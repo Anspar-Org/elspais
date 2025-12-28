@@ -1,0 +1,23 @@
+# Configuration for circular dependency test
+[project]
+name = "circular-deps-test"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+dev = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[rules.hierarchy]
+allowed_implements = ["dev -> dev"]  # Allow DEV -> DEV for this test
+allow_circular = false  # But forbid circular

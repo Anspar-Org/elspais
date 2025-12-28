@@ -1,0 +1,129 @@
+"""
+elspais.config.defaults - Default configuration values.
+
+Provides built-in defaults matching the HHT-diary repository structure.
+"""
+
+DEFAULT_CONFIG = {
+    "project": {
+        "name": "",
+        "type": "core",
+    },
+    "directories": {
+        "spec": "spec",
+        "docs": "docs",
+        "database": "database",
+        "code": ["apps", "packages", "server", "tools"],
+        "ignore": [
+            "node_modules",
+            ".git",
+            "build",
+            "dist",
+            ".dart_tool",
+            "__pycache__",
+            ".venv",
+            "venv",
+        ],
+    },
+    "patterns": {
+        "id_template": "{prefix}-{sponsor}{type}{id}",
+        "prefix": "REQ",
+        "types": {
+            "prd": {"id": "p", "name": "Product Requirement", "level": 1},
+            "ops": {"id": "o", "name": "Operations Requirement", "level": 2},
+            "dev": {"id": "d", "name": "Development Requirement", "level": 3},
+        },
+        "id_format": {
+            "style": "numeric",
+            "digits": 5,
+            "leading_zeros": True,
+        },
+        "sponsor": {
+            "enabled": True,
+            "position": "after_prefix",
+            "format": "uppercase",
+            "length": 3,
+            "separator": "-",
+        },
+    },
+    "spec": {
+        "index_file": "INDEX.md",
+        "readme_file": "README.md",
+        "format_guide": "requirements-format.md",
+        "skip_files": ["README.md", "requirements-format.md", "INDEX.md"],
+        "file_patterns": {
+            "prd-*.md": "prd",
+            "ops-*.md": "ops",
+            "dev-*.md": "dev",
+        },
+        # Values in Implements field that mean "no references"
+        "no_reference_values": ["-", "null", "none", "x", "X", "N/A", "n/a"],
+    },
+    "core": {
+        "path": None,
+        "remote": None,
+    },
+    "sponsor": {
+        "prefix": None,
+        "id_range": [1, 99999],
+    },
+    "rules": {
+        "hierarchy": {
+            "allowed_implements": [
+                "dev -> ops, prd",
+                "ops -> prd",
+                "prd -> prd",
+            ],
+            "allow_circular": False,
+            "allow_orphans": False,
+            "max_depth": 5,
+            "cross_repo_implements": True,
+        },
+        "format": {
+            "require_hash": True,
+            "require_rationale": False,
+            "require_acceptance": True,
+            "require_status": True,
+            "allowed_statuses": ["Active", "Draft", "Deprecated", "Superseded"],
+        },
+        "traceability": {
+            "require_code_link": False,
+            "scan_for_orphans": True,
+        },
+        "naming": {
+            "title_min_length": 10,
+            "title_max_length": 100,
+            "title_pattern": "^[A-Z].*",
+        },
+    },
+    "validation": {
+        "strict_hierarchy": True,
+        "hash_algorithm": "sha256",
+        "hash_length": 8,
+        "normalize_whitespace": False,  # If True, normalize whitespace before hashing
+    },
+    "traceability": {
+        "output_formats": ["markdown", "html"],
+        "output_dir": ".",
+        "scan_patterns": [
+            "database/**/*.sql",
+            "apps/**/*.dart",
+            "packages/**/*.dart",
+            "server/**/*.dart",
+            "tools/**/*.py",
+            ".github/workflows/**/*.yml",
+        ],
+        "impl_patterns": [
+            r"IMPLEMENTS.*REQ-",
+            r"Implements:\s*REQ-",
+            r"Fixes:\s*REQ-",
+        ],
+    },
+    "index": {
+        "auto_regenerate": False,
+    },
+    "hooks": {
+        "pre_commit": True,
+        "commit_msg": True,
+    },
+}

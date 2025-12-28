@@ -1,0 +1,271 @@
+# elspais
+
+> "L-Space is the ultimate library, connecting all libraries everywhere through the sheer weight of accumulated knowledge."
+> — Terry Pratchett
+
+**elspais** is a requirements validation and traceability tool that helps teams manage formal requirements across single or multiple repositories. It supports configurable ID patterns, validation rules, and generates traceability matrices.
+
+## Features
+
+- **Zero Dependencies**: Uses only Python 3.8+ standard library
+- **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
+- **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
+- **Multi-Repository**: Link requirements across core and sponsor repositories
+- **Traceability Matrices**: Generate Markdown, HTML, or CSV output
+- **Hash-Based Change Detection**: Track requirement changes with SHA-256 hashes
+- **FDA 21 CFR Part 11 Ready**: Designed for regulated environments
+
+## Installation
+
+```bash
+pip install elspais
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/anspar/elspais.git
+cd elspais
+pip install -e .
+```
+
+## Quick Start
+
+### Initialize a Repository
+
+```bash
+# Create .elspais.toml with default configuration
+elspais init
+
+# Or specify repository type
+elspais init --type core           # Core repository
+elspais init --type sponsor CAL    # Sponsor with prefix CAL
+```
+
+### Validate Requirements
+
+```bash
+# Validate all requirements in spec/ directory
+elspais validate
+
+# Verbose output
+elspais validate -v
+
+# Validate with auto-fix for fixable issues
+elspais validate --fix
+```
+
+### Generate Traceability Matrix
+
+```bash
+# Generate both Markdown and HTML
+elspais trace
+
+# Generate specific format
+elspais trace --format html
+elspais trace --format csv
+
+# Custom output location
+elspais trace --output docs/traceability.html
+```
+
+### Manage Requirement Hashes
+
+```bash
+# Verify all hashes match content
+elspais hash verify
+
+# Update all hashes
+elspais hash update
+
+# Update specific requirement
+elspais hash update REQ-d00027
+```
+
+### Analyze Requirements
+
+```bash
+# Show requirement hierarchy tree
+elspais analyze hierarchy
+
+# Find orphaned requirements
+elspais analyze orphans
+
+# Implementation coverage report
+elspais analyze coverage
+```
+
+## Configuration
+
+Create `.elspais.toml` in your repository root:
+
+```toml
+[project]
+name = "my-project"
+type = "core"  # "core" | "sponsor"
+
+[directories]
+spec = "spec"
+docs = "docs"
+code = ["src", "apps", "packages"]
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", name = "Product Requirement", level = 1 }
+ops = { id = "o", name = "Operations Requirement", level = 2 }
+dev = { id = "d", name = "Development Requirement", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[rules.hierarchy]
+allowed_implements = [
+    "dev -> ops, prd",
+    "ops -> prd",
+    "prd -> prd",
+]
+allow_circular = false
+allow_orphans = false
+
+[rules.format]
+require_hash = true
+require_acceptance = true
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+```
+
+See [docs/configuration.md](docs/configuration.md) for full reference.
+
+## Requirement Format
+
+elspais expects requirements in Markdown format:
+
+```markdown
+### REQ-d00001: Requirement Title
+
+**Level**: Dev | **Implements**: p00001 | **Status**: Active
+
+The system SHALL provide user authentication.
+
+**Rationale**: Security requires identity verification.
+
+**Acceptance Criteria**:
+- Users can log in with email/password
+- Session expires after 30 minutes of inactivity
+
+*End* *Requirement Title* | **Hash**: a1b2c3d4
+---
+```
+
+## ID Pattern Examples
+
+elspais supports multiple ID formats:
+
+| Pattern | Example | Configuration |
+|---------|---------|---------------|
+| HHT Default | `REQ-p00001` | `id_template = "{prefix}-{type}{id}"` |
+| FDA Style | `PRD-00001` | `id_template = "{type}-{id}"` |
+| Jira-Like | `PROJ-123` | `id_template = "{prefix}-{id}"` |
+| Named | `REQ-UserAuth` | `style = "named"` |
+| Sponsor | `REQ-CAL-d00001` | `sponsor.enabled = true` |
+
+See [docs/patterns.md](docs/patterns.md) for details.
+
+## Multi-Repository Support
+
+For sponsor repositories that reference a core repository:
+
+```toml
+[project]
+type = "sponsor"
+
+[sponsor]
+prefix = "CAL"
+
+[core]
+path = "../core-repo"
+```
+
+Validate with core linking:
+
+```bash
+elspais validate --core-repo ../core-repo
+```
+
+## CLI Reference
+
+```
+elspais [OPTIONS] COMMAND [ARGS]
+
+Options:
+  --config PATH    Path to config file
+  --spec-dir PATH  Override spec directory
+  -v, --verbose    Verbose output
+  -q, --quiet      Suppress non-error output
+  --version        Show version
+  --help           Show help
+
+Commands:
+  validate   Validate requirements format, links, hashes
+  trace      Generate traceability matrix
+  hash       Manage requirement hashes (verify, update)
+  index      Validate or regenerate INDEX.md
+  analyze    Analyze requirement hierarchy
+  version    Show version and check for updates
+  init       Create .elspais.toml configuration
+```
+
+## Development
+
+```bash
+# Clone and install in development mode
+git clone https://github.com/anspar/elspais.git
+cd elspais
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=elspais
+
+# Type checking
+mypy src/elspais
+
+# Linting
+ruff check src/elspais
+black --check src/elspais
+```
+
+## Version Pinning
+
+For reproducible builds, pin the version in your project:
+
+```bash
+# .github/versions.env
+ELSPAIS_VERSION=0.1.0
+```
+
+```yaml
+# GitHub Actions
+- name: Install elspais
+  run: pip install elspais==${{ env.ELSPAIS_VERSION }}
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Contributing
+
+Contributions welcome! Please read the contributing guidelines before submitting PRs.
+
+## Links
+
+- [Documentation](https://github.com/anspar/elspais#readme)
+- [Issue Tracker](https://github.com/anspar/elspais/issues)
+- [Changelog](CHANGELOG.md)
