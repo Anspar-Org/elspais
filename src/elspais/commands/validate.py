@@ -168,7 +168,7 @@ def validate_links(
     """Validate requirement links (implements references)."""
     violations = []
 
-    # Load core requirements if this is a sponsor repo
+    # Load core requirements if this is an associated repo
     core_requirements = {}
     if args.core_repo:
         core_requirements = load_core_requirements(args.core_repo, config)

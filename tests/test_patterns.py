@@ -21,30 +21,30 @@ class TestPatternValidator:
         assert parsed.prefix == "REQ"
         assert parsed.type_code == "p"
         assert parsed.number == "00001"
-        assert parsed.sponsor is None
+        assert parsed.associated is None
 
-    def test_hht_pattern_parse_with_sponsor(self):
-        """Test parsing HHT-style IDs with sponsor (REQ-CAL-d00001)."""
+    def test_hht_pattern_parse_with_associated(self):
+        """Test parsing HHT-style IDs with associated prefix (REQ-CAL-d00001)."""
         from elspais.core.patterns import PatternValidator, PatternConfig
 
         config = PatternConfig(
-            id_template="{prefix}-{sponsor}{type}{id}",
+            id_template="{prefix}-{associated}{type}{id}",
             prefix="REQ",
             types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
             id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
-            sponsor={"enabled": True, "length": 3, "format": "uppercase", "separator": "-"},
+            associated={"enabled": True, "length": 3, "format": "uppercase", "separator": "-"},
         )
         validator = PatternValidator(config)
 
         parsed = validator.parse("REQ-CAL-d00001")
         assert parsed is not None
         assert parsed.prefix == "REQ"
-        assert parsed.sponsor == "CAL"
+        assert parsed.associated == "CAL"
         assert parsed.type_code == "d"
         assert parsed.number == "00001"
 
-    def test_fda_pattern_parse(self):
-        """Test parsing FDA-style IDs (PRD-00001)."""
+    def test_type_prefix_pattern_parse(self):
+        """Test parsing type-prefix style IDs (PRD-00001)."""
         from elspais.core.patterns import PatternValidator, PatternConfig
 
         config = PatternConfig(
@@ -131,20 +131,20 @@ class TestPatternValidator:
         formatted_dev = validator.format(type_code="d", number=42)
         assert formatted_dev == "REQ-d00042"
 
-    def test_format_id_with_sponsor(self):
-        """Test formatting ID with sponsor prefix."""
+    def test_format_id_with_associated(self):
+        """Test formatting ID with associated prefix."""
         from elspais.core.patterns import PatternValidator, PatternConfig
 
         config = PatternConfig(
-            id_template="{prefix}-{sponsor}{type}{id}",
+            id_template="{prefix}-{associated}{type}{id}",
             prefix="REQ",
             types={"dev": {"id": "d", "level": 3}},
             id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
-            sponsor={"enabled": True, "length": 3, "format": "uppercase", "separator": "-"},
+            associated={"enabled": True, "length": 3, "format": "uppercase", "separator": "-"},
         )
         validator = PatternValidator(config)
 
-        formatted = validator.format(type_code="d", number=1, sponsor="CAL")
+        formatted = validator.format(type_code="d", number=1, associated="CAL")
         assert formatted == "REQ-CAL-d00001"
 
     def test_validate_id(self, sample_config_dict):

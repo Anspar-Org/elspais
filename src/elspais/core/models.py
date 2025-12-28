@@ -35,14 +35,14 @@ class ParsedRequirement:
     Attributes:
         full_id: The complete requirement ID (e.g., "REQ-CAL-p00001")
         prefix: The ID prefix (e.g., "REQ")
-        sponsor: Optional sponsor namespace (e.g., "CAL")
+        associated: Optional associated repo namespace (e.g., "CAL")
         type_code: The requirement type code (e.g., "p")
         number: The ID number or name (e.g., "00001")
     """
 
     full_id: str
     prefix: str
-    sponsor: Optional[str]
+    associated: Optional[str]
     type_code: str
     number: str
 
@@ -116,9 +116,9 @@ class Requirement:
         return 0
 
     @property
-    def sponsor(self) -> Optional[str]:
+    def associated(self) -> Optional[str]:
         """
-        Extract the sponsor code from the requirement ID.
+        Extract the associated repo code from the requirement ID.
 
         For REQ-CAL-d00001, returns "CAL".
         For REQ-p00001, returns None.

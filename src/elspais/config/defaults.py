@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         ],
     },
     "patterns": {
-        "id_template": "{prefix}-{sponsor}{type}{id}",
+        "id_template": "{prefix}-{associated}{type}{id}",
         "prefix": "REQ",
         "types": {
             "prd": {"id": "p", "name": "Product Requirement", "level": 1},
@@ -38,7 +38,7 @@ DEFAULT_CONFIG = {
             "digits": 5,
             "leading_zeros": True,
         },
-        "sponsor": {
+        "associated": {
             "enabled": True,
             "position": "after_prefix",
             "format": "uppercase",
@@ -63,7 +63,7 @@ DEFAULT_CONFIG = {
         "path": None,
         "remote": None,
     },
-    "sponsor": {
+    "associated": {
         "prefix": None,
         "id_range": [1, 99999],
     },

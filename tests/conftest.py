@@ -47,9 +47,9 @@ def named_reqs_fixture() -> Path:
 
 
 @pytest.fixture
-def sponsor_repo_fixture() -> Path:
-    """Return path to sponsor repository fixture."""
-    return FIXTURES_DIR / "sponsor-repo"
+def associated_repo_fixture() -> Path:
+    """Return path to associated repository fixture."""
+    return FIXTURES_DIR / "associated-repo"
 
 
 @pytest.fixture

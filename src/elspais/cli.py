@@ -73,7 +73,7 @@ Examples:
     validate_parser.add_argument(
         "--core-repo",
         type=Path,
-        help="Path to core repository (for sponsor validation)",
+        help="Path to core repository (for associated repo validation)",
         metavar="PATH",
     )
     validate_parser.add_argument(
@@ -182,12 +182,12 @@ Examples:
     )
     init_parser.add_argument(
         "--type",
-        choices=["core", "sponsor"],
+        choices=["core", "associated"],
         help="Repository type",
     )
     init_parser.add_argument(
-        "--sponsor-prefix",
-        help="Sponsor prefix (e.g., CAL)",
+        "--associated-prefix",
+        help="Associated repo prefix (e.g., CAL)",
         metavar="PREFIX",
     )
     init_parser.add_argument(

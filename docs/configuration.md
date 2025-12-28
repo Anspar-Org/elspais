@@ -25,8 +25,8 @@ elspais looks for configuration in this order:
 # Project name (used in reports)
 name = "my-project"
 
-# Repository type: "core" for primary repository, "sponsor" for extensions
-type = "core"  # "core" | "sponsor"
+# Repository type: "core" for primary repository, "associated" for extensions
+type = "core"  # "core" | "associated"
 
 #──────────────────────────────────────────────────────────────────────────────
 # DIRECTORIES
@@ -91,12 +91,12 @@ skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 #──────────────────────────────────────────────────────────────────────────────
 
 [patterns]
-# ID template using tokens: {prefix}, {sponsor}, {type}, {id}
+# ID template using tokens: {prefix}, {associated}, {type}, {id}
 # Examples:
-#   "{prefix}-{type}{id}"           -> REQ-p00001
-#   "{type}-{id}"                   -> PRD-00001
-#   "{prefix}-{sponsor}-{type}{id}" -> REQ-CAL-d00001
-#   "{prefix}-{id}"                 -> PROJ-123
+#   "{prefix}-{type}{id}"              -> REQ-p00001
+#   "{type}-{id}"                      -> PRD-00001
+#   "{prefix}-{associated}-{type}{id}" -> REQ-CAL-d00001
+#   "{prefix}-{id}"                    -> PROJ-123
 id_template = "{prefix}-{type}{id}"
 
 # Base prefix (used when {prefix} token is in template)
@@ -127,9 +127,9 @@ leading_zeros = true
 # allowed_chars = "A-Za-z0-9-"
 # max_length = 32
 
-# Sponsor namespace configuration
-[patterns.sponsor]
-# Enable sponsor prefixes in IDs
+# Associated repository namespace configuration
+[patterns.associated]
+# Enable associated prefixes in IDs
 enabled = false
 
 # Position in ID: "after_prefix" | "before_type" | "none"
@@ -141,11 +141,11 @@ format = "uppercase"
 # Fixed length (null for variable)
 length = 3
 
-# Separator between sponsor and rest
+# Separator between associated and rest
 separator = "-"
 
 #──────────────────────────────────────────────────────────────────────────────
-# CORE REPOSITORY (for sponsor repos)
+# CORE REPOSITORY (for associated repos)
 #──────────────────────────────────────────────────────────────────────────────
 
 [core]
@@ -156,14 +156,14 @@ path = "../core-repo"
 # remote = "git@github.com:org/core-repo.git"
 
 #──────────────────────────────────────────────────────────────────────────────
-# SPONSOR CONFIGURATION (when type = "sponsor")
+# ASSOCIATED CONFIGURATION (when type = "associated")
 #──────────────────────────────────────────────────────────────────────────────
 
-[sponsor]
-# Sponsor prefix (e.g., CAL for Callisto)
+[associated]
+# Associated repo prefix (e.g., CAL for Callisto)
 prefix = "CAL"
 
-# Allowed ID range for this sponsor
+# Allowed ID range for this associated repo
 id_range = [1, 99999]
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ allow_orphans = false
 # Maximum implementation chain depth
 max_depth = 5
 
-# Allow cross-repository implementations (sponsor -> core)
+# Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ Configuration values can be overridden with environment variables:
 # Pattern: ELSPAIS_<SECTION>_<KEY>
 ELSPAIS_DIRECTORIES_SPEC=requirements
 ELSPAIS_PATTERNS_PREFIX=PRD
-ELSPAIS_SPONSOR_PREFIX=CAL
+ELSPAIS_ASSOCIATED_PREFIX=CAL
 ELSPAIS_VALIDATION_STRICT_HIERARCHY=false
 ```
 
@@ -327,21 +327,21 @@ name = "my-core-project"
 type = "core"
 ```
 
-### Sponsor Repository
+### Associated Repository
 
 ```toml
 [project]
-name = "sponsor-cal"
-type = "sponsor"
+name = "associated-cal"
+type = "associated"
 
-[sponsor]
+[associated]
 prefix = "CAL"
 
 [core]
 path = "../core-repo"
 ```
 
-### FDA-Style Requirements
+### Type-Prefix Style Requirements
 
 ```toml
 [patterns]

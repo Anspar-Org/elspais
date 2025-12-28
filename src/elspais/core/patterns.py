@@ -3,7 +3,7 @@ elspais.core.patterns - Configurable requirement ID pattern matching.
 
 Supports multiple ID formats:
 - HHT style: REQ-p00001, REQ-CAL-d00001
-- FDA style: PRD-00001, OPS-00001, DEV-00001
+- Type-prefix style: PRD-00001, OPS-00001, DEV-00001
 - Jira style: PROJ-123
 - Named: REQ-UserAuth
 """
@@ -21,18 +21,18 @@ class PatternConfig:
     Configuration for requirement ID patterns.
 
     Attributes:
-        id_template: Template string with tokens {prefix}, {sponsor}, {type}, {id}
+        id_template: Template string with tokens {prefix}, {associated}, {type}, {id}
         prefix: Base prefix (e.g., "REQ")
         types: Dictionary of type definitions
         id_format: ID format configuration (style, digits, etc.)
-        sponsor: Optional sponsor namespace configuration
+        associated: Optional associated repo namespace configuration
     """
 
     id_template: str
     prefix: str
     types: Dict[str, Dict[str, Any]]
     id_format: Dict[str, Any]
-    sponsor: Optional[Dict[str, Any]] = None
+    associated: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PatternConfig":
@@ -42,7 +42,7 @@ class PatternConfig:
             prefix=data.get("prefix", "REQ"),
             types=data.get("types", {}),
             id_format=data.get("id_format", {"style": "numeric", "digits": 5}),
-            sponsor=data.get("sponsor"),
+            associated=data.get("associated"),
         )
 
     def get_type_by_id(self, type_id: str) -> Optional[Dict[str, Any]]:
@@ -102,28 +102,28 @@ class PatternValidator:
         else:
             id_pattern = "[A-Za-z0-9]+"
 
-        # Build sponsor pattern if enabled
-        sponsor_config = self.config.sponsor or {}
-        if sponsor_config.get("enabled"):
-            length = sponsor_config.get("length", 3)
-            sep = re.escape(sponsor_config.get("separator", "-"))
+        # Build associated pattern if enabled
+        associated_config = self.config.associated or {}
+        if associated_config.get("enabled"):
+            length = associated_config.get("length", 3)
+            sep = re.escape(associated_config.get("separator", "-"))
             if length:
-                sponsor_pattern = f"(?P<sponsor>[A-Z]{{{length}}}){sep}"
+                associated_pattern = f"(?P<associated>[A-Z]{{{length}}}){sep}"
             else:
-                sponsor_pattern = f"(?P<sponsor>[A-Z]+){sep}"
+                associated_pattern = f"(?P<associated>[A-Z]+){sep}"
         else:
-            sponsor_pattern = "(?P<sponsor>)"
+            associated_pattern = "(?P<associated>)"
 
         # Build full regex from template
         # Replace tokens with regex groups
         pattern = template
         pattern = pattern.replace("{prefix}", f"(?P<prefix>{re.escape(self.config.prefix)})")
 
-        # Handle sponsor - it's optional
-        if "{sponsor}" in pattern:
-            pattern = pattern.replace("{sponsor}", f"(?:{sponsor_pattern})?")
+        # Handle associated - it's optional
+        if "{associated}" in pattern:
+            pattern = pattern.replace("{associated}", f"(?:{associated_pattern})?")
         else:
-            pattern = pattern.replace("{sponsor}", "")
+            pattern = pattern.replace("{associated}", "")
 
         if type_pattern:
             pattern = pattern.replace("{type}", f"(?P<type>{type_pattern})")
@@ -152,7 +152,7 @@ class PatternValidator:
         return ParsedRequirement(
             full_id=id_string,
             prefix=groups.get("prefix", ""),
-            sponsor=groups.get("sponsor") or None,
+            associated=groups.get("associated") or None,
             type_code=groups.get("type", ""),
             number=groups.get("id", ""),
         )
@@ -170,7 +170,7 @@ class PatternValidator:
         return self.parse(id_string) is not None
 
     def format(
-        self, type_code: str, number: int, sponsor: Optional[str] = None
+        self, type_code: str, number: int, associated: Optional[str] = None
     ) -> str:
         """
         Format a requirement ID from components.
@@ -178,7 +178,7 @@ class PatternValidator:
         Args:
             type_code: The requirement type code (e.g., "p")
             number: The requirement number
-            sponsor: Optional sponsor code
+            associated: Optional associated repo code
 
         Returns:
             Formatted requirement ID string
@@ -202,13 +202,13 @@ class PatternValidator:
         result = template
         result = result.replace("{prefix}", self.config.prefix)
 
-        # Handle sponsor
-        if sponsor and "{sponsor}" in result:
-            sponsor_config = self.config.sponsor or {}
-            sep = sponsor_config.get("separator", "-")
-            result = result.replace("{sponsor}", f"{sponsor}{sep}")
+        # Handle associated
+        if associated and "{associated}" in result:
+            associated_config = self.config.associated or {}
+            sep = associated_config.get("separator", "-")
+            result = result.replace("{associated}", f"{associated}{sep}")
         else:
-            result = result.replace("{sponsor}", "")
+            result = result.replace("{associated}", "")
 
         result = result.replace("{type}", type_code)
         result = result.replace("{id}", formatted_number)

@@ -19,24 +19,24 @@ type = "core"
 - Acts as source of truth for shared requirements
 - Generates complete traceability matrix
 
-### Sponsor Repository
+### Associated Repository
 
 Extensions or customizations that reference the core:
 
 ```toml
-# .elspais.toml in sponsor repo
+# .elspais.toml in associated repo
 [project]
-name = "sponsor-callisto"
-type = "sponsor"
+name = "associated-callisto"
+type = "associated"
 
-[sponsor]
+[associated]
 prefix = "CAL"
 
 [core]
 path = "../core-platform"
 ```
 
-- Requirements use sponsor format: `REQ-CAL-d00001`
+- Requirements use associated format: `REQ-CAL-d00001`
 - Can reference core requirements in "Implements" field
 - Validation checks core repo for referenced requirements
 
@@ -53,8 +53,8 @@ organization/
 │   │   └── dev-impl.md     # REQ-d00001
 │   └── ...
 │
-├── sponsor-callisto/        # Sponsor repository
-│   ├── .elspais.toml       # type = "sponsor", prefix = "CAL"
+├── associated-callisto/     # Associated repository
+│   ├── .elspais.toml       # type = "associated", prefix = "CAL"
 │   ├── .core-repo          # Points to ../core-platform
 │   ├── spec/
 │   │   ├── INDEX.md
@@ -62,32 +62,32 @@ organization/
 │   │   └── dev-cal.md      # REQ-CAL-d00001 (implements REQ-p00001)
 │   └── ...
 │
-└── sponsor-xyz/             # Another sponsor
-    ├── .elspais.toml       # type = "sponsor", prefix = "XYZ"
+└── associated-xyz/          # Another associated repo
+    ├── .elspais.toml       # type = "associated", prefix = "XYZ"
     └── ...
 ```
 
 ## Cross-Repository References
 
-Sponsor requirements can implement core requirements:
+Associated requirements can implement core requirements:
 
 ```markdown
 ### REQ-CAL-d00001: Callisto Authentication
 
 **Level**: Dev | **Implements**: p00001 | **Status**: Active
 
-Implements core user authentication for Callisto sponsor.
+Implements core user authentication for Callisto project.
 ```
 
 Here `Implements: p00001` refers to core `REQ-p00001`.
 
 ## Validation
 
-### Validate Sponsor Against Core
+### Validate Associated Repo Against Core
 
 ```bash
-# In sponsor repository
-cd sponsor-callisto/
+# In associated repository
+cd associated-callisto/
 
 # Validate with explicit core path
 elspais validate --core-repo ../core-platform
@@ -98,17 +98,17 @@ elspais validate
 
 ### What's Validated
 
-1. **Sponsor ID format**: IDs must use sponsor prefix
+1. **Associated ID format**: IDs must use associated prefix
 2. **Core references**: Referenced core IDs must exist
-3. **Hierarchy rules**: Sponsor DEV can implement core PRD
-4. **Hash verification**: Both core and sponsor hashes
+3. **Hierarchy rules**: Associated DEV can implement core PRD
+4. **Hash verification**: Both core and associated hashes
 
 ### Validation Output
 
 ```
-✓ Validating sponsor requirements (CAL)
+✓ Validating associated requirements (CAL)
 ✓ Loading core requirements from ../core-platform
-✓ 15 sponsor requirements found
+✓ 15 associated requirements found
 ✓ 8 cross-repository references validated
 
 ❌ ERROR REQ-CAL-d00003
@@ -128,7 +128,7 @@ elspais trace --combined --core-repo ../core-platform
 
 # Output includes:
 # - Core requirements
-# - All sponsor requirements
+# - All associated requirements
 # - Cross-repo implementation links
 ```
 
@@ -145,18 +145,18 @@ type = "core"
 id_template = "{prefix}-{type}{id}"
 prefix = "REQ"
 
-[patterns.sponsor]
-enabled = true  # Allow sponsor IDs in traces
+[patterns.associated]
+enabled = true  # Allow associated IDs in traces
 ```
 
-### Sponsor Repository
+### Associated Repository
 
 ```toml
 [project]
-name = "sponsor-callisto"
-type = "sponsor"
+name = "associated-callisto"
+type = "associated"
 
-[sponsor]
+[associated]
 prefix = "CAL"
 id_range = [1, 99999]  # Allowed ID range
 
@@ -169,7 +169,7 @@ path = "../core-platform"
 # branch = "main"
 
 [rules.hierarchy]
-# Sponsor can implement core requirements
+# Associated can implement core requirements
 cross_repo_implements = true
 ```
 
@@ -221,14 +221,14 @@ core:
   path: ~/repos/core-platform
   remote: git@github.com:org/core-platform.git
 
-sponsors:
+associated:
   - prefix: CAL
-    path: ~/repos/sponsor-callisto
-    remote: git@github.com:org/sponsor-callisto.git
+    path: ~/repos/associated-callisto
+    remote: git@github.com:org/associated-callisto.git
 
   - prefix: XYZ
-    path: ~/repos/sponsor-xyz
-    remote: git@github.com:org/sponsor-xyz.git
+    path: ~/repos/associated-xyz
+    remote: git@github.com:org/associated-xyz.git
 ```
 
 Commands can operate across all repositories:
@@ -248,7 +248,7 @@ elspais analyze cross-repo
 
 1. **Core requirements are immutable**: Once published, don't change core REQ IDs
 2. **Version your core**: Use git tags to version core requirements
-3. **Document cross-references**: Make sponsor → core links explicit
-4. **Separate ID ranges**: Give each sponsor a distinct ID range
+3. **Document cross-references**: Make associated → core links explicit
+4. **Separate ID ranges**: Give each associated repo a distinct ID range
 5. **CI validation**: Always validate against core in CI/CD
-6. **Sync core updates**: Regularly pull core updates to sponsors
+6. **Sync core updates**: Regularly pull core updates to associated repos

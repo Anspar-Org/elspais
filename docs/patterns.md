@@ -10,7 +10,7 @@ The `id_template` configuration defines the structure of requirement IDs using t
 |-------|-------------|---------------|
 | `{prefix}` | Base prefix from `patterns.prefix` | `REQ`, `PROJ` |
 | `{type}` | Requirement type identifier | `p`, `PRD`, `dev` |
-| `{sponsor}` | Sponsor namespace (if enabled) | `CAL`, `XYZ` |
+| `{associated}` | Associated repo namespace (if enabled) | `CAL`, `XYZ` |
 | `{id}` | Unique identifier (number or name) | `00001`, `123`, `UserAuth` |
 
 ## Common Patterns
@@ -38,14 +38,14 @@ leading_zeros = true
 - `REQ-o00015` - Operations requirement
 - `REQ-d00127` - Development requirement
 
-### Pattern 2: With Sponsor (`REQ-CAL-d00001`)
+### Pattern 2: With Associated Prefix (`REQ-CAL-d00001`)
 
 ```toml
 [patterns]
-id_template = "{prefix}-{sponsor}{type}{id}"
+id_template = "{prefix}-{associated}{type}{id}"
 prefix = "REQ"
 
-[patterns.sponsor]
+[patterns.associated]
 enabled = true
 position = "after_prefix"
 format = "uppercase"
@@ -65,10 +65,10 @@ leading_zeros = true
 
 **Examples:**
 - `REQ-CAL-p00001` - Callisto product requirement
-- `REQ-XYZ-d00042` - XYZ sponsor dev requirement
-- `REQ-p00001` - Core requirement (no sponsor)
+- `REQ-XYZ-d00042` - XYZ associated dev requirement
+- `REQ-p00001` - Core requirement (no associated prefix)
 
-### Pattern 3: FDA Style (`PRD-00001`)
+### Pattern 3: Type-Prefix Style (`PRD-00001`)
 
 ```toml
 [patterns]
@@ -209,24 +209,24 @@ style = "alphanumeric"
 pattern = "[A-Z]{2}[0-9]{3}"  # Strict regex pattern
 ```
 
-## Sponsor Configuration
+## Associated Prefix Configuration
 
-For multi-repository setups with sponsor namespaces:
+For multi-repository setups with associated namespaces:
 
 ```toml
-[patterns.sponsor]
-enabled = true           # Enable sponsor prefixes
-position = "after_prefix" # Where to place sponsor
+[patterns.associated]
+enabled = true           # Enable associated prefixes
+position = "after_prefix" # Where to place associated prefix
 format = "uppercase"     # "uppercase" | "lowercase" | "mixed"
 length = 3              # Fixed length (null for variable)
 separator = "-"         # Separator character
 ```
 
-### Sponsor Position Options
+### Associated Position Options
 
-- `after_prefix`: `REQ-CAL-d00001` (prefix-sponsor-type-id)
+- `after_prefix`: `REQ-CAL-d00001` (prefix-associated-type-id)
 - `before_type`: `REQ-CAL-d00001` (same effect, semantic difference)
-- `none`: `REQ-d00001` (no sponsor in ID)
+- `none`: `REQ-d00001` (no associated prefix in ID)
 
 ## Validation
 

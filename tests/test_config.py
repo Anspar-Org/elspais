@@ -125,7 +125,7 @@ class TestDefaultConfig:
 
         patterns = DEFAULT_CONFIG["patterns"]
 
-        assert patterns["id_template"] == "{prefix}-{sponsor}{type}{id}"
+        assert patterns["id_template"] == "{prefix}-{associated}{type}{id}"
         assert patterns["prefix"] == "REQ"
         assert "prd" in patterns["types"]
         assert "ops" in patterns["types"]
@@ -184,16 +184,16 @@ class TestEnvironmentOverrides:
 
         assert config["directories"]["spec"] == "requirements"
 
-    def test_env_override_sponsor_prefix(self, monkeypatch):
-        """Test environment variable overrides sponsor prefix."""
+    def test_env_override_associated_prefix(self, monkeypatch):
+        """Test environment variable overrides associated prefix."""
         from elspais.config.loader import apply_env_overrides
 
-        monkeypatch.setenv("ELSPAIS_SPONSOR_PREFIX", "XYZ")
+        monkeypatch.setenv("ELSPAIS_ASSOCIATED_PREFIX", "XYZ")
 
-        config = {"sponsor": {"prefix": "CAL"}}
+        config = {"associated": {"prefix": "CAL"}}
         config = apply_env_overrides(config)
 
-        assert config["sponsor"]["prefix"] == "XYZ"
+        assert config["associated"]["prefix"] == "XYZ"
 
 
 class TestGetDirectories:

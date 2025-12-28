@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-12-28
+
+### Changed
+- Renamed "sponsor" to "associated" throughout the codebase
+  - Config: `[sponsor]` → `[associated]`, `[patterns.sponsor]` → `[patterns.associated]`
+  - CLI: `--sponsor-prefix` → `--associated-prefix`, `--type sponsor` → `--type associated`
+  - ID template: `{sponsor}` → `{associated}`
+- Made the tool generic by removing standards-specific references
+- Updated documentation to use neutral terminology
+
 ## [0.2.0] - 2025-12-28
 
 ### Added
@@ -32,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable validation rules with hierarchy enforcement
 - TOML-based per-repository configuration (.elspais.toml)
 - CLI commands: validate, trace, hash, index, analyze, init
-- Multi-repository support (core/sponsor model)
+- Multi-repository support (core/associated model)
 - Traceability matrix generation (Markdown, HTML, CSV)
 - Hash-based change detection for requirements
 - Zero external dependencies (Python 3.8+ standard library only)

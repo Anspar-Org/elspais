@@ -83,29 +83,29 @@ class TestParsedRequirement:
         parsed = ParsedRequirement(
             full_id="REQ-CAL-p00001",
             prefix="REQ",
-            sponsor="CAL",
+            associated="CAL",
             type_code="p",
             number="00001",
         )
 
         assert parsed.full_id == "REQ-CAL-p00001"
-        assert parsed.sponsor == "CAL"
+        assert parsed.associated == "CAL"
         assert parsed.type_code == "p"
         assert parsed.number == "00001"
 
-    def test_parsed_requirement_no_sponsor(self):
-        """Test ParsedRequirement without sponsor."""
+    def test_parsed_requirement_no_associated(self):
+        """Test ParsedRequirement without associated prefix."""
         from elspais.core.models import ParsedRequirement
 
         parsed = ParsedRequirement(
             full_id="REQ-p00001",
             prefix="REQ",
-            sponsor=None,
+            associated=None,
             type_code="p",
             number="00001",
         )
 
-        assert parsed.sponsor is None
+        assert parsed.associated is None
         assert parsed.full_id == "REQ-p00001"
 
 

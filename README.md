@@ -10,10 +10,9 @@
 - **Zero Dependencies**: Uses only Python 3.8+ standard library
 - **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
 - **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
-- **Multi-Repository**: Link requirements across core and sponsor repositories
+- **Multi-Repository**: Link requirements across core and associated repositories
 - **Traceability Matrices**: Generate Markdown, HTML, or CSV output
 - **Hash-Based Change Detection**: Track requirement changes with SHA-256 hashes
-- **FDA 21 CFR Part 11 Ready**: Designed for regulated environments
 
 ## Installation
 
@@ -38,8 +37,8 @@ pip install -e .
 elspais init
 
 # Or specify repository type
-elspais init --type core           # Core repository
-elspais init --type sponsor CAL    # Sponsor with prefix CAL
+elspais init --type core              # Core repository
+elspais init --type associated CAL    # Associated repo with prefix CAL
 ```
 
 ### Validate Requirements
@@ -102,7 +101,7 @@ Create `.elspais.toml` in your repository root:
 ```toml
 [project]
 name = "my-project"
-type = "core"  # "core" | "sponsor"
+type = "core"  # "core" | "associated"
 
 [directories]
 spec = "spec"
@@ -168,22 +167,22 @@ elspais supports multiple ID formats:
 | Pattern | Example | Configuration |
 |---------|---------|---------------|
 | HHT Default | `REQ-p00001` | `id_template = "{prefix}-{type}{id}"` |
-| FDA Style | `PRD-00001` | `id_template = "{type}-{id}"` |
+| Type-Prefix | `PRD-00001` | `id_template = "{type}-{id}"` |
 | Jira-Like | `PROJ-123` | `id_template = "{prefix}-{id}"` |
 | Named | `REQ-UserAuth` | `style = "named"` |
-| Sponsor | `REQ-CAL-d00001` | `sponsor.enabled = true` |
+| Associated | `REQ-CAL-d00001` | `associated.enabled = true` |
 
 See [docs/patterns.md](docs/patterns.md) for details.
 
 ## Multi-Repository Support
 
-For sponsor repositories that reference a core repository:
+For associated repositories that reference a core repository:
 
 ```toml
 [project]
-type = "sponsor"
+type = "associated"
 
-[sponsor]
+[associated]
 prefix = "CAL"
 
 [core]

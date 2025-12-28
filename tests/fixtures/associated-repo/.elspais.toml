@@ -1,11 +1,11 @@
-# Sponsor repository configuration
+# Associated repository configuration
 # References core repository for cross-repo validation
 
 [project]
-name = "sponsor-callisto"
-type = "sponsor"
+name = "associated-callisto"
+type = "associated"
 
-[sponsor]
+[associated]
 prefix = "CAL"
 id_range = [1, 99999]
 
@@ -16,7 +16,7 @@ path = "../hht-like"
 spec = "spec"
 
 [patterns]
-id_template = "{prefix}-{sponsor}{type}{id}"
+id_template = "{prefix}-{associated}{type}{id}"
 prefix = "REQ"
 
 [patterns.types]
@@ -29,7 +29,7 @@ style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.sponsor]
+[patterns.associated]
 enabled = true
 position = "after_prefix"
 format = "uppercase"

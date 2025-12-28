@@ -341,14 +341,14 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
         errors.append("Missing required section: [project]")
     elif "type" in config["project"]:
         project_type = config["project"]["type"]
-        if project_type not in ["core", "sponsor"]:
-            errors.append(f"Invalid project type: {project_type}. Must be 'core' or 'sponsor'")
+        if project_type not in ["core", "associated"]:
+            errors.append(f"Invalid project type: {project_type}. Must be 'core' or 'associated'")
 
-    # Validate sponsor config when type is sponsor
-    if config.get("project", {}).get("type") == "sponsor":
-        sponsor = config.get("sponsor", {})
-        if not sponsor.get("prefix"):
-            errors.append("Sponsor repository requires sponsor.prefix to be set")
+    # Validate associated config when type is associated
+    if config.get("project", {}).get("type") == "associated":
+        associated = config.get("associated", {})
+        if not associated.get("prefix"):
+            errors.append("Associated repository requires associated.prefix to be set")
 
     return errors
 

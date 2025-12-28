@@ -10,7 +10,7 @@ and supports multi-repository requirement management with configurable
 ID patterns and validation rules.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "Anspar"
 __license__ = "MIT"
 

@@ -186,20 +186,20 @@ class TestNamedStyleParsing:
         assert "REQ-AuditLog" in requirements
 
 
-class TestSponsorStyleParsing:
-    """Tests for sponsor-style requirement parsing."""
+class TestAssociatedStyleParsing:
+    """Tests for associated-style requirement parsing."""
 
-    def test_parse_sponsor_style(self, sponsor_repo_fixture):
-        """Test parsing sponsor IDs (REQ-CAL-d00001)."""
+    def test_parse_associated_style(self, associated_repo_fixture):
+        """Test parsing associated IDs (REQ-CAL-d00001)."""
         from elspais.core.parser import RequirementParser
         from elspais.core.patterns import PatternConfig
         from elspais.config.loader import load_config
 
-        config_dict = load_config(sponsor_repo_fixture / ".elspais.toml")
+        config_dict = load_config(associated_repo_fixture / ".elspais.toml")
         pattern_config = PatternConfig.from_dict(config_dict["patterns"])
         parser = RequirementParser(pattern_config)
 
-        spec_dir = sponsor_repo_fixture / "spec"
+        spec_dir = associated_repo_fixture / "spec"
         requirements = parser.parse_directory(spec_dir)
 
         assert "REQ-CAL-p00001" in requirements

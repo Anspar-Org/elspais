@@ -95,7 +95,7 @@ Allow cross-repository references:
 
 ```toml
 [rules.hierarchy]
-cross_repo_implements = true  # Sponsor can implement core REQs
+cross_repo_implements = true  # Associated can implement core REQs
 ```
 
 ## Format Rules
@@ -264,7 +264,7 @@ severity = "warning"
 
 ## Per-Repo Overrides
 
-Sponsor repositories can override core rules:
+Associated repositories can override core rules:
 
 **Core repo** (strict):
 ```toml
@@ -277,7 +277,7 @@ require_rationale = true
 require_acceptance = true
 ```
 
-**Sponsor repo** (permissive for innovation):
+**Associated repo** (permissive for innovation):
 ```toml
 [rules.hierarchy]
 allow_orphans = true  # Allow experimental requirements
@@ -308,7 +308,7 @@ elspais validate --skip-rule format.require_rationale
 ## Best Practices
 
 1. **Start strict, relax as needed**: Begin with all rules enabled
-2. **Use per-repo overrides**: Let sponsors have different rules
+2. **Use per-repo overrides**: Let associated repos have different rules
 3. **Document exceptions**: If disabling rules, document why
 4. **Review orphans**: Orphaned requirements may indicate gaps
 5. **Check circular dependencies**: They indicate design issues
