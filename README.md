@@ -18,17 +18,49 @@
 
 ## Installation
 
+### For End Users
+
 ```bash
+# Standard installation
 pip install elspais
+
+# Recommended for CLI tools: Isolated installation
+pipx install elspais
 ```
 
-Or install from source:
+### For Development
 
 ```bash
 git clone https://github.com/anspar/elspais.git
 cd elspais
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+### For Docker and CI/CD
+
+For faster installation in containerized environments, consider [uv](https://github.com/astral-sh/uv):
+
+```dockerfile
+# Example Dockerfile
+FROM python:3.11-slim
+
+# Copy uv binary
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install elspais (10-100x faster than pip)
+RUN uv pip install --system --no-cache elspais==0.8.0
+```
+
+```yaml
+# Example GitHub Actions
+- name: Install uv
+  uses: astral-sh/setup-uv@v2
+
+- name: Install elspais
+  run: uv pip install --system elspais==0.8.0
+```
+
+**Note:** For regulated/medical software projects, always pin the exact version for reproducibility.
 
 ## Quick Start
 
