@@ -5,6 +5,7 @@ Validates requirements format, links, and hashes.
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -85,6 +86,12 @@ def run(args: argparse.Namespace) -> int:
             v for v in violations
             if not any(skip in v.rule_name for skip in args.skip_rule)
         ]
+
+    # JSON output mode - output and exit
+    if getattr(args, 'json', False):
+        print(format_requirements_json(requirements, violations))
+        errors = [v for v in violations if v.severity == Severity.ERROR]
+        return 1 if errors else 0
 
     # Report results
     errors = [v for v in violations if v.severity == Severity.ERROR]
@@ -232,3 +239,69 @@ def load_core_requirements(core_path: Path, config: Dict) -> Dict[str, Requireme
         return parser.parse_directory(spec_dir, skip_files=skip_files)
     except Exception:
         return {}
+
+
+def format_requirements_json(
+    requirements: Dict[str, Requirement],
+    violations: List[RuleViolation],
+) -> str:
+    """
+    Format requirements as JSON in hht_diary compatible format.
+
+    Args:
+        requirements: Dictionary of requirement ID to Requirement
+        violations: List of rule violations for error metadata
+
+    Returns:
+        JSON string with requirement data
+    """
+    # Build violation lookup for cycle/conflict detection
+    violation_by_req: Dict[str, List[RuleViolation]] = {}
+    for v in violations:
+        if v.requirement_id not in violation_by_req:
+            violation_by_req[v.requirement_id] = []
+        violation_by_req[v.requirement_id].append(v)
+
+    output = {}
+    for req_id, req in requirements.items():
+        req_violations = violation_by_req.get(req_id, [])
+
+        # Check for specific violation types
+        is_cycle = any("cycle" in v.rule_name.lower() for v in req_violations)
+        is_conflict = any("conflict" in v.rule_name.lower() or "duplicate" in v.rule_name.lower() for v in req_violations)
+        conflict_with = None
+        cycle_path = None
+
+        for v in req_violations:
+            if "duplicate" in v.rule_name.lower():
+                # Try to extract conflicting ID from message
+                conflict_with = v.message
+            if "cycle" in v.rule_name.lower():
+                cycle_path = v.message
+
+        # Build requirement data matching hht_diary format
+        output[req_id] = {
+            "title": req.title,
+            "status": req.status,
+            "level": req.level,
+            "body": req.body.strip(),
+            "rationale": (req.rationale or "").strip(),
+            "file": req.file_path.name if req.file_path else "",
+            "filePath": str(req.file_path) if req.file_path else "",
+            "line": req.line_number or 0,
+            "implements": req.implements,
+            "hash": req.hash or "",
+            "isConflict": is_conflict,
+            "conflictWith": conflict_with,
+            "isCycle": is_cycle,
+            "cyclePath": cycle_path,
+        }
+
+        # Include assertions if present
+        if req.assertions:
+            output[req_id]["assertions"] = [
+                {"label": a.label, "text": a.text, "isPlaceholder": a.is_placeholder}
+                for a in req.assertions
+            ]
+
+    return json.dumps(output, indent=2)
