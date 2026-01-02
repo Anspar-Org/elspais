@@ -361,6 +361,25 @@ Examples:
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
 
+    # mcp command
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="MCP server commands (requires elspais[mcp])",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
+
+    # mcp serve
+    mcp_serve = mcp_subparsers.add_parser(
+        "serve",
+        help="Start MCP server",
+    )
+    mcp_serve.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="stdio",
+        help="Transport type (default: stdio)",
+    )
+
     return parser
 
 
@@ -404,6 +423,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return config_cmd.run(args)
         elif args.command == "rules":
             return rules_cmd.run(args)
+        elif args.command == "mcp":
+            return mcp_command(args)
         else:
             parser.print_help()
             return 1
@@ -428,6 +449,34 @@ def version_command(args: argparse.Namespace) -> int:
         print("Update check not yet implemented.")
 
     return 0
+
+
+def mcp_command(args: argparse.Namespace) -> int:
+    """Handle MCP server commands."""
+    try:
+        from elspais.mcp.server import run_server
+    except ImportError:
+        print("Error: MCP dependencies not installed.", file=sys.stderr)
+        print("Install with: pip install elspais[mcp]", file=sys.stderr)
+        return 1
+
+    if args.mcp_action == "serve":
+        working_dir = Path.cwd()
+        if hasattr(args, "spec_dir") and args.spec_dir:
+            working_dir = args.spec_dir.parent
+
+        print(f"Starting elspais MCP server...")
+        print(f"Working directory: {working_dir}")
+        print(f"Transport: {args.transport}")
+
+        try:
+            run_server(working_dir=working_dir, transport=args.transport)
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
+        return 0
+    else:
+        print("Usage: elspais mcp serve")
+        return 1
 
 
 if __name__ == "__main__":
