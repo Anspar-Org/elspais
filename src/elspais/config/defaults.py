@@ -108,6 +108,7 @@ DEFAULT_CONFIG = {
             "title_max_length": 100,
             "title_pattern": "^[A-Z].*",
         },
+        "content_rules": [],  # List of content rule markdown file paths
     },
     "validation": {
         "strict_hierarchy": True,

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import analyze, config_cmd, edit, hash_cmd, index, init, trace, validate
+from elspais.commands import analyze, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -338,6 +338,29 @@ Examples:
         help="Show path to configuration file",
     )
 
+    # rules command
+    rules_parser = subparsers.add_parser(
+        "rules",
+        help="View and manage content rules",
+    )
+    rules_subparsers = rules_parser.add_subparsers(dest="rules_action")
+
+    # rules list
+    rules_subparsers.add_parser(
+        "list",
+        help="List configured content rules",
+    )
+
+    # rules show
+    rules_show = rules_subparsers.add_parser(
+        "show",
+        help="Show content of a content rule file",
+    )
+    rules_show.add_argument(
+        "file",
+        help="Content rule file name (e.g., 'AI-AGENT.md')",
+    )
+
     return parser
 
 
@@ -379,6 +402,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return edit.run(args)
         elif args.command == "config":
             return config_cmd.run(args)
+        elif args.command == "rules":
+            return rules_cmd.run(args)
         else:
             parser.print_help()
             return 1

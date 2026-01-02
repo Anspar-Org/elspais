@@ -470,3 +470,25 @@ def get_spec_directories(
         base_path=base_path,
         default="spec",
     )
+
+
+def get_content_rules(
+    config: Dict[str, Any],
+    base_path: Optional[Path] = None,
+) -> List[Path]:
+    """Get content rule file paths from configuration.
+
+    Args:
+        config: Configuration dictionary
+        base_path: Base path to resolve relative paths (defaults to cwd)
+
+    Returns:
+        List of content rule file paths (may not exist)
+    """
+    if base_path is None:
+        base_path = Path.cwd()
+
+    rules_config = config.get("rules", {})
+    rule_paths = rules_config.get("content_rules", [])
+
+    return [base_path / rel_path for rel_path in rule_paths]

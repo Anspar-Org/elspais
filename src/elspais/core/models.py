@@ -214,3 +214,27 @@ class Requirement:
 
     def __repr__(self) -> str:
         return f"Requirement(id={self.id!r}, title={self.title!r}, level={self.level!r})"
+
+
+@dataclass
+class ContentRule:
+    """
+    Represents a content rule file for semantic validation guidance.
+
+    Content rules are markdown files that provide guidance to AI agents
+    and humans when authoring requirements. They can include YAML frontmatter
+    for metadata.
+
+    Attributes:
+        file_path: Path to the content rule file
+        title: Human-readable title (from frontmatter or filename)
+        content: Full markdown content (excluding frontmatter)
+        type: Rule type - "guidance", "specification", or "template"
+        applies_to: List of what this rule applies to (e.g., ["requirements", "assertions"])
+    """
+
+    file_path: Path
+    title: str
+    content: str
+    type: str = "guidance"
+    applies_to: List[str] = field(default_factory=list)
