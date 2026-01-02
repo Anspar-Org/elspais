@@ -82,6 +82,11 @@ Examples:
         help="Skip specific validation rules",
         metavar="RULE",
     )
+    validate_parser.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output requirements as JSON (hht_diary compatible format)",
+    )
 
     # trace command
     trace_parser = subparsers.add_parser(
