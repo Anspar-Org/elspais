@@ -365,6 +365,38 @@ Examples:
     mcp_parser = subparsers.add_parser(
         "mcp",
         help="MCP server commands (requires elspais[mcp])",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Claude Code Configuration:
+  Add to ~/.claude/claude_desktop_config.json:
+
+    {
+      "mcpServers": {
+        "elspais": {
+          "command": "elspais",
+          "args": ["mcp", "serve"],
+          "cwd": "/path/to/your/project"
+        }
+      }
+    }
+
+  Set "cwd" to the directory containing your .elspais.toml config.
+
+Resources:
+  requirements://all           List all requirements
+  requirements://{id}          Get requirement details
+  requirements://level/{level} Filter by PRD/OPS/DEV
+  content-rules://list         List content rules
+  content-rules://{file}       Get content rule content
+  config://current             Current configuration
+
+Tools:
+  validate          Run validation rules
+  parse_requirement Parse requirement text
+  search            Search requirements by pattern
+  get_requirement   Get requirement details
+  analyze           Analyze hierarchy/orphans/coverage
+""",
     )
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
 

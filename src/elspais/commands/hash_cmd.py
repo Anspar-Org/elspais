@@ -139,25 +139,31 @@ def load_requirements(args: argparse.Namespace) -> tuple:
 
 
 def update_hash_in_file(req: Requirement, new_hash: str) -> None:
-    """Update the hash in the requirement's source file."""
+    """Update the hash in the requirement's source file.
+
+    The replacement is scoped to the specific requirement's end marker
+    (identified by title) to avoid accidentally updating other requirements
+    in the same file that might have the same hash value.
+    """
     if not req.file_path:
         return
 
     content = req.file_path.read_text(encoding="utf-8")
 
-    # Find and replace the hash
     import re
 
     if req.hash:
-        # Replace existing hash
+        # Replace existing hash - SCOPED to this requirement's end marker
+        # Match: *End* *Title* | **Hash**: oldhash
+        # Replace hash only for THIS requirement (identified by title)
         content = re.sub(
-            rf"\*\*Hash\*\*:\s*{re.escape(req.hash)}",
-            f"**Hash**: {new_hash}",
+            rf"(\*End\*\s+\*{re.escape(req.title)}\*\s*\|\s*)\*\*Hash\*\*:\s*{re.escape(req.hash)}",
+            rf"\1**Hash**: {new_hash}",
             content,
         )
     else:
         # Add hash to end marker
-        # Pattern: *End* *Title* | ...
+        # Pattern: *End* *Title* (without hash)
         # Add: | **Hash**: XXXX
         content = re.sub(
             rf"(\*End\*\s+\*{re.escape(req.title)}\*)(?!\s*\|\s*\*\*Hash\*\*)",
