@@ -28,16 +28,44 @@ class RequirementType:
 
 
 @dataclass
+class Assertion:
+    """
+    Represents a single assertion within a requirement.
+
+    Assertions are the unit of verification - each defines one testable
+    obligation using SHALL/SHALL NOT language.
+
+    Attributes:
+        label: The assertion label (e.g., "A", "B", "01", "0A")
+        text: The assertion text (e.g., "The system SHALL...")
+        is_placeholder: True if text indicates removed/deprecated assertion
+    """
+
+    label: str
+    text: str
+    is_placeholder: bool = False
+
+    @property
+    def full_id(self) -> str:
+        """Return the assertion ID suffix (e.g., "-A")."""
+        return f"-{self.label}"
+
+    def __str__(self) -> str:
+        return f"{self.label}. {self.text}"
+
+
+@dataclass
 class ParsedRequirement:
     """
     Represents a parsed requirement ID broken into components.
 
     Attributes:
-        full_id: The complete requirement ID (e.g., "REQ-CAL-p00001")
+        full_id: The complete requirement ID (e.g., "REQ-CAL-p00001" or "REQ-p00001-A")
         prefix: The ID prefix (e.g., "REQ")
         associated: Optional associated repo namespace (e.g., "CAL")
         type_code: The requirement type code (e.g., "p")
         number: The ID number or name (e.g., "00001")
+        assertion: Optional assertion label (e.g., "A", "01")
     """
 
     full_id: str
@@ -45,6 +73,14 @@ class ParsedRequirement:
     associated: Optional[str]
     type_code: str
     number: str
+    assertion: Optional[str] = None
+
+    @property
+    def base_id(self) -> str:
+        """Return the requirement ID without assertion suffix."""
+        if self.assertion:
+            return self.full_id.rsplit("-", 1)[0]
+        return self.full_id
 
 
 @dataclass
@@ -59,7 +95,8 @@ class Requirement:
         status: Current status (e.g., "Active", "Draft")
         body: Main requirement text
         implements: List of requirement IDs this requirement implements
-        acceptance_criteria: List of acceptance criteria
+        acceptance_criteria: List of acceptance criteria (legacy format)
+        assertions: List of Assertion objects (new format)
         rationale: Optional rationale text
         hash: Content hash for change detection
         file_path: Source file path
@@ -74,6 +111,7 @@ class Requirement:
     body: str
     implements: List[str] = field(default_factory=list)
     acceptance_criteria: List[str] = field(default_factory=list)
+    assertions: List["Assertion"] = field(default_factory=list)
     rationale: Optional[str] = None
     hash: Optional[str] = None
     file_path: Optional[Path] = None
@@ -136,6 +174,17 @@ class Requirement:
         elif self.file_path:
             return str(self.file_path)
         return "unknown"
+
+    def get_assertion(self, label: str) -> Optional["Assertion"]:
+        """Get an assertion by its label."""
+        for assertion in self.assertions:
+            if assertion.label == label:
+                return assertion
+        return None
+
+    def assertion_id(self, label: str) -> str:
+        """Return the full assertion ID (e.g., 'REQ-p00001-A')."""
+        return f"{self.id}-{label}"
 
     def __str__(self) -> str:
         return f"{self.id}: {self.title}"

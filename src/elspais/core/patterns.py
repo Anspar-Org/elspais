@@ -26,6 +26,7 @@ class PatternConfig:
         types: Dictionary of type definitions
         id_format: ID format configuration (style, digits, etc.)
         associated: Optional associated repo namespace configuration
+        assertions: Optional assertion label format configuration
     """
 
     id_template: str
@@ -33,6 +34,7 @@ class PatternConfig:
     types: Dict[str, Dict[str, Any]]
     id_format: Dict[str, Any]
     associated: Optional[Dict[str, Any]] = None
+    assertions: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PatternConfig":
@@ -43,6 +45,7 @@ class PatternConfig:
             types=data.get("types", {}),
             id_format=data.get("id_format", {"style": "numeric", "digits": 5}),
             associated=data.get("associated"),
+            assertions=data.get("assertions"),
         )
 
     def get_type_by_id(self, type_id: str) -> Optional[Dict[str, Any]]:
@@ -55,6 +58,47 @@ class PatternConfig:
     def get_all_type_ids(self) -> List[str]:
         """Get list of all type IDs."""
         return [config.get("id", "") for config in self.types.values()]
+
+    def get_assertion_label_pattern(self) -> str:
+        """Get regex pattern for assertion labels based on configuration."""
+        assertions = self.assertions or {}
+        style = assertions.get("label_style", "uppercase")
+        zero_pad = assertions.get("zero_pad", False)
+
+        if style == "uppercase":
+            return r"[A-Z]"
+        elif style == "numeric":
+            if zero_pad:
+                return r"[0-9]{2}"
+            return r"[0-9]{1,2}"
+        elif style == "alphanumeric":
+            return r"[0-9A-Z]"
+        elif style == "numeric_1based":
+            if zero_pad:
+                return r"[0-9]{2}"
+            return r"[1-9][0-9]?"
+        else:
+            return r"[A-Z]"
+
+    def get_assertion_max_count(self) -> int:
+        """Get maximum number of assertions allowed."""
+        assertions = self.assertions or {}
+        style = assertions.get("label_style", "uppercase")
+        max_count = assertions.get("max_count")
+
+        if max_count is not None:
+            return max_count
+
+        # Default max based on style
+        if style == "uppercase":
+            return 26
+        elif style == "numeric":
+            return 100
+        elif style == "alphanumeric":
+            return 36
+        elif style == "numeric_1based":
+            return 99
+        return 26
 
 
 class PatternValidator:
@@ -71,9 +115,17 @@ class PatternValidator:
         """
         self.config = config
         self._regex = self._build_regex()
+        self._regex_with_assertion = self._build_regex(include_assertion=True)
+        self._assertion_label_regex = re.compile(
+            f"^{self.config.get_assertion_label_pattern()}$"
+        )
 
-    def _build_regex(self) -> re.Pattern:
-        """Build regex pattern from configuration."""
+    def _build_regex(self, include_assertion: bool = False) -> re.Pattern:
+        """Build regex pattern from configuration.
+
+        Args:
+            include_assertion: If True, include optional assertion suffix pattern
+        """
         template = self.config.id_template
 
         # Build type alternatives
@@ -132,19 +184,26 @@ class PatternValidator:
 
         pattern = pattern.replace("{id}", f"(?P<id>{id_pattern})")
 
+        # Optionally add assertion suffix pattern
+        if include_assertion:
+            assertion_pattern = self.config.get_assertion_label_pattern()
+            pattern = f"{pattern}(?:-(?P<assertion>{assertion_pattern}))?"
+
         return re.compile(f"^{pattern}$")
 
-    def parse(self, id_string: str) -> Optional[ParsedRequirement]:
+    def parse(self, id_string: str, allow_assertion: bool = False) -> Optional[ParsedRequirement]:
         """
         Parse a requirement ID string into components.
 
         Args:
-            id_string: The requirement ID to parse (e.g., "REQ-p00001")
+            id_string: The requirement ID to parse (e.g., "REQ-p00001" or "REQ-p00001-A")
+            allow_assertion: If True, allow and parse assertion suffix
 
         Returns:
             ParsedRequirement if valid, None if invalid
         """
-        match = self._regex.match(id_string)
+        regex = self._regex_with_assertion if allow_assertion else self._regex
+        match = regex.match(id_string)
         if not match:
             return None
 
@@ -155,19 +214,97 @@ class PatternValidator:
             associated=groups.get("associated") or None,
             type_code=groups.get("type", ""),
             number=groups.get("id", ""),
+            assertion=groups.get("assertion") or None,
         )
 
-    def is_valid(self, id_string: str) -> bool:
+    def is_valid(self, id_string: str, allow_assertion: bool = False) -> bool:
         """
         Check if an ID string is valid.
 
         Args:
             id_string: The requirement ID to validate
+            allow_assertion: If True, allow assertion suffix
 
         Returns:
             True if valid, False otherwise
         """
-        return self.parse(id_string) is not None
+        return self.parse(id_string, allow_assertion=allow_assertion) is not None
+
+    def is_valid_assertion_label(self, label: str) -> bool:
+        """
+        Check if an assertion label is valid.
+
+        Args:
+            label: The assertion label to validate (e.g., "A", "01")
+
+        Returns:
+            True if valid, False otherwise
+        """
+        return self._assertion_label_regex.match(label) is not None
+
+    def format_assertion_label(self, index: int) -> str:
+        """
+        Format an assertion label from a zero-based index.
+
+        Args:
+            index: Zero-based index (0 = A or 00, 1 = B or 01, etc.)
+
+        Returns:
+            Formatted assertion label
+        """
+        assertions = self.config.assertions or {}
+        style = assertions.get("label_style", "uppercase")
+        zero_pad = assertions.get("zero_pad", False)
+
+        if style == "uppercase":
+            if index < 0 or index >= 26:
+                raise ValueError(f"Index {index} out of range for uppercase labels (0-25)")
+            return chr(ord("A") + index)
+        elif style == "numeric":
+            if zero_pad:
+                return f"{index:02d}"
+            return str(index)
+        elif style == "alphanumeric":
+            if index < 10:
+                return str(index)
+            elif index < 36:
+                return chr(ord("A") + index - 10)
+            else:
+                raise ValueError(f"Index {index} out of range for alphanumeric labels (0-35)")
+        elif style == "numeric_1based":
+            if zero_pad:
+                return f"{index + 1:02d}"
+            return str(index + 1)
+        else:
+            return chr(ord("A") + index)
+
+    def parse_assertion_label_index(self, label: str) -> int:
+        """
+        Parse an assertion label to get its zero-based index.
+
+        Args:
+            label: The assertion label (e.g., "A", "01", "B")
+
+        Returns:
+            Zero-based index
+        """
+        assertions = self.config.assertions or {}
+        style = assertions.get("label_style", "uppercase")
+
+        if style == "uppercase":
+            if len(label) == 1 and label.isupper():
+                return ord(label) - ord("A")
+        elif style == "numeric":
+            return int(label)
+        elif style == "alphanumeric":
+            if label.isdigit():
+                return int(label)
+            elif len(label) == 1 and label.isupper():
+                return ord(label) - ord("A") + 10
+        elif style == "numeric_1based":
+            return int(label) - 1
+
+        raise ValueError(f"Cannot parse assertion label: {label}")
 
     def format(
         self, type_code: str, number: int, associated: Optional[str] = None

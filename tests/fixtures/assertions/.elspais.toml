@@ -1,0 +1,32 @@
+[project]
+name = "assertions-test"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", name = "Product Requirement", level = 1 }
+dev = { id = "d", name = "Development Requirement", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[rules.format]
+require_hash = true
+require_assertions = true
+acceptance_criteria = "warn"
+require_shall = true
+labels_sequential = true
+labels_unique = true
+placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved", "Removed"]

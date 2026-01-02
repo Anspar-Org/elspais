@@ -10,16 +10,17 @@ and supports multi-repository requirement management with configurable
 ID patterns and validation rules.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 __author__ = "Anspar"
 __license__ = "MIT"
 
-from elspais.core.models import Requirement, ParsedRequirement
+from elspais.core.models import Assertion, Requirement, ParsedRequirement
 from elspais.core.patterns import PatternValidator
 from elspais.core.rules import RuleEngine, RuleViolation, Severity
 
 __all__ = [
     "__version__",
+    "Assertion",
     "Requirement",
     "ParsedRequirement",
     "PatternValidator",

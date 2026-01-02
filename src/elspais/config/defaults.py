@@ -45,6 +45,11 @@ DEFAULT_CONFIG = {
             "length": 3,
             "separator": "-",
         },
+        "assertions": {
+            "label_style": "uppercase",  # uppercase | numeric | alphanumeric | numeric_1based
+            "max_count": 26,
+            "zero_pad": False,
+        },
     },
     "spec": {
         "index_file": "INDEX.md",
@@ -82,9 +87,17 @@ DEFAULT_CONFIG = {
         "format": {
             "require_hash": True,
             "require_rationale": False,
-            "require_acceptance": True,
             "require_status": True,
             "allowed_statuses": ["Active", "Draft", "Deprecated", "Superseded"],
+            # Assertion format rules
+            "require_assertions": True,
+            "acceptance_criteria": "warn",  # allow | warn | error
+            "require_shall": True,
+            "labels_sequential": True,
+            "labels_unique": True,
+            "placeholder_values": [
+                "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+            ],
         },
         "traceability": {
             "require_code_link": False,
