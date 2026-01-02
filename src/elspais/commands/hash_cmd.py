@@ -7,14 +7,13 @@ Verify and update requirement hashes.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict
 
-from elspais.config.loader import load_config, find_config_file, get_spec_directories
 from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.core.patterns import PatternConfig
-from elspais.core.parser import RequirementParser
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hasher import calculate_hash, verify_hash
 from elspais.core.models import Requirement
+from elspais.core.parser import RequirementParser
+from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:

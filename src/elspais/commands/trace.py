@@ -5,13 +5,13 @@ elspais.commands.trace - Generate traceability matrix command.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from elspais.config.loader import load_config, find_config_file, get_spec_directories
 from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.core.patterns import PatternConfig
-from elspais.core.parser import RequirementParser
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.models import Requirement
+from elspais.core.parser import RequirementParser
+from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -48,7 +48,10 @@ def run(args: argparse.Namespace) -> int:
     if output_format in ["markdown", "both"]:
         md_output = generate_markdown_matrix(requirements)
         if args.output:
-            output_path = args.output if output_format == "markdown" else args.output.with_suffix(".md")
+            if output_format == "markdown":
+                output_path = args.output
+            else:
+                output_path = args.output.with_suffix(".md")
         else:
             output_path = Path("traceability.md")
         output_path.write_text(md_output)
@@ -57,7 +60,10 @@ def run(args: argparse.Namespace) -> int:
     if output_format in ["html", "both"]:
         html_output = generate_html_matrix(requirements)
         if args.output:
-            output_path = args.output if output_format == "html" else args.output.with_suffix(".html")
+            if output_format == "html":
+                output_path = args.output
+            else:
+                output_path = args.output.with_suffix(".html")
         else:
             output_path = Path("traceability.html")
         output_path.write_text(html_output)
@@ -159,7 +165,11 @@ def generate_html_matrix(requirements: Dict[str, Requirement]) -> str:
         for req_id, req in sorted(reqs.items()):
             impl_str = ", ".join(req.implements) if req.implements else "-"
             status_class = f"status-{req.status.lower()}"
-            html += f'        <tr><td>{req_id}</td><td>{req.title}</td><td>{impl_str}</td><td class="{status_class}">{req.status}</td></tr>\n'
+            subdir_attr = f'data-subdir="{req.subdir}"'
+            html += (
+                f'        <tr {subdir_attr}><td>{req_id}</td><td>{req.title}</td>'
+                f'<td>{impl_str}</td><td class="{status_class}">{req.status}</td></tr>\n'
+            )
 
         html += "    </table>\n"
 
@@ -172,12 +182,12 @@ def generate_html_matrix(requirements: Dict[str, Requirement]) -> str:
 
 def generate_csv_matrix(requirements: Dict[str, Requirement]) -> str:
     """Generate CSV traceability matrix."""
-    lines = ["ID,Title,Level,Status,Implements"]
+    lines = ["ID,Title,Level,Status,Implements,Subdir"]
 
     for req_id, req in sorted(requirements.items()):
         impl_str = ";".join(req.implements) if req.implements else ""
         title = req.title.replace('"', '""')
-        lines.append(f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}"')
+        lines.append(f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}","{req.subdir}"')
 
     return "\n".join(lines)
 

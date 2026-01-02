@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import validate, trace, hash_cmd, index, analyze, init
+from elspais.commands import analyze, edit, hash_cmd, index, init, trace, validate
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -113,7 +113,7 @@ Examples:
     )
     hash_subparsers = hash_parser.add_subparsers(dest="hash_action")
 
-    hash_verify = hash_subparsers.add_parser(
+    hash_subparsers.add_parser(
         "verify",
         help="Verify hashes without changes",
     )
@@ -201,6 +201,47 @@ Examples:
         help="Overwrite existing configuration",
     )
 
+    # edit command
+    edit_parser = subparsers.add_parser(
+        "edit",
+        help="Edit requirements in-place (implements, status, move)",
+    )
+    edit_parser.add_argument(
+        "--req-id",
+        help="Requirement ID to edit",
+        metavar="ID",
+    )
+    edit_parser.add_argument(
+        "--implements",
+        help="New Implements value (comma-separated, empty string to clear)",
+        metavar="REFS",
+    )
+    edit_parser.add_argument(
+        "--status",
+        help="New Status value",
+        metavar="STATUS",
+    )
+    edit_parser.add_argument(
+        "--move-to",
+        help="Move requirement to file (relative to spec dir)",
+        metavar="FILE",
+    )
+    edit_parser.add_argument(
+        "--from-json",
+        help="Batch edit from JSON file (- for stdin)",
+        metavar="FILE",
+    )
+    edit_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show changes without applying",
+    )
+    edit_parser.add_argument(
+        "--validate-refs",
+        action="store_true",
+        help="Validate that implements references exist",
+    )
+
     return parser
 
 
@@ -238,6 +279,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return version_command(args)
         elif args.command == "init":
             return init.run(args)
+        elif args.command == "edit":
+            return edit.run(args)
         else:
             parser.print_help()
             return 1

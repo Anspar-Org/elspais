@@ -6,11 +6,10 @@ Parses Markdown files containing requirements in the standard format.
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 from elspais.core.models import Assertion, Requirement
-from elspais.core.patterns import PatternValidator, PatternConfig
-from elspais.core.hasher import extract_hash_from_footer
+from elspais.core.patterns import PatternConfig, PatternValidator
 
 
 class RequirementParser:
@@ -19,7 +18,8 @@ class RequirementParser:
     """
 
     # Regex patterns for parsing
-    # Generic pattern to find potential requirement headers - actual ID validation done by PatternValidator
+    # Generic pattern to find potential requirement headers
+    # Actual ID validation is done by PatternValidator
     HEADER_PATTERN = re.compile(
         r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$"
     )
@@ -90,7 +90,10 @@ class RequirementParser:
         )
 
     def parse_text(
-        self, text: str, file_path: Optional[Path] = None
+        self,
+        text: str,
+        file_path: Optional[Path] = None,
+        subdir: str = "",
     ) -> Dict[str, Requirement]:
         """
         Parse requirements from text.
@@ -98,6 +101,7 @@ class RequirementParser:
         Args:
             text: Markdown text containing requirements
             file_path: Optional source file path for location tracking
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
             Dictionary of requirement ID -> Requirement
@@ -144,7 +148,7 @@ class RequirementParser:
                 # Parse the requirement block
                 req_text = "\n".join(req_lines)
                 req = self._parse_requirement_block(
-                    req_id, title, req_text, file_path, start_line
+                    req_id, title, req_text, file_path, start_line, subdir
                 )
                 if req:
                     requirements[req_id] = req
@@ -153,24 +157,30 @@ class RequirementParser:
 
         return requirements
 
-    def parse_file(self, file_path: Path) -> Dict[str, Requirement]:
+    def parse_file(
+        self,
+        file_path: Path,
+        subdir: str = "",
+    ) -> Dict[str, Requirement]:
         """
         Parse requirements from a file.
 
         Args:
             file_path: Path to the Markdown file
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
             Dictionary of requirement ID -> Requirement
         """
         text = file_path.read_text(encoding="utf-8")
-        return self.parse_text(text, file_path)
+        return self.parse_text(text, file_path, subdir)
 
     def parse_directory(
         self,
         directory: Path,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
+        subdir: str = "",
     ) -> Dict[str, Requirement]:
         """
         Parse all requirements from a directory.
@@ -179,6 +189,7 @@ class RequirementParser:
             directory: Path to the spec directory
             patterns: Optional glob patterns to match files
             skip_files: Optional list of filenames to skip
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
             Dictionary of requirement ID -> Requirement
@@ -193,14 +204,14 @@ class RequirementParser:
         for pattern in patterns:
             for file_path in directory.glob(pattern):
                 if file_path.is_file() and file_path.name not in skip_files:
-                    file_reqs = self.parse_file(file_path)
+                    file_reqs = self.parse_file(file_path, subdir)
                     requirements.update(file_reqs)
 
         return requirements
 
     def parse_directories(
         self,
-        directories: Union[str, Path, List[Union[str, Path]]],
+        directories: Union[str, Path, Sequence[Union[str, Path]]],
         base_path: Optional[Path] = None,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
@@ -230,12 +241,60 @@ class RequirementParser:
 
         requirements = {}
         for dir_entry in dir_list:
-            dir_path = base_path / dir_entry if not Path(dir_entry).is_absolute() else Path(dir_entry)
+            if Path(dir_entry).is_absolute():
+                dir_path = Path(dir_entry)
+            else:
+                dir_path = base_path / dir_entry
             if dir_path.exists() and dir_path.is_dir():
                 dir_reqs = self.parse_directory(
                     dir_path, patterns=patterns, skip_files=skip_files
                 )
                 requirements.update(dir_reqs)
+
+        return requirements
+
+    def parse_directory_with_subdirs(
+        self,
+        directory: Path,
+        subdirs: Optional[List[str]] = None,
+        patterns: Optional[List[str]] = None,
+        skip_files: Optional[List[str]] = None,
+    ) -> Dict[str, Requirement]:
+        """
+        Parse requirements from a directory and its subdirectories.
+
+        Unlike parse_directory, this method:
+        - Parses the root directory (with subdir="")
+        - Parses each specified subdirectory (with subdir set to the subdir name)
+
+        Args:
+            directory: Path to the spec directory
+            subdirs: List of subdirectory names to include (e.g., ["roadmap", "archive"])
+            patterns: Optional glob patterns to match files
+            skip_files: Optional list of filenames to skip
+
+        Returns:
+            Dictionary of requirement ID -> Requirement
+        """
+        if subdirs is None:
+            subdirs = []
+
+        requirements = {}
+
+        # Parse root directory
+        root_reqs = self.parse_directory(
+            directory, patterns=patterns, skip_files=skip_files, subdir=""
+        )
+        requirements.update(root_reqs)
+
+        # Parse each subdirectory
+        for subdir_name in subdirs:
+            subdir_path = directory / subdir_name
+            if subdir_path.exists() and subdir_path.is_dir():
+                subdir_reqs = self.parse_directory(
+                    subdir_path, patterns=patterns, skip_files=skip_files, subdir=subdir_name
+                )
+                requirements.update(subdir_reqs)
 
         return requirements
 
@@ -246,6 +305,7 @@ class RequirementParser:
         text: str,
         file_path: Optional[Path],
         line_number: int,
+        subdir: str = "",
     ) -> Optional[Requirement]:
         """
         Parse a single requirement block.
@@ -256,6 +316,7 @@ class RequirementParser:
             text: The full requirement text block
             file_path: Source file path
             line_number: Starting line number
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
             Requirement object or None if parsing fails
@@ -328,6 +389,7 @@ class RequirementParser:
             hash=hash_value,
             file_path=file_path,
             line_number=line_number,
+            subdir=subdir,
         )
 
     def _parse_implements(self, implements_str: str) -> List[str]:
@@ -395,7 +457,7 @@ class RequirementParser:
         Returns:
             List of Assertion objects
         """
-        assertions = []
+        assertions: List[Assertion] = []
 
         # Find the assertions section
         header_match = self.ASSERTIONS_HEADER_PATTERN.search(text)

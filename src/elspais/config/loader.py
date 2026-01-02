@@ -311,7 +311,7 @@ def apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
 
             if section in config and isinstance(config[section], dict):
                 # Parse value (handle booleans, numbers)
-                parsed = value
+                parsed: Any = value
                 if value.lower() == "true":
                     parsed = True
                 elif value.lower() == "false":

@@ -5,13 +5,13 @@ elspais.commands.analyze - Analyze requirements command.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Optional
 
-from elspais.config.loader import load_config, find_config_file, get_spec_directories
 from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.core.patterns import PatternConfig
-from elspais.core.parser import RequirementParser
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.models import Requirement
+from elspais.core.parser import RequirementParser
+from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -83,7 +83,7 @@ def run_orphans(args: argparse.Namespace) -> int:
 
     orphans = []
 
-    for req_id, req in requirements.items():
+    for req in requirements.values():
         # Skip PRD (they can be roots)
         if req.level.upper() in ["PRD", "PRODUCT"]:
             continue
@@ -145,7 +145,7 @@ def run_coverage(args: argparse.Namespace) -> int:
     print(f"  OPS: {ops_count}")
     print(f"  DEV: {dev_count}")
     print()
-    print(f"PRD Implementation Coverage:")
+    print("PRD Implementation Coverage:")
     print(f"  Implemented: {len(implemented_prd)}/{prd_count}")
     if prd_count > 0:
         pct = (len(implemented_prd) / prd_count) * 100
@@ -206,7 +206,7 @@ def find_children(req_id: str, requirements: Dict[str, Requirement]) -> List[Req
     return sorted(children, key=lambda r: r.id)
 
 
-def find_requirement(impl_id: str, requirements: Dict[str, Requirement]) -> Requirement:
+def find_requirement(impl_id: str, requirements: Dict[str, Requirement]) -> Optional[Requirement]:
     """Find a requirement by full or partial ID."""
     if impl_id in requirements:
         return requirements[impl_id]

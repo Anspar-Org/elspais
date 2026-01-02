@@ -9,8 +9,8 @@ Supports multiple ID formats:
 """
 
 import re
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from elspais.core.models import ParsedRequirement
 
@@ -50,7 +50,7 @@ class PatternConfig:
 
     def get_type_by_id(self, type_id: str) -> Optional[Dict[str, Any]]:
         """Get type configuration by type ID."""
-        for name, config in self.types.items():
+        for config in self.types.values():
             if config.get("id") == type_id:
                 return config
         return None
@@ -87,7 +87,7 @@ class PatternConfig:
         max_count = assertions.get("max_count")
 
         if max_count is not None:
-            return max_count
+            return int(max_count)
 
         # Default max based on style
         if style == "uppercase":

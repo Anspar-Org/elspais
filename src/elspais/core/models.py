@@ -5,10 +5,10 @@ Provides dataclasses for representing requirements, parsed IDs,
 and requirement types.
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
-import re
 
 
 @dataclass
@@ -117,6 +117,7 @@ class Requirement:
     file_path: Optional[Path] = None
     line_number: Optional[int] = None
     tags: List[str] = field(default_factory=list)
+    subdir: str = ""  # Subdirectory within spec/, e.g., "roadmap", "archive", ""
 
     @property
     def type_code(self) -> str:
@@ -166,6 +167,28 @@ class Requirement:
         if match:
             return match.group(1)
         return None
+
+    @property
+    def is_roadmap(self) -> bool:
+        """
+        Check if this requirement is from the roadmap subdirectory.
+
+        Returns True if subdir is "roadmap", False otherwise.
+        This is a convenience property for backward compatibility.
+        """
+        return self.subdir == "roadmap"
+
+    @property
+    def spec_path(self) -> str:
+        """
+        Return the spec-relative file path as a string.
+
+        For requirements in spec/prd-core.md, returns "spec/prd-core.md".
+        For requirements in spec/roadmap/prd-future.md, returns "spec/roadmap/prd-future.md".
+        """
+        if self.file_path:
+            return str(self.file_path)
+        return ""
 
     def location(self) -> str:
         """Return file:line location string."""

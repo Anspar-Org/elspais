@@ -664,6 +664,202 @@ Body text.
         assert requirements["REQ-d00001"].implements == ["p00001"]
 
 
+class TestSubdirParsing:
+    """Tests for parsing requirements with subdir tracking."""
+
+    def test_parse_file_with_subdir(self, tmp_path):
+        """Test parsing a file with explicit subdir parameter."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create roadmap directory
+        roadmap_dir = tmp_path / "spec" / "roadmap"
+        roadmap_dir.mkdir(parents=True)
+        req_file = roadmap_dir / "roadmap-reqs.md"
+        req_file.write_text("""
+# REQ-p00001: Future Feature
+
+**Level**: PRD | **Status**: Draft
+
+Body text.
+
+*End* *Future Feature* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file, subdir="roadmap")
+        req = requirements["REQ-p00001"]
+        assert req.subdir == "roadmap"
+        assert req.is_roadmap is True
+
+    def test_parse_file_no_subdir(self, tmp_path):
+        """Test parsing a file without subdir parameter defaults to empty."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        req_file = spec_dir / "prd-core.md"
+        req_file.write_text("""
+# REQ-p00001: Core Feature
+
+**Level**: PRD | **Status**: Active
+
+Body text.
+
+*End* *Core Feature* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-p00001"]
+        assert req.subdir == ""
+        assert req.is_roadmap is False
+
+    def test_parse_directory_with_subdirs_auto_detects(self, tmp_path):
+        """Test parse_directory_with_subdirs auto-detects subdir from path."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create spec directory structure
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Root spec file
+        root_req = spec_dir / "prd-core.md"
+        root_req.write_text("""
+# REQ-p00001: Core Feature
+
+**Level**: PRD | **Status**: Active
+
+Body text.
+
+*End* *Core Feature* | **Hash**: test1234
+---
+""")
+
+        # Roadmap subdirectory
+        roadmap_dir = spec_dir / "roadmap"
+        roadmap_dir.mkdir()
+        roadmap_req = roadmap_dir / "prd-roadmap.md"
+        roadmap_req.write_text("""
+# REQ-p00002: Future Feature
+
+**Level**: PRD | **Status**: Draft
+
+Body text.
+
+*End* *Future Feature* | **Hash**: test5678
+---
+""")
+
+        # Parse with subdirs
+        requirements = parser.parse_directory_with_subdirs(
+            spec_dir,
+            subdirs=["roadmap"]
+        )
+
+        # Check root requirement
+        assert "REQ-p00001" in requirements
+        assert requirements["REQ-p00001"].subdir == ""
+        assert requirements["REQ-p00001"].is_roadmap is False
+
+        # Check roadmap requirement
+        assert "REQ-p00002" in requirements
+        assert requirements["REQ-p00002"].subdir == "roadmap"
+        assert requirements["REQ-p00002"].is_roadmap is True
+
+    def test_parse_directory_with_subdirs_multiple(self, tmp_path):
+        """Test parse_directory_with_subdirs with multiple subdirs."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create spec directory structure
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Root spec file
+        (spec_dir / "prd-core.md").write_text("""
+# REQ-p00001: Core Feature
+
+**Level**: PRD | **Status**: Active
+
+Body text.
+
+*End* *Core Feature* | **Hash**: test1234
+---
+""")
+
+        # Roadmap subdirectory
+        (spec_dir / "roadmap").mkdir()
+        (spec_dir / "roadmap" / "prd-roadmap.md").write_text("""
+# REQ-p00002: Future Feature
+
+**Level**: PRD | **Status**: Draft
+
+Body text.
+
+*End* *Future Feature* | **Hash**: test5678
+---
+""")
+
+        # Archive subdirectory
+        (spec_dir / "archive").mkdir()
+        (spec_dir / "archive" / "prd-old.md").write_text("""
+# REQ-p00003: Archived Feature
+
+**Level**: PRD | **Status**: Deprecated
+
+Body text.
+
+*End* *Archived Feature* | **Hash**: testabcd
+---
+""")
+
+        # Parse with multiple subdirs
+        requirements = parser.parse_directory_with_subdirs(
+            spec_dir,
+            subdirs=["roadmap", "archive"]
+        )
+
+        assert len(requirements) == 3
+        assert requirements["REQ-p00001"].subdir == ""
+        assert requirements["REQ-p00002"].subdir == "roadmap"
+        assert requirements["REQ-p00003"].subdir == "archive"
+
+
 class TestAssertionParsing:
     """Tests for parsing assertion-based requirements."""
 
