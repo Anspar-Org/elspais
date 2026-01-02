@@ -142,8 +142,8 @@ class TestRuleEngine:
         hash_violations = [v for v in violations if "hash" in v.rule_name.lower()]
         assert len(hash_violations) > 0
 
-    def test_format_rule_missing_acceptance(self, sample_config_dict):
-        """Test format rule detects missing acceptance criteria."""
+    def test_format_rule_missing_assertions(self, sample_config_dict):
+        """Test format rule detects missing assertions."""
         from elspais.core.rules import RuleEngine, RulesConfig
         from elspais.core.models import Requirement
 
@@ -153,18 +153,18 @@ class TestRuleEngine:
         requirements = {
             "REQ-p00001": Requirement(
                 id="REQ-p00001",
-                title="No Acceptance",
+                title="No Assertions",
                 level="PRD",
                 status="Active",
                 body="",
                 hash="a1b2c3d4",
-                acceptance_criteria=[],  # Empty!
+                assertions=[],  # Empty!
             ),
         }
 
         violations = engine.validate(requirements)
-        acceptance_violations = [v for v in violations if "acceptance" in v.rule_name.lower()]
-        assert len(acceptance_violations) > 0
+        assertion_violations = [v for v in violations if "assertions" in v.rule_name.lower()]
+        assert len(assertion_violations) > 0
 
 
 class TestRulesConfig:
@@ -179,7 +179,8 @@ class TestRulesConfig:
         assert config.hierarchy.allow_circular is False
         assert config.hierarchy.allow_orphans is False
         assert config.format.require_hash is True
-        assert config.format.require_acceptance is True
+        assert config.format.require_assertions is True
+        assert config.format.acceptance_criteria == "warn"
 
     def test_parse_allowed_implements(self, sample_config_dict):
         """Test parsing allowed_implements rules."""

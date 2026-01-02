@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
-from elspais.core.models import Requirement
+from elspais.core.models import Assertion, Requirement
 from elspais.core.patterns import PatternValidator, PatternConfig
 from elspais.core.hasher import extract_hash_from_footer
 
@@ -44,14 +44,29 @@ class RequirementParser:
     ACCEPTANCE_PATTERN = re.compile(
         r"\*\*Acceptance Criteria\*\*:\s*\n((?:\s*-\s*.+\n?)+)", re.MULTILINE
     )
+    # Assertions section header (## Assertions or **Assertions**)
+    ASSERTIONS_HEADER_PATTERN = re.compile(
+        r"^##\s+Assertions\s*$", re.MULTILINE
+    )
+    # Individual assertion line: "A. The system SHALL..." or "01. ..." etc.
+    # Captures: label (any alphanumeric), text (rest of line, may continue)
+    ASSERTION_LINE_PATTERN = re.compile(
+        r"^\s*([A-Z0-9]+)\.\s+(.+)$", re.MULTILINE
+    )
 
     # Default values that mean "no references" in Implements field
     DEFAULT_NO_REFERENCE_VALUES = ["-", "null", "none", "x", "X", "N/A", "n/a"]
+
+    # Default placeholder values that indicate a removed/deprecated assertion
+    DEFAULT_PLACEHOLDER_VALUES = [
+        "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+    ]
 
     def __init__(
         self,
         pattern_config: PatternConfig,
         no_reference_values: Optional[List[str]] = None,
+        placeholder_values: Optional[List[str]] = None,
     ):
         """
         Initialize parser with pattern configuration.
@@ -59,6 +74,7 @@ class RequirementParser:
         Args:
             pattern_config: Configuration for ID patterns
             no_reference_values: Values in Implements field that mean "no references"
+            placeholder_values: Values that indicate removed/deprecated assertions
         """
         self.pattern_config = pattern_config
         self.validator = PatternValidator(pattern_config)
@@ -66,6 +82,11 @@ class RequirementParser:
             no_reference_values
             if no_reference_values is not None
             else self.DEFAULT_NO_REFERENCE_VALUES
+        )
+        self.placeholder_values = (
+            placeholder_values
+            if placeholder_values is not None
+            else self.DEFAULT_PLACEHOLDER_VALUES
         )
 
     def parse_text(
@@ -274,7 +295,7 @@ class RequirementParser:
         if rationale_match:
             rationale = rationale_match.group(1).strip()
 
-        # Extract acceptance criteria
+        # Extract acceptance criteria (legacy format)
         acceptance_criteria = []
         acceptance_match = self.ACCEPTANCE_PATTERN.search(text)
         if acceptance_match:
@@ -284,6 +305,9 @@ class RequirementParser:
                 for line in criteria_text.split("\n")
                 if line.strip().startswith("-")
             ]
+
+        # Extract assertions (new format)
+        assertions = self._extract_assertions(text)
 
         # Extract hash from end marker
         hash_value = None
@@ -299,6 +323,7 @@ class RequirementParser:
             body=body,
             implements=implements,
             acceptance_criteria=acceptance_criteria,
+            assertions=assertions,
             rationale=rationale,
             hash=hash_value,
             file_path=file_path,
@@ -356,3 +381,60 @@ class RequirementParser:
 
         # Strip trailing whitespace from result (hht-diary does this via .strip() on rationale)
         return "\n".join(body_lines).rstrip()
+
+    def _extract_assertions(self, text: str) -> List[Assertion]:
+        """Extract assertions from requirement text.
+
+        Looks for `## Assertions` section and parses lines like:
+        A. The system SHALL...
+        B. The system SHALL NOT...
+
+        Args:
+            text: The requirement text block
+
+        Returns:
+            List of Assertion objects
+        """
+        assertions = []
+
+        # Find the assertions section
+        header_match = self.ASSERTIONS_HEADER_PATTERN.search(text)
+        if not header_match:
+            return assertions
+
+        # Get text after the header until the next section or end marker
+        start_pos = header_match.end()
+        section_text = text[start_pos:]
+
+        # Find the end of the assertions section (next ## header, Rationale, or End marker)
+        end_patterns = [
+            r"^##\s+",           # Next section header
+            r"^\*End\*",         # End marker
+            r"^---\s*$",         # Separator line
+        ]
+        end_pos = len(section_text)
+        for pattern in end_patterns:
+            match = re.search(pattern, section_text, re.MULTILINE)
+            if match and match.start() < end_pos:
+                end_pos = match.start()
+
+        assertions_text = section_text[:end_pos]
+
+        # Parse individual assertion lines
+        for match in self.ASSERTION_LINE_PATTERN.finditer(assertions_text):
+            label = match.group(1)
+            assertion_text = match.group(2).strip()
+
+            # Check if this is a placeholder
+            is_placeholder = any(
+                assertion_text.lower().startswith(pv.lower())
+                for pv in self.placeholder_values
+            )
+
+            assertions.append(Assertion(
+                label=label,
+                text=assertion_text,
+                is_placeholder=is_placeholder,
+            ))
+
+        return assertions

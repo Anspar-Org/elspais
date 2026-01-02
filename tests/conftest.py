@@ -71,6 +71,12 @@ def missing_hash_fixture() -> Path:
 
 
 @pytest.fixture
+def assertions_fixture() -> Path:
+    """Return path to assertions-based fixture."""
+    return FIXTURES_DIR / "assertions"
+
+
+@pytest.fixture
 def temp_project(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary project directory for testing."""
     project_dir = tmp_path / "test-project"
@@ -135,7 +141,8 @@ def sample_config_dict() -> dict:
             },
             "format": {
                 "require_hash": True,
-                "require_acceptance": True,
+                "require_assertions": True,
+                "acceptance_criteria": "warn",
             },
         },
     }

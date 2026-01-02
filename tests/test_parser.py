@@ -662,3 +662,148 @@ Body text.
         requirements = parser.parse_file(req_file)
         assert "REQ-d00001" in requirements
         assert requirements["REQ-d00001"].implements == ["p00001"]
+
+
+class TestAssertionParsing:
+    """Tests for parsing assertion-based requirements."""
+
+    def test_parse_assertions_section(self, tmp_path):
+        """Test parsing requirements with ## Assertions section."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-p00001: User Authentication
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL provide secure user authentication.
+B. The system SHALL support email and password login.
+C. The system SHALL NOT allow unauthenticated access.
+
+*End* *User Authentication* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        assert "REQ-p00001" in requirements
+        req = requirements["REQ-p00001"]
+
+        assert len(req.assertions) == 3
+        assert req.assertions[0].label == "A"
+        assert "secure user authentication" in req.assertions[0].text
+        assert req.assertions[1].label == "B"
+        assert req.assertions[2].label == "C"
+        assert "SHALL NOT" in req.assertions[2].text
+
+    def test_parse_assertions_with_placeholder(self, tmp_path):
+        """Test parsing assertions with placeholder values."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Implementation Detail
+
+**Level**: Dev | **Status**: Active | **Implements**: p00001
+
+## Assertions
+
+A. The implementation SHALL use bcrypt.
+B. Removed - was duplicate of A.
+C. The implementation SHALL NOT store plaintext.
+
+*End* *Implementation Detail* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+
+        assert len(req.assertions) == 3
+        assert req.assertions[0].is_placeholder is False
+        assert req.assertions[1].is_placeholder is True
+        assert req.assertions[2].is_placeholder is False
+
+    def test_parse_assertions_fixture(self, assertions_fixture):
+        """Test parsing assertions from fixture directory."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={
+                "prd": {"id": "p", "level": 1},
+                "dev": {"id": "d", "level": 3},
+            },
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        spec_dir = assertions_fixture / "spec"
+        requirements = parser.parse_directory(spec_dir)
+
+        # Check PRD requirements
+        assert "REQ-p00001" in requirements
+        assert len(requirements["REQ-p00001"].assertions) == 3
+
+        # Check DEV requirements
+        assert "REQ-d00001" in requirements
+        assert len(requirements["REQ-d00001"].assertions) == 3
+
+    def test_parse_mixed_format(self, tmp_path):
+        """Test parsing requirements with both Acceptance Criteria and Assertions."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-p00001: Mixed Format
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL do something.
+
+**Acceptance Criteria**:
+- Old style criterion
+
+*End* *Mixed Format* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-p00001"]
+
+        # Both should be parsed
+        assert len(req.assertions) == 1
+        assert len(req.acceptance_criteria) == 1

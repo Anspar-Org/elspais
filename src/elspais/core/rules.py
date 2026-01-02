@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any, Set
 
 from elspais.core.models import Requirement
+from elspais.core.patterns import PatternConfig, PatternValidator
 
 
 class Severity(Enum):
@@ -86,11 +87,20 @@ class FormatConfig:
 
     require_hash: bool = True
     require_rationale: bool = False
-    require_acceptance: bool = True
     require_status: bool = True
     allowed_statuses: List[str] = field(
         default_factory=lambda: ["Active", "Draft", "Deprecated", "Superseded"]
     )
+
+    # Assertion format rules
+    require_assertions: bool = True
+    acceptance_criteria: str = "warn"  # "allow" | "warn" | "error"
+    require_shall: bool = True
+    labels_sequential: bool = True
+    labels_unique: bool = True
+    placeholder_values: List[str] = field(default_factory=lambda: [
+        "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+    ])
 
 
 @dataclass
@@ -119,11 +129,19 @@ class RulesConfig:
         format_config = FormatConfig(
             require_hash=format_data.get("require_hash", True),
             require_rationale=format_data.get("require_rationale", False),
-            require_acceptance=format_data.get("require_acceptance", True),
             require_status=format_data.get("require_status", True),
             allowed_statuses=format_data.get(
                 "allowed_statuses", ["Active", "Draft", "Deprecated", "Superseded"]
             ),
+            # Assertion rules
+            require_assertions=format_data.get("require_assertions", True),
+            acceptance_criteria=format_data.get("acceptance_criteria", "warn"),
+            require_shall=format_data.get("require_shall", True),
+            labels_sequential=format_data.get("labels_sequential", True),
+            labels_unique=format_data.get("labels_unique", True),
+            placeholder_values=format_data.get("placeholder_values", [
+                "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+            ]),
         )
 
         return cls(hierarchy=hierarchy, format=format_config)
@@ -134,14 +152,23 @@ class RuleEngine:
     Validates requirements against configured rules.
     """
 
-    def __init__(self, config: RulesConfig):
+    def __init__(
+        self,
+        config: RulesConfig,
+        pattern_config: Optional[PatternConfig] = None,
+    ):
         """
         Initialize rule engine.
 
         Args:
             config: Rules configuration
+            pattern_config: Optional pattern configuration for assertion label validation
         """
         self.config = config
+        self.pattern_config = pattern_config
+        self.pattern_validator = (
+            PatternValidator(pattern_config) if pattern_config else None
+        )
 
     def validate(self, requirements: Dict[str, Requirement]) -> List[RuleViolation]:
         """
@@ -275,7 +302,7 @@ class RuleEngine:
         return violations
 
     def _check_format(self, requirements: Dict[str, Requirement]) -> List[RuleViolation]:
-        """Check format rules (hash, rationale, acceptance criteria)."""
+        """Check format rules (hash, rationale, assertions, acceptance criteria)."""
         violations = []
 
         for req_id, req in requirements.items():
@@ -303,17 +330,33 @@ class RuleEngine:
                     )
                 )
 
-            # Check acceptance criteria
-            if self.config.format.require_acceptance and not req.acceptance_criteria:
-                violations.append(
-                    RuleViolation(
-                        rule_name="format.require_acceptance",
-                        requirement_id=req_id,
-                        message="Missing Acceptance Criteria section",
-                        severity=Severity.ERROR,
-                        location=req.location(),
+            # Check assertions (new format)
+            violations.extend(self._check_assertions(req_id, req))
+
+            # Check acceptance criteria (legacy format)
+            acceptance_mode = self.config.format.acceptance_criteria
+            if req.acceptance_criteria:
+                if acceptance_mode == "error":
+                    violations.append(
+                        RuleViolation(
+                            rule_name="format.acceptance_criteria",
+                            requirement_id=req_id,
+                            message="Acceptance Criteria not allowed; use Assertions section instead",
+                            severity=Severity.ERROR,
+                            location=req.location(),
+                        )
                     )
-                )
+                elif acceptance_mode == "warn":
+                    violations.append(
+                        RuleViolation(
+                            rule_name="format.acceptance_criteria",
+                            requirement_id=req_id,
+                            message="Acceptance Criteria is deprecated; migrate to Assertions section",
+                            severity=Severity.WARNING,
+                            location=req.location(),
+                        )
+                    )
+                # "allow" mode: no violation
 
             # Check status
             if self.config.format.require_status:
@@ -323,6 +366,97 @@ class RuleEngine:
                             rule_name="format.status_valid",
                             requirement_id=req_id,
                             message=f"Invalid status '{req.status}'. Allowed: {self.config.format.allowed_statuses}",
+                            severity=Severity.ERROR,
+                            location=req.location(),
+                        )
+                    )
+
+        return violations
+
+    def _check_assertions(
+        self, req_id: str, req: Requirement
+    ) -> List[RuleViolation]:
+        """Check assertion-specific validation rules."""
+        violations = []
+
+        # Check if assertions are required
+        if self.config.format.require_assertions and not req.assertions:
+            violations.append(
+                RuleViolation(
+                    rule_name="format.require_assertions",
+                    requirement_id=req_id,
+                    message="Missing Assertions section",
+                    severity=Severity.ERROR,
+                    location=req.location(),
+                )
+            )
+            return violations  # No point checking other assertion rules
+
+        if not req.assertions:
+            return violations
+
+        # Extract labels and check for duplicates
+        labels = [a.label for a in req.assertions]
+
+        # Check labels are unique
+        if self.config.format.labels_unique:
+            seen = set()
+            for label in labels:
+                if label in seen:
+                    violations.append(
+                        RuleViolation(
+                            rule_name="format.labels_unique",
+                            requirement_id=req_id,
+                            message=f"Duplicate assertion label: {label}",
+                            severity=Severity.ERROR,
+                            location=req.location(),
+                        )
+                    )
+                seen.add(label)
+
+        # Check labels are sequential
+        if self.config.format.labels_sequential and self.pattern_validator:
+            expected_labels = []
+            for i in range(len(labels)):
+                expected_labels.append(
+                    self.pattern_validator.format_assertion_label(i)
+                )
+            if labels != expected_labels:
+                violations.append(
+                    RuleViolation(
+                        rule_name="format.labels_sequential",
+                        requirement_id=req_id,
+                        message=f"Assertion labels not sequential: {labels} (expected {expected_labels})",
+                        severity=Severity.ERROR,
+                        location=req.location(),
+                    )
+                )
+
+        # Check SHALL/SHALL NOT language (skip placeholders)
+        if self.config.format.require_shall:
+            for assertion in req.assertions:
+                if assertion.is_placeholder:
+                    continue
+                if "SHALL" not in assertion.text.upper():
+                    violations.append(
+                        RuleViolation(
+                            rule_name="format.require_shall",
+                            requirement_id=req_id,
+                            message=f"Assertion {assertion.label} missing SHALL/SHALL NOT: {assertion.text[:50]}...",
+                            severity=Severity.WARNING,
+                            location=req.location(),
+                        )
+                    )
+
+        # Validate assertion labels against configured pattern
+        if self.pattern_validator:
+            for assertion in req.assertions:
+                if not self.pattern_validator.is_valid_assertion_label(assertion.label):
+                    violations.append(
+                        RuleViolation(
+                            rule_name="format.assertion_label",
+                            requirement_id=req_id,
+                            message=f"Invalid assertion label format: {assertion.label}",
                             severity=Severity.ERROR,
                             location=req.location(),
                         )
