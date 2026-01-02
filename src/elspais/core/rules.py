@@ -7,7 +7,7 @@ format compliance, and traceability.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Any, Set
+from typing import Any, Dict, List, Optional, Set
 
 from elspais.core.models import Requirement
 from elspais.core.patterns import PatternConfig, PatternValidator
@@ -46,7 +46,10 @@ class RuleViolation:
             Severity.WARNING: "⚠️ WARNING",
             Severity.INFO: "ℹ️ INFO",
         }.get(self.severity, "?")
-        return f"{prefix} [{self.rule_name}] {self.requirement_id}\n   {self.message}\n   {self.location}"
+        return (
+            f"{prefix} [{self.rule_name}] {self.requirement_id}\n"
+            f"   {self.message}\n   {self.location}"
+        )
 
 
 @dataclass
@@ -62,7 +65,7 @@ class HierarchyConfig:
     # Parsed allowed relationships: source_type -> set of allowed target types
     _allowed_map: Dict[str, Set[str]] = field(default_factory=dict, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Parse allowed_implements into a lookup map."""
         self._allowed_map = {}
         for rule in self.allowed_implements:
@@ -208,11 +211,15 @@ class RuleEngine:
 
                 # Check if this relationship is allowed
                 if not self.config.hierarchy.can_implement(source_type, target_type):
+                    msg = (
+                        f"{source_type.upper()} cannot implement "
+                        f"{target_type.upper()} ({impl_id})"
+                    )
                     violations.append(
                         RuleViolation(
                             rule_name="hierarchy.implements",
                             requirement_id=req_id,
-                            message=f"{source_type.upper()} cannot implement {target_type.upper()} ({impl_id})",
+                            message=msg,
                             severity=Severity.ERROR,
                             location=req.location(),
                         )
@@ -225,9 +232,9 @@ class RuleEngine:
         if self.config.hierarchy.allow_circular:
             return []
 
-        violations = []
-        visited = set()
-        path = []
+        violations: List[RuleViolation] = []
+        visited: Set[str] = set()
+        path: List[str] = []
 
         def dfs(req_id: str) -> Optional[List[str]]:
             """Depth-first search for cycles."""
@@ -341,7 +348,7 @@ class RuleEngine:
                         RuleViolation(
                             rule_name="format.acceptance_criteria",
                             requirement_id=req_id,
-                            message="Acceptance Criteria not allowed; use Assertions section instead",
+                            message="Acceptance Criteria not allowed; use Assertions",
                             severity=Severity.ERROR,
                             location=req.location(),
                         )
@@ -351,7 +358,7 @@ class RuleEngine:
                         RuleViolation(
                             rule_name="format.acceptance_criteria",
                             requirement_id=req_id,
-                            message="Acceptance Criteria is deprecated; migrate to Assertions section",
+                            message="Acceptance Criteria deprecated; use Assertions",
                             severity=Severity.WARNING,
                             location=req.location(),
                         )
@@ -361,11 +368,12 @@ class RuleEngine:
             # Check status
             if self.config.format.require_status:
                 if req.status not in self.config.format.allowed_statuses:
+                    allowed = self.config.format.allowed_statuses
                     violations.append(
                         RuleViolation(
                             rule_name="format.status_valid",
                             requirement_id=req_id,
-                            message=f"Invalid status '{req.status}'. Allowed: {self.config.format.allowed_statuses}",
+                            message=f"Invalid status '{req.status}'. Allowed: {allowed}",
                             severity=Severity.ERROR,
                             location=req.location(),
                         )
@@ -422,11 +430,12 @@ class RuleEngine:
                     self.pattern_validator.format_assertion_label(i)
                 )
             if labels != expected_labels:
+                msg = f"Labels not sequential: {labels} (expected {expected_labels})"
                 violations.append(
                     RuleViolation(
                         rule_name="format.labels_sequential",
                         requirement_id=req_id,
-                        message=f"Assertion labels not sequential: {labels} (expected {expected_labels})",
+                        message=msg,
                         severity=Severity.ERROR,
                         location=req.location(),
                     )
@@ -438,11 +447,13 @@ class RuleEngine:
                 if assertion.is_placeholder:
                     continue
                 if "SHALL" not in assertion.text.upper():
+                    text_preview = assertion.text[:40]
+                    msg = f"Assertion {assertion.label} missing SHALL: {text_preview}..."
                     violations.append(
                         RuleViolation(
                             rule_name="format.require_shall",
                             requirement_id=req_id,
-                            message=f"Assertion {assertion.label} missing SHALL/SHALL NOT: {assertion.text[:50]}...",
+                            message=msg,
                             severity=Severity.WARNING,
                             location=req.location(),
                         )

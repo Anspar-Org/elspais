@@ -7,12 +7,14 @@
 
 ## Features
 
-- **Zero Dependencies**: Uses only Python 3.8+ standard library
+- **Zero Dependencies**: Core CLI uses only Python 3.9+ standard library
 - **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
 - **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
 - **Multi-Repository**: Link requirements across core and associated repositories
 - **Traceability Matrices**: Generate Markdown, HTML, or CSV output
 - **Hash-Based Change Detection**: Track requirement changes with SHA-256 hashes
+- **Content Rules**: Define semantic validation guidelines for AI agents
+- **MCP Server**: Integrate with AI assistants via Model Context Protocol
 
 ## Installation
 
@@ -195,6 +197,84 @@ Validate with core linking:
 elspais validate --core-repo ../core-repo
 ```
 
+## Content Rules
+
+Content rules are markdown files that provide semantic validation guidance for AI agents authoring requirements:
+
+```bash
+# Configure content rules
+elspais config add rules.content_rules "spec/AI-AGENT.md"
+
+# List configured rules
+elspais rules list
+
+# View a specific rule
+elspais rules show AI-AGENT.md
+```
+
+Content rule files can include YAML frontmatter for metadata:
+
+```markdown
+---
+title: AI Agent Guidelines
+type: guidance
+applies_to: [requirements, assertions]
+---
+
+# AI Agent Guidelines
+
+- Use SHALL for normative statements
+- One assertion per obligation
+- No duplication across levels
+```
+
+## MCP Server (AI Integration)
+
+elspais includes an MCP (Model Context Protocol) server for AI assistant integration:
+
+```bash
+# Install with MCP support
+pip install elspais[mcp]
+
+# Start MCP server
+elspais mcp serve
+```
+
+Configure in Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "elspais": {
+      "command": "elspais",
+      "args": ["mcp", "serve"],
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+### MCP Resources
+
+| Resource | Description |
+|----------|-------------|
+| `requirements://all` | List all requirements |
+| `requirements://{id}` | Get requirement details |
+| `requirements://level/{level}` | Filter by PRD/OPS/DEV |
+| `content-rules://list` | List content rules |
+| `content-rules://{file}` | Get content rule content |
+| `config://current` | Current configuration |
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `validate` | Run validation rules |
+| `parse_requirement` | Parse requirement text |
+| `search` | Search requirements |
+| `get_requirement` | Get requirement details |
+| `analyze` | Analyze hierarchy/orphans/coverage |
+
 ## CLI Reference
 
 ```
@@ -214,6 +294,9 @@ Commands:
   hash       Manage requirement hashes (verify, update)
   index      Validate or regenerate INDEX.md
   analyze    Analyze requirement hierarchy
+  config     View and modify configuration
+  rules      View and manage content rules
+  mcp        MCP server commands (requires elspais[mcp])
   version    Show version and check for updates
   init       Create .elspais.toml configuration
 ```

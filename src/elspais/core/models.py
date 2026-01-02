@@ -5,10 +5,10 @@ Provides dataclasses for representing requirements, parsed IDs,
 and requirement types.
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
-import re
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -117,6 +117,7 @@ class Requirement:
     file_path: Optional[Path] = None
     line_number: Optional[int] = None
     tags: List[str] = field(default_factory=list)
+    subdir: str = ""  # Subdirectory within spec/, e.g., "roadmap", "archive", ""
 
     @property
     def type_code(self) -> str:
@@ -167,6 +168,28 @@ class Requirement:
             return match.group(1)
         return None
 
+    @property
+    def is_roadmap(self) -> bool:
+        """
+        Check if this requirement is from the roadmap subdirectory.
+
+        Returns True if subdir is "roadmap", False otherwise.
+        This is a convenience property for backward compatibility.
+        """
+        return self.subdir == "roadmap"
+
+    @property
+    def spec_path(self) -> str:
+        """
+        Return the spec-relative file path as a string.
+
+        For requirements in spec/prd-core.md, returns "spec/prd-core.md".
+        For requirements in spec/roadmap/prd-future.md, returns "spec/roadmap/prd-future.md".
+        """
+        if self.file_path:
+            return str(self.file_path)
+        return ""
+
     def location(self) -> str:
         """Return file:line location string."""
         if self.file_path and self.line_number:
@@ -191,3 +214,105 @@ class Requirement:
 
     def __repr__(self) -> str:
         return f"Requirement(id={self.id!r}, title={self.title!r}, level={self.level!r})"
+
+
+@dataclass
+class ContentRule:
+    """
+    Represents a content rule file for semantic validation guidance.
+
+    Content rules are markdown files that provide guidance to AI agents
+    and humans when authoring requirements. They can include YAML frontmatter
+    for metadata.
+
+    Attributes:
+        file_path: Path to the content rule file
+        title: Human-readable title (from frontmatter or filename)
+        content: Full markdown content (excluding frontmatter)
+        type: Rule type - "guidance", "specification", or "template"
+        applies_to: List of what this rule applies to (e.g., ["requirements", "assertions"])
+    """
+
+    file_path: Path
+    title: str
+    content: str
+    type: str = "guidance"
+    applies_to: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ParseWarning:
+    """
+    Parser-level warning about a requirement.
+
+    Warnings indicate issues found during parsing that don't prevent
+    the requirement from being parsed, but may indicate problems.
+
+    Attributes:
+        requirement_id: The requirement ID this warning relates to
+        message: Human-readable warning message
+        file_path: Source file path (optional)
+        line_number: Line number in source file (optional)
+    """
+
+    requirement_id: str
+    message: str
+    file_path: Optional[Path] = None
+    line_number: Optional[int] = None
+
+    def __str__(self) -> str:
+        location = ""
+        if self.file_path:
+            location = f" at {self.file_path}"
+            if self.line_number:
+                location = f" at {self.file_path}:{self.line_number}"
+        return f"[{self.requirement_id}] {self.message}{location}"
+
+
+@dataclass
+class ParseResult:
+    """
+    Result of parsing requirements from text or files.
+
+    Contains both the successfully parsed requirements and any
+    warnings generated during parsing.
+
+    Attributes:
+        requirements: Dictionary of requirement ID to Requirement
+        warnings: List of parser warnings
+    """
+
+    requirements: Dict[str, "Requirement"]
+    warnings: List[ParseWarning] = field(default_factory=list)
+
+    def __getitem__(self, key: str) -> "Requirement":
+        """Get a requirement by ID."""
+        return self.requirements[key]
+
+    def __contains__(self, key: str) -> bool:
+        """Check if a requirement ID exists."""
+        return key in self.requirements
+
+    def __len__(self) -> int:
+        """Return the number of requirements."""
+        return len(self.requirements)
+
+    def __iter__(self):
+        """Iterate over requirement IDs."""
+        return iter(self.requirements)
+
+    def items(self):
+        """Return items like a dict."""
+        return self.requirements.items()
+
+    def keys(self):
+        """Return keys like a dict."""
+        return self.requirements.keys()
+
+    def values(self):
+        """Return values like a dict."""
+        return self.requirements.values()
+
+    def get(self, key: str, default=None) -> Optional["Requirement"]:
+        """Get a requirement by ID with default."""
+        return self.requirements.get(key, default)

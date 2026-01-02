@@ -187,3 +187,56 @@ class TestFormatRequirementsJson:
         assert data["REQ-p00001"]["implements"] == []
         assert data["REQ-p00001"]["hash"] == ""
         assert "assertions" not in data["REQ-p00001"]  # Only included when present
+
+    def test_subdir_field_default(self, tmp_path: Path):
+        """Test that subdir defaults to empty string for root spec dir."""
+        req = Requirement(
+            id="REQ-p00001",
+            title="Core Requirement",
+            level="PRD",
+            status="Active",
+            body="Body text.",
+            file_path=tmp_path / "spec" / "prd-core.md",
+            line_number=1,
+        )
+
+        result = format_requirements_json({"REQ-p00001": req}, [])
+        data = json.loads(result)
+
+        assert data["REQ-p00001"]["subdir"] == ""
+
+    def test_subdir_field_roadmap(self, tmp_path: Path):
+        """Test that subdir is set correctly for roadmap requirements."""
+        req = Requirement(
+            id="REQ-p00002",
+            title="Roadmap Feature",
+            level="PRD",
+            status="Draft",
+            body="Future feature.",
+            subdir="roadmap",
+            file_path=tmp_path / "spec" / "roadmap" / "prd-roadmap.md",
+            line_number=1,
+        )
+
+        result = format_requirements_json({"REQ-p00002": req}, [])
+        data = json.loads(result)
+
+        assert data["REQ-p00002"]["subdir"] == "roadmap"
+
+    def test_subdir_field_custom(self, tmp_path: Path):
+        """Test that subdir works with any subdirectory name."""
+        req = Requirement(
+            id="REQ-p00003",
+            title="Archived Feature",
+            level="PRD",
+            status="Deprecated",
+            body="Old feature.",
+            subdir="archive",
+            file_path=tmp_path / "spec" / "archive" / "prd-old.md",
+            line_number=1,
+        )
+
+        result = format_requirements_json({"REQ-p00003": req}, [])
+        data = json.loads(result)
+
+        assert data["REQ-p00003"]["subdir"] == "archive"

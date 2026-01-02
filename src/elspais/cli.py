@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import validate, trace, hash_cmd, index, analyze, init
+from elspais.commands import analyze, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -113,7 +113,7 @@ Examples:
     )
     hash_subparsers = hash_parser.add_subparsers(dest="hash_action")
 
-    hash_verify = hash_subparsers.add_parser(
+    hash_subparsers.add_parser(
         "verify",
         help="Verify hashes without changes",
     )
@@ -201,6 +201,217 @@ Examples:
         help="Overwrite existing configuration",
     )
 
+    # edit command
+    edit_parser = subparsers.add_parser(
+        "edit",
+        help="Edit requirements in-place (implements, status, move)",
+    )
+    edit_parser.add_argument(
+        "--req-id",
+        help="Requirement ID to edit",
+        metavar="ID",
+    )
+    edit_parser.add_argument(
+        "--implements",
+        help="New Implements value (comma-separated, empty string to clear)",
+        metavar="REFS",
+    )
+    edit_parser.add_argument(
+        "--status",
+        help="New Status value",
+        metavar="STATUS",
+    )
+    edit_parser.add_argument(
+        "--move-to",
+        help="Move requirement to file (relative to spec dir)",
+        metavar="FILE",
+    )
+    edit_parser.add_argument(
+        "--from-json",
+        help="Batch edit from JSON file (- for stdin)",
+        metavar="FILE",
+    )
+    edit_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show changes without applying",
+    )
+    edit_parser.add_argument(
+        "--validate-refs",
+        action="store_true",
+        help="Validate that implements references exist",
+    )
+
+    # config command
+    config_parser = subparsers.add_parser(
+        "config",
+        help="View and modify configuration",
+    )
+    config_subparsers = config_parser.add_subparsers(dest="config_action")
+
+    # config show
+    config_show = config_subparsers.add_parser(
+        "show",
+        help="Show current configuration",
+    )
+    config_show.add_argument(
+        "--section",
+        help="Show only a specific section (e.g., 'patterns', 'rules.format')",
+        metavar="SECTION",
+    )
+    config_show.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # config get
+    config_get = config_subparsers.add_parser(
+        "get",
+        help="Get a configuration value",
+    )
+    config_get.add_argument(
+        "key",
+        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
+    )
+    config_get.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # config set
+    config_set = config_subparsers.add_parser(
+        "set",
+        help="Set a configuration value",
+    )
+    config_set.add_argument(
+        "key",
+        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
+    )
+    config_set.add_argument(
+        "value",
+        help="Value to set (type auto-detected: true/false, numbers, JSON arrays/objects, or string)",
+    )
+
+    # config unset
+    config_unset = config_subparsers.add_parser(
+        "unset",
+        help="Remove a configuration key",
+    )
+    config_unset.add_argument(
+        "key",
+        help="Configuration key to remove",
+    )
+
+    # config add
+    config_add = config_subparsers.add_parser(
+        "add",
+        help="Add a value to an array configuration",
+    )
+    config_add.add_argument(
+        "key",
+        help="Configuration key for array (e.g., 'directories.code')",
+    )
+    config_add.add_argument(
+        "value",
+        help="Value to add to the array",
+    )
+
+    # config remove
+    config_remove = config_subparsers.add_parser(
+        "remove",
+        help="Remove a value from an array configuration",
+    )
+    config_remove.add_argument(
+        "key",
+        help="Configuration key for array (e.g., 'directories.code')",
+    )
+    config_remove.add_argument(
+        "value",
+        help="Value to remove from the array",
+    )
+
+    # config path
+    config_subparsers.add_parser(
+        "path",
+        help="Show path to configuration file",
+    )
+
+    # rules command
+    rules_parser = subparsers.add_parser(
+        "rules",
+        help="View and manage content rules",
+    )
+    rules_subparsers = rules_parser.add_subparsers(dest="rules_action")
+
+    # rules list
+    rules_subparsers.add_parser(
+        "list",
+        help="List configured content rules",
+    )
+
+    # rules show
+    rules_show = rules_subparsers.add_parser(
+        "show",
+        help="Show content of a content rule file",
+    )
+    rules_show.add_argument(
+        "file",
+        help="Content rule file name (e.g., 'AI-AGENT.md')",
+    )
+
+    # mcp command
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="MCP server commands (requires elspais[mcp])",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Claude Code Configuration:
+  Add to ~/.claude/claude_desktop_config.json:
+
+    {
+      "mcpServers": {
+        "elspais": {
+          "command": "elspais",
+          "args": ["mcp", "serve"],
+          "cwd": "/path/to/your/project"
+        }
+      }
+    }
+
+  Set "cwd" to the directory containing your .elspais.toml config.
+
+Resources:
+  requirements://all           List all requirements
+  requirements://{id}          Get requirement details
+  requirements://level/{level} Filter by PRD/OPS/DEV
+  content-rules://list         List content rules
+  content-rules://{file}       Get content rule content
+  config://current             Current configuration
+
+Tools:
+  validate          Run validation rules
+  parse_requirement Parse requirement text
+  search            Search requirements by pattern
+  get_requirement   Get requirement details
+  analyze           Analyze hierarchy/orphans/coverage
+""",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
+
+    # mcp serve
+    mcp_serve = mcp_subparsers.add_parser(
+        "serve",
+        help="Start MCP server",
+    )
+    mcp_serve.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="stdio",
+        help="Transport type (default: stdio)",
+    )
+
     return parser
 
 
@@ -238,6 +449,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             return version_command(args)
         elif args.command == "init":
             return init.run(args)
+        elif args.command == "edit":
+            return edit.run(args)
+        elif args.command == "config":
+            return config_cmd.run(args)
+        elif args.command == "rules":
+            return rules_cmd.run(args)
+        elif args.command == "mcp":
+            return mcp_command(args)
         else:
             parser.print_help()
             return 1
@@ -262,6 +481,34 @@ def version_command(args: argparse.Namespace) -> int:
         print("Update check not yet implemented.")
 
     return 0
+
+
+def mcp_command(args: argparse.Namespace) -> int:
+    """Handle MCP server commands."""
+    try:
+        from elspais.mcp.server import run_server
+    except ImportError:
+        print("Error: MCP dependencies not installed.", file=sys.stderr)
+        print("Install with: pip install elspais[mcp]", file=sys.stderr)
+        return 1
+
+    if args.mcp_action == "serve":
+        working_dir = Path.cwd()
+        if hasattr(args, "spec_dir") and args.spec_dir:
+            working_dir = args.spec_dir.parent
+
+        print(f"Starting elspais MCP server...")
+        print(f"Working directory: {working_dir}")
+        print(f"Transport: {args.transport}")
+
+        try:
+            run_server(working_dir=working_dir, transport=args.transport)
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
+        return 0
+    else:
+        print("Usage: elspais mcp serve")
+        return 1
 
 
 if __name__ == "__main__":

@@ -10,13 +10,13 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from elspais.config.loader import load_config, find_config_file, get_spec_directories
 from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.core.patterns import PatternConfig, PatternValidator
-from elspais.core.parser import RequirementParser
-from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hasher import calculate_hash, verify_hash
 from elspais.core.models import Requirement
+from elspais.core.parser import RequirementParser
+from elspais.core.patterns import PatternConfig
+from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
 
 
 def run(args: argparse.Namespace) -> int:
@@ -107,13 +107,15 @@ def run(args: argparse.Namespace) -> int:
     # Summary
     if not args.quiet:
         print("─" * 60)
-        valid_count = len(requirements) - len(set(v.requirement_id for v in errors))
+        valid_count = len(requirements) - len({v.requirement_id for v in errors})
         print(f"✓ {valid_count}/{len(requirements)} requirements valid")
 
         if errors:
             print(f"❌ {len(errors)} errors")
         if warnings:
             print(f"⚠️  {len(warnings)} warnings")
+        if infos and getattr(args, "verbose", False):
+            print(f"ℹ️  {len(infos)} info")
 
     # Return error if there are errors
     if errors:
@@ -268,7 +270,10 @@ def format_requirements_json(
 
         # Check for specific violation types
         is_cycle = any("cycle" in v.rule_name.lower() for v in req_violations)
-        is_conflict = any("conflict" in v.rule_name.lower() or "duplicate" in v.rule_name.lower() for v in req_violations)
+        is_conflict = any(
+            "conflict" in v.rule_name.lower() or "duplicate" in v.rule_name.lower()
+            for v in req_violations
+        )
         conflict_with = None
         cycle_path = None
 
@@ -291,6 +296,7 @@ def format_requirements_json(
             "line": req.line_number or 0,
             "implements": req.implements,
             "hash": req.hash or "",
+            "subdir": req.subdir,
             "isConflict": is_conflict,
             "conflictWith": conflict_with,
             "isCycle": is_cycle,

@@ -6,11 +6,10 @@ Parses Markdown files containing requirements in the standard format.
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Union
 
-from elspais.core.models import Assertion, Requirement
-from elspais.core.patterns import PatternValidator, PatternConfig
-from elspais.core.hasher import extract_hash_from_footer
+from elspais.core.models import Assertion, ParseResult, ParseWarning, Requirement
+from elspais.core.patterns import PatternConfig, PatternValidator
 
 
 class RequirementParser:
@@ -19,20 +18,21 @@ class RequirementParser:
     """
 
     # Regex patterns for parsing
-    # Generic pattern to find potential requirement headers - actual ID validation done by PatternValidator
+    # Generic pattern to find potential requirement headers
+    # Actual ID validation is done by PatternValidator
     HEADER_PATTERN = re.compile(
         r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$"
     )
     LEVEL_STATUS_PATTERN = re.compile(
         r"\*\*Level\*\*:\s*(?P<level>\w+)"
-        r"(?:\s*\|\s*\*\*Implements\*\*:\s*(?P<implements>[^|]+))?"
+        r"(?:\s*\|\s*\*\*Implements\*\*:\s*(?P<implements>[^|\n]+))?"
         r"(?:\s*\|\s*\*\*Status\*\*:\s*(?P<status>\w+))?"
     )
     ALT_STATUS_PATTERN = re.compile(
         r"\*\*Status\*\*:\s*(?P<status>\w+)"
     )
     IMPLEMENTS_PATTERN = re.compile(
-        r"\*\*Implements\*\*:\s*(?P<implements>[^|]+)"
+        r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)"
     )
     END_MARKER_PATTERN = re.compile(
         r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?",
@@ -90,19 +90,24 @@ class RequirementParser:
         )
 
     def parse_text(
-        self, text: str, file_path: Optional[Path] = None
-    ) -> Dict[str, Requirement]:
+        self,
+        text: str,
+        file_path: Optional[Path] = None,
+        subdir: str = "",
+    ) -> ParseResult:
         """
         Parse requirements from text.
 
         Args:
             text: Markdown text containing requirements
             file_path: Optional source file path for location tracking
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
-            Dictionary of requirement ID -> Requirement
+            ParseResult with requirements dict and warnings list
         """
-        requirements = {}
+        requirements: Dict[str, Requirement] = {}
+        warnings: List[ParseWarning] = []
         lines = text.split("\n")
 
         i = 0
@@ -143,35 +148,51 @@ class RequirementParser:
 
                 # Parse the requirement block
                 req_text = "\n".join(req_lines)
-                req = self._parse_requirement_block(
-                    req_id, title, req_text, file_path, start_line
+                req, block_warnings = self._parse_requirement_block(
+                    req_id, title, req_text, file_path, start_line, subdir
                 )
+                warnings.extend(block_warnings)
                 if req:
-                    requirements[req_id] = req
+                    # Check for duplicate ID
+                    if req_id in requirements:
+                        warnings.append(ParseWarning(
+                            requirement_id=req_id,
+                            message=f"Duplicate ID ignored (first occurrence at line {requirements[req_id].line_number})",
+                            file_path=file_path,
+                            line_number=start_line,
+                        ))
+                    else:
+                        requirements[req_id] = req
             else:
                 i += 1
 
-        return requirements
+        return ParseResult(requirements=requirements, warnings=warnings)
 
-    def parse_file(self, file_path: Path) -> Dict[str, Requirement]:
+    def parse_file(
+        self,
+        file_path: Path,
+        subdir: str = "",
+    ) -> ParseResult:
         """
         Parse requirements from a file.
 
         Args:
             file_path: Path to the Markdown file
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
-            Dictionary of requirement ID -> Requirement
+            ParseResult with requirements dict and warnings list
         """
         text = file_path.read_text(encoding="utf-8")
-        return self.parse_text(text, file_path)
+        return self.parse_text(text, file_path, subdir)
 
     def parse_directory(
         self,
         directory: Path,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
-    ) -> Dict[str, Requirement]:
+        subdir: str = "",
+    ) -> ParseResult:
         """
         Parse all requirements from a directory.
 
@@ -179,9 +200,10 @@ class RequirementParser:
             directory: Path to the spec directory
             patterns: Optional glob patterns to match files
             skip_files: Optional list of filenames to skip
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
-            Dictionary of requirement ID -> Requirement
+            ParseResult with requirements dict and warnings list
         """
         if patterns is None:
             patterns = ["*.md"]
@@ -189,22 +211,35 @@ class RequirementParser:
         if skip_files is None:
             skip_files = []
 
-        requirements = {}
+        requirements: Dict[str, Requirement] = {}
+        warnings: List[ParseWarning] = []
+
         for pattern in patterns:
             for file_path in directory.glob(pattern):
                 if file_path.is_file() and file_path.name not in skip_files:
-                    file_reqs = self.parse_file(file_path)
-                    requirements.update(file_reqs)
+                    result = self.parse_file(file_path, subdir)
+                    # Merge requirements, checking for cross-file duplicates
+                    for req_id, req in result.requirements.items():
+                        if req_id in requirements:
+                            warnings.append(ParseWarning(
+                                requirement_id=req_id,
+                                message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
+                                file_path=file_path,
+                                line_number=req.line_number,
+                            ))
+                        else:
+                            requirements[req_id] = req
+                    warnings.extend(result.warnings)
 
-        return requirements
+        return ParseResult(requirements=requirements, warnings=warnings)
 
     def parse_directories(
         self,
-        directories: Union[str, Path, List[Union[str, Path]]],
+        directories: Union[str, Path, Sequence[Union[str, Path]]],
         base_path: Optional[Path] = None,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
-    ) -> Dict[str, Requirement]:
+    ) -> ParseResult:
         """
         Parse all requirements from one or more directories.
 
@@ -217,7 +252,7 @@ class RequirementParser:
             skip_files: Optional list of filenames to skip
 
         Returns:
-            Dictionary of requirement ID -> Requirement
+            ParseResult with requirements dict and warnings list
         """
         # Normalize to list
         if isinstance(directories, (str, Path)):
@@ -228,16 +263,90 @@ class RequirementParser:
         if base_path is None:
             base_path = Path.cwd()
 
-        requirements = {}
+        requirements: Dict[str, Requirement] = {}
+        warnings: List[ParseWarning] = []
+
         for dir_entry in dir_list:
-            dir_path = base_path / dir_entry if not Path(dir_entry).is_absolute() else Path(dir_entry)
+            if Path(dir_entry).is_absolute():
+                dir_path = Path(dir_entry)
+            else:
+                dir_path = base_path / dir_entry
             if dir_path.exists() and dir_path.is_dir():
-                dir_reqs = self.parse_directory(
+                result = self.parse_directory(
                     dir_path, patterns=patterns, skip_files=skip_files
                 )
-                requirements.update(dir_reqs)
+                # Merge requirements, checking for cross-directory duplicates
+                for req_id, req in result.requirements.items():
+                    if req_id in requirements:
+                        warnings.append(ParseWarning(
+                            requirement_id=req_id,
+                            message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
+                            file_path=req.file_path,
+                            line_number=req.line_number,
+                        ))
+                    else:
+                        requirements[req_id] = req
+                warnings.extend(result.warnings)
 
-        return requirements
+        return ParseResult(requirements=requirements, warnings=warnings)
+
+    def parse_directory_with_subdirs(
+        self,
+        directory: Path,
+        subdirs: Optional[List[str]] = None,
+        patterns: Optional[List[str]] = None,
+        skip_files: Optional[List[str]] = None,
+    ) -> ParseResult:
+        """
+        Parse requirements from a directory and its subdirectories.
+
+        Unlike parse_directory, this method:
+        - Parses the root directory (with subdir="")
+        - Parses each specified subdirectory (with subdir set to the subdir name)
+
+        Args:
+            directory: Path to the spec directory
+            subdirs: List of subdirectory names to include (e.g., ["roadmap", "archive"])
+            patterns: Optional glob patterns to match files
+            skip_files: Optional list of filenames to skip
+
+        Returns:
+            ParseResult with requirements dict and warnings list
+        """
+        if subdirs is None:
+            subdirs = []
+
+        requirements: Dict[str, Requirement] = {}
+        warnings: List[ParseWarning] = []
+
+        # Parse root directory
+        root_result = self.parse_directory(
+            directory, patterns=patterns, skip_files=skip_files, subdir=""
+        )
+        requirements.update(root_result.requirements)
+        warnings.extend(root_result.warnings)
+
+        # Parse each subdirectory
+        for subdir_name in subdirs:
+            subdir_path = directory / subdir_name
+            if subdir_path.exists() and subdir_path.is_dir():
+                subdir_result = self.parse_directory(
+                    subdir_path, patterns=patterns, skip_files=skip_files, subdir=subdir_name
+                )
+                # Merge requirements, checking for cross-subdir duplicates
+                for req_id, req in subdir_result.requirements.items():
+                    if req_id in requirements:
+                        warnings.append(ParseWarning(
+                            requirement_id=req_id,
+                            message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
+                            file_path=req.file_path,
+                            line_number=req.line_number,
+                        ))
+                    else:
+                        requirements[req_id] = req
+                warnings.extend(subdir_result.warnings)
+
+        return ParseResult(requirements=requirements, warnings=warnings)
 
     def _parse_requirement_block(
         self,
@@ -246,7 +355,8 @@ class RequirementParser:
         text: str,
         file_path: Optional[Path],
         line_number: int,
-    ) -> Optional[Requirement]:
+        subdir: str = "",
+    ) -> tuple:
         """
         Parse a single requirement block.
 
@@ -256,10 +366,13 @@ class RequirementParser:
             text: The full requirement text block
             file_path: Source file path
             line_number: Starting line number
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
 
         Returns:
-            Requirement object or None if parsing fails
+            Tuple of (Requirement or None, List[ParseWarning])
         """
+        block_warnings: List[ParseWarning] = []
+
         # Extract level, status, and implements from header line
         level = "Unknown"
         status = "Unknown"
@@ -283,8 +396,16 @@ class RequirementParser:
             if impl_match:
                 implements_str = impl_match.group("implements")
 
-        # Parse implements list
+        # Parse implements list and validate references
         implements = self._parse_implements(implements_str)
+        for ref in implements:
+            if not self.validator.is_valid(ref):
+                block_warnings.append(ParseWarning(
+                    requirement_id=req_id,
+                    message=f"Invalid implements reference: {ref}",
+                    file_path=file_path,
+                    line_number=line_number,
+                ))
 
         # Extract body (text between header and acceptance/end)
         body = self._extract_body(text)
@@ -306,8 +427,16 @@ class RequirementParser:
                 if line.strip().startswith("-")
             ]
 
-        # Extract assertions (new format)
+        # Extract assertions (new format) and validate labels
         assertions = self._extract_assertions(text)
+        for assertion in assertions:
+            if not self._is_valid_assertion_label(assertion.label):
+                block_warnings.append(ParseWarning(
+                    requirement_id=req_id,
+                    message=f"Invalid assertion label format: {assertion.label}",
+                    file_path=file_path,
+                    line_number=line_number,
+                ))
 
         # Extract hash from end marker
         hash_value = None
@@ -315,7 +444,7 @@ class RequirementParser:
         if end_match:
             hash_value = end_match.group("hash")
 
-        return Requirement(
+        req = Requirement(
             id=req_id,
             title=title,
             level=level,
@@ -328,7 +457,27 @@ class RequirementParser:
             hash=hash_value,
             file_path=file_path,
             line_number=line_number,
+            subdir=subdir,
         )
+        return req, block_warnings
+
+    def _is_valid_assertion_label(self, label: str) -> bool:
+        """Check if an assertion label matches expected format.
+
+        Default expectation is uppercase letters A-Z.
+        """
+        # Check against configured assertion label pattern if available
+        assertion_config = getattr(self.pattern_config, 'assertions', None)
+        if assertion_config:
+            label_style = assertion_config.get('label_style', 'uppercase')
+            if label_style == 'uppercase':
+                return bool(re.match(r'^[A-Z]$', label))
+            elif label_style == 'numeric':
+                return bool(re.match(r'^\d+$', label))
+            elif label_style == 'alphanumeric':
+                return bool(re.match(r'^[A-Z0-9]+$', label))
+        # Default: uppercase single letter
+        return bool(re.match(r'^[A-Z]$', label))
 
     def _parse_implements(self, implements_str: str) -> List[str]:
         """Parse comma-separated implements list.
@@ -350,23 +499,30 @@ class RequirementParser:
     def _extract_body(self, text: str) -> str:
         """Extract the main body text from requirement block.
 
-        Matches hht-diary behavior: body is everything between the status line
+        Body is everything between the header (and optional metadata line)
         and the end marker, including Rationale and Acceptance Criteria sections.
         Trailing blank lines are removed for consistent hashing.
         """
         lines = text.split("\n")
         body_lines = []
+        found_header = False
         in_body = False
 
         for line in lines:
-            # Skip header line and everything before status line
+            # Skip header line
             if self.HEADER_PATTERN.match(line):
+                found_header = True
                 continue
 
-            # Status line marks the start - skip it but start collecting after
-            if "**Level**" in line or "**Status**" in line:
-                in_body = True
-                continue
+            if found_header and not in_body:
+                # Metadata line - skip it but mark body start
+                if "**Level**" in line or "**Status**" in line:
+                    in_body = True
+                    continue
+                # First non-blank content line starts body (when no metadata)
+                elif line.strip():
+                    in_body = True
+                    # Don't continue - include this line in body
 
             # Stop at end marker
             if line.strip().startswith("*End*"):
@@ -379,7 +535,7 @@ class RequirementParser:
         while body_lines and not body_lines[-1].strip():
             body_lines.pop()
 
-        # Strip trailing whitespace from result (hht-diary does this via .strip() on rationale)
+        # Strip trailing whitespace from result
         return "\n".join(body_lines).rstrip()
 
     def _extract_assertions(self, text: str) -> List[Assertion]:
@@ -395,7 +551,7 @@ class RequirementParser:
         Returns:
             List of Assertion objects
         """
-        assertions = []
+        assertions: List[Assertion] = []
 
         # Find the assertions section
         header_match = self.ASSERTIONS_HEADER_PATTERN.search(text)

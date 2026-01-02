@@ -72,6 +72,77 @@ class TestRequirement:
         req = Requirement(id="REQ-p00042", title="Test", level="PRD", status="Active", body="")
         assert req.number == 42
 
+    def test_requirement_subdir_default(self):
+        """Test that subdir defaults to empty string (root spec dir)."""
+        from elspais.core.models import Requirement
+
+        req = Requirement(
+            id="REQ-p00001",
+            title="Test",
+            level="PRD",
+            status="Active",
+            body="Body",
+        )
+        assert req.subdir == ""
+        assert req.is_roadmap is False
+
+    def test_requirement_subdir_roadmap(self):
+        """Test subdir set to 'roadmap' and is_roadmap property."""
+        from elspais.core.models import Requirement
+
+        req = Requirement(
+            id="REQ-p00001",
+            title="Roadmap Feature",
+            level="PRD",
+            status="Draft",
+            body="Body",
+            subdir="roadmap",
+        )
+        assert req.subdir == "roadmap"
+        assert req.is_roadmap is True
+
+    def test_requirement_subdir_other(self):
+        """Test subdir with non-roadmap value."""
+        from elspais.core.models import Requirement
+
+        req = Requirement(
+            id="REQ-p00001",
+            title="Archived Feature",
+            level="PRD",
+            status="Deprecated",
+            body="Body",
+            subdir="archive",
+        )
+        assert req.subdir == "archive"
+        assert req.is_roadmap is False
+
+    def test_requirement_spec_path(self):
+        """Test spec_path property returns correct path."""
+        from elspais.core.models import Requirement
+
+        # Root spec directory
+        req1 = Requirement(
+            id="REQ-p00001",
+            title="Test",
+            level="PRD",
+            status="Active",
+            body="Body",
+            file_path=Path("spec/prd-core.md"),
+        )
+        assert req1.spec_path == "spec/prd-core.md"
+
+        # Subdirectory
+        req2 = Requirement(
+            id="REQ-p00002",
+            title="Roadmap",
+            level="PRD",
+            status="Draft",
+            body="Body",
+            subdir="roadmap",
+            file_path=Path("spec/roadmap/prd-future.md"),
+        )
+        assert req2.spec_path == "spec/roadmap/prd-future.md"
+
 
 class TestParsedRequirement:
     """Tests for ParsedRequirement dataclass."""
