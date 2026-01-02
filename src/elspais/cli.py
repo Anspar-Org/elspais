@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import analyze, edit, hash_cmd, index, init, trace, validate
+from elspais.commands import analyze, config_cmd, edit, hash_cmd, index, init, trace, validate
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -242,6 +242,102 @@ Examples:
         help="Validate that implements references exist",
     )
 
+    # config command
+    config_parser = subparsers.add_parser(
+        "config",
+        help="View and modify configuration",
+    )
+    config_subparsers = config_parser.add_subparsers(dest="config_action")
+
+    # config show
+    config_show = config_subparsers.add_parser(
+        "show",
+        help="Show current configuration",
+    )
+    config_show.add_argument(
+        "--section",
+        help="Show only a specific section (e.g., 'patterns', 'rules.format')",
+        metavar="SECTION",
+    )
+    config_show.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # config get
+    config_get = config_subparsers.add_parser(
+        "get",
+        help="Get a configuration value",
+    )
+    config_get.add_argument(
+        "key",
+        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
+    )
+    config_get.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # config set
+    config_set = config_subparsers.add_parser(
+        "set",
+        help="Set a configuration value",
+    )
+    config_set.add_argument(
+        "key",
+        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
+    )
+    config_set.add_argument(
+        "value",
+        help="Value to set (type auto-detected: true/false, numbers, JSON arrays/objects, or string)",
+    )
+
+    # config unset
+    config_unset = config_subparsers.add_parser(
+        "unset",
+        help="Remove a configuration key",
+    )
+    config_unset.add_argument(
+        "key",
+        help="Configuration key to remove",
+    )
+
+    # config add
+    config_add = config_subparsers.add_parser(
+        "add",
+        help="Add a value to an array configuration",
+    )
+    config_add.add_argument(
+        "key",
+        help="Configuration key for array (e.g., 'directories.code')",
+    )
+    config_add.add_argument(
+        "value",
+        help="Value to add to the array",
+    )
+
+    # config remove
+    config_remove = config_subparsers.add_parser(
+        "remove",
+        help="Remove a value from an array configuration",
+    )
+    config_remove.add_argument(
+        "key",
+        help="Configuration key for array (e.g., 'directories.code')",
+    )
+    config_remove.add_argument(
+        "value",
+        help="Value to remove from the array",
+    )
+
+    # config path
+    config_subparsers.add_parser(
+        "path",
+        help="Show path to configuration file",
+    )
+
     return parser
 
 
@@ -281,6 +377,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return init.run(args)
         elif args.command == "edit":
             return edit.run(args)
+        elif args.command == "config":
+            return config_cmd.run(args)
         else:
             parser.print_help()
             return 1
