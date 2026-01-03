@@ -8,7 +8,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
@@ -17,6 +17,7 @@ from elspais.core.models import Requirement
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
 from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
+from elspais.testing.config import TestingConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -89,7 +90,22 @@ def run(args: argparse.Namespace) -> int:
 
     # JSON output mode - output and exit
     if getattr(args, 'json', False):
-        print(format_requirements_json(requirements, violations))
+        # Test mapping (if enabled)
+        test_data = None
+        testing_config = TestingConfig.from_dict(config.get("testing", {}))
+        if should_scan_tests(args, testing_config):
+            from elspais.testing.mapper import TestMapper
+
+            base_path = find_project_root(spec_dirs)
+            ignore_dirs = config.get("directories", {}).get("ignore", [])
+            mapper = TestMapper(testing_config)
+            test_data = mapper.map_tests(
+                requirement_ids=set(requirements.keys()),
+                base_path=base_path,
+                ignore=ignore_dirs,
+            )
+
+        print(format_requirements_json(requirements, violations, test_data))
         errors = [v for v in violations if v.severity == Severity.ERROR]
         return 1 if errors else 0
 
@@ -143,6 +159,51 @@ def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
     else:
         # Use defaults
         return DEFAULT_CONFIG
+
+
+def should_scan_tests(args: argparse.Namespace, config: TestingConfig) -> bool:
+    """
+    Determine if test scanning should run based on args and config.
+
+    Args:
+        args: Command line arguments
+        config: Testing configuration
+
+    Returns:
+        True if test scanning should run
+    """
+    if getattr(args, 'no_tests', False):
+        return False
+    if getattr(args, 'tests', False):
+        return True
+    return config.enabled
+
+
+def find_project_root(spec_dirs: List[Path]) -> Path:
+    """
+    Find the project root from spec directories.
+
+    Looks for .elspais.toml or .git directory above spec dirs.
+
+    Args:
+        spec_dirs: List of spec directories
+
+    Returns:
+        Project root path
+    """
+    if not spec_dirs:
+        return Path.cwd()
+
+    # Start from first spec dir and look upward
+    current = spec_dirs[0].resolve()
+    while current != current.parent:
+        if (current / ".elspais.toml").exists():
+            return current
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+
+    return Path.cwd()
 
 
 def validate_hashes(requirements: Dict[str, Requirement], config: Dict) -> List[RuleViolation]:
@@ -246,6 +307,7 @@ def load_core_requirements(core_path: Path, config: Dict) -> Dict[str, Requireme
 def format_requirements_json(
     requirements: Dict[str, Requirement],
     violations: List[RuleViolation],
+    test_data: Optional[Any] = None,
 ) -> str:
     """
     Format requirements as JSON in hht_diary compatible format.
@@ -253,6 +315,7 @@ def format_requirements_json(
     Args:
         requirements: Dictionary of requirement ID to Requirement
         violations: List of rule violations for error metadata
+        test_data: Optional TestMappingResult with test coverage data
 
     Returns:
         JSON string with requirement data
@@ -309,5 +372,17 @@ def format_requirements_json(
                 {"label": a.label, "text": a.text, "isPlaceholder": a.is_placeholder}
                 for a in req.assertions
             ]
+
+        # Include test data if available
+        if test_data and req_id in test_data.requirement_data:
+            td = test_data.requirement_data[req_id]
+            output[req_id]["test_count"] = td.test_count
+            output[req_id]["test_passed"] = td.test_passed
+            output[req_id]["test_result_files"] = td.test_result_files
+        else:
+            # Default values when no test data
+            output[req_id]["test_count"] = 0
+            output[req_id]["test_passed"] = 0
+            output[req_id]["test_result_files"] = []
 
     return json.dumps(output, indent=2)

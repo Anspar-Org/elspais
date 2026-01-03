@@ -136,6 +136,36 @@ DEFAULT_CONFIG = {
     "index": {
         "auto_regenerate": False,
     },
+    "testing": {
+        "enabled": False,
+        "test_dirs": [
+            "apps/**/test",
+            "apps/**/tests",
+            "packages/**/test",
+            "packages/**/tests",
+            "tools/**/tests",
+            "tests",
+        ],
+        "patterns": [
+            "*_test.dart",
+            "test_*.dart",
+            "test_*.py",
+            "*_test.py",
+            "*_test.sql",
+        ],
+        "result_files": [
+            "build-reports/**/TEST-*.xml",
+            "build-reports/pytest-results.json",
+        ],
+        "reference_patterns": [
+            # Test function names containing requirement IDs
+            r"test_.*(?:REQ[-_])?([pod]\d{5})(?:_[A-Z])?",
+            # Comment/docstring patterns
+            r"(?:IMPLEMENTS|Implements|implements)[:\s]+(?:REQ[-_])?([pod]\d{5})(?:-[A-Z])?",
+            # Direct requirement ID mentions
+            r"\bREQ[-_]([pod]\d{5})(?:-[A-Z])?\b",
+        ],
+    },
     "hooks": {
         "pre_commit": True,
         "commit_msg": True,

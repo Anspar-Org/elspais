@@ -87,6 +87,16 @@ Examples:
         action="store_true",
         help="Output requirements as JSON (hht_diary compatible format)",
     )
+    validate_parser.add_argument(
+        "--tests",
+        action="store_true",
+        help="Force test scanning even if disabled in config",
+    )
+    validate_parser.add_argument(
+        "--no-tests",
+        action="store_true",
+        help="Skip test scanning",
+    )
 
     # trace command
     trace_parser = subparsers.add_parser(

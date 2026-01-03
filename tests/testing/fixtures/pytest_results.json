@@ -1,0 +1,34 @@
+{
+  "created": 1704000000.0,
+  "duration": 2.5,
+  "tests": [
+    {
+      "nodeid": "tests/test_auth.py::test_REQ_p00001_user_authentication",
+      "outcome": "passed",
+      "duration": 0.5
+    },
+    {
+      "nodeid": "tests/test_auth.py::test_REQ_p00001_B_stores_password_hash",
+      "outcome": "failed",
+      "duration": 0.3,
+      "call": {
+        "longrepr": "AssertionError: Expected hash to match"
+      }
+    },
+    {
+      "nodeid": "tests/test_auth.py::test_d00001_basic_functionality",
+      "outcome": "passed",
+      "duration": 0.2
+    },
+    {
+      "nodeid": "tests/test_ops.py::TestAuthModule::test_REQ_o00001_operations_check",
+      "outcome": "passed",
+      "duration": 0.1
+    },
+    {
+      "nodeid": "tests/test_auth.py::test_skipped_feature",
+      "outcome": "skipped",
+      "duration": 0.0
+    }
+  ]
+}
