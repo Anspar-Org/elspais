@@ -130,20 +130,79 @@ Expects:
 **Rationale**: Why this requirement exists...
 ```
 
-### `require_acceptance`
+### `require_assertions` (v0.9.0+)
 
-Require Acceptance Criteria section:
+Require an `## Assertions` section in requirements:
 
 ```toml
 [rules.format]
-require_acceptance = true
+require_assertions = true
 ```
 
 Expects:
 ```markdown
-**Acceptance Criteria**:
-- Criterion 1
-- Criterion 2
+## Assertions
+
+A. The system SHALL do something.
+B. The system SHALL do another thing.
+```
+
+### `acceptance_criteria` (v0.9.0+)
+
+Control handling of legacy Acceptance Criteria format:
+
+```toml
+[rules.format]
+acceptance_criteria = "warn"  # "allow" | "warn" | "error"
+```
+
+- `allow`: Silently accept old format
+- `warn`: Log a warning but continue
+- `error`: Fail validation
+
+### `require_shall` (v0.9.0+)
+
+Require SHALL keyword in assertion text:
+
+```toml
+[rules.format]
+require_shall = true
+```
+
+### `labels_sequential` (v0.9.0+)
+
+Require assertion labels to be sequential (A, B, C... not A, C, D):
+
+```toml
+[rules.format]
+labels_sequential = true
+```
+
+### `labels_unique` (v0.9.0+)
+
+Forbid duplicate assertion labels:
+
+```toml
+[rules.format]
+labels_unique = true
+```
+
+### `placeholder_values` (v0.9.0+)
+
+Values indicating removed/deprecated assertions (to maintain label sequence):
+
+```toml
+[rules.format]
+placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"]
+```
+
+Example of a placeholder assertion:
+```markdown
+## Assertions
+
+A. The system SHALL do something.
+B. Removed.
+C. The system SHALL do another thing.
 ```
 
 ### `require_status`

@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
-The project was derived from the requirements tracing system in `~/cure-hht/hht_diary/tools/` and is intended to replace it.
-
 ## Commands
 
 ```bash
@@ -45,25 +43,37 @@ elspais hash update         # Update requirement hashes
 
 - **cli.py**: Entry point, argparse-based CLI dispatcher
 - **core/**: Core domain logic
-  - **models.py**: Dataclasses (`Requirement`, `ParsedRequirement`, `RequirementType`, `Assertion`)
-  - **parser.py**: `RequirementParser` - parses Markdown requirement files using regex patterns, extracts `## Assertions` section
+  - **models.py**: Dataclasses (`Requirement`, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
+  - **parser.py**: `RequirementParser` - parses Markdown requirement files using regex patterns, extracts `## Assertions` section, returns `ParseResult` with warnings
   - **patterns.py**: `PatternValidator`, `PatternConfig` - configurable ID pattern matching (supports HHT-style `REQ-p00001`, Jira-style `PROJ-123`, named `REQ-UserAuth`, assertion IDs `REQ-p00001-A`, etc.)
   - **rules.py**: `RuleEngine`, `RulesConfig`, `FormatConfig` - validation rules for hierarchy, format, assertions, and traceability
   - **hasher.py**: SHA-256 content hashing for change detection
+  - **content_rules.py**: Content rule loading and parsing (AI agent guidance)
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
   - **defaults.py**: Default configuration values
-- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, init)
+- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, init, edit, config_cmd, rules_cmd)
+- **testing/**: Test mapping and coverage functionality
+  - **config.py**: `TestingConfig` - configuration for test scanning
+  - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
+  - **result_parser.py**: `ResultParser` - parses JUnit XML and pytest JSON test results
+  - **mapper.py**: `TestMapper` - orchestrates scanning and result mapping for coverage analysis
+- **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
+  - **server.py**: MCP server implementation
+  - **context.py**: Context management for MCP resources
+  - **serializers.py**: Serialization helpers for MCP responses
 
 ### Key Design Patterns
 
-1. **Zero Dependencies**: Uses only Python 3.8+ stdlib. Custom TOML parser in `config/loader.py`.
+1. **Zero Dependencies**: Uses only Python 3.9+ stdlib. Custom TOML parser in `config/loader.py`.
 
 2. **Configurable Patterns**: ID patterns defined via template tokens (`{prefix}`, `{type}`, `{associated}`, `{id}`). The `PatternValidator` builds regex dynamically from config.
 
 3. **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
 
-4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Matches hht-diary behavior for compatibility.
+4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes.
+
+5. **ParseResult API**: Parser returns `ParseResult` containing both requirements and warnings, enabling resilient parsing that continues on non-fatal issues.
 
 ### Requirement Format (Updated)
 
@@ -113,7 +123,7 @@ labels_unique = true            # No duplicate labels
 placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved", "Removed"]
 ```
 
-See `~/cure-hht/hht_diary-worktrees/REQ-format-update/spec/requirements-spec.md` for authoritative grammar.
+See `docs/configuration.md` for full configuration options.
 
 ### Configuration
 
@@ -129,3 +139,10 @@ Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, 
 - `associated-repo/`: Multi-repo with associated prefixes
 - `assertions/`: Assertion-based requirements with `## Assertions` section
 - `invalid/`: Invalid cases (circular deps, broken links, missing hashes)
+
+## Workflow
+
+- **ALWAYS** update the version in `pyproject.toml` before pushing to remote
+- **ALWAYS** update `CHANGELOG.md` with new features
+- **ALWAYS** use a sub-agent to update the `docs/` files
+- **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit

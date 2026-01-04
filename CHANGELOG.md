@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-01-03
+
+### Changed
+- Updated CLAUDE.md with complete architecture documentation
+- Added testing/, mcp/, and content_rules modules to CLAUDE.md
+- Added ParseResult API design pattern documentation
+- Added Workflow section with contribution guidelines
+- Updated Python version reference from 3.8+ to 3.9+
+
+## [0.9.0] - 2026-01-03
+
+### Added
+- Test mapping and coverage functionality (`elspais.testing` module)
+  - `TestScanner`: Scans test files for requirement references
+  - `ResultParser`: Parses JUnit XML and pytest JSON test results
+  - `TestMapper`: Orchestrates scanning and result mapping
+- Parser resilience with `ParseResult` API and warning system
+  - Parser now returns `ParseResult` containing both requirements and warnings
+  - Non-fatal issues generate warnings instead of failing parsing
+
 ## [0.2.1] - 2025-12-28
 
 ### Changed

@@ -127,6 +127,12 @@ leading_zeros = true
 # allowed_chars = "A-Za-z0-9-"
 # max_length = 32
 
+# Assertion label configuration
+[patterns.assertions]
+label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
+max_count = 26             # Maximum assertions per requirement
+zero_pad = false           # For numeric styles: true = "01", false = "1"
+
 # Associated repository namespace configuration
 [patterns.associated]
 # Enable associated prefixes in IDs
@@ -222,14 +228,31 @@ require_hash = true
 # Require Rationale section
 require_rationale = false
 
-# Require Acceptance Criteria section
-require_acceptance = true
-
 # Require Status field
 require_status = true
 
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+# Assertion format rules (new in v0.9.0)
+# Require ## Assertions section in requirements
+require_assertions = true
+
+# How to handle legacy Acceptance Criteria format
+# "allow" = silently accept, "warn" = log warning, "error" = fail validation
+acceptance_criteria = "warn"
+
+# Require SHALL keyword in assertion text
+require_shall = true
+
+# Labels must be sequential (A, B, C... not A, C, D)
+labels_sequential = true
+
+# No duplicate labels allowed
+labels_unique = true
+
+# Values that indicate removed/deprecated assertions (preserve label sequence)
+placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # TRACEABILITY RULES
@@ -292,6 +315,46 @@ impl_patterns = [
 [index]
 # Automatically regenerate INDEX.md on validation
 auto_regenerate = false
+
+#──────────────────────────────────────────────────────────────────────────────
+# TESTING (v0.9.0+)
+#──────────────────────────────────────────────────────────────────────────────
+
+[testing]
+# Enable test mapping and coverage features
+enabled = false
+
+# Glob patterns for test directories to scan
+test_dirs = [
+    "apps/**/test",
+    "apps/**/tests",
+    "packages/**/test",
+    "packages/**/tests",
+    "tools/**/tests",
+    "tests",
+]
+
+# File patterns to match test files
+patterns = [
+    "*_test.dart",
+    "test_*.dart",
+    "test_*.py",
+    "*_test.py",
+    "*_test.sql",
+]
+
+# Glob patterns for test result files (JUnit XML, pytest JSON)
+result_files = [
+    "build-reports/**/TEST-*.xml",
+    "build-reports/pytest-results.json",
+]
+
+# Regex patterns to extract requirement IDs from test names/comments
+reference_patterns = [
+    'test_.*(?:REQ[-_])?([pod]\\d{5})(?:_[A-Z])?',
+    '(?:IMPLEMENTS|Implements|implements)[:\\s]+(?:REQ[-_])?([pod]\\d{5})(?:-[A-Z])?',
+    '\\bREQ[-_]([pod]\\d{5})(?:-[A-Z])?\\b',
+]
 
 #──────────────────────────────────────────────────────────────────────────────
 # GIT HOOKS
