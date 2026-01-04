@@ -10,7 +10,12 @@ and supports multi-repository requirement management with configurable
 ID patterns and validation rules.
 """
 
-__version__ = "0.9.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("elspais")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"  # Not installed
 __author__ = "Anspar"
 __license__ = "MIT"
 
