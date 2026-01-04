@@ -101,7 +101,7 @@ allow_orphans = true  # More permissive for associated development
 
 [rules.format]
 require_hash = true
-require_acceptance = true
+require_assertions = true
 '''
 
     else:  # core
@@ -159,7 +159,7 @@ allow_orphans = false
 [rules.format]
 require_hash = true
 require_rationale = false
-require_acceptance = true
+require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 

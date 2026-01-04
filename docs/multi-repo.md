@@ -118,18 +118,19 @@ elspais validate
 ✓ 14/15 requirements valid
 ```
 
-## Combined Traceability
+## Combined Traceability (Planned)
+
+> **Note**: The `--combined` flag is not yet implemented. Currently, generate separate matrices per repository and merge manually.
 
 Generate a combined matrix across repositories:
 
 ```bash
-# From core or any repo
-elspais trace --combined --core-repo ../core-platform
+# Planned syntax (not yet available):
+# elspais trace --combined --core-repo ../core-platform
 
-# Output includes:
-# - Core requirements
-# - All associated requirements
-# - Cross-repo implementation links
+# Current workaround: generate matrices separately
+cd core-platform && elspais trace
+cd ../associated-callisto && elspais trace
 ```
 
 ## Configuration Details
@@ -231,17 +232,13 @@ associated:
     remote: git@github.com:org/associated-xyz.git
 ```
 
-Commands can operate across all repositories:
+Commands will operate across all repositories:
 
 ```bash
-# Validate all repos
-elspais validate --all
-
-# Generate combined traceability
-elspais trace --combined
-
-# Analyze cross-repo dependencies
-elspais analyze cross-repo
+# Planned commands (not yet implemented):
+# elspais validate --all
+# elspais trace --combined
+# elspais analyze cross-repo
 ```
 
 ## Best Practices

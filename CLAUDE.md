@@ -146,3 +146,4 @@ Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, 
 - **ALWAYS** update `CHANGELOG.md` with new features
 - **ALWAYS** use a sub-agent to update the `docs/` files
 - **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit
+- **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation

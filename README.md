@@ -40,7 +40,7 @@ elspais init
 
 # Or specify repository type
 elspais init --type core              # Core repository
-elspais init --type associated CAL    # Associated repo with prefix CAL
+elspais init --type associated --associated-prefix CAL  # Associated repo
 ```
 
 ### Validate Requirements
@@ -135,7 +135,7 @@ allow_orphans = false
 
 [rules.format]
 require_hash = true
-require_acceptance = true
+require_assertions = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 ```
 
@@ -294,6 +294,7 @@ Commands:
   hash       Manage requirement hashes (verify, update)
   index      Validate or regenerate INDEX.md
   analyze    Analyze requirement hierarchy
+  edit       Edit requirements in-place (status, implements, move)
   config     View and modify configuration
   rules      View and manage content rules
   mcp        MCP server commands (requires elspais[mcp])

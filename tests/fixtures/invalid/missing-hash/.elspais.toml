@@ -21,4 +21,4 @@ leading_zeros = true
 
 [rules.format]
 require_hash = true
-require_acceptance = true
+require_assertions = true

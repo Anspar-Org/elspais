@@ -55,7 +55,7 @@ max_depth = 5
 [rules.format]
 require_hash = true
 require_rationale = false
-require_acceptance = true
+require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 

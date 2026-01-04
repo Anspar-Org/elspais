@@ -92,12 +92,13 @@ skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
 [patterns]
 # ID template using tokens: {prefix}, {associated}, {type}, {id}
+# The {associated} token is optional - renders empty for core repos
 # Examples:
-#   "{prefix}-{type}{id}"              -> REQ-p00001
+#   "{prefix}-{associated}{type}{id}"  -> REQ-p00001 (core) or REQ-CAL-d00001 (associated)
+#   "{prefix}-{type}{id}"              -> REQ-p00001 (no associated support)
 #   "{type}-{id}"                      -> PRD-00001
-#   "{prefix}-{associated}-{type}{id}" -> REQ-CAL-d00001
 #   "{prefix}-{id}"                    -> PROJ-123
-id_template = "{prefix}-{type}{id}"
+id_template = "{prefix}-{associated}{type}{id}"
 
 # Base prefix (used when {prefix} token is in template)
 prefix = "REQ"

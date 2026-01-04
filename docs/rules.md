@@ -220,6 +220,44 @@ Expects:
 **Level**: Dev | **Status**: Active
 ```
 
+Violation `format.status_valid` is raised when status is not in `allowed_statuses`.
+
+### `assertion_label` (v0.9.0+)
+
+Assertion labels must match the configured pattern (`label_style` in `[patterns.assertions]`):
+
+Violation `format.assertion_label` is raised for invalid label formats:
+```
+❌ ERROR [format.assertion_label] REQ-d00001
+   Invalid assertion label format: 1A
+```
+
+## Hash Rules
+
+### `hash.mismatch`
+
+When a requirement has a hash footer, the hash is verified against the content. A mismatch indicates the requirement was modified without updating the hash.
+
+```
+⚠️ WARNING [hash.mismatch] REQ-d00001
+   Hash mismatch: expected a1b2c3d4, found x9y8z7w6
+```
+
+Fix with: `elspais hash update REQ-d00001`
+
+## Link Rules
+
+### `link.broken`
+
+Implements references must point to existing requirements. This rule validates that referenced requirement IDs exist.
+
+```
+❌ ERROR [link.broken] REQ-d00001
+   Implements reference not found: p99999
+```
+
+For associated repositories, use `--core-repo` to validate cross-repo references.
+
 ## Traceability Rules
 
 Control code-to-requirement linking.
@@ -292,8 +330,16 @@ Violations are reported with severity levels:
    Circular dependency detected: d00001 -> d00002 -> d00001
    File: spec/dev-impl.md:42
 
-⚠️ WARNING [format.require_rationale] REQ-p00003
-   Missing Rationale section
+❌ ERROR [link.broken] REQ-d00005
+   Implements reference not found: p99999
+   File: spec/dev-impl.md:120
+
+⚠️ WARNING [hierarchy.orphan] REQ-d00010
+   DEV requirement has no Implements reference
+   File: spec/dev-orphan.md:1
+
+⚠️ WARNING [hash.mismatch] REQ-p00003
+   Hash mismatch: expected a1b2c3d4, found x9y8z7w6
    File: spec/prd-core.md:156
 
 ℹ️ INFO [naming.title_pattern] REQ-o00007
@@ -333,7 +379,7 @@ allow_circular = false
 
 [rules.format]
 require_rationale = true
-require_acceptance = true
+require_assertions = true
 ```
 
 **Associated repo** (permissive for innovation):
