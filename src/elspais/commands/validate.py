@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hasher import calculate_hash, verify_hash
-from elspais.core.models import Requirement
+from elspais.core.models import ParseWarning, Requirement
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
 from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
@@ -55,7 +55,8 @@ def run(args: argparse.Namespace) -> int:
     skip_files = spec_config.get("skip_files", [])
 
     try:
-        requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        requirements = dict(parse_result)  # ParseResult supports dict-like access
     except Exception as e:
         print(f"Error parsing requirements: {e}", file=sys.stderr)
         return 1
@@ -80,6 +81,10 @@ def run(args: argparse.Namespace) -> int:
     # Add broken link validation
     link_violations = validate_links(requirements, args, config)
     violations.extend(link_violations)
+
+    # Add parser warnings (duplicates, etc.) as violations
+    parse_violations = convert_parse_warnings_to_violations(parse_result.warnings)
+    violations.extend(parse_violations)
 
     # Filter skipped rules
     if args.skip_rule:
@@ -273,6 +278,36 @@ def validate_links(
                     )
                 )
 
+    return violations
+
+
+def convert_parse_warnings_to_violations(
+    warnings: List[ParseWarning],
+) -> List[RuleViolation]:
+    """Convert parser warnings (like duplicates) to rule violations.
+
+    The parser detects duplicate REQ IDs and generates ParseWarning objects.
+    This function converts them to RuleViolation objects so they appear in
+    validation output.
+
+    Args:
+        warnings: List of ParseWarning objects from parser
+
+    Returns:
+        List of RuleViolation objects for duplicate IDs
+    """
+    violations = []
+    for warning in warnings:
+        if "duplicate" in warning.message.lower():
+            violations.append(
+                RuleViolation(
+                    rule_name="id.duplicate",
+                    requirement_id=warning.requirement_id,
+                    message=warning.message,
+                    severity=Severity.ERROR,
+                    location=f"{warning.file_path}:{warning.line_number}",
+                )
+            )
     return violations
 
 
