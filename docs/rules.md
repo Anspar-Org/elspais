@@ -258,6 +258,24 @@ Implements references must point to existing requirements. This rule validates t
 
 For associated repositories, use `--core-repo` to validate cross-repo references.
 
+## ID Rules
+
+### `id.duplicate` (v0.9.2+)
+
+Detects when the same requirement ID appears multiple times across specification files. The parser keeps the first occurrence and ignores duplicates, surfacing a warning that becomes an error during validation.
+
+```
+❌ ERROR [id.duplicate] REQ-d00001
+   Duplicate requirement ID (first seen in spec/dev-impl.md:42)
+   File: spec/dev-other.md:15
+```
+
+**How to fix:**
+- Rename one of the conflicting requirements to a unique ID
+- Remove the duplicate if it was created by mistake
+
+This rule cannot be disabled as duplicate IDs cause ambiguous references.
+
 ## Traceability Rules
 
 Control code-to-requirement linking.

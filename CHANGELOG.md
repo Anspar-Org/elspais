@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-01-05
+
+### Added
+- Git-based change detection with new `changed` command
+  - `elspais changed`: Show uncommitted changes to spec files
+  - `elspais changed --json`: JSON output for programmatic use
+  - `elspais changed --all`: Include all changed files, not just spec/
+  - `elspais changed --base-branch`: Compare vs different branch
+- New `src/elspais/core/git.py` module with functions:
+  - `get_git_changes()`: Main entry point for git change detection
+  - `get_modified_files()`: Detect modified/untracked files via git status
+  - `get_changed_vs_branch()`: Files changed vs main/master branch
+  - `detect_moved_requirements()`: Detect requirements moved between files
+- 23 new tests for git functionality
+
+## [0.9.2] - 2026-01-05
+
+### Added
+- `id.duplicate` rule documentation in `docs/rules.md`
+- Dynamic version detection using `importlib.metadata`
+
+### Changed
+- Enhanced ParseResult API documentation in CLAUDE.md to explain warning handling
+- Updated CLAUDE.md with git.py module description
+
 ## [0.9.1] - 2026-01-03
 
 ### Changed

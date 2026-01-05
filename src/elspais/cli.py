@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import analyze, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate
+from elspais.commands import analyze, changed, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -177,6 +177,28 @@ Examples:
     analyze_subparsers.add_parser(
         "coverage",
         help="Implementation coverage report",
+    )
+
+    # changed command
+    changed_parser = subparsers.add_parser(
+        "changed",
+        help="Detect git changes to spec files",
+    )
+    changed_parser.add_argument(
+        "--base-branch",
+        default="main",
+        help="Base branch for comparison (default: main)",
+        metavar="BRANCH",
+    )
+    changed_parser.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+    changed_parser.add_argument(
+        "-a", "--all",
+        action="store_true",
+        help="Include all changed files (not just spec)",
     )
 
     # version command
@@ -455,6 +477,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return index.run(args)
         elif args.command == "analyze":
             return analyze.run(args)
+        elif args.command == "changed":
+            return changed.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":

@@ -35,6 +35,8 @@ black --check src/elspais
 elspais validate           # Validate requirements
 elspais trace --format html  # Generate traceability matrix
 elspais hash update         # Update requirement hashes
+elspais changed            # Show uncommitted changes to spec files
+elspais changed --json     # Output changes as JSON
 ```
 
 ## Architecture
@@ -49,10 +51,11 @@ elspais hash update         # Update requirement hashes
   - **rules.py**: `RuleEngine`, `RulesConfig`, `FormatConfig` - validation rules for hierarchy, format, assertions, and traceability
   - **hasher.py**: SHA-256 content hashing for change detection
   - **content_rules.py**: Content rule loading and parsing (AI agent guidance)
+  - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
   - **defaults.py**: Default configuration values
-- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, init, edit, config_cmd, rules_cmd)
+- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd)
 - **testing/**: Test mapping and coverage functionality
   - **config.py**: `TestingConfig` - configuration for test scanning
   - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
@@ -73,7 +76,11 @@ elspais hash update         # Update requirement hashes
 
 4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes.
 
-5. **ParseResult API**: Parser returns `ParseResult` containing both requirements and warnings, enabling resilient parsing that continues on non-fatal issues.
+5. **ParseResult API**: Parser returns `ParseResult` containing both requirements and warnings, enabling resilient parsing that continues on non-fatal issues. Warnings include duplicate ID detection (surfaced as `id.duplicate` rule violations during validation).
+
+6. **Dynamic Version Detection**: Uses `importlib.metadata` to read version from installed package metadata, with fallback to "0.0.0+unknown" if not installed.
+
+7. **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files, files changed vs main branch, and moved requirements (by comparing current location to committed state).
 
 ### Requirement Format (Updated)
 
