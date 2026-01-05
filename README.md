@@ -21,11 +21,11 @@
 ### For End Users
 
 ```bash
-# Standard installation
-pip install elspais
-
-# Recommended for CLI tools: Isolated installation
+# Recommended: Isolated installation with pipx
 pipx install elspais
+
+# Or standard pip installation
+pip install elspais
 ```
 
 ### For Development
@@ -48,7 +48,7 @@ FROM python:3.11-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install elspais (10-100x faster than pip)
-RUN uv pip install --system --no-cache elspais==0.9.1
+RUN uv pip install --system --no-cache elspais==0.9.3
 ```
 
 ```yaml
@@ -57,7 +57,7 @@ RUN uv pip install --system --no-cache elspais==0.9.1
   uses: astral-sh/setup-uv@v2
 
 - name: Install elspais
-  run: uv pip install --system elspais==0.9.1
+  run: uv pip install --system elspais==0.9.3
 ```
 
 **Note:** For regulated/medical software projects, always pin the exact version for reproducibility.
@@ -332,6 +332,7 @@ Commands:
   hash       Manage requirement hashes (verify, update)
   index      Validate or regenerate INDEX.md
   analyze    Analyze requirement hierarchy
+  changed    Detect git changes to spec files
   edit       Edit requirements in-place (status, implements, move)
   config     View and modify configuration
   rules      View and manage content rules
