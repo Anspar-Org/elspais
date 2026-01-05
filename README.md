@@ -48,7 +48,7 @@ FROM python:3.11-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install elspais (10-100x faster than pip)
-RUN uv pip install --system --no-cache elspais==0.8.0
+RUN uv pip install --system --no-cache elspais==0.9.1
 ```
 
 ```yaml
@@ -57,7 +57,7 @@ RUN uv pip install --system --no-cache elspais==0.8.0
   uses: astral-sh/setup-uv@v2
 
 - name: Install elspais
-  run: uv pip install --system elspais==0.8.0
+  run: uv pip install --system elspais==0.9.1
 ```
 
 **Note:** For regulated/medical software projects, always pin the exact version for reproducibility.
@@ -178,21 +178,27 @@ See [docs/configuration.md](docs/configuration.md) for full reference.
 elspais expects requirements in Markdown format:
 
 ```markdown
-### REQ-d00001: Requirement Title
+# REQ-d00001: Requirement Title
 
-**Level**: Dev | **Implements**: p00001 | **Status**: Active
+**Level**: Dev | **Status**: Active | **Implements**: REQ-p00001
 
-The system SHALL provide user authentication.
+## Assertions
 
-**Rationale**: Security requires identity verification.
+A. The system SHALL provide user authentication via email/password.
+B. Sessions SHALL expire after 30 minutes of inactivity.
 
-**Acceptance Criteria**:
-- Users can log in with email/password
-- Session expires after 30 minutes of inactivity
+## Rationale
+
+Security requires identity verification.
 
 *End* *Requirement Title* | **Hash**: a1b2c3d4
 ---
 ```
+
+Key format elements:
+- **Assertions section**: Labeled A-Z, each using SHALL for normative statements
+- **One-way traceability**: Children reference parents via `Implements:`
+- **Hash footer**: SHA-256 hash for change detection
 
 ## ID Pattern Examples
 
