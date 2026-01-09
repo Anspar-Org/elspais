@@ -118,6 +118,8 @@ class Requirement:
     line_number: Optional[int] = None
     tags: List[str] = field(default_factory=list)
     subdir: str = ""  # Subdirectory within spec/, e.g., "roadmap", "archive", ""
+    is_conflict: bool = False  # True if this is a conflicting duplicate entry
+    conflict_with: str = ""  # ID of the original requirement this conflicts with
 
     @property
     def type_code(self) -> str:

@@ -45,7 +45,7 @@ elspais changed --json     # Output changes as JSON
 
 - **cli.py**: Entry point, argparse-based CLI dispatcher
 - **core/**: Core domain logic
-  - **models.py**: Dataclasses (`Requirement`, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
+  - **models.py**: Dataclasses (`Requirement` with `is_conflict`/`conflict_with` fields, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
   - **parser.py**: `RequirementParser` - parses Markdown requirement files using regex patterns, extracts `## Assertions` section, returns `ParseResult` with warnings
   - **patterns.py**: `PatternValidator`, `PatternConfig` - configurable ID pattern matching (supports HHT-style `REQ-p00001`, Jira-style `PROJ-123`, named `REQ-UserAuth`, assertion IDs `REQ-p00001-A`, etc.)
   - **rules.py**: `RuleEngine`, `RulesConfig`, `FormatConfig` - validation rules for hierarchy, format, assertions, and traceability
@@ -61,6 +61,8 @@ elspais changed --json     # Output changes as JSON
   - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
   - **result_parser.py**: `ResultParser` - parses JUnit XML and pytest JSON test results
   - **mapper.py**: `TestMapper` - orchestrates scanning and result mapping for coverage analysis
+- **sponsors/**: Sponsor/associated repository configuration loading
+  - **\_\_init\_\_.py**: `Sponsor`, `SponsorsConfig` dataclasses, zero-dependency YAML parser, `load_sponsors_config()`, `resolve_sponsor_spec_dir()`, `get_sponsor_spec_directories()` for multi-repo spec scanning
 - **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
   - **server.py**: MCP server implementation
   - **context.py**: Context management for MCP resources
@@ -81,6 +83,10 @@ elspais changed --json     # Output changes as JSON
 6. **Dynamic Version Detection**: Uses `importlib.metadata` to read version from installed package metadata, with fallback to "0.0.0+unknown" if not installed.
 
 7. **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files, files changed vs main branch, and moved requirements (by comparing current location to committed state).
+
+8. **Conflict Entry Handling**: When duplicate requirement IDs are found (e.g., same ID in spec/ and spec/roadmap/), both are kept: the original with its ID, and the duplicate with a `__conflict` suffix. Conflict entries have `is_conflict=True`, `conflict_with` set to original ID, and `implements=[]` (orphaned).
+
+9. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
 
 ### Requirement Format (Updated)
 

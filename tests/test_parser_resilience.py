@@ -289,6 +289,222 @@ class TestDuplicateIds:
         )
 
 
+class TestConflictEntries:
+    """Tests for conflict entry handling (both duplicates visible in output)."""
+
+    def test_duplicate_creates_conflict_entry(self, parser):
+        """When duplicate IDs exist, both should be kept with conflict suffix."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active
+
+            First body content.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft
+
+            Second body content.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        # Should have both entries
+        assert "REQ-d00001" in result.requirements, "Original should exist"
+        assert "REQ-d00001__conflict" in result.requirements, (
+            f"Conflict entry should exist. Keys: {list(result.requirements.keys())}"
+        )
+
+    def test_conflict_entry_has_is_conflict_flag(self, parser):
+        """Conflict entry should have is_conflict=True."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active
+
+            First body.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft
+
+            Second body.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        conflict_req = result["REQ-d00001__conflict"]
+        assert conflict_req.is_conflict is True, (
+            "Conflict entry should have is_conflict=True"
+        )
+
+    def test_conflict_entry_has_conflict_with(self, parser):
+        """Conflict entry should have conflict_with set to original ID."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active
+
+            First body.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft
+
+            Second body.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        conflict_req = result["REQ-d00001__conflict"]
+        assert conflict_req.conflict_with == "REQ-d00001", (
+            f"conflict_with should be 'REQ-d00001', got '{conflict_req.conflict_with}'"
+        )
+
+    def test_conflict_entry_has_empty_implements(self, parser):
+        """Conflict entry should have implements=[] (orphaned)."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active | **Implements**: REQ-p00001
+
+            First body.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft | **Implements**: REQ-p00002
+
+            Second body.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        conflict_req = result["REQ-d00001__conflict"]
+        assert conflict_req.implements == [], (
+            f"Conflict entry should have empty implements, got {conflict_req.implements}"
+        )
+
+    def test_original_entry_not_conflict(self, parser):
+        """Original entry should not be marked as conflict."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active
+
+            First body.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft
+
+            Second body.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        original_req = result["REQ-d00001"]
+        assert original_req.is_conflict is False, (
+            "Original entry should have is_conflict=False"
+        )
+        assert original_req.conflict_with == "", (
+            "Original entry should have empty conflict_with"
+        )
+
+    def test_conflict_entry_preserves_content(self, parser):
+        """Conflict entry should preserve original content."""
+        text = dedent("""\
+            # REQ-d00001: First Occurrence
+
+            **Level**: Dev | **Status**: Active
+
+            First body.
+
+            *End* *First Occurrence* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second Occurrence
+
+            **Level**: Dev | **Status**: Draft
+
+            Second body with unique content.
+
+            *End* *Second Occurrence* | **Hash**: 22222222
+        """)
+
+        result = parser.parse_text(text)
+
+        conflict_req = result["REQ-d00001__conflict"]
+        assert conflict_req.title == "Second Occurrence", (
+            f"Conflict should preserve title: got '{conflict_req.title}'"
+        )
+        assert "unique content" in conflict_req.body, (
+            f"Conflict should preserve body: got '{conflict_req.body}'"
+        )
+
+    def test_result_count_includes_conflicts(self, parser):
+        """Total count should include both original and conflict entries."""
+        text = dedent("""\
+            # REQ-d00001: First
+
+            **Level**: Dev | **Status**: Active
+
+            Body.
+
+            *End* *First* | **Hash**: 11111111
+            ---
+
+            # REQ-d00001: Second (Duplicate)
+
+            **Level**: Dev | **Status**: Draft
+
+            Body.
+
+            *End* *Second (Duplicate)* | **Hash**: 22222222
+            ---
+
+            # REQ-d00002: Third (Unique)
+
+            **Level**: Dev | **Status**: Active
+
+            Body.
+
+            *End* *Third (Unique)* | **Hash**: 33333333
+        """)
+
+        result = parser.parse_text(text)
+
+        # Should have 3 entries: REQ-d00001, REQ-d00001__conflict, REQ-d00002
+        assert len(result) == 3, (
+            f"Should have 3 entries (2 original + 1 conflict). Got {len(result)}: {list(result.keys())}"
+        )
+
+
 class TestImplementsValidation:
     """Tests for implements reference validation."""
 

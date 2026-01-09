@@ -17,6 +17,7 @@ from elspais.core.models import ParseWarning, Requirement
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
 from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
+from elspais.sponsors import get_sponsor_spec_directories
 from elspais.testing.config import TestingConfig
 
 
@@ -40,6 +41,19 @@ def run(args: argparse.Namespace) -> int:
     if not spec_dirs:
         print("Error: No spec directories found", file=sys.stderr)
         return 1
+
+    # Add sponsor spec directories if mode is "combined" and include_associated is enabled
+    mode = getattr(args, 'mode', 'combined')
+    include_associated = config.get('traceability', {}).get('include_associated', True)
+
+    if mode == 'combined' and include_associated:
+        base_path = find_project_root(spec_dirs)
+        sponsor_dirs = get_sponsor_spec_directories(config, base_path)
+        if sponsor_dirs:
+            spec_dirs = list(spec_dirs) + sponsor_dirs
+            if not args.quiet:
+                for sponsor_dir in sponsor_dirs:
+                    print(f"Including sponsor specs: {sponsor_dir}")
 
     if not args.quiet:
         if len(spec_dirs) == 1:
@@ -368,21 +382,26 @@ def format_requirements_json(
 
         # Check for specific violation types
         is_cycle = any("cycle" in v.rule_name.lower() for v in req_violations)
-        is_conflict = any(
+
+        # Use the model's is_conflict flag directly, or check violations for older behavior
+        is_conflict = req.is_conflict or any(
             "conflict" in v.rule_name.lower() or "duplicate" in v.rule_name.lower()
             for v in req_violations
         )
-        conflict_with = None
+        conflict_with = req.conflict_with if req.conflict_with else None
         cycle_path = None
 
+        # Also check violations for additional context
         for v in req_violations:
-            if "duplicate" in v.rule_name.lower():
+            if "duplicate" in v.rule_name.lower() and not conflict_with:
                 # Try to extract conflicting ID from message
                 conflict_with = v.message
             if "cycle" in v.rule_name.lower():
                 cycle_path = v.message
 
         # Build requirement data matching hht_diary format
+        # Use the original ID (strip __conflict suffix) for output key
+        output_key = req_id.replace("__conflict", "") if req.is_conflict else req_id
         output[req_id] = {
             "title": req.title,
             "status": req.status,

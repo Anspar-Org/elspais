@@ -97,6 +97,12 @@ Examples:
         action="store_true",
         help="Skip test scanning",
     )
+    validate_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: skip sponsor repos, combined: include all (default: combined)",
+    )
 
     # trace command
     trace_parser = subparsers.add_parser(

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-01-08
+
+### Added
+- **Roadmap conflict entries**: When duplicate requirement IDs exist (e.g., same ID in spec/ and spec/roadmap/), both requirements are now visible in output
+  - Duplicate entries stored with `__conflict` suffix key (e.g., `REQ-p00001__conflict`)
+  - New `is_conflict` and `conflict_with` fields on Requirement model
+  - Conflict entries treated as orphaned (`implements=[]`) for clear visibility
+  - Warning generated for each duplicate (surfaced as `id.duplicate` rule)
+- **Sponsor/associated repository spec scanning**: New `--mode` flag and sponsor configuration support
+  - `elspais validate --mode core`: Scan only core spec directories
+  - `elspais validate --mode combined`: Include sponsor specs (default)
+  - New `sponsors` module with zero-dependency YAML parser
+  - Configuration via `.github/config/sponsors.yml` with local override support
+  - `traceability.include_associated` config option (default: true)
+- 29 new tests for conflict entries and sponsor scanning
+
+### Changed
+- Parser now keeps both requirements when duplicates found (instead of ignoring second)
+- JSON output includes conflict metadata for both original and conflict entries
+
 ## [0.9.3] - 2026-01-05
 
 ### Added
