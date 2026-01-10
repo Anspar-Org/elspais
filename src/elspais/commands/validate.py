@@ -259,8 +259,9 @@ def validate_links(
 
     # Load core requirements if this is an associated repo
     core_requirements = {}
-    if args.core_repo:
-        core_requirements = load_core_requirements(args.core_repo, config)
+    core_path = args.core_repo or config.get("core", {}).get("path")
+    if core_path:
+        core_requirements = load_core_requirements(Path(core_path), config)
 
     all_requirements = {**core_requirements, **requirements}
     all_ids = set(all_requirements.keys())
