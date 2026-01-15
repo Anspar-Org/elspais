@@ -12,8 +12,10 @@ REQ-int-d00008-C: Line break normalization SHALL be included.
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 
 def run(args: argparse.Namespace) -> int:
@@ -22,59 +24,281 @@ def run(args: argparse.Namespace) -> int:
     This command reformats requirements from the old Acceptance Criteria format
     to the new Assertions format using Claude AI.
     """
-    # TODO: Full implementation pending - Phase 6 of integration
+    from elspais.reformat import (
+        get_all_requirements,
+        build_hierarchy,
+        traverse_top_down,
+        needs_reformatting,
+        normalize_req_id,
+        reformat_requirement,
+        assemble_new_format,
+        validate_reformatted_content,
+        normalize_line_breaks,
+        fix_requirement_line_breaks,
+    )
+
     print("elspais reformat-with-claude")
     print()
 
+    # Handle line-breaks-only mode
     if args.line_breaks_only:
         return run_line_breaks_only(args)
 
-    # Check for required components
-    try:
-        from elspais.reformat import (
-            get_all_requirements,
-            build_hierarchy,
-            traverse_top_down,
-            needs_reformatting,
-            reformat_requirement,
-        )
-    except ImportError:
-        print("Error: Reformat module not yet fully ported.", file=sys.stderr)
-        print("This feature is under development.", file=sys.stderr)
-        return 1
-
     # Configuration
     start_req = args.start_req
-    depth = args.depth
+    max_depth = args.depth
     dry_run = args.dry_run
     backup = args.backup
     force = args.force
+    fix_line_breaks = args.fix_line_breaks
+    verbose = getattr(args, 'verbose', False)
 
     print(f"Options:")
-    print(f"  Start REQ:     {start_req or 'All PRD requirements'}")
-    print(f"  Max depth:     {depth or 'Unlimited'}")
-    print(f"  Dry run:       {dry_run}")
-    print(f"  Backup:        {backup}")
-    print(f"  Force:         {force}")
+    print(f"  Start REQ:       {start_req or 'All PRD requirements'}")
+    print(f"  Max depth:       {max_depth or 'Unlimited'}")
+    print(f"  Dry run:         {dry_run}")
+    print(f"  Backup:          {backup}")
+    print(f"  Force reformat:  {force}")
+    print(f"  Fix line breaks: {fix_line_breaks}")
     print()
 
     if dry_run:
         print("DRY RUN MODE - no changes will be made")
         print()
 
-    # Placeholder for actual implementation
-    print("Feature under development. Full implementation pending.")
-    return 0
+    # Get all requirements
+    print("Loading requirements...", end=" ", flush=True)
+    requirements = get_all_requirements()
+    if not requirements:
+        print("FAILED")
+        print("Error: Could not load requirements. Run 'elspais validate' first.",
+              file=sys.stderr)
+        return 1
+    print(f"found {len(requirements)} requirements")
+
+    # Build hierarchy
+    print("Building hierarchy...", end=" ", flush=True)
+    build_hierarchy(requirements)
+    print("done")
+
+    # Determine which requirements to process
+    if start_req:
+        # Normalize and validate start requirement
+        start_req = normalize_req_id(start_req)
+        if start_req not in requirements:
+            print(f"Error: Requirement {start_req} not found", file=sys.stderr)
+            return 1
+
+        print(f"Traversing from {start_req}...")
+        req_ids = traverse_top_down(requirements, start_req, max_depth)
+    else:
+        # Process all PRD requirements first, then their descendants
+        prd_reqs = [
+            req_id for req_id, node in requirements.items()
+            if node.level.upper() == 'PRD'
+        ]
+        prd_reqs.sort()
+
+        print(f"Processing {len(prd_reqs)} PRD requirements and their descendants...")
+        req_ids = []
+        seen = set()
+        for prd_id in prd_reqs:
+            for req_id in traverse_top_down(requirements, prd_id, max_depth):
+                if req_id not in seen:
+                    req_ids.append(req_id)
+                    seen.add(req_id)
+
+    print(f"Found {len(req_ids)} requirements to process")
+    print()
+
+    # Process each requirement
+    reformatted = 0
+    skipped = 0
+    errors = 0
+    line_break_fixes = 0
+
+    for req_id in req_ids:
+        node = requirements[req_id]
+
+        # Check if reformatting is needed
+        needs_reformat = needs_reformatting(node.body)
+
+        if not needs_reformat and not force:
+            if verbose:
+                print(f"[SKIP] {req_id}: Already in new format")
+            skipped += 1
+            continue
+
+        print(f"[PROC] {req_id}: {node.title[:50]}...")
+
+        # Call Claude to reformat
+        result, success, error_msg = reformat_requirement(node, verbose=verbose)
+
+        if not success:
+            print(f"  ERROR: {error_msg}")
+            errors += 1
+            continue
+
+        # Validate the result
+        rationale = result.get('rationale', '')
+        assertions = result.get('assertions', [])
+
+        is_valid, warnings = validate_reformatted_content(node, rationale, assertions)
+
+        if warnings:
+            for warning in warnings:
+                print(f"  WARNING: {warning}")
+
+        if not is_valid:
+            print(f"  INVALID: Skipping due to validation errors")
+            errors += 1
+            continue
+
+        # Assemble the new format
+        new_content = assemble_new_format(
+            req_id=node.req_id,
+            title=node.title,
+            level=node.level,
+            status=node.status,
+            implements=node.implements,
+            rationale=rationale,
+            assertions=assertions
+        )
+
+        # Optionally normalize line breaks
+        if fix_line_breaks:
+            new_content = normalize_line_breaks(new_content)
+            line_break_fixes += 1
+
+        if dry_run:
+            print(f"  Would write to: {node.file_path}")
+            print(f"  Assertions: {len(assertions)}")
+            reformatted += 1
+        else:
+            # Write the reformatted content
+            try:
+                file_path = Path(node.file_path)
+
+                if backup:
+                    backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+                    shutil.copy2(file_path, backup_path)
+                    print(f"  Backup: {backup_path}")
+
+                # Read the entire file
+                content = file_path.read_text()
+
+                # Find and replace this requirement's content
+                # The requirement starts with its header and ends before the next
+                # requirement or end of file
+                updated_content = replace_requirement_content(
+                    content, node.req_id, node.title, new_content
+                )
+
+                if updated_content:
+                    file_path.write_text(updated_content)
+                    print(f"  Written: {file_path}")
+                    reformatted += 1
+                else:
+                    print(f"  ERROR: Could not locate requirement in file")
+                    errors += 1
+
+            except Exception as e:
+                print(f"  ERROR: {e}")
+                errors += 1
+
+    # Summary
+    print()
+    print("=" * 60)
+    print(f"Summary:")
+    print(f"  Reformatted: {reformatted}")
+    print(f"  Skipped:     {skipped}")
+    print(f"  Errors:      {errors}")
+    if fix_line_breaks:
+        print(f"  Line breaks: {line_break_fixes} files normalized")
+
+    return 0 if errors == 0 else 1
+
+
+def replace_requirement_content(
+    file_content: str,
+    req_id: str,
+    title: str,
+    new_content: str
+) -> Optional[str]:
+    """
+    Replace a requirement's content in a file.
+
+    Finds the requirement by its header pattern and replaces everything
+    up to the footer line.
+
+    Args:
+        file_content: Full file content
+        req_id: Requirement ID (e.g., 'REQ-d00027')
+        title: Requirement title
+        new_content: New requirement content
+
+    Returns:
+        Updated file content, or None if requirement not found
+    """
+    import re
+
+    # Pattern to match the requirement header
+    # # REQ-d00027: Title
+    header_pattern = rf'^# {re.escape(req_id)}:\s*'
+
+    # Pattern to match the footer
+    # *End* *Title* | **Hash**: xxxxxxxx
+    footer_pattern = rf'^\*End\*\s+\*{re.escape(title)}\*\s+\|\s+\*\*Hash\*\*:\s*[a-fA-F0-9]+'
+
+    lines = file_content.split('\n')
+    result_lines = []
+    in_requirement = False
+    found = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        if not in_requirement:
+            # Check if this line starts the requirement
+            if re.match(header_pattern, line, re.IGNORECASE):
+                in_requirement = True
+                found = True
+                # Insert new content (without trailing newline, we'll add it)
+                new_lines = new_content.rstrip('\n').split('\n')
+                result_lines.extend(new_lines)
+                i += 1
+                continue
+            else:
+                result_lines.append(line)
+                i += 1
+        else:
+            # We're inside the requirement, skip until we find the footer
+            if re.match(footer_pattern, line, re.IGNORECASE):
+                # Found the footer, we've already added the new content
+                # with its own footer, so skip this old footer
+                in_requirement = False
+                i += 1
+                # Skip any trailing blank lines after the footer
+                while i < len(lines) and lines[i].strip() == '':
+                    i += 1
+            else:
+                # Skip this line (part of old requirement)
+                i += 1
+
+    if not found:
+        return None
+
+    return '\n'.join(result_lines)
 
 
 def run_line_breaks_only(args: argparse.Namespace) -> int:
     """Run line break normalization only."""
-    try:
-        from elspais.reformat import normalize_line_breaks, detect_line_break_issues
-    except ImportError:
-        print("Error: Line break module not yet fully ported.", file=sys.stderr)
-        print("This feature is under development.", file=sys.stderr)
-        return 1
+    from elspais.reformat import (
+        get_all_requirements,
+        normalize_line_breaks,
+        detect_line_break_issues,
+    )
 
     dry_run = args.dry_run
     backup = args.backup
@@ -84,10 +308,67 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     print(f"  Backup:  {backup}")
     print()
 
-    if dry_run:
-        print("DRY RUN MODE - no changes will be made")
-        print()
+    # Get all requirements
+    print("Loading requirements...", end=" ", flush=True)
+    requirements = get_all_requirements()
+    if not requirements:
+        print("FAILED")
+        print("Error: Could not load requirements.", file=sys.stderr)
+        return 1
+    print(f"found {len(requirements)} requirements")
 
-    # Placeholder for actual implementation
-    print("Feature under development. Full implementation pending.")
-    return 0
+    # Group by file
+    files_to_process = {}
+    for req_id, node in requirements.items():
+        if node.file_path not in files_to_process:
+            files_to_process[node.file_path] = []
+        files_to_process[node.file_path].append(req_id)
+
+    print(f"Processing {len(files_to_process)} files...")
+    print()
+
+    fixed = 0
+    unchanged = 0
+    errors = 0
+
+    for file_path_str, req_ids in sorted(files_to_process.items()):
+        file_path = Path(file_path_str)
+
+        try:
+            content = file_path.read_text()
+            issues = detect_line_break_issues(content)
+
+            if not issues:
+                unchanged += 1
+                continue
+
+            print(f"[FIX] {file_path}")
+            for issue in issues:
+                print(f"  - {issue}")
+
+            if dry_run:
+                fixed += 1
+                continue
+
+            # Apply fixes
+            fixed_content = normalize_line_breaks(content)
+
+            if backup:
+                backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+                shutil.copy2(file_path, backup_path)
+
+            file_path.write_text(fixed_content)
+            fixed += 1
+
+        except Exception as e:
+            print(f"[ERR] {file_path}: {e}")
+            errors += 1
+
+    print()
+    print("=" * 60)
+    print(f"Summary:")
+    print(f"  Fixed:     {fixed}")
+    print(f"  Unchanged: {unchanged}")
+    print(f"  Errors:    {errors}")
+
+    return 0 if errors == 0 else 1
