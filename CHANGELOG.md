@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-01-15
+
+### Added
+- **Cross-repo hierarchy support** for `reformat-with-claude` command
+  - Resolves parent requirements from associated/sponsor repositories
+  - New `--core-repo` flag to specify core repository path
+  - Builds complete hierarchy graph across repository boundaries
+
+### Changed
+- **Performance optimization** for reformat command: Uses validation to filter requirements before reformatting instead of processing all files
+- Reformat module now uses core modules directly for consistent behavior
+
+### Fixed
+- Hash update robustness improved with better error handling and INFO logging
+- `normalize_req_id()` now uses config-based `PatternValidator` for consistent ID normalization
+- Associated prefix case is now preserved in normalized requirement IDs
+
 ## [0.10.0] - 2026-01-10
 
 ### Added

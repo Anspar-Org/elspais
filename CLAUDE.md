@@ -49,9 +49,11 @@ elspais trace --server               # Start Flask review server on port 8080
 elspais trace --server --port 3000   # Start on custom port
 
 # AI-assisted requirement reformatting
-elspais reformat-with-claude --dry-run      # Preview reformatting
-elspais reformat-with-claude --backup       # Create backups before changes
-elspais reformat-with-claude --start-req X  # Start from requirement X
+elspais reformat-with-claude --dry-run              # Preview reformatting
+elspais reformat-with-claude --backup               # Create backups before changes
+elspais reformat-with-claude --start-req X          # Start from requirement X
+elspais reformat-with-claude --mode combined        # Cross-repo hierarchy support
+elspais reformat-with-claude --mode local-only      # Only local requirements
 ```
 
 ## Architecture

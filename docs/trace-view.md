@@ -145,7 +145,7 @@ When `--edit-mode` or `--review-mode` is enabled:
 
 ## Requirement Reformatting
 
-The `reformat-with-claude` command uses AI to transform legacy requirements.
+The `reformat-with-claude` command uses AI to transform legacy requirements from "Acceptance Criteria" to "Assertions" format.
 
 ### Usage
 
@@ -159,8 +159,11 @@ elspais reformat-with-claude --backup
 # Start from specific requirement
 elspais reformat-with-claude --start-req REQ-p00010
 
-# Use specific model
-elspais reformat-with-claude --model opus
+# Reformat with cross-repo hierarchy (for associated repositories)
+elspais reformat-with-claude --mode combined
+
+# Reformat only local requirements
+elspais reformat-with-claude --mode local-only
 ```
 
 ### Format Transformation
@@ -187,8 +190,20 @@ B. The system SHALL provide Y.
 | `--dry-run` | Preview without modifying files |
 | `--backup` | Create .bak files before changes |
 | `--start-req ID` | Start processing from this requirement |
-| `--model MODEL` | Claude model (sonnet, opus, haiku) |
+| `--depth N` | Maximum traversal depth (default: unlimited) |
+| `--mode {combined,core-only,local-only}` | Which repos to include in hierarchy (default: combined) |
+| `--force` | Reformat even if already in new format |
+| `--fix-line-breaks` | Normalize line breaks during reformatting |
+| `--line-breaks-only` | Only fix line breaks, skip AI reformatting |
 | `--verbose` | Show detailed progress |
+
+### Cross-Repository Support (v0.11.0+)
+
+When working in an associated repository that implements requirements from a core repository, use `--mode combined` to build the complete hierarchy graph across repository boundaries.
+
+**Example**: Starting from a core PRD requirement, the command will traverse into associated repository DEV requirements that implement it, ensuring proper hierarchical reformatting.
+
+See [Commands Reference](commands.md#reformat-with-claude) for detailed documentation.
 
 ## Architecture
 

@@ -118,20 +118,47 @@ elspais validate
 ✓ 14/15 requirements valid
 ```
 
-## Combined Traceability (Planned)
+## Cross-Repository Hierarchy Traversal
 
-> **Note**: The `--combined` flag is not yet implemented. Currently, generate separate matrices per repository and merge manually.
+### Reformat Command (v0.11.0+)
 
-Generate a combined matrix across repositories:
+The `reformat-with-claude` command supports cross-repository hierarchy traversal using the `--mode` flag:
 
 ```bash
-# Planned syntax (not yet available):
-# elspais trace --combined --core-repo ../core-platform
+# In associated repository that implements core requirements
+cd associated-callisto/
 
-# Current workaround: generate matrices separately
-cd core-platform && elspais trace
-cd ../associated-callisto && elspais trace
+# Reformat starting from core PRD, including associated DEV requirements
+elspais reformat-with-claude --start-req REQ-p00001 --mode combined
+
+# This will:
+# 1. Load requirements from both core and associated repositories
+# 2. Build complete hierarchy graph with cross-repo links
+# 3. Traverse from REQ-p00001 → REQ-CAL-d00027 and any other children
+# 4. Only modify files in the local (associated) repository
 ```
+
+**Mode Options**:
+- `combined` (default): Load both local and core/associated repository requirements
+- `core-only`: Load only core/associated repository requirements
+- `local-only`: Load only local requirements, ignore cross-repository dependencies
+
+### Combined Traceability
+
+Generate traceability matrices with sponsor/associated repository requirements:
+
+```bash
+# Generate trace with sponsor requirements included (default)
+elspais trace --mode combined
+
+# Generate trace with only core requirements
+elspais trace --mode core
+
+# Filter to specific sponsor
+elspais trace --sponsor CAL
+```
+
+See [Trace-View documentation](trace-view.md) for enhanced visualization options.
 
 ## Configuration Details
 
