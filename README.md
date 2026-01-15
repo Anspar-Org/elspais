@@ -327,19 +327,19 @@ Options:
   --help           Show help
 
 Commands:
-  validate              Validate requirements format, links, hashes
+  validate              Validate requirements format, links, and hashes
   trace                 Generate traceability matrix
   hash                  Manage requirement hashes (verify, update)
-  reformat-with-claude  Transform requirements using AI (Acceptance Criteria → Assertions)
+  index                 Manage INDEX.md file (validate, regenerate)
+  analyze               Analyze requirement hierarchy (hierarchy, orphans, coverage)
   changed               Detect git changes to spec files
-  analyze               Analyze requirement hierarchy
-  edit                  Edit requirements in-place (status, implements, move)
-  config                View and modify configuration
-  rules                 View and manage content rules
-  index                 Validate or regenerate INDEX.md
-  init                  Create .elspais.toml configuration
-  mcp                   MCP server commands (requires elspais[mcp])
   version               Show version and check for updates
+  init                  Create .elspais.toml configuration
+  edit                  Edit requirements in-place (implements, status, move)
+  config                View and modify configuration (show, get, set, ...)
+  rules                 View and manage content rules (list, show)
+  reformat-with-claude  Reformat requirements using AI (Acceptance Criteria -> Assertions)
+  mcp                   MCP server commands (requires elspais[mcp])
 ```
 
 See [docs/commands.md](docs/commands.md) for comprehensive command documentation.

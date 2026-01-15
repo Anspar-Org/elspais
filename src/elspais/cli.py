@@ -22,9 +22,16 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   elspais validate              # Validate all requirements
+  elspais validate --fix        # Auto-fix fixable issues
   elspais trace --format html   # Generate HTML traceability matrix
+  elspais trace --view          # Interactive HTML view
   elspais hash update           # Update all requirement hashes
+  elspais changed               # Show uncommitted spec changes
+  elspais analyze hierarchy     # Show requirement hierarchy tree
+  elspais config show           # View current configuration
   elspais init                  # Create .elspais.toml configuration
+
+For detailed command help: elspais <command> --help
         """,
     )
 
@@ -64,6 +71,21 @@ Examples:
     validate_parser = subparsers.add_parser(
         "validate",
         help="Validate requirements format, links, and hashes",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais validate                      # Validate all requirements
+  elspais validate --fix                # Auto-fix hashes and formatting
+  elspais validate --skip-rule hash.*   # Skip all hash rules
+  elspais validate -j                   # Output JSON for tooling
+  elspais validate --mode core          # Exclude associated repo specs
+
+Common rules to skip:
+  hash.missing     Hash footer is missing
+  hash.mismatch    Hash doesn't match content
+  hierarchy.*      All hierarchy rules
+  format.*         All format rules
+""",
     )
     validate_parser.add_argument(
         "--fix",
@@ -79,7 +101,7 @@ Examples:
     validate_parser.add_argument(
         "--skip-rule",
         action="append",
-        help="Skip specific validation rules",
+        help="Skip validation rules (can be repeated, e.g., hash.*, format.*)",
         metavar="RULE",
     )
     validate_parser.add_argument(
@@ -101,7 +123,7 @@ Examples:
         "--mode",
         choices=["core", "combined"],
         default="combined",
-        help="core: skip sponsor repos, combined: include all (default: combined)",
+        help="Scope: core (this repo only), combined (include sponsor repos)",
     )
 
     # trace command
@@ -113,7 +135,7 @@ Examples:
         "--format",
         choices=["markdown", "html", "csv", "both"],
         default="both",
-        help="Output format (default: both)",
+        help="Output format: markdown, html, csv, or both (markdown + csv)",
     )
     trace_parser.add_argument(
         "--output",
@@ -130,17 +152,17 @@ Examples:
     trace_parser.add_argument(
         "--embed-content",
         action="store_true",
-        help="Embed full requirement content in HTML output",
+        help="Embed full requirement markdown in HTML for offline viewing",
     )
     trace_parser.add_argument(
         "--edit-mode",
         action="store_true",
-        help="Include edit mode UI in HTML output",
+        help="Enable in-browser editing of implements and status fields",
     )
     trace_parser.add_argument(
         "--review-mode",
         action="store_true",
-        help="Include review mode UI in HTML output",
+        help="Enable collaborative review with comments and flags",
     )
     trace_parser.add_argument(
         "--server",
@@ -168,7 +190,7 @@ Examples:
     # hash command
     hash_parser = subparsers.add_parser(
         "hash",
-        help="Manage requirement hashes",
+        help="Manage requirement hashes (verify, update)",
     )
     hash_subparsers = hash_parser.add_subparsers(dest="hash_action")
 
@@ -195,7 +217,7 @@ Examples:
     # index command
     index_parser = subparsers.add_parser(
         "index",
-        help="Manage INDEX.md file",
+        help="Manage INDEX.md file (validate, regenerate)",
     )
     index_subparsers = index_parser.add_subparsers(dest="index_action")
 
@@ -211,7 +233,7 @@ Examples:
     # analyze command
     analyze_parser = subparsers.add_parser(
         "analyze",
-        help="Analyze requirement hierarchy",
+        help="Analyze requirement hierarchy (hierarchy, orphans, coverage)",
     )
     analyze_subparsers = analyze_parser.add_subparsers(dest="analyze_action")
 
@@ -221,7 +243,7 @@ Examples:
     )
     analyze_subparsers.add_parser(
         "orphans",
-        help="Find orphaned requirements",
+        help="Find requirements with no parent (missing or invalid Implements)",
     )
     analyze_subparsers.add_parser(
         "coverage",
@@ -258,7 +280,7 @@ Examples:
     version_parser.add_argument(
         "check",
         nargs="?",
-        help="Check for updates",
+        help="Check for updates (not yet implemented)",
     )
 
     # init command
@@ -286,6 +308,17 @@ Examples:
     edit_parser = subparsers.add_parser(
         "edit",
         help="Edit requirements in-place (implements, status, move)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais edit --req-id REQ-d00001 --status Draft
+  elspais edit --req-id REQ-d00001 --implements REQ-p00001,REQ-p00002
+  elspais edit --req-id REQ-d00001 --move-to roadmap/future.md
+  elspais edit --from-json edits.json
+
+JSON batch format:
+  {"edits": [{"req_id": "...", "status": "...", "implements": [...]}]}
+""",
     )
     edit_parser.add_argument(
         "--req-id",
@@ -326,7 +359,7 @@ Examples:
     # config command
     config_parser = subparsers.add_parser(
         "config",
-        help="View and modify configuration",
+        help="View and modify configuration (show, get, set, ...)",
     )
     config_subparsers = config_parser.add_subparsers(dest="config_action")
 
@@ -422,7 +455,7 @@ Examples:
     # rules command
     rules_parser = subparsers.add_parser(
         "rules",
-        help="View and manage content rules",
+        help="View and manage content rules (list, show)",
     )
     rules_subparsers = rules_parser.add_subparsers(dest="rules_action")
 
