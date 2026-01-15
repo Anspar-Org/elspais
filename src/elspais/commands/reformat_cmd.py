@@ -17,8 +17,10 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from elspais.config.loader import load_config, find_config_file
+from elspais.config.loader import load_config, find_config_file, get_spec_directories
+from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternValidator, PatternConfig
+from elspais.core.rules import RuleEngine, RulesConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -31,7 +33,6 @@ def run(args: argparse.Namespace) -> int:
         get_all_requirements,
         build_hierarchy,
         traverse_top_down,
-        needs_reformatting,
         normalize_req_id,
         reformat_requirement,
         assemble_new_format,
@@ -93,18 +94,21 @@ def run(args: argparse.Namespace) -> int:
     # Build hierarchy
     print("Building hierarchy...", end=" ", flush=True)
     build_hierarchy(requirements)
-    print("done")
+    print("done", flush=True)
 
     # Determine which requirements to process
     if start_req:
         # Normalize and validate start requirement
+        print(f"Normalizing {start_req}...", end=" ", flush=True)
         start_req = normalize_req_id(start_req, validator)
+        print(f"-> {start_req}", flush=True)
         if start_req not in requirements:
             print(f"Error: Requirement {start_req} not found", file=sys.stderr)
             return 1
 
-        print(f"Traversing from {start_req}...")
+        print(f"Traversing from {start_req}...", flush=True)
         req_ids = traverse_top_down(requirements, start_req, max_depth)
+        print(f"Traversal complete", flush=True)
     else:
         # Process all PRD requirements first, then their descendants
         prd_reqs = [
@@ -122,8 +126,19 @@ def run(args: argparse.Namespace) -> int:
                     req_ids.append(req_id)
                     seen.add(req_id)
 
-    print(f"Found {len(req_ids)} requirements to process")
-    print()
+    print(f"Found {len(req_ids)} requirements to process", flush=True)
+
+    # Run validation to identify requirements with acceptance_criteria issues
+    print("Running validation to identify old format...", end=" ", flush=True)
+    needs_reformat_ids = get_requirements_needing_reformat(config, local_base_path)
+    print(f"found {len(needs_reformat_ids)} with old format", flush=True)
+    print(flush=True)
+
+    # Filter to only requirements that need reformatting (unless --force)
+    if not force:
+        req_ids = [r for r in req_ids if r in needs_reformat_ids]
+        print(f"Filtered to {len(req_ids)} requirements needing reformat")
+        print(flush=True)
 
     # Process each requirement
     reformatted = 0
@@ -131,22 +146,13 @@ def run(args: argparse.Namespace) -> int:
     errors = 0
     line_break_fixes = 0
 
-    for req_id in req_ids:
+    for i, req_id in enumerate(req_ids):
+        if i % 10 == 0 and i > 0:
+            print(f"Processing {i}/{len(req_ids)}...", flush=True)
         node = requirements[req_id]
 
         # Skip non-local files (from core/associated repos)
         if not is_local_file(node.file_path, local_base_path):
-            if verbose:
-                print(f"[SKIP] {req_id}: Not in local repo")
-            skipped += 1
-            continue
-
-        # Check if reformatting is needed
-        needs_reformat = needs_reformatting(node.body)
-
-        if not needs_reformat and not force:
-            if verbose:
-                print(f"[SKIP] {req_id}: Already in new format")
             skipped += 1
             continue
 
@@ -393,6 +399,46 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     print(f"  Errors:    {errors}")
 
     return 0 if errors == 0 else 1
+
+
+def get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
+    """Run validation to identify requirements with old format.
+
+    Args:
+        config: Configuration dictionary
+        base_path: Base path of the local repository
+
+    Returns:
+        Set of requirement IDs that have format.acceptance_criteria violations
+    """
+    # Get local spec directories only
+    spec_dirs = get_spec_directories(None, config, base_path)
+    if not spec_dirs:
+        return set()
+
+    # Parse local requirements
+    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    spec_config = config.get("spec", {})
+    no_reference_values = spec_config.get("no_reference_values")
+    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
+    skip_files = spec_config.get("skip_files", [])
+
+    try:
+        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        requirements = dict(parse_result)
+    except Exception:
+        return set()
+
+    # Run validation
+    rules_config = RulesConfig.from_dict(config.get("rules", {}))
+    engine = RuleEngine(rules_config)
+    violations = engine.validate(requirements)
+
+    # Filter to acceptance_criteria violations
+    return {
+        v.requirement_id for v in violations
+        if v.rule_name == "format.acceptance_criteria"
+    }
 
 
 def is_local_file(file_path: str, base_path: Path) -> bool:
