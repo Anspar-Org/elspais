@@ -352,6 +352,9 @@ git clone https://github.com/anspar/elspais.git
 cd elspais
 pip install -e ".[dev]"
 
+# Enable git hooks (verifies docs stay in sync before push)
+git config core.hooksPath .githooks
+
 # Run tests
 pytest
 
