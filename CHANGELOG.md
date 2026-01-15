@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-01-15
+
+### Added
+- **Cross-repo hierarchy support** for `reformat-with-claude` command
+  - Resolves parent requirements from associated/sponsor repositories
+  - New `--core-repo` flag to specify core repository path
+  - Builds complete hierarchy graph across repository boundaries
+
+### Changed
+- **Performance optimization** for reformat command: Uses validation to filter requirements before reformatting instead of processing all files
+- Reformat module now uses core modules directly for consistent behavior
+
+### Fixed
+- Hash update robustness improved with better error handling and INFO logging
+- `normalize_req_id()` now uses config-based `PatternValidator` for consistent ID normalization
+- Associated prefix case is now preserved in normalized requirement IDs
+
+## [0.10.0] - 2026-01-10
+
+### Added
+- **trace-view integration**: Enhanced traceability visualization with optional dependencies
+  - Interactive HTML generation with Jinja2 templates (`elspais[trace-view]`)
+  - Collaborative review server with Flask REST API (`elspais[trace-review]`)
+  - New CLI flags: `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server`, `--port`
+- **New `trace_view` package** (`src/elspais/trace_view/`)
+  - `TraceViewRequirement` adapter wrapping core `Requirement` model
+  - Coverage calculation and orphan detection
+  - Implementation file scanning
+  - Generators for HTML, Markdown, and CSV output
+- **Review system** for collaborative requirement feedback
+  - Comment threads with nested replies
+  - Review flags and status change requests
+  - Git branch management for review workflows
+  - JSON-based persistence in `.elspais/reviews/`
+- **AI-assisted requirement reformatting** with `reformat-with-claude` command
+  - Transforms legacy "Acceptance Criteria" format to assertion-based format
+  - Format detection and validation
+  - Line break normalization
+  - Claude CLI integration with structured JSON output
+- **New `reformat` module** (`src/elspais/reformat/`)
+  - `detect_format()`, `needs_reformatting()` - format analysis
+  - `reformat_requirement()`, `assemble_new_format()` - AI transformation
+  - `normalize_line_breaks()`, `fix_requirement_line_breaks()` - cleanup
+  - `RequirementNode`, `build_hierarchy()` - requirement traversal
+- New optional dependency extras in pyproject.toml:
+  - `elspais[trace-view]`: jinja2 for HTML generation
+  - `elspais[trace-review]`: flask, flask-cors for review server
+  - `elspais[all]`: all optional features
+- New documentation: `docs/trace-view.md` user guide
+- 18 new integration tests for trace-view features
+
+### Changed
+- `elspais trace` command now delegates to trace-view when enhanced features requested
+- CLAUDE.md updated with trace-view architecture documentation
+
+## [0.9.4] - 2026-01-08
+
+### Added
+- **Roadmap conflict entries**: When duplicate requirement IDs exist (e.g., same ID in spec/ and spec/roadmap/), both requirements are now visible in output
+  - Duplicate entries stored with `__conflict` suffix key (e.g., `REQ-p00001__conflict`)
+  - New `is_conflict` and `conflict_with` fields on Requirement model
+  - Conflict entries treated as orphaned (`implements=[]`) for clear visibility
+  - Warning generated for each duplicate (surfaced as `id.duplicate` rule)
+- **Sponsor/associated repository spec scanning**: New `--mode` flag and sponsor configuration support
+  - `elspais validate --mode core`: Scan only core spec directories
+  - `elspais validate --mode combined`: Include sponsor specs (default)
+  - New `sponsors` module with zero-dependency YAML parser
+  - Configuration via `.github/config/sponsors.yml` with local override support
+  - `traceability.include_associated` config option (default: true)
+- 29 new tests for conflict entries and sponsor scanning
+
+### Changed
+- Parser now keeps both requirements when duplicates found (instead of ignoring second)
+- JSON output includes conflict metadata for both original and conflict entries
+
 ## [0.9.3] - 2026-01-05
 
 ### Added

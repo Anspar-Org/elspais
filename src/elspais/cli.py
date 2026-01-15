@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import analyze, changed, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate
+from elspais.commands import analyze, changed, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate, reformat_cmd
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -97,6 +97,12 @@ Examples:
         action="store_true",
         help="Skip test scanning",
     )
+    validate_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: skip sponsor repos, combined: include all (default: combined)",
+    )
 
     # trace command
     trace_parser = subparsers.add_parser(
@@ -114,6 +120,49 @@ Examples:
         type=Path,
         help="Output file path",
         metavar="PATH",
+    )
+    # trace-view enhanced options (requires elspais[trace-view])
+    trace_parser.add_argument(
+        "--view",
+        action="store_true",
+        help="Generate interactive HTML traceability view (requires trace-view extra)",
+    )
+    trace_parser.add_argument(
+        "--embed-content",
+        action="store_true",
+        help="Embed full requirement content in HTML output",
+    )
+    trace_parser.add_argument(
+        "--edit-mode",
+        action="store_true",
+        help="Include edit mode UI in HTML output",
+    )
+    trace_parser.add_argument(
+        "--review-mode",
+        action="store_true",
+        help="Include review mode UI in HTML output",
+    )
+    trace_parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Start review server (requires trace-review extra)",
+    )
+    trace_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port for review server (default: 8080)",
+    )
+    trace_parser.add_argument(
+        "--mode",
+        choices=["core", "sponsor", "combined"],
+        default="core",
+        help="Report mode: core, sponsor, or combined (default: core)",
+    )
+    trace_parser.add_argument(
+        "--sponsor",
+        help="Sponsor name for sponsor-specific reports",
+        metavar="NAME",
     )
 
     # hash command
@@ -393,6 +442,53 @@ Examples:
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
 
+    # reformat-with-claude command
+    reformat_parser = subparsers.add_parser(
+        "reformat-with-claude",
+        help="Reformat requirements using AI (Acceptance Criteria -> Assertions)",
+    )
+    reformat_parser.add_argument(
+        "--start-req",
+        help="Starting requirement ID (default: all PRD requirements)",
+        metavar="ID",
+    )
+    reformat_parser.add_argument(
+        "--depth",
+        type=int,
+        help="Maximum traversal depth (default: unlimited)",
+    )
+    reformat_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview changes without applying",
+    )
+    reformat_parser.add_argument(
+        "--backup",
+        action="store_true",
+        help="Create .bak files before editing",
+    )
+    reformat_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reformat even if already in new format",
+    )
+    reformat_parser.add_argument(
+        "--fix-line-breaks",
+        action="store_true",
+        help="Normalize line breaks (remove extra blank lines)",
+    )
+    reformat_parser.add_argument(
+        "--line-breaks-only",
+        action="store_true",
+        help="Only fix line breaks, skip AI-based reformatting",
+    )
+    reformat_parser.add_argument(
+        "--mode",
+        choices=["combined", "core-only", "local-only"],
+        default="combined",
+        help="Which repos to include in hierarchy (default: combined)",
+    )
+
     # mcp command
     mcp_parser = subparsers.add_parser(
         "mcp",
@@ -489,6 +585,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return config_cmd.run(args)
         elif args.command == "rules":
             return rules_cmd.run(args)
+        elif args.command == "reformat-with-claude":
+            return reformat_cmd.run(args)
         elif args.command == "mcp":
             return mcp_command(args)
         else:

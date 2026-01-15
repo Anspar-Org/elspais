@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.validate import format_requirements_json
+from elspais.commands.validate import format_requirements_json, validate_links
 from elspais.core.models import Requirement, Assertion
 from elspais.core.rules import RuleViolation, Severity
 
@@ -240,3 +240,134 @@ class TestFormatRequirementsJson:
         data = json.loads(result)
 
         assert data["REQ-p00003"]["subdir"] == "archive"
+
+
+class TestValidateLinksCorePath:
+    """Tests for core.path config fallback in validate_links."""
+
+    # Pattern config needed for parsing requirements with p/o/d type codes
+    PATTERNS_CONFIG = {
+        "id_template": "{prefix}-{type}{id}",
+        "prefix": "REQ",
+        "types": {
+            "prd": {"id": "p", "name": "Product Requirement", "level": 1},
+            "ops": {"id": "o", "name": "Operations Requirement", "level": 2},
+            "dev": {"id": "d", "name": "Development Requirement", "level": 3},
+        },
+        "id_format": {"style": "numeric", "digits": 5, "leading_zeros": True},
+    }
+
+    def test_core_path_from_config_fallback(self, tmp_path: Path):
+        """Test that core.path config is used when --core-repo is not provided."""
+        # Create a mock core repo structure
+        core_repo = tmp_path / "core_repo"
+        core_spec = core_repo / "spec"
+        core_spec.mkdir(parents=True)
+
+        # Create a core requirement file
+        core_req_file = core_spec / "prd-core.md"
+        core_req_file.write_text("""# REQ-p00001: Core Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Core Requirement* | **Hash**: abcd1234
+""")
+
+        # Create a requirement that implements the core requirement
+        associated_req = Requirement(
+            id="REQ-d00001",
+            title="Associated Requirement",
+            level="DEV",
+            status="Active",
+            body="Associated body.",
+            implements=["REQ-p00001"],
+            file_path=tmp_path / "spec" / "dev.md",
+            line_number=1,
+        )
+
+        # Test with config containing core.path (no --core-repo arg)
+        args = Namespace(core_repo=None)
+        config = {
+            "core": {"path": str(core_repo)},
+            "patterns": self.PATTERNS_CONFIG,
+        }
+
+        violations = validate_links({"REQ-d00001": associated_req}, args, config)
+
+        # Should have NO broken link violation because core.path is used
+        broken_links = [v for v in violations if v.rule_name == "link.broken"]
+        assert len(broken_links) == 0, f"Expected no broken links, got: {[v.message for v in broken_links]}"
+
+    def test_core_path_cli_overrides_config(self, tmp_path: Path):
+        """Test that --core-repo takes precedence over config."""
+        # Create two mock core repos
+        config_repo = tmp_path / "config_repo"
+        cli_repo = tmp_path / "cli_repo"
+
+        for repo in [config_repo, cli_repo]:
+            spec = repo / "spec"
+            spec.mkdir(parents=True)
+
+        # Only cli_repo has the requirement
+        cli_req_file = cli_repo / "spec" / "prd-core.md"
+        cli_req_file.write_text("""# REQ-p00001: CLI Core Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *CLI Core Requirement* | **Hash**: abcd1234
+""")
+
+        associated_req = Requirement(
+            id="REQ-d00001",
+            title="Associated Requirement",
+            level="DEV",
+            status="Active",
+            body="Associated body.",
+            implements=["REQ-p00001"],
+            file_path=tmp_path / "spec" / "dev.md",
+            line_number=1,
+        )
+
+        # Pass cli_repo via args, config_repo via config
+        args = Namespace(core_repo=cli_repo)
+        config = {
+            "core": {"path": str(config_repo)},
+            "patterns": self.PATTERNS_CONFIG,
+        }
+
+        violations = validate_links({"REQ-d00001": associated_req}, args, config)
+
+        # Should have NO broken link because cli_repo is used (has the req)
+        broken_links = [v for v in violations if v.rule_name == "link.broken"]
+        assert len(broken_links) == 0
+
+    def test_broken_link_without_core_config(self, tmp_path: Path):
+        """Test that broken link is detected when no core config is provided."""
+        associated_req = Requirement(
+            id="REQ-d00001",
+            title="Associated Requirement",
+            level="DEV",
+            status="Active",
+            body="Associated body.",
+            implements=["REQ-p00001"],  # This doesn't exist
+            file_path=tmp_path / "spec" / "dev.md",
+            line_number=1,
+        )
+
+        args = Namespace(core_repo=None)
+        config = {}  # No core.path
+
+        violations = validate_links({"REQ-d00001": associated_req}, args, config)
+
+        # Should have broken link violation
+        broken_links = [v for v in violations if v.rule_name == "link.broken"]
+        assert len(broken_links) == 1
+        assert "REQ-p00001" in broken_links[0].message

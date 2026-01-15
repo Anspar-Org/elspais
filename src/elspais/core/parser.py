@@ -155,12 +155,12 @@ class RequirementParser:
                 if req:
                     # Check for duplicate ID
                     if req_id in requirements:
-                        warnings.append(ParseWarning(
-                            requirement_id=req_id,
-                            message=f"Duplicate ID ignored (first occurrence at line {requirements[req_id].line_number})",
-                            file_path=file_path,
-                            line_number=start_line,
-                        ))
+                        # Keep both: original stays, duplicate gets __conflict suffix
+                        conflict_key, conflict_req, warning = self._make_conflict_entry(
+                            req, req_id, requirements[req_id], file_path, start_line
+                        )
+                        requirements[conflict_key] = conflict_req
+                        warnings.append(warning)
                     else:
                         requirements[req_id] = req
             else:
@@ -221,12 +221,12 @@ class RequirementParser:
                     # Merge requirements, checking for cross-file duplicates
                     for req_id, req in result.requirements.items():
                         if req_id in requirements:
-                            warnings.append(ParseWarning(
-                                requirement_id=req_id,
-                                message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
-                                file_path=file_path,
-                                line_number=req.line_number,
-                            ))
+                            # Keep both: original stays, duplicate gets __conflict suffix
+                            conflict_key, conflict_req, warning = self._make_conflict_entry(
+                                req, req_id, requirements[req_id], file_path, req.line_number
+                            )
+                            requirements[conflict_key] = conflict_req
+                            warnings.append(warning)
                         else:
                             requirements[req_id] = req
                     warnings.extend(result.warnings)
@@ -278,12 +278,12 @@ class RequirementParser:
                 # Merge requirements, checking for cross-directory duplicates
                 for req_id, req in result.requirements.items():
                     if req_id in requirements:
-                        warnings.append(ParseWarning(
-                            requirement_id=req_id,
-                            message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
-                            file_path=req.file_path,
-                            line_number=req.line_number,
-                        ))
+                        # Keep both: original stays, duplicate gets __conflict suffix
+                        conflict_key, conflict_req, warning = self._make_conflict_entry(
+                            req, req_id, requirements[req_id], req.file_path, req.line_number
+                        )
+                        requirements[conflict_key] = conflict_req
+                        warnings.append(warning)
                     else:
                         requirements[req_id] = req
                 warnings.extend(result.warnings)
@@ -336,17 +336,61 @@ class RequirementParser:
                 # Merge requirements, checking for cross-subdir duplicates
                 for req_id, req in subdir_result.requirements.items():
                     if req_id in requirements:
-                        warnings.append(ParseWarning(
-                            requirement_id=req_id,
-                            message=f"Duplicate ID ignored (first occurrence in {requirements[req_id].file_path})",
-                            file_path=req.file_path,
-                            line_number=req.line_number,
-                        ))
+                        # Keep both: original stays, duplicate gets __conflict suffix
+                        conflict_key, conflict_req, warning = self._make_conflict_entry(
+                            req, req_id, requirements[req_id], req.file_path, req.line_number
+                        )
+                        requirements[conflict_key] = conflict_req
+                        warnings.append(warning)
                     else:
                         requirements[req_id] = req
                 warnings.extend(subdir_result.warnings)
 
         return ParseResult(requirements=requirements, warnings=warnings)
+
+    def _make_conflict_entry(
+        self,
+        duplicate_req: Requirement,
+        original_id: str,
+        original_req: Requirement,
+        file_path: Optional[Path],
+        line_number: Optional[int],
+    ) -> tuple:
+        """
+        Create a conflict entry for a duplicate requirement.
+
+        When a requirement ID already exists, this creates a modified version
+        of the duplicate with:
+        - Key suffix `__conflict` for storage
+        - `is_conflict=True` flag
+        - `conflict_with` set to the original ID
+        - `implements=[]` (treated as orphaned)
+
+        Args:
+            duplicate_req: The duplicate requirement that was found
+            original_id: The ID that is duplicated
+            original_req: The original requirement that was first
+            file_path: File path for the warning
+            line_number: Line number for the warning
+
+        Returns:
+            Tuple of (conflict_key, modified_requirement, ParseWarning)
+        """
+        conflict_key = f"{original_id}__conflict"
+
+        # Modify the duplicate requirement
+        duplicate_req.is_conflict = True
+        duplicate_req.conflict_with = original_id
+        duplicate_req.implements = []  # Treat as orphaned
+
+        warning = ParseWarning(
+            requirement_id=original_id,
+            message=f"Duplicate ID found (first occurrence in {original_req.file_path}:{original_req.line_number})",
+            file_path=file_path,
+            line_number=line_number,
+        )
+
+        return conflict_key, duplicate_req, warning
 
     def _parse_requirement_block(
         self,
