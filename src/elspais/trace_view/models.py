@@ -136,6 +136,31 @@ class TraceViewRequirement:
         return self.core.conflict_with
 
     @property
+    def is_cycle(self) -> bool:
+        """Check if requirement is part of a circular dependency.
+
+        Note: Cycle detection happens during validation. This property
+        defaults to False unless explicitly set via cycle_info.
+        """
+        return getattr(self, "_is_cycle", False)
+
+    @is_cycle.setter
+    def is_cycle(self, value: bool) -> None:
+        self._is_cycle = value
+
+    @property
+    def cycle_path(self) -> str:
+        """Get the cycle path if this requirement is part of a cycle.
+
+        Returns empty string if not in a cycle.
+        """
+        return getattr(self, "_cycle_path", "")
+
+    @cycle_path.setter
+    def cycle_path(self, value: str) -> None:
+        self._cycle_path = value
+
+    @property
     def subdir(self) -> str:
         return self.core.subdir
 
