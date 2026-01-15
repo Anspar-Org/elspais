@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from elspais.config.loader import load_config, find_config_file
+from elspais.core.patterns import PatternValidator, PatternConfig
+
 
 def run(args: argparse.Namespace) -> int:
     """Run the reformat-with-claude command.
@@ -66,6 +69,12 @@ def run(args: argparse.Namespace) -> int:
         print("DRY RUN MODE - no changes will be made")
         print()
 
+    # Create cached validator for ID normalization
+    config_path = find_config_file(Path.cwd())
+    config = load_config(config_path) if config_path else {}
+    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    validator = PatternValidator(pattern_config)
+
     # Get all requirements
     print("Loading requirements...", end=" ", flush=True)
     requirements = get_all_requirements()
@@ -84,7 +93,7 @@ def run(args: argparse.Namespace) -> int:
     # Determine which requirements to process
     if start_req:
         # Normalize and validate start requirement
-        start_req = normalize_req_id(start_req)
+        start_req = normalize_req_id(start_req, validator)
         if start_req not in requirements:
             print(f"Error: Requirement {start_req} not found", file=sys.stderr)
             return 1

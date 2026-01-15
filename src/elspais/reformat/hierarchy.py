@@ -2,16 +2,18 @@
 """
 Hierarchy traversal logic for requirements.
 
-Uses elspais validate --json to get all requirements and build
+Uses elspais core modules directly to parse requirements and build
 a traversable hierarchy based on implements relationships.
 """
 
-import json
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from elspais.core.models import Requirement
+    from elspais.core.patterns import PatternValidator
 
 
 @dataclass
@@ -23,78 +25,94 @@ class RequirementNode:
     rationale: str
     file_path: str
     line: int
-    implements: List[str]  # Parent REQ IDs (without REQ- prefix)
+    implements: List[str]  # Parent REQ IDs
     hash: str
     status: str
     level: str
     children: List[str] = field(default_factory=list)  # Child REQ IDs
 
+    @classmethod
+    def from_core(cls, req: "Requirement") -> "RequirementNode":
+        """
+        Create a RequirementNode from a core Requirement object.
 
-def get_repo_root() -> Path:
-    """Get the repository root using git."""
-    try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True,
-            text=True,
-            check=True
+        Args:
+            req: Core Requirement object from elspais.core.models
+
+        Returns:
+            RequirementNode with mapped fields
+        """
+        return cls(
+            req_id=req.id,
+            title=req.title,
+            body=req.body,
+            rationale=req.rationale or "",
+            file_path=str(req.file_path) if req.file_path else "",
+            line=req.line_number or 0,
+            implements=list(req.implements),
+            hash=req.hash or "",
+            status=req.status,
+            level=req.level,
+            children=[],
         )
-        return Path(result.stdout.strip())
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Not in a git repository: {e}")
 
 
-def get_all_requirements() -> Dict[str, RequirementNode]:
+def get_all_requirements(
+    config_path: Optional[Path] = None,
+    base_path: Optional[Path] = None,
+) -> Dict[str, RequirementNode]:
     """
-    Get all requirements via elspais validate --json.
+    Get all requirements using core parser directly.
+
+    Args:
+        config_path: Optional path to .elspais.toml config file
+        base_path: Base path for resolving relative directories
 
     Returns:
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
     """
-    repo_root = get_repo_root()
+    from elspais.config.loader import load_config, find_config_file, get_spec_directories
+    from elspais.core.parser import RequirementParser
+    from elspais.core.patterns import PatternConfig
+
+    # Find and load config
+    if config_path is None:
+        config_path = find_config_file(base_path or Path.cwd())
+
+    if config_path is None:
+        print("Warning: No .elspais.toml found", file=sys.stderr)
+        return {}
 
     try:
-        result = subprocess.run(
-            ['elspais', 'validate', '--json'],
-            capture_output=True,
-            text=True,
-            cwd=str(repo_root)
-        )
-
-        # The JSON starts after the "Found N requirements" line
-        output = result.stdout
-        json_start = output.find('{')
-        if json_start == -1:
-            print("Warning: No JSON found in elspais output", file=sys.stderr)
-            return {}
-
-        json_str = output[json_start:]
-        raw_data = json.loads(json_str)
-
-        requirements = {}
-        for req_id, data in raw_data.items():
-            requirements[req_id] = RequirementNode(
-                req_id=req_id,
-                title=data.get('title', ''),
-                body=data.get('body', ''),
-                rationale=data.get('rationale', ''),
-                file_path=data.get('filePath', ''),
-                line=data.get('line', 0),
-                implements=data.get('implements', []),
-                hash=data.get('hash', ''),
-                status=data.get('status', 'Draft'),
-                level=data.get('level', 'PRD'),
-                children=[]
-            )
-
-        return requirements
-
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: elspais failed: {e}", file=sys.stderr)
+        config = load_config(config_path)
+    except Exception as e:
+        print(f"Warning: Failed to load config: {e}", file=sys.stderr)
         return {}
-    except json.JSONDecodeError as e:
-        print(f"Warning: Failed to parse elspais JSON: {e}", file=sys.stderr)
+
+    # Create parser with pattern config
+    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    parser = RequirementParser(pattern_config)
+
+    # Get spec directories
+    spec_dirs = get_spec_directories(None, config, base_path or config_path.parent)
+
+    if not spec_dirs:
+        print("Warning: No spec directories found", file=sys.stderr)
         return {}
+
+    # Parse all requirements
+    try:
+        parse_result = parser.parse_directories(spec_dirs)
+    except Exception as e:
+        print(f"Warning: Failed to parse requirements: {e}", file=sys.stderr)
+        return {}
+
+    # Convert core Requirements to RequirementNodes
+    requirements = {}
+    for req_id, req in parse_result.requirements.items():
+        requirements[req_id] = RequirementNode.from_core(req)
+
+    return requirements
 
 
 def build_hierarchy(requirements: Dict[str, RequirementNode]) -> Dict[str, RequirementNode]:
@@ -107,7 +125,7 @@ def build_hierarchy(requirements: Dict[str, RequirementNode]) -> Dict[str, Requi
     for req_id, node in requirements.items():
         for parent_id in node.implements:
             # Normalize parent ID format
-            parent_key = f"REQ-{parent_id}" if not parent_id.startswith('REQ-') else parent_id
+            parent_key = parent_id if parent_id.startswith('REQ-') else f"REQ-{parent_id}"
             if parent_key in requirements:
                 requirements[parent_key].children.append(req_id)
 
@@ -170,83 +188,44 @@ def traverse_top_down(
     return visited
 
 
-def normalize_req_id(req_id: str, validator=None) -> str:
+def normalize_req_id(req_id: str, validator: Optional["PatternValidator"] = None) -> str:
     """
-    Normalize requirement ID to full format using config-based patterns.
-
-    Uses PatternValidator to parse and reconstruct the ID in canonical form.
-    Falls back to basic normalization if config cannot be loaded.
+    Normalize requirement ID to canonical format using PatternValidator.
 
     Args:
         req_id: Requirement ID (e.g., "d00027", "REQ-d00027", "REQ-CAL-p00001")
-        validator: Optional PatternValidator instance (cached for performance)
+        validator: PatternValidator instance (created from config if not provided)
 
     Returns:
         Normalized ID in canonical format from config
     """
-    # Try to use config-based validation
-    try:
-        if validator is None:
-            from elspais.config.loader import load_config
-            from elspais.core.patterns import PatternValidator, PatternConfig
+    from elspais.config.loader import load_config, find_config_file
+    from elspais.core.patterns import PatternValidator, PatternConfig
 
-            config = load_config()
-            pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-            validator = PatternValidator(pattern_config)
+    # Create validator if not provided
+    if validator is None:
+        try:
+            config_path = find_config_file(Path.cwd())
+            config = load_config(config_path) if config_path else {}
+        except Exception:
+            config = {}
+        pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+        validator = PatternValidator(pattern_config)
 
-        # Try parsing the ID with the validator
-        # First try with the ID as-is
-        parsed = validator.parse(req_id)
+    # Try parsing the ID as-is
+    parsed = validator.parse(req_id)
 
-        # If that fails, try with common prefix additions
-        if parsed is None and not req_id.upper().startswith(validator.config.prefix):
-            # Try adding the prefix
-            parsed = validator.parse(f"{validator.config.prefix}-{req_id}")
+    # If that fails, try with prefix
+    if parsed is None and not req_id.upper().startswith(validator.config.prefix):
+        parsed = validator.parse(f"{validator.config.prefix}-{req_id}")
 
-        if parsed:
-            # Reconstruct the canonical ID from parsed components
-            parts = [parsed.prefix]
-            if parsed.associated:
-                parts.append(parsed.associated)
-            parts.append(f"{parsed.type_code}{parsed.number}")
-            return "-".join(parts)
+    if parsed:
+        # Reconstruct canonical ID from parsed components
+        parts = [parsed.prefix]
+        if parsed.associated:
+            parts.append(parsed.associated)
+        parts.append(f"{parsed.type_code}{parsed.number}")
+        return "-".join(parts)
 
-    except Exception:
-        # Fall back to basic normalization if config loading fails
-        pass
-
-    # Fallback: basic normalization without config
-    return _normalize_req_id_basic(req_id)
-
-
-def _normalize_req_id_basic(req_id: str) -> str:
-    """
-    Basic requirement ID normalization without config.
-
-    Used as fallback when config cannot be loaded.
-    """
-    import re
-
-    # Check for simple REQ- prefix or bare ID first: REQ-type##### or type#####
-    req_match = re.match(r'^(?:REQ-)?([pdoPDO])(\d+)$', req_id, re.IGNORECASE)
-    if req_match:
-        type_letter = req_match.group(1).lower()
-        number = req_match.group(2)
-        return f"REQ-{type_letter}{number}"
-
-    # Check for associated prefix pattern: REQ-ASSOC-type##### (e.g., REQ-CAL-p00001)
-    associated_match = re.match(
-        r'^(?:REQ-)?([A-Z]{2,4})-?([pdoPDO])(\d+)$',
-        req_id,
-        re.IGNORECASE
-    )
-    if associated_match:
-        assoc_prefix = associated_match.group(1).upper()
-        type_letter = associated_match.group(2).lower()
-        number = associated_match.group(3)
-        return f"REQ-{assoc_prefix}-{type_letter}{number}"
-
-    # Fallback: return as-is with REQ- prefix if missing
-    if not req_id.upper().startswith('REQ-'):
-        return f"REQ-{req_id}"
+    # Return as-is if unparseable
     return req_id
