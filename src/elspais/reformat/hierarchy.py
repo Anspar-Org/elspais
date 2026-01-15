@@ -174,21 +174,36 @@ def normalize_req_id(req_id: str) -> str:
     """
     Normalize requirement ID to full format with REQ- prefix.
 
-    The prefix is uppercase (REQ-) but the type letter is lowercase (p, d, o).
+    Handles both simple IDs (p00044) and associated IDs (CAL-REQ-p00001).
+    The type letter (p, d, o) is lowercased, but associated prefixes are preserved.
 
     Args:
-        req_id: Requirement ID (e.g., "d00027" or "REQ-d00027" or "p00044")
+        req_id: Requirement ID (e.g., "d00027", "REQ-d00027", "CAL-REQ-p00001")
 
     Returns:
-        Normalized ID with prefix (e.g., "REQ-d00027")
+        Normalized ID with prefix (e.g., "REQ-d00027", "CAL-REQ-p00001")
     """
-    # Strip any existing prefix
-    if req_id.upper().startswith('REQ-'):
-        bare_id = req_id[4:]
-    else:
-        bare_id = req_id
+    import re
 
-    # Ensure lowercase type letter
-    bare_id = bare_id.lower()
+    # Check for associated prefix pattern: PREFIX-REQ-type##### (e.g., CAL-REQ-p00001)
+    # The prefix must NOT be "REQ" itself
+    associated_match = re.match(r'^([A-Z]+)-(?:REQ-)?([pdoPDO])(\d+)$', req_id, re.IGNORECASE)
+    if associated_match:
+        prefix = associated_match.group(1).upper()
+        # Skip if the "prefix" is actually "REQ" - that's not an associated prefix
+        if prefix != 'REQ':
+            type_letter = associated_match.group(2).lower()
+            number = associated_match.group(3)
+            return f"{prefix}-REQ-{type_letter}{number}"
 
-    return f"REQ-{bare_id}"
+    # Check for simple REQ- prefix or bare ID: REQ-type##### or type#####
+    req_match = re.match(r'^(?:REQ-)?([pdoPDO])(\d+)$', req_id, re.IGNORECASE)
+    if req_match:
+        type_letter = req_match.group(1).lower()
+        number = req_match.group(2)
+        return f"REQ-{type_letter}{number}"
+
+    # Fallback: return as-is with REQ- prefix if missing
+    if not req_id.upper().startswith('REQ-'):
+        return f"REQ-{req_id}"
+    return req_id
