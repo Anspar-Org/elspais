@@ -170,38 +170,81 @@ def traverse_top_down(
     return visited
 
 
-def normalize_req_id(req_id: str) -> str:
+def normalize_req_id(req_id: str, validator=None) -> str:
     """
-    Normalize requirement ID to full format with REQ- prefix.
+    Normalize requirement ID to full format using config-based patterns.
 
-    Handles both simple IDs (p00044) and associated IDs (CAL-REQ-p00001).
-    The type letter (p, d, o) is lowercased, but associated prefixes are preserved.
+    Uses PatternValidator to parse and reconstruct the ID in canonical form.
+    Falls back to basic normalization if config cannot be loaded.
 
     Args:
-        req_id: Requirement ID (e.g., "d00027", "REQ-d00027", "CAL-REQ-p00001")
+        req_id: Requirement ID (e.g., "d00027", "REQ-d00027", "REQ-CAL-p00001")
+        validator: Optional PatternValidator instance (cached for performance)
 
     Returns:
-        Normalized ID with prefix (e.g., "REQ-d00027", "CAL-REQ-p00001")
+        Normalized ID in canonical format from config
+    """
+    # Try to use config-based validation
+    try:
+        if validator is None:
+            from elspais.config.loader import load_config
+            from elspais.core.patterns import PatternValidator, PatternConfig
+
+            config = load_config()
+            pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+            validator = PatternValidator(pattern_config)
+
+        # Try parsing the ID with the validator
+        # First try with the ID as-is
+        parsed = validator.parse(req_id)
+
+        # If that fails, try with common prefix additions
+        if parsed is None and not req_id.upper().startswith(validator.config.prefix):
+            # Try adding the prefix
+            parsed = validator.parse(f"{validator.config.prefix}-{req_id}")
+
+        if parsed:
+            # Reconstruct the canonical ID from parsed components
+            parts = [parsed.prefix]
+            if parsed.associated:
+                parts.append(parsed.associated)
+            parts.append(f"{parsed.type_code}{parsed.number}")
+            return "-".join(parts)
+
+    except Exception:
+        # Fall back to basic normalization if config loading fails
+        pass
+
+    # Fallback: basic normalization without config
+    return _normalize_req_id_basic(req_id)
+
+
+def _normalize_req_id_basic(req_id: str) -> str:
+    """
+    Basic requirement ID normalization without config.
+
+    Used as fallback when config cannot be loaded.
     """
     import re
 
-    # Check for associated prefix pattern: PREFIX-REQ-type##### (e.g., CAL-REQ-p00001)
-    # The prefix must NOT be "REQ" itself
-    associated_match = re.match(r'^([A-Z]+)-(?:REQ-)?([pdoPDO])(\d+)$', req_id, re.IGNORECASE)
-    if associated_match:
-        prefix = associated_match.group(1).upper()
-        # Skip if the "prefix" is actually "REQ" - that's not an associated prefix
-        if prefix != 'REQ':
-            type_letter = associated_match.group(2).lower()
-            number = associated_match.group(3)
-            return f"{prefix}-REQ-{type_letter}{number}"
-
-    # Check for simple REQ- prefix or bare ID: REQ-type##### or type#####
+    # Check for simple REQ- prefix or bare ID first: REQ-type##### or type#####
     req_match = re.match(r'^(?:REQ-)?([pdoPDO])(\d+)$', req_id, re.IGNORECASE)
     if req_match:
         type_letter = req_match.group(1).lower()
         number = req_match.group(2)
         return f"REQ-{type_letter}{number}"
+
+    # Check for associated prefix pattern: REQ-ASSOC-type##### (e.g., REQ-CAL-p00001)
+    associated_match = re.match(
+        r'^(?:REQ-)?([A-Z]{2,4})-?([pdoPDO])(\d+)$',
+        req_id,
+        re.IGNORECASE
+    )
+    if associated_match:
+        assoc_prefix = associated_match.group(1).upper()
+        type_letter = associated_match.group(2).lower()
+        number = associated_match.group(3)
+        return f"REQ-{assoc_prefix}-{type_letter}{number}"
 
     # Fallback: return as-is with REQ- prefix if missing
     if not req_id.upper().startswith('REQ-'):
