@@ -37,6 +37,21 @@ elspais trace --format html  # Generate traceability matrix
 elspais hash update         # Update requirement hashes
 elspais changed            # Show uncommitted changes to spec files
 elspais changed --json     # Output changes as JSON
+
+# trace-view enhanced features (requires pip install elspais[trace-view])
+elspais trace --view                 # Generate interactive HTML view
+elspais trace --view --embed-content # Embed full requirement content
+elspais trace --view --edit-mode     # Enable client-side editing
+elspais trace --view --review-mode   # Enable collaborative review
+
+# Review server (requires pip install elspais[trace-review])
+elspais trace --server               # Start Flask review server on port 8080
+elspais trace --server --port 3000   # Start on custom port
+
+# AI-assisted requirement reformatting
+elspais reformat-with-claude --dry-run      # Preview reformatting
+elspais reformat-with-claude --backup       # Create backups before changes
+elspais reformat-with-claude --start-req X  # Start from requirement X
 ```
 
 ## Architecture
@@ -55,7 +70,7 @@ elspais changed --json     # Output changes as JSON
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
   - **defaults.py**: Default configuration values
-- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd)
+- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd)
 - **testing/**: Test mapping and coverage functionality
   - **config.py**: `TestingConfig` - configuration for test scanning
   - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
@@ -67,6 +82,31 @@ elspais changed --json     # Output changes as JSON
   - **server.py**: MCP server implementation
   - **context.py**: Context management for MCP resources
   - **serializers.py**: Serialization helpers for MCP responses
+- **trace_view/**: Enhanced traceability visualization (optional, requires `elspais[trace-view]`)
+  - **models.py**: `TraceViewRequirement` adapter wrapping `core.models.Requirement`, `TestInfo`, `GitChangeInfo`
+  - **coverage.py**: Coverage calculation (`calculate_coverage`, `count_by_level`, `find_orphaned_requirements`)
+  - **scanning.py**: Implementation file scanning (`scan_implementation_files`)
+  - **generators/**: Output format generators
+    - **base.py**: `TraceViewGenerator` - abstract base with HTML, CSV, Markdown support
+    - **markdown.py**: Markdown matrix generation
+    - **csv.py**: CSV export
+  - **html/**: HTML generation (requires jinja2)
+    - **generator.py**: `HTMLGenerator` with Jinja2 templates
+    - **templates/**: Jinja2 template files
+    - **static/**: CSS and JavaScript assets
+  - **review/**: Collaborative review system (requires flask)
+    - **models.py**: `Comment`, `Thread`, `ReviewFlag`, `StatusRequest` dataclasses
+    - **storage.py**: JSON-based comment persistence
+    - **branches.py**: Git branch management for reviews
+    - **server.py**: Flask REST API (`create_app`)
+    - **position.py**: Position resolution for diff-based comments
+    - **status.py**: Requirement status modification
+- **reformat/**: AI-assisted requirement reformatting
+  - **detector.py**: `detect_format`, `needs_reformatting`, `FormatAnalysis` - detects old vs new format
+  - **transformer.py**: `reformat_requirement`, `assemble_new_format` - Claude CLI integration
+  - **prompts.py**: System prompts and JSON schema for Claude
+  - **line_breaks.py**: `normalize_line_breaks`, `fix_requirement_line_breaks`
+  - **hierarchy.py**: `RequirementNode`, `build_hierarchy`, `traverse_top_down`
 
 ### Key Design Patterns
 
@@ -87,6 +127,16 @@ elspais changed --json     # Output changes as JSON
 8. **Conflict Entry Handling**: When duplicate requirement IDs are found (e.g., same ID in spec/ and spec/roadmap/), both are kept: the original with its ID, and the duplicate with a `__conflict` suffix. Conflict entries have `is_conflict=True`, `conflict_with` set to original ID, and `implements=[]` (orphaned).
 
 9. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
+
+10. **Optional Dependencies**: Advanced features are available via pip extras:
+    - `elspais[trace-view]`: HTML generation with Jinja2
+    - `elspais[trace-review]`: Flask-based review server
+    - `elspais[all]`: All optional features
+    Missing dependencies produce clear installation instructions.
+
+11. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
+
+12. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
 
 ### Requirement Format (Updated)
 
@@ -152,6 +202,10 @@ Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, 
 - `associated-repo/`: Multi-repo with associated prefixes
 - `assertions/`: Assertion-based requirements with `## Assertions` section
 - `invalid/`: Invalid cases (circular deps, broken links, missing hashes)
+
+`tests/test_trace_view/` contains trace_view integration tests:
+- Tests use `pytest.importorskip()` for optional dependencies (jinja2, flask)
+- `test_integration.py`: Import tests, model tests, format detection tests
 
 ## Workflow
 

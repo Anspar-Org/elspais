@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-01-10
+
+### Added
+- **trace-view integration**: Enhanced traceability visualization with optional dependencies
+  - Interactive HTML generation with Jinja2 templates (`elspais[trace-view]`)
+  - Collaborative review server with Flask REST API (`elspais[trace-review]`)
+  - New CLI flags: `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server`, `--port`
+- **New `trace_view` package** (`src/elspais/trace_view/`)
+  - `TraceViewRequirement` adapter wrapping core `Requirement` model
+  - Coverage calculation and orphan detection
+  - Implementation file scanning
+  - Generators for HTML, Markdown, and CSV output
+- **Review system** for collaborative requirement feedback
+  - Comment threads with nested replies
+  - Review flags and status change requests
+  - Git branch management for review workflows
+  - JSON-based persistence in `.elspais/reviews/`
+- **AI-assisted requirement reformatting** with `reformat-with-claude` command
+  - Transforms legacy "Acceptance Criteria" format to assertion-based format
+  - Format detection and validation
+  - Line break normalization
+  - Claude CLI integration with structured JSON output
+- **New `reformat` module** (`src/elspais/reformat/`)
+  - `detect_format()`, `needs_reformatting()` - format analysis
+  - `reformat_requirement()`, `assemble_new_format()` - AI transformation
+  - `normalize_line_breaks()`, `fix_requirement_line_breaks()` - cleanup
+  - `RequirementNode`, `build_hierarchy()` - requirement traversal
+- New optional dependency extras in pyproject.toml:
+  - `elspais[trace-view]`: jinja2 for HTML generation
+  - `elspais[trace-review]`: flask, flask-cors for review server
+  - `elspais[all]`: all optional features
+- New documentation: `docs/trace-view.md` user guide
+- 18 new integration tests for trace-view features
+
+### Changed
+- `elspais trace` command now delegates to trace-view when enhanced features requested
+- CLAUDE.md updated with trace-view architecture documentation
+
 ## [0.9.4] - 2026-01-08
 
 ### Added

@@ -1,5 +1,8 @@
+# Implements: REQ-int-d00003 (CLI Extension)
 """
 elspais.commands.trace - Generate traceability matrix command.
+
+Supports both basic matrix generation and enhanced trace-view features.
 """
 
 import argparse
@@ -15,7 +18,28 @@ from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:
-    """Run the trace command."""
+    """Run the trace command.
+
+    REQ-int-d00003-C: Existing elspais trace --format html behavior SHALL be preserved.
+    """
+    # Check if enhanced trace-view features are requested
+    use_trace_view = (
+        getattr(args, 'view', False) or
+        getattr(args, 'embed_content', False) or
+        getattr(args, 'edit_mode', False) or
+        getattr(args, 'review_mode', False) or
+        getattr(args, 'server', False)
+    )
+
+    if use_trace_view:
+        return run_trace_view(args)
+
+    # Original basic trace functionality
+    return run_basic_trace(args)
+
+
+def run_basic_trace(args: argparse.Namespace) -> int:
+    """Run basic trace matrix generation (original behavior)."""
     # Load configuration
     config_path = args.config or find_config_file(Path.cwd())
     if config_path and config_path.exists():
@@ -74,6 +98,138 @@ def run(args: argparse.Namespace) -> int:
         output_path = args.output or Path("traceability.csv")
         output_path.write_text(csv_output)
         print(f"Generated: {output_path}")
+
+    return 0
+
+
+def run_trace_view(args: argparse.Namespace) -> int:
+    """Run enhanced trace-view features.
+
+    REQ-int-d00003-A: Trace-view features SHALL be accessible via elspais trace command.
+    REQ-int-d00003-B: New flags SHALL include: --view, --embed-content, --edit-mode,
+                      --review-mode, --server.
+    """
+    # Check if starting review server
+    if args.server:
+        return run_review_server(args)
+
+    # Import trace_view (requires jinja2)
+    try:
+        from elspais.trace_view import TraceViewGenerator
+    except ImportError as e:
+        print("Error: trace-view features require additional dependencies.", file=sys.stderr)
+        print("Install with: pip install elspais[trace-view]", file=sys.stderr)
+        if args.verbose if hasattr(args, 'verbose') else False:
+            print(f"Import error: {e}", file=sys.stderr)
+        return 1
+
+    # Load configuration
+    config_path = args.config or find_config_file(Path.cwd())
+    if config_path and config_path.exists():
+        config = load_config(config_path)
+    else:
+        config = DEFAULT_CONFIG
+
+    # Determine spec directory
+    spec_dir = args.spec_dir
+    if not spec_dir:
+        spec_dirs = get_spec_directories(None, config)
+        spec_dir = spec_dirs[0] if spec_dirs else Path.cwd() / "spec"
+
+    repo_root = spec_dir.parent if spec_dir.name == "spec" else spec_dir.parent.parent
+
+    # Get implementation directories from config
+    impl_dirs = []
+    dirs_config = config.get("directories", {})
+    code_dirs = dirs_config.get("code", [])
+    for code_dir in code_dirs:
+        impl_path = repo_root / code_dir
+        if impl_path.exists():
+            impl_dirs.append(impl_path)
+
+    # Create generator
+    generator = TraceViewGenerator(
+        spec_dir=spec_dir,
+        impl_dirs=impl_dirs,
+        sponsor=getattr(args, 'sponsor', None),
+        mode=getattr(args, 'mode', 'core'),
+        repo_root=repo_root,
+        config=config,
+    )
+
+    # Determine output format
+    # --view implies HTML
+    output_format = "html" if args.view else args.format
+    if output_format == "both":
+        output_format = "html"
+
+    # Determine output file
+    output_file = args.output
+    if output_file is None:
+        if output_format == "html":
+            output_file = Path("traceability_matrix.html")
+        elif output_format == "csv":
+            output_file = Path("traceability_matrix.csv")
+        else:
+            output_file = Path("traceability_matrix.md")
+
+    # Generate
+    quiet = getattr(args, 'quiet', False)
+    generator.generate(
+        format=output_format,
+        output_file=output_file,
+        embed_content=getattr(args, 'embed_content', False),
+        edit_mode=getattr(args, 'edit_mode', False),
+        review_mode=getattr(args, 'review_mode', False),
+        quiet=quiet,
+    )
+
+    return 0
+
+
+def run_review_server(args: argparse.Namespace) -> int:
+    """Start the review server.
+
+    REQ-int-d00002-C: Review server SHALL require flask, flask-cors via
+                      elspais[trace-review] extra.
+    """
+    try:
+        from elspais.trace_view.review import create_app, FLASK_AVAILABLE
+    except ImportError:
+        print("Error: Review server requires additional dependencies.", file=sys.stderr)
+        print("Install with: pip install elspais[trace-review]", file=sys.stderr)
+        return 1
+
+    if not FLASK_AVAILABLE:
+        print("Error: Review server requires Flask.", file=sys.stderr)
+        print("Install with: pip install elspais[trace-review]", file=sys.stderr)
+        return 1
+
+    # Determine repo root
+    spec_dir = args.spec_dir
+    if spec_dir:
+        repo_root = spec_dir.parent if spec_dir.name == "spec" else spec_dir.parent.parent
+    else:
+        repo_root = Path.cwd()
+
+    port = getattr(args, 'port', 8080)
+
+    print(f"""
+======================================
+  elspais Review Server
+======================================
+
+Repository: {repo_root}
+Server:     http://localhost:{port}
+
+Press Ctrl+C to stop
+""")
+
+    app = create_app(repo_root, auto_sync=True)
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except KeyboardInterrupt:
+        print("\nServer stopped.")
 
     return 0
 
@@ -204,5 +360,3 @@ def find_implementers(req_id: str, requirements: Dict[str, Requirement]) -> List
                 break
 
     return implementers
-
-
