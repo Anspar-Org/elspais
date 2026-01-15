@@ -482,6 +482,12 @@ Examples:
         action="store_true",
         help="Only fix line breaks, skip AI-based reformatting",
     )
+    reformat_parser.add_argument(
+        "--mode",
+        choices=["combined", "core-only", "local-only"],
+        default="combined",
+        help="Which repos to include in hierarchy (default: combined)",
+    )
 
     # mcp command
     mcp_parser = subparsers.add_parser(

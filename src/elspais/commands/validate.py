@@ -261,7 +261,7 @@ def validate_links(
     core_requirements = {}
     core_path = args.core_repo or config.get("core", {}).get("path")
     if core_path:
-        core_requirements = load_core_requirements(Path(core_path), config)
+        core_requirements = load_requirements_from_repo(Path(core_path), config)
 
     all_requirements = {**core_requirements, **requirements}
     all_ids = set(all_requirements.keys())
@@ -326,24 +326,32 @@ def convert_parse_warnings_to_violations(
     return violations
 
 
-def load_core_requirements(core_path: Path, config: Dict) -> Dict[str, Requirement]:
-    """Load requirements from core repository."""
-    if not core_path.exists():
+def load_requirements_from_repo(repo_path: Path, config: Dict) -> Dict[str, Requirement]:
+    """Load requirements from any repository path.
+
+    Args:
+        repo_path: Path to the repository root
+        config: Configuration dict (used as fallback if repo has no config)
+
+    Returns:
+        Dict mapping requirement ID to Requirement object
+    """
+    if not repo_path.exists():
         return {}
 
-    # Find core config
-    core_config_path = core_path / ".elspais.toml"
-    if core_config_path.exists():
-        core_config = load_config(core_config_path)
+    # Find repo config
+    repo_config_path = repo_path / ".elspais.toml"
+    if repo_config_path.exists():
+        repo_config = load_config(repo_config_path)
     else:
-        core_config = config  # Use same config
+        repo_config = config  # Use same config
 
-    spec_dir = core_path / core_config.get("directories", {}).get("spec", "spec")
+    spec_dir = repo_path / repo_config.get("directories", {}).get("spec", "spec")
     if not spec_dir.exists():
         return {}
 
-    pattern_config = PatternConfig.from_dict(core_config.get("patterns", {}))
-    spec_config = core_config.get("spec", {})
+    pattern_config = PatternConfig.from_dict(repo_config.get("patterns", {}))
+    spec_config = repo_config.get("spec", {})
     no_reference_values = spec_config.get("no_reference_values")
     parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
     skip_files = spec_config.get("skip_files", [])

@@ -55,10 +55,12 @@ def run(args: argparse.Namespace) -> int:
     force = args.force
     fix_line_breaks = args.fix_line_breaks
     verbose = getattr(args, 'verbose', False)
+    mode = getattr(args, 'mode', 'combined')
 
     print(f"Options:")
     print(f"  Start REQ:       {start_req or 'All PRD requirements'}")
     print(f"  Max depth:       {max_depth or 'Unlimited'}")
+    print(f"  Mode:            {mode}")
     print(f"  Dry run:         {dry_run}")
     print(f"  Backup:          {backup}")
     print(f"  Force reformat:  {force}")
@@ -75,9 +77,12 @@ def run(args: argparse.Namespace) -> int:
     pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
     validator = PatternValidator(pattern_config)
 
-    # Get all requirements
+    # Determine local base path for filtering (only modify local files)
+    local_base_path = config_path.parent if config_path else Path.cwd()
+
+    # Get all requirements (including cross-repo if mode allows)
     print("Loading requirements...", end=" ", flush=True)
-    requirements = get_all_requirements()
+    requirements = get_all_requirements(mode=mode)
     if not requirements:
         print("FAILED")
         print("Error: Could not load requirements. Run 'elspais validate' first.",
@@ -128,6 +133,13 @@ def run(args: argparse.Namespace) -> int:
 
     for req_id in req_ids:
         node = requirements[req_id]
+
+        # Skip non-local files (from core/associated repos)
+        if not is_local_file(node.file_path, local_base_path):
+            if verbose:
+                print(f"[SKIP] {req_id}: Not in local repo")
+            skipped += 1
+            continue
 
         # Check if reformatting is needed
         needs_reformat = needs_reformatting(node.body)
@@ -381,3 +393,20 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     print(f"  Errors:    {errors}")
 
     return 0 if errors == 0 else 1
+
+
+def is_local_file(file_path: str, base_path: Path) -> bool:
+    """Check if file is in the local repo (not core/associated).
+
+    Args:
+        file_path: Path to the file (string)
+        base_path: Base path of the local repository
+
+    Returns:
+        True if file is within the local repo, False otherwise
+    """
+    try:
+        Path(file_path).resolve().relative_to(base_path.resolve())
+        return True
+    except ValueError:
+        return False

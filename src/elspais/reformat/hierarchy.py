@@ -60,6 +60,7 @@ class RequirementNode:
 def get_all_requirements(
     config_path: Optional[Path] = None,
     base_path: Optional[Path] = None,
+    mode: str = "combined",
 ) -> Dict[str, RequirementNode]:
     """
     Get all requirements using core parser directly.
@@ -67,6 +68,10 @@ def get_all_requirements(
     Args:
         config_path: Optional path to .elspais.toml config file
         base_path: Base path for resolving relative directories
+        mode: Which repos to include:
+            - "combined" (default): Load local + core/associated repo requirements
+            - "core-only": Load only core/associated repo requirements
+            - "local-only": Load only local requirements
 
     Returns:
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
@@ -74,6 +79,7 @@ def get_all_requirements(
     from elspais.config.loader import load_config, find_config_file, get_spec_directories
     from elspais.core.parser import RequirementParser
     from elspais.core.patterns import PatternConfig
+    from elspais.commands.validate import load_requirements_from_repo
 
     # Find and load config
     if config_path is None:
@@ -89,28 +95,37 @@ def get_all_requirements(
         print(f"Warning: Failed to load config: {e}", file=sys.stderr)
         return {}
 
-    # Create parser with pattern config
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    parser = RequirementParser(pattern_config)
-
-    # Get spec directories
-    spec_dirs = get_spec_directories(None, config, base_path or config_path.parent)
-
-    if not spec_dirs:
-        print("Warning: No spec directories found", file=sys.stderr)
-        return {}
-
-    # Parse all requirements
-    try:
-        parse_result = parser.parse_directories(spec_dirs)
-    except Exception as e:
-        print(f"Warning: Failed to parse requirements: {e}", file=sys.stderr)
-        return {}
-
-    # Convert core Requirements to RequirementNodes
     requirements = {}
-    for req_id, req in parse_result.requirements.items():
-        requirements[req_id] = RequirementNode.from_core(req)
+
+    # Load local requirements (unless core-only mode)
+    if mode in ("combined", "local-only"):
+        # Create parser with pattern config
+        pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+        parser = RequirementParser(pattern_config)
+
+        # Get spec directories
+        spec_dirs = get_spec_directories(None, config, base_path or config_path.parent)
+
+        if spec_dirs:
+            try:
+                parse_result = parser.parse_directories(spec_dirs)
+                for req_id, req in parse_result.requirements.items():
+                    requirements[req_id] = RequirementNode.from_core(req)
+            except Exception as e:
+                print(f"Warning: Failed to parse local requirements: {e}", file=sys.stderr)
+
+    # Load core/associated repo requirements (unless local-only mode)
+    if mode in ("combined", "core-only"):
+        core_path = config.get("core", {}).get("path")
+        if core_path:
+            core_reqs = load_requirements_from_repo(Path(core_path), config)
+            for req_id, req in core_reqs.items():
+                # Don't overwrite local requirements with same ID
+                if req_id not in requirements:
+                    requirements[req_id] = RequirementNode.from_core(req)
+
+    if not requirements:
+        print("Warning: No requirements found", file=sys.stderr)
 
     return requirements
 
