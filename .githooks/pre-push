@@ -1,0 +1,27 @@
+#!/bin/bash
+# Pre-push hook: Verify documentation stays in sync with code
+# Install: git config core.hooksPath .githooks
+
+set -e
+
+echo "Running documentation verification..."
+
+# Run documentation sync tests
+echo "=== Running documentation sync tests ==="
+pytest tests/test_doc_sync.py -v --tb=short
+
+# Check for deprecated config options
+echo "=== Checking for deprecated config options ==="
+if grep -r "require_acceptance" src/ docs/ --include="*.py" --include="*.md" --include="*.toml" 2>/dev/null | grep -v "deprecated\|legacy\|test_doc"; then
+    echo "ERROR: Found deprecated 'require_acceptance' in production code/docs"
+    exit 1
+fi
+echo "No deprecated options found"
+
+# Verify CLI help works
+echo "=== Verifying CLI help ==="
+python3 -m elspais --help > /dev/null
+echo "CLI help verification passed"
+
+echo ""
+echo "Documentation verification passed!"
