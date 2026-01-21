@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import List, Optional, Set
 
 
 class TestStatus(Enum):
@@ -143,7 +143,7 @@ class ResultParser:
             tree = ET.parse(file_path)
             root = tree.getroot()
         except ET.ParseError as e:
-            raise ValueError(f"Invalid XML: {e}")
+            raise ValueError(f"Invalid XML: {e}") from e
 
         # Handle both <testsuites> and <testsuite> as root
         if root.tag == "testsuites":
@@ -181,15 +181,17 @@ class ResultParser:
                 # Extract requirement IDs from test name
                 req_ids = self._extract_requirement_ids(test_name, classname)
 
-                results.append(TestResult(
-                    test_name=test_name,
-                    classname=classname,
-                    status=status,
-                    requirement_ids=req_ids,
-                    result_file=file_path,
-                    duration=duration,
-                    message=message,
-                ))
+                results.append(
+                    TestResult(
+                        test_name=test_name,
+                        classname=classname,
+                        status=status,
+                        requirement_ids=req_ids,
+                        result_file=file_path,
+                        duration=duration,
+                        message=message,
+                    )
+                )
 
         return results
 
@@ -209,7 +211,7 @@ class ResultParser:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}")
+            raise ValueError(f"Invalid JSON: {e}") from e
 
         # Handle pytest-json-report format
         tests = data.get("tests", [])
@@ -241,15 +243,17 @@ class ResultParser:
             # Extract requirement IDs
             req_ids = self._extract_requirement_ids(test_name, classname)
 
-            results.append(TestResult(
-                test_name=test_name,
-                classname=classname,
-                status=status,
-                requirement_ids=req_ids,
-                result_file=file_path,
-                duration=duration,
-                message=message,
-            ))
+            results.append(
+                TestResult(
+                    test_name=test_name,
+                    classname=classname,
+                    status=status,
+                    requirement_ids=req_ids,
+                    result_file=file_path,
+                    duration=duration,
+                    message=message,
+                )
+            )
 
         return results
 

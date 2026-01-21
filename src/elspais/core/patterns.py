@@ -116,9 +116,7 @@ class PatternValidator:
         self.config = config
         self._regex = self._build_regex()
         self._regex_with_assertion = self._build_regex(include_assertion=True)
-        self._assertion_label_regex = re.compile(
-            f"^{self.config.get_assertion_label_pattern()}$"
-        )
+        self._assertion_label_regex = re.compile(f"^{self.config.get_assertion_label_pattern()}$")
 
     def _build_regex(self, include_assertion: bool = False) -> re.Pattern:
         """Build regex pattern from configuration.
@@ -306,9 +304,7 @@ class PatternValidator:
 
         raise ValueError(f"Cannot parse assertion label: {label}")
 
-    def format(
-        self, type_code: str, number: int, associated: Optional[str] = None
-    ) -> str:
+    def format(self, type_code: str, number: int, associated: Optional[str] = None) -> str:
         """
         Format a requirement ID from components.
 

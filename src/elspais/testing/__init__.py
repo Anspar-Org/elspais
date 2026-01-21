@@ -11,7 +11,7 @@ This package provides test-to-requirement mapping and coverage analysis:
 from elspais.testing.config import TestingConfig
 from elspais.testing.mapper import RequirementTestData, TestMapper, TestMappingResult
 from elspais.testing.result_parser import ResultParser, TestResult, TestStatus
-from elspais.testing.scanner import TestReference, TestScanResult, TestScanner
+from elspais.testing.scanner import TestReference, TestScanner, TestScanResult
 
 __all__ = [
     "TestingConfig",

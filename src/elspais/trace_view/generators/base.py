@@ -9,14 +9,11 @@ requirement parsing, implementation scanning, and output generation.
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from elspais.config.loader import find_config_file, load_config, get_spec_directories
 from elspais.config.defaults import DEFAULT_CONFIG
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
+from elspais.core.git import get_git_changes
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
-from elspais.core.git import get_git_changes, GitChangeInfo
-
-from elspais.trace_view.models import TraceViewRequirement, GitChangeInfo as TVGitChangeInfo
-from elspais.trace_view.scanning import scan_implementation_files
 from elspais.trace_view.coverage import (
     calculate_coverage,
     generate_coverage_report,
@@ -24,6 +21,9 @@ from elspais.trace_view.coverage import (
 )
 from elspais.trace_view.generators.csv import generate_csv, generate_planning_csv
 from elspais.trace_view.generators.markdown import generate_markdown
+from elspais.trace_view.models import GitChangeInfo as TVGitChangeInfo
+from elspais.trace_view.models import TraceViewRequirement
+from elspais.trace_view.scanning import scan_implementation_files
 
 
 class TraceViewGenerator:
@@ -93,7 +93,7 @@ class TraceViewGenerator:
 
         # Parse requirements
         if not quiet:
-            print(f"Scanning for requirements...")
+            print("Scanning for requirements...")
         self._parse_requirements(quiet)
 
         if not self.requirements:
@@ -187,9 +187,7 @@ class TraceViewGenerator:
 
             # Report branch changes vs main
             if not quiet and git_changes.branch_changed_files:
-                spec_branch = [
-                    f for f in git_changes.branch_changed_files if f.startswith("spec/")
-                ]
+                spec_branch = [f for f in git_changes.branch_changed_files if f.startswith("spec/")]
                 if spec_branch:
                     print(f"Spec files changed vs main: {len(spec_branch)}")
 
@@ -298,7 +296,9 @@ class TraceViewGenerator:
                     cycle_count += 1
 
         if not quiet and cycle_count > 0:
-            print(f"   Warning: {cycle_count} requirements marked as cyclic (shown as orphaned items)")
+            print(
+                f"   Warning: {cycle_count} requirements marked as cyclic (shown as orphaned items)"
+            )
 
     def _calculate_base_path(self, output_file: Path):
         """Calculate relative path from output file location to repo root."""
@@ -320,8 +320,13 @@ class TraceViewGenerator:
 
     def generate_planning_csv(self) -> str:
         """Generate planning CSV with actionable requirements."""
-        get_status = lambda req_id: get_implementation_status(self.requirements, req_id)
-        calc_coverage = lambda req_id: calculate_coverage(self.requirements, req_id)
+
+        def get_status(req_id):
+            return get_implementation_status(self.requirements, req_id)
+
+        def calc_coverage(req_id):
+            return calculate_coverage(self.requirements, req_id)
+
         return generate_planning_csv(self.requirements, get_status, calc_coverage)
 
     def generate_coverage_report(self) -> str:

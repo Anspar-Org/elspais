@@ -52,6 +52,7 @@ class WorkspaceContext:
         else:
             # Use defaults
             from elspais.config.defaults import DEFAULT_CONFIG
+
             config = DEFAULT_CONFIG.copy()
 
         return cls(working_dir=directory, config=config)

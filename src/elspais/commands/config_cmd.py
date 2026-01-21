@@ -8,15 +8,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
+from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import (
     find_config_file,
     load_config,
-    merge_configs,
     parse_toml,
 )
-from elspais.config.defaults import DEFAULT_CONFIG
 
 
 def run(args: argparse.Namespace) -> int:
@@ -255,6 +254,7 @@ def cmd_path(args: argparse.Namespace) -> int:
 
 # Helper functions
 
+
 def _get_config_path(args: argparse.Namespace) -> Optional[Path]:
     """Get configuration file path from args or by discovery."""
     if hasattr(args, "config") and args.config:
@@ -363,7 +363,7 @@ def _print_value(value: Any, prefix: str = "") -> None:
         if prefix:
             print(f"{prefix} = {'true' if value else 'false'}")
         else:
-            print('true' if value else 'false')
+            print("true" if value else "false")
     elif isinstance(value, str):
         if prefix:
             print(f'{prefix} = "{value}"')

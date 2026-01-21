@@ -4,7 +4,7 @@ elspais.mcp.serializers - JSON serialization for MCP responses.
 Provides functions to serialize elspais data models to JSON-compatible dicts.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from elspais.core.models import Assertion, ContentRule, Requirement
 from elspais.core.rules import RuleViolation

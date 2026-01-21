@@ -12,13 +12,11 @@ import sys
 from typing import List, Optional, Tuple
 
 from elspais.reformat.hierarchy import RequirementNode
-from elspais.reformat.prompts import REFORMAT_SYSTEM_PROMPT, JSON_SCHEMA_STR, build_user_prompt
+from elspais.reformat.prompts import JSON_SCHEMA_STR, REFORMAT_SYSTEM_PROMPT, build_user_prompt
 
 
 def reformat_requirement(
-    node: RequirementNode,
-    model: str = "sonnet",
-    verbose: bool = False
+    node: RequirementNode, model: str = "sonnet", verbose: bool = False
 ) -> Tuple[Optional[dict], bool, str]:
     """
     Use Claude CLI to reformat a requirement.
@@ -40,30 +38,32 @@ def reformat_requirement(
         status=node.status,
         implements=node.implements,
         body=node.body,
-        rationale=node.rationale
+        rationale=node.rationale,
     )
 
     # Build the claude command
     cmd = [
-        'claude',
-        '-p',  # Print mode (non-interactive)
-        '--output-format', 'json',
-        '--json-schema', JSON_SCHEMA_STR,
-        '--system-prompt', REFORMAT_SYSTEM_PROMPT,
-        '--tools', '',  # Disable all tools
-        '--model', model,
-        user_prompt
+        "claude",
+        "-p",  # Print mode (non-interactive)
+        "--output-format",
+        "json",
+        "--json-schema",
+        JSON_SCHEMA_STR,
+        "--system-prompt",
+        REFORMAT_SYSTEM_PROMPT,
+        "--tools",
+        "",  # Disable all tools
+        "--model",
+        model,
+        user_prompt,
     ]
 
     if verbose:
-        print(f"  Running: claude -p --output-format json ...", file=sys.stderr)
+        print("  Running: claude -p --output-format json ...", file=sys.stderr)
 
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=120  # 2 minute timeout
+            cmd, capture_output=True, text=True, timeout=120  # 2 minute timeout
         )
 
         if result.returncode != 0:
@@ -105,29 +105,33 @@ def parse_claude_response(response: str) -> Optional[dict]:
         data = json.loads(response)
 
         # Check for error
-        if data.get('is_error') or data.get('subtype') == 'error':
+        if data.get("is_error") or data.get("subtype") == "error":
             return None
 
         # The structured output is in 'structured_output' field
-        if 'structured_output' in data:
-            structured = data['structured_output']
-            if isinstance(structured, dict) and 'rationale' in structured and 'assertions' in structured:
+        if "structured_output" in data:
+            structured = data["structured_output"]
+            if (
+                isinstance(structured, dict)
+                and "rationale" in structured
+                and "assertions" in structured
+            ):
                 return structured
 
         # Fallback: Direct result (if schema not used)
-        if 'rationale' in data and 'assertions' in data:
+        if "rationale" in data and "assertions" in data:
             return data
 
         # Fallback: Wrapped in result field
-        if 'result' in data:
-            result = data['result']
-            if isinstance(result, dict) and 'rationale' in result:
+        if "result" in data:
+            result = data["result"]
+            if isinstance(result, dict) and "rationale" in result:
                 return result
             # Result might be a JSON string
             if isinstance(result, str) and result.strip():
                 try:
                     parsed = json.loads(result)
-                    if 'rationale' in parsed:
+                    if "rationale" in parsed:
                         return parsed
                 except json.JSONDecodeError:
                     pass
@@ -137,13 +141,13 @@ def parse_claude_response(response: str) -> Optional[dict]:
     except json.JSONDecodeError:
         # Try to extract JSON from the response
         try:
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
+            json_start = response.find("{")
+            json_end = response.rfind("}") + 1
             if json_start >= 0 and json_end > json_start:
                 parsed = json.loads(response[json_start:json_end])
-                if 'structured_output' in parsed:
-                    return parsed['structured_output']
-                if 'rationale' in parsed and 'assertions' in parsed:
+                if "structured_output" in parsed:
+                    return parsed["structured_output"]
+                if "rationale" in parsed and "assertions" in parsed:
                     return parsed
         except json.JSONDecodeError:
             pass
@@ -157,7 +161,7 @@ def assemble_new_format(
     status: str,
     implements: List[str],
     rationale: str,
-    assertions: List[str]
+    assertions: List[str],
 ) -> str:
     """
     Assemble the new format requirement markdown.
@@ -200,11 +204,11 @@ def assemble_new_format(
 
     # Label assertions A, B, C, etc.
     for i, assertion in enumerate(assertions):
-        label = chr(ord('A') + i)
+        label = chr(ord("A") + i)
         # Clean up assertion text
         assertion_text = assertion.strip()
         # Remove any existing label if present
-        if len(assertion_text) > 2 and assertion_text[1] == '.' and assertion_text[0].isupper():
+        if len(assertion_text) > 2 and assertion_text[1] == "." and assertion_text[0].isupper():
             assertion_text = assertion_text[2:].strip()
         lines.append(f"{label}. {assertion_text}")
 
@@ -219,9 +223,7 @@ def assemble_new_format(
 
 
 def validate_reformatted_content(
-    original: RequirementNode,
-    rationale: str,
-    assertions: List[str]
+    original: RequirementNode, rationale: str, assertions: List[str]
 ) -> Tuple[bool, List[str]]:
     """
     Validate that reformatted content is well-formed.
@@ -243,12 +245,12 @@ def validate_reformatted_content(
 
     # Check each assertion uses SHALL
     for i, assertion in enumerate(assertions):
-        label = chr(ord('A') + i)
-        if 'SHALL' not in assertion.upper():
+        label = chr(ord("A") + i)
+        if "SHALL" not in assertion.upper():
             warnings.append(f"Assertion {label} missing SHALL keyword")
 
     # Check rationale doesn't use SHALL
-    if 'SHALL' in rationale.upper():
+    if "SHALL" in rationale.upper():
         warnings.append("Rationale contains SHALL (should be non-normative)")
 
     # Check assertion count

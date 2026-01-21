@@ -23,17 +23,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-
 # =============================================================================
 # Constants
 # =============================================================================
 
-REVIEW_BRANCH_PREFIX = 'reviews/'
+REVIEW_BRANCH_PREFIX = "reviews/"
 
 
 # =============================================================================
 # Data Classes (REQ-tv-d00013)
 # =============================================================================
+
 
 @dataclass
 class BranchInfo:
@@ -42,13 +42,14 @@ class BranchInfo:
 
     REQ-tv-d00013: Branch info data class for listing and cleanup operations.
     """
-    name: str                    # Full branch name: reviews/{pkg}/{user}
-    package_id: str              # Package identifier
-    username: str                # User who owns the branch
-    last_commit_date: datetime   # Date of last commit on branch
-    is_current: bool             # True if this is the current branch
-    has_remote: bool             # True if remote tracking branch exists
-    is_merged: bool              # True if merged into main
+
+    name: str  # Full branch name: reviews/{pkg}/{user}
+    package_id: str  # Package identifier
+    username: str  # User who owns the branch
+    last_commit_date: datetime  # Date of last commit on branch
+    is_current: bool  # True if this is the current branch
+    has_remote: bool  # True if remote tracking branch exists
+    is_merged: bool  # True if merged into main
 
     @property
     def age_days(self) -> int:
@@ -66,6 +67,7 @@ class BranchInfo:
 # =============================================================================
 # Branch Naming (REQ-tv-d00013-A, B)
 # =============================================================================
+
 
 def get_review_branch_name(package_id: str, user: str) -> str:
     """
@@ -101,11 +103,11 @@ def _sanitize_branch_name(name: str) -> str:
     Replaces spaces with hyphens and removes invalid characters.
     """
     # Replace spaces with hyphens
-    name = name.replace(' ', '-')
+    name = name.replace(" ", "-")
     # Remove invalid characters (keep alphanumeric, hyphen, underscore)
-    name = re.sub(r'[^a-zA-Z0-9_-]', '', name)
+    name = re.sub(r"[^a-zA-Z0-9_-]", "", name)
     # Remove leading/trailing hyphens
-    name = name.strip('-')
+    name = name.strip("-")
     # Convert to lowercase
     return name.lower()
 
@@ -113,6 +115,7 @@ def _sanitize_branch_name(name: str) -> str:
 # =============================================================================
 # Branch Parsing (REQ-tv-d00013-C, D)
 # =============================================================================
+
 
 def parse_review_branch_name(branch_name: str) -> Optional[Tuple[str, str]]:
     """
@@ -139,8 +142,8 @@ def parse_review_branch_name(branch_name: str) -> Optional[Tuple[str, str]]:
         return None
 
     # Remove prefix
-    remainder = branch_name[len(REVIEW_BRANCH_PREFIX):]
-    parts = remainder.split('/', 1)
+    remainder = branch_name[len(REVIEW_BRANCH_PREFIX) :]
+    parts = remainder.split("/", 1)
 
     if len(parts) != 2 or not parts[0] or not parts[1]:
         return None
@@ -175,8 +178,8 @@ def is_review_branch(branch_name: str) -> bool:
     if not branch_name.startswith(REVIEW_BRANCH_PREFIX):
         return False
 
-    remainder = branch_name[len(REVIEW_BRANCH_PREFIX):]
-    parts = remainder.split('/', 1)
+    remainder = branch_name[len(REVIEW_BRANCH_PREFIX) :]
+    parts = remainder.split("/", 1)
 
     # Must have both package and user
     return len(parts) == 2 and bool(parts[0]) and bool(parts[1])
@@ -186,8 +189,8 @@ def is_review_branch(branch_name: str) -> bool:
 # Git Utilities
 # =============================================================================
 
-def _run_git(repo_root: Path, args: List[str],
-             check: bool = False) -> subprocess.CompletedProcess:
+
+def _run_git(repo_root: Path, args: List[str], check: bool = False) -> subprocess.CompletedProcess:
     """
     Run a git command in the repository.
 
@@ -201,19 +204,12 @@ def _run_git(repo_root: Path, args: List[str],
     """
     try:
         return subprocess.run(
-            ['git'] + args,
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=check
+            ["git"] + args, cwd=repo_root, capture_output=True, text=True, check=check
         )
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         # Return a fake failed result
         return subprocess.CompletedProcess(
-            args=['git'] + args,
-            returncode=1,
-            stdout='',
-            stderr='Error running git'
+            args=["git"] + args, returncode=1, stdout="", stderr="Error running git"
         )
 
 
@@ -227,7 +223,7 @@ def get_current_branch(repo_root: Path) -> Optional[str]:
     Returns:
         Branch name or None if not in a git repo
     """
-    result = _run_git(repo_root, ['rev-parse', '--abbrev-ref', 'HEAD'])
+    result = _run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"])
     if result.returncode != 0:
         return None
     return result.stdout.strip()
@@ -243,16 +239,17 @@ def get_remote_name(repo_root: Path) -> Optional[str]:
     Returns:
         Remote name or None if no remotes configured
     """
-    result = _run_git(repo_root, ['remote'])
+    result = _run_git(repo_root, ["remote"])
     if result.returncode != 0 or not result.stdout.strip():
         return None
     # Return first remote
-    return result.stdout.strip().split('\n')[0]
+    return result.stdout.strip().split("\n")[0]
 
 
 # =============================================================================
 # Git Audit Trail (REQ-d00098)
 # =============================================================================
+
 
 def get_head_commit_hash(repo_root: Path) -> Optional[str]:
     """
@@ -267,7 +264,7 @@ def get_head_commit_hash(repo_root: Path) -> Optional[str]:
     Returns:
         Full commit hash (40 chars) or None if not in a git repo
     """
-    result = _run_git(repo_root, ['rev-parse', 'HEAD'])
+    result = _run_git(repo_root, ["rev-parse", "HEAD"])
     if result.returncode != 0:
         return None
     return result.stdout.strip()
@@ -284,7 +281,7 @@ def get_short_commit_hash(repo_root: Path, length: int = 7) -> Optional[str]:
     Returns:
         Short commit hash or None if not in a git repo
     """
-    result = _run_git(repo_root, ['rev-parse', f'--short={length}', 'HEAD'])
+    result = _run_git(repo_root, ["rev-parse", f"--short={length}", "HEAD"])
     if result.returncode != 0:
         return None
     return result.stdout.strip()
@@ -303,8 +300,8 @@ def get_git_context(repo_root: Path) -> dict:
         Dictionary with 'branchName' and 'commitHash' keys (values may be None)
     """
     return {
-        'branchName': get_current_branch(repo_root),
-        'commitHash': get_head_commit_hash(repo_root)
+        "branchName": get_current_branch(repo_root),
+        "commitHash": get_head_commit_hash(repo_root),
     }
 
 
@@ -324,8 +321,8 @@ def commit_exists(repo_root: Path, commit_hash: str) -> bool:
     Returns:
         True if commit exists, False otherwise
     """
-    result = _run_git(repo_root, ['cat-file', '-t', commit_hash])
-    return result.returncode == 0 and result.stdout.strip() == 'commit'
+    result = _run_git(repo_root, ["cat-file", "-t", commit_hash])
+    return result.returncode == 0 and result.stdout.strip() == "commit"
 
 
 def branch_exists(repo_root: Path, branch_name: str) -> bool:
@@ -339,12 +336,11 @@ def branch_exists(repo_root: Path, branch_name: str) -> bool:
     Returns:
         True if branch exists locally
     """
-    result = _run_git(repo_root, ['rev-parse', '--verify', f'refs/heads/{branch_name}'])
+    result = _run_git(repo_root, ["rev-parse", "--verify", f"refs/heads/{branch_name}"])
     return result.returncode == 0
 
 
-def remote_branch_exists(repo_root: Path, branch_name: str,
-                         remote: str = 'origin') -> bool:
+def remote_branch_exists(repo_root: Path, branch_name: str, remote: str = "origin") -> bool:
     """
     Check if a remote branch exists.
 
@@ -356,13 +352,14 @@ def remote_branch_exists(repo_root: Path, branch_name: str,
     Returns:
         True if branch exists on remote
     """
-    result = _run_git(repo_root, ['rev-parse', '--verify', f'refs/remotes/{remote}/{branch_name}'])
+    result = _run_git(repo_root, ["rev-parse", "--verify", f"refs/remotes/{remote}/{branch_name}"])
     return result.returncode == 0
 
 
 # =============================================================================
 # Branch Metadata (REQ-tv-d00013 Service Layer)
 # =============================================================================
+
 
 def get_branch_last_commit_date(repo_root: Path, branch_name: str) -> Optional[datetime]:
     """
@@ -382,9 +379,7 @@ def get_branch_last_commit_date(repo_root: Path, branch_name: str) -> Optional[d
         datetime.datetime(2025, 1, 8, 12, 30, 45, tzinfo=timezone.utc)
     """
     # Use git log to get the commit date in ISO format
-    result = _run_git(repo_root, [
-        'log', '-1', '--format=%cI', branch_name
-    ])
+    result = _run_git(repo_root, ["log", "-1", "--format=%cI", branch_name])
     if result.returncode != 0 or not result.stdout.strip():
         return None
 
@@ -400,8 +395,7 @@ def get_branch_last_commit_date(repo_root: Path, branch_name: str) -> Optional[d
         return None
 
 
-def is_branch_merged(repo_root: Path, branch_name: str,
-                     target_branch: str = 'main') -> bool:
+def is_branch_merged(repo_root: Path, branch_name: str, target_branch: str = "main") -> bool:
     """
     Check if a branch has been merged into the target branch.
 
@@ -422,22 +416,21 @@ def is_branch_merged(repo_root: Path, branch_name: str,
         False  # bob's branch not merged to develop
     """
     # git branch --merged <target> lists branches merged into target
-    result = _run_git(repo_root, ['branch', '--merged', target_branch])
+    result = _run_git(repo_root, ["branch", "--merged", target_branch])
     if result.returncode != 0:
         return False
 
     # Parse branch list and check if our branch is in it
     merged_branches = []
-    for line in result.stdout.strip().split('\n'):
-        branch = line.strip().lstrip('* ')
+    for line in result.stdout.strip().split("\n"):
+        branch = line.strip().lstrip("* ")
         if branch:
             merged_branches.append(branch)
 
     return branch_name in merged_branches
 
 
-def has_unpushed_commits(repo_root: Path, branch_name: str,
-                         remote: str = 'origin') -> bool:
+def has_unpushed_commits(repo_root: Path, branch_name: str, remote: str = "origin") -> bool:
     """
     Check if a branch has commits not pushed to remote.
 
@@ -460,10 +453,7 @@ def has_unpushed_commits(repo_root: Path, branch_name: str,
         return True  # Remote exists but branch not pushed
 
     # Compare local and remote
-    result = _run_git(repo_root, [
-        'rev-list', '--count',
-        f'{remote}/{branch_name}..{branch_name}'
-    ])
+    result = _run_git(repo_root, ["rev-list", "--count", f"{remote}/{branch_name}..{branch_name}"])
     if result.returncode != 0:
         return True  # Assume unpushed if we can't check
 
@@ -513,7 +503,7 @@ def get_branch_info(repo_root: Path, branch_name: str) -> Optional[BranchInfo]:
 
     # Check if current branch
     current = get_current_branch(repo_root)
-    is_current = (current == branch_name)
+    is_current = current == branch_name
 
     # Check remote existence
     has_remote = remote_branch_exists(repo_root, branch_name)
@@ -528,13 +518,14 @@ def get_branch_info(repo_root: Path, branch_name: str) -> Optional[BranchInfo]:
         last_commit_date=last_commit,
         is_current=is_current,
         has_remote=has_remote,
-        is_merged=is_merged
+        is_merged=is_merged,
     )
 
 
 # =============================================================================
 # Package Context (REQ-tv-d00013-F)
 # =============================================================================
+
 
 def get_current_package_context(repo_root: Path) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -568,6 +559,7 @@ def get_current_package_context(repo_root: Path) -> Tuple[Optional[str], Optiona
 # =============================================================================
 # Branch Discovery (REQ-tv-d00013-E)
 # =============================================================================
+
 
 def list_package_branches(repo_root: Path, package_id: str) -> List[str]:
     """
@@ -603,21 +595,20 @@ def _list_branches_by_pattern(repo_root: Path, pattern: str) -> List[str]:
     Returns:
         List of matching branch names
     """
-    result = _run_git(repo_root, ['branch', '--list', pattern])
+    result = _run_git(repo_root, ["branch", "--list", pattern])
     if result.returncode != 0:
         return []
 
     branches = []
-    for line in result.stdout.strip().split('\n'):
-        branch = line.strip().lstrip('* ')
+    for line in result.stdout.strip().split("\n"):
+        branch = line.strip().lstrip("* ")
         if branch and is_review_branch(branch):
             branches.append(branch)
 
     return branches
 
 
-def list_local_review_branches(repo_root: Path,
-                               user: Optional[str] = None) -> List[str]:
+def list_local_review_branches(repo_root: Path, user: Optional[str] = None) -> List[str]:
     """
     List all local review branches.
 
@@ -628,14 +619,14 @@ def list_local_review_branches(repo_root: Path,
     Returns:
         List of branch names
     """
-    result = _run_git(repo_root, ['branch', '--list', 'reviews/*'])
+    result = _run_git(repo_root, ["branch", "--list", "reviews/*"])
     if result.returncode != 0:
         return []
 
     branches = []
-    for line in result.stdout.strip().split('\n'):
+    for line in result.stdout.strip().split("\n"):
         # Remove leading * and whitespace
-        branch = line.strip().lstrip('* ')
+        branch = line.strip().lstrip("* ")
         if branch and is_review_branch(branch):
             if user is None:
                 branches.append(branch)
@@ -651,6 +642,7 @@ def list_local_review_branches(repo_root: Path,
 # =============================================================================
 # Branch Operations
 # =============================================================================
+
 
 def create_review_branch(repo_root: Path, package_id: str, user: str) -> str:
     """
@@ -673,7 +665,7 @@ def create_review_branch(repo_root: Path, package_id: str, user: str) -> str:
     if branch_exists(repo_root, branch_name):
         raise ValueError(f"Branch already exists: {branch_name}")
 
-    result = _run_git(repo_root, ['branch', branch_name])
+    result = _run_git(repo_root, ["branch", branch_name])
     if result.returncode != 0:
         raise RuntimeError(f"Failed to create branch: {result.stderr}")
 
@@ -697,13 +689,14 @@ def checkout_review_branch(repo_root: Path, package_id: str, user: str) -> bool:
     if not branch_exists(repo_root, branch_name):
         return False
 
-    result = _run_git(repo_root, ['checkout', branch_name])
+    result = _run_git(repo_root, ["checkout", branch_name])
     return result.returncode == 0
 
 
 # =============================================================================
 # Change Detection
 # =============================================================================
+
 
 def has_uncommitted_changes(repo_root: Path) -> bool:
     """
@@ -717,7 +710,7 @@ def has_uncommitted_changes(repo_root: Path) -> bool:
     Returns:
         True if there are uncommitted changes (staged or unstaged)
     """
-    result = _run_git(repo_root, ['status', '--porcelain'])
+    result = _run_git(repo_root, ["status", "--porcelain"])
     return bool(result.stdout.strip())
 
 
@@ -731,11 +724,11 @@ def has_reviews_changes(repo_root: Path) -> bool:
     Returns:
         True if .reviews/ has uncommitted changes
     """
-    reviews_dir = repo_root / '.reviews'
+    reviews_dir = repo_root / ".reviews"
     if not reviews_dir.exists():
         return False
 
-    result = _run_git(repo_root, ['status', '--porcelain', '.reviews/'])
+    result = _run_git(repo_root, ["status", "--porcelain", ".reviews/"])
     return bool(result.stdout.strip())
 
 
@@ -752,19 +745,19 @@ def has_conflicts(repo_root: Path) -> bool:
         True if there are unresolved merge conflicts
     """
     # Check for merge in progress
-    git_dir = repo_root / '.git'
-    if (git_dir / 'MERGE_HEAD').exists():
+    git_dir = repo_root / ".git"
+    if (git_dir / "MERGE_HEAD").exists():
         # Merge in progress, check for conflict markers
-        result = _run_git(repo_root, ['diff', '--check'])
+        result = _run_git(repo_root, ["diff", "--check"])
         return result.returncode != 0
 
     # Check for conflict markers in staged files
-    result = _run_git(repo_root, ['diff', '--cached', '--check'])
+    result = _run_git(repo_root, ["diff", "--cached", "--check"])
     if result.returncode != 0:
         return True
 
     # Also check working tree
-    result = _run_git(repo_root, ['diff', '--check'])
+    result = _run_git(repo_root, ["diff", "--check"])
     return result.returncode != 0
 
 
@@ -772,7 +765,8 @@ def has_conflicts(repo_root: Path) -> bool:
 # Commit and Push Operations (REQ-tv-d00013-G)
 # =============================================================================
 
-def commit_reviews(repo_root: Path, message: str, user: str = 'system') -> bool:
+
+def commit_reviews(repo_root: Path, message: str, user: str = "system") -> bool:
     """
     Commit changes to .reviews/ directory.
 
@@ -789,21 +783,18 @@ def commit_reviews(repo_root: Path, message: str, user: str = 'system') -> bool:
         return True  # No changes, success
 
     # Stage .reviews/ changes
-    result = _run_git(repo_root, ['add', '.reviews/'])
+    result = _run_git(repo_root, ["add", ".reviews/"])
     if result.returncode != 0:
         return False
 
     # Commit with message
     full_message = f"[review] {message}\n\nBy: {user}"
-    result = _run_git(repo_root, ['commit', '-m', full_message])
+    result = _run_git(repo_root, ["commit", "-m", full_message])
     return result.returncode == 0
 
 
 def commit_and_push_reviews(
-    repo_root: Path,
-    message: str,
-    user: str = 'system',
-    remote: str = 'origin'
+    repo_root: Path, message: str, user: str = "system", remote: str = "origin"
 ) -> Tuple[bool, str]:
     """
     Commit changes to .reviews/ and push to remote.
@@ -822,42 +813,42 @@ def commit_and_push_reviews(
     """
     # Check if there are changes
     if not has_reviews_changes(repo_root):
-        return (True, 'No changes to commit')
+        return (True, "No changes to commit")
 
     # Stage .reviews/ changes
-    result = _run_git(repo_root, ['add', '.reviews/'])
+    result = _run_git(repo_root, ["add", ".reviews/"])
     if result.returncode != 0:
-        return (False, f'Failed to stage changes: {result.stderr}')
+        return (False, f"Failed to stage changes: {result.stderr}")
 
     # Commit with message
     full_message = f"[review] {message}\n\nBy: {user}"
-    result = _run_git(repo_root, ['commit', '-m', full_message])
+    result = _run_git(repo_root, ["commit", "-m", full_message])
     if result.returncode != 0:
-        return (False, f'Failed to commit: {result.stderr}')
+        return (False, f"Failed to commit: {result.stderr}")
 
     # Check if remote exists
     if get_remote_name(repo_root) is None:
-        return (True, 'Committed locally (no remote configured)')
+        return (True, "Committed locally (no remote configured)")
 
     # Push to remote
     current_branch = get_current_branch(repo_root)
     if current_branch:
-        push_result = _run_git(repo_root, ['push', remote, current_branch])
+        push_result = _run_git(repo_root, ["push", remote, current_branch])
         if push_result.returncode == 0:
-            return (True, 'Committed and pushed successfully')
+            return (True, "Committed and pushed successfully")
         else:
             # Commit succeeded but push failed - still return success for commit
-            return (True, f'Committed locally (push failed: {push_result.stderr})')
+            return (True, f"Committed locally (push failed: {push_result.stderr})")
 
-    return (True, 'Committed locally')
+    return (True, "Committed locally")
 
 
 # =============================================================================
 # Fetch Operations (REQ-tv-d00013-I)
 # =============================================================================
 
-def fetch_package_branches(repo_root: Path, package_id: str,
-                           remote: str = 'origin') -> List[str]:
+
+def fetch_package_branches(repo_root: Path, package_id: str, remote: str = "origin") -> List[str]:
     """
     Fetch all remote branches for a package.
 
@@ -877,17 +868,23 @@ def fetch_package_branches(repo_root: Path, package_id: str,
         return []
 
     sanitized_package = _sanitize_branch_name(package_id)
-    refspec = f'refs/heads/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*:refs/remotes/{remote}/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*'
+    refspec = (
+        f"refs/heads/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*:"
+        f"refs/remotes/{remote}/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*"
+    )
 
     # Fetch the specific package branches
-    result = _run_git(repo_root, ['fetch', remote, refspec])
+    _run_git(repo_root, ["fetch", remote, refspec])
 
     # Even if fetch fails (e.g., no matching refs), list what we have
     branches = []
-    list_result = _run_git(repo_root, ['branch', '-r', '--list', f'{remote}/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*'])
+    list_result = _run_git(
+        repo_root,
+        ["branch", "-r", "--list", f"{remote}/{REVIEW_BRANCH_PREFIX}{sanitized_package}/*"],
+    )
 
     if list_result.returncode == 0:
-        for line in list_result.stdout.strip().split('\n'):
+        for line in list_result.stdout.strip().split("\n"):
             branch = line.strip()
             if branch:
                 branches.append(branch)
@@ -895,7 +892,7 @@ def fetch_package_branches(repo_root: Path, package_id: str,
     return branches
 
 
-def fetch_review_branches(repo_root: Path, remote: str = 'origin') -> bool:
+def fetch_review_branches(repo_root: Path, remote: str = "origin") -> bool:
     """
     Fetch all review branches from remote.
 
@@ -909,13 +906,14 @@ def fetch_review_branches(repo_root: Path, remote: str = 'origin') -> bool:
     if get_remote_name(repo_root) is None:
         return False
 
-    result = _run_git(repo_root, ['fetch', remote, '--prune'])
+    result = _run_git(repo_root, ["fetch", remote, "--prune"])
     return result.returncode == 0
 
 
 # =============================================================================
 # Branch Listing and Cleanup (REQ-tv-d00013 CLI Service Layer)
 # =============================================================================
+
 
 @dataclass
 class CleanupResult:
@@ -924,18 +922,17 @@ class CleanupResult:
 
     REQ-tv-d00013: Cleanup result for CLI feedback.
     """
-    deleted_local: List[str]      # Branches deleted locally
-    deleted_remote: List[str]     # Branches deleted from remote
-    skipped_current: List[str]    # Skipped because current branch
-    skipped_unpushed: List[str]   # Skipped because has unpushed commits
-    skipped_unmerged: List[str]   # Skipped because not merged
-    errors: List[Tuple[str, str]] # (branch, error_message) pairs
+
+    deleted_local: List[str]  # Branches deleted locally
+    deleted_remote: List[str]  # Branches deleted from remote
+    skipped_current: List[str]  # Skipped because current branch
+    skipped_unpushed: List[str]  # Skipped because has unpushed commits
+    skipped_unmerged: List[str]  # Skipped because not merged
+    errors: List[Tuple[str, str]]  # (branch, error_message) pairs
 
 
 def list_review_branches_with_info(
-    repo_root: Path,
-    package_id: Optional[str] = None,
-    user: Optional[str] = None
+    repo_root: Path, package_id: Optional[str] = None, user: Optional[str] = None
 ) -> List[BranchInfo]:
     """
     List all review branches with their metadata.
@@ -988,7 +985,7 @@ def delete_review_branch(
     branch_name: str,
     delete_remote: bool = False,
     force: bool = False,
-    remote: str = 'origin'
+    remote: str = "origin",
 ) -> Tuple[bool, str]:
     """
     Delete a review branch with safety checks.
@@ -1037,14 +1034,14 @@ def delete_review_branch(
         return (False, f"Branch is not merged into main: {branch_name}")
 
     # Delete local branch
-    delete_flag = '-D' if force else '-d'
-    result = _run_git(repo_root, ['branch', delete_flag, branch_name])
+    delete_flag = "-D" if force else "-d"
+    result = _run_git(repo_root, ["branch", delete_flag, branch_name])
     if result.returncode != 0:
         return (False, f"Failed to delete local branch: {result.stderr}")
 
     # Delete remote branch if requested
     if delete_remote and remote_branch_exists(repo_root, branch_name, remote):
-        result = _run_git(repo_root, ['push', remote, '--delete', branch_name])
+        result = _run_git(repo_root, ["push", remote, "--delete", branch_name])
         if result.returncode != 0:
             return (True, f"Deleted local branch, but failed to delete remote: {result.stderr}")
         return (True, f"Deleted local and remote branch: {branch_name}")
@@ -1059,7 +1056,7 @@ def cleanup_review_branches(
     only_merged: bool = True,
     delete_remote: bool = False,
     dry_run: bool = False,
-    remote: str = 'origin'
+    remote: str = "origin",
 ) -> CleanupResult:
     """
     Delete review branches matching criteria.
@@ -1092,7 +1089,7 @@ def cleanup_review_branches(
         skipped_current=[],
         skipped_unpushed=[],
         skipped_unmerged=[],
-        errors=[]
+        errors=[],
     )
 
     # Get branches to consider
@@ -1126,15 +1123,13 @@ def cleanup_review_branches(
                 result.deleted_remote.append(branch.name)
         else:
             # Delete local branch
-            delete_result = _run_git(repo_root, ['branch', '-d', branch.name])
+            delete_result = _run_git(repo_root, ["branch", "-d", branch.name])
             if delete_result.returncode == 0:
                 result.deleted_local.append(branch.name)
 
                 # Delete remote if requested
                 if delete_remote and branch.has_remote:
-                    remote_result = _run_git(
-                        repo_root, ['push', remote, '--delete', branch.name]
-                    )
+                    remote_result = _run_git(repo_root, ["push", remote, "--delete", branch.name])
                     if remote_result.returncode == 0:
                         result.deleted_remote.append(branch.name)
                     else:
@@ -1142,8 +1137,6 @@ def cleanup_review_branches(
                             (branch.name, f"Failed to delete remote: {remote_result.stderr}")
                         )
             else:
-                result.errors.append(
-                    (branch.name, f"Failed to delete: {delete_result.stderr}")
-                )
+                result.errors.append((branch.name, f"Failed to delete: {delete_result.stderr}"))
 
     return result

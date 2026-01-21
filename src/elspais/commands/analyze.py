@@ -41,16 +41,14 @@ def run_hierarchy(args: argparse.Namespace) -> int:
 
     # Find root requirements (PRD with no implements)
     roots = [
-        req for req in requirements.values()
+        req
+        for req in requirements.values()
         if req.level.upper() in ["PRD", "PRODUCT"] and not req.implements
     ]
 
     if not roots:
         # Fall back to all PRD requirements
-        roots = [
-            req for req in requirements.values()
-            if req.level.upper() in ["PRD", "PRODUCT"]
-        ]
+        roots = [req for req in requirements.values() if req.level.upper() in ["PRD", "PRODUCT"]]
 
     printed = set()
 
@@ -153,7 +151,8 @@ def run_coverage(args: argparse.Namespace) -> int:
 
     # List unimplemented PRD
     unimplemented = [
-        req for req in requirements.values()
+        req
+        for req in requirements.values()
         if req.level.upper() in ["PRD", "PRODUCT"] and req.id not in implemented_prd
     ]
 

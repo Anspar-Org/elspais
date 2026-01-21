@@ -8,8 +8,8 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from elspais.trace_view.models import TraceViewRequirement
 from elspais.trace_view.coverage import count_by_level, find_orphaned_requirements
+from elspais.trace_view.models import TraceViewRequirement
 
 
 def generate_legend_markdown() -> str:
@@ -83,9 +83,7 @@ def generate_markdown(
         lines.append("\n## Orphaned Requirements\n")
         lines.append("*(Requirements not linked from any parent)*\n")
         for req in orphaned:
-            lines.append(
-                f"- **REQ-{req.id}**: {req.title} ({req.level}) - {req.display_filename}"
-            )
+            lines.append(f"- **REQ-{req.id}**: {req.title} ({req.level}) - {req.display_filename}")
 
     return "\n".join(lines)
 
@@ -117,10 +115,7 @@ def format_req_tree_md(
         cycle_path = ancestor_path + [req.id]
         cycle_str = " -> ".join([f"REQ-{rid}" for rid in cycle_path])
         print(f"Warning: CYCLE DETECTED: {cycle_str}", file=sys.stderr)
-        return (
-            "  " * indent
-            + f"- **CYCLE DETECTED**: REQ-{req.id} (path: {cycle_str})"
-        )
+        return "  " * indent + f"- **CYCLE DETECTED**: REQ-{req.id} (path: {cycle_str})"
 
     # Safety depth limit
     MAX_DEPTH = 50

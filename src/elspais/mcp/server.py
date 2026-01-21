@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 try:
     from mcp.server.fastmcp import FastMCP
+
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
@@ -39,8 +40,7 @@ def create_server(working_dir: Optional[Path] = None) -> "FastMCP":
     """
     if not MCP_AVAILABLE:
         raise ImportError(
-            "MCP dependencies not installed. "
-            "Install with: pip install elspais[mcp]"
+            "MCP dependencies not installed. " "Install with: pip install elspais[mcp]"
         )
 
     if working_dir is None:
@@ -75,14 +75,17 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         ID, title, level, status, and assertion count.
         """
         import json
+
         requirements = ctx.get_requirements()
-        return json.dumps({
-            "count": len(requirements),
-            "requirements": [
-                serialize_requirement_summary(req)
-                for req in requirements.values()
-            ]
-        }, indent=2)
+        return json.dumps(
+            {
+                "count": len(requirements),
+                "requirements": [
+                    serialize_requirement_summary(req) for req in requirements.values()
+                ],
+            },
+            indent=2,
+        )
 
     @mcp.resource("requirements://{req_id}")
     def get_requirement_resource(req_id: str) -> str:
@@ -93,6 +96,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         implements references, and location.
         """
         import json
+
         req = ctx.get_requirement(req_id)
         if req is None:
             return json.dumps({"error": f"Requirement {req_id} not found"})
@@ -102,34 +106,39 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
     def get_requirements_by_level(level: str) -> str:
         """Get all requirements of a specific level (PRD, OPS, DEV)."""
         import json
+
         requirements = ctx.get_requirements()
-        filtered = [
-            r for r in requirements.values()
-            if r.level.upper() == level.upper()
-        ]
-        return json.dumps({
-            "level": level,
-            "count": len(filtered),
-            "requirements": [serialize_requirement_summary(r) for r in filtered]
-        }, indent=2)
+        filtered = [r for r in requirements.values() if r.level.upper() == level.upper()]
+        return json.dumps(
+            {
+                "level": level,
+                "count": len(filtered),
+                "requirements": [serialize_requirement_summary(r) for r in filtered],
+            },
+            indent=2,
+        )
 
     @mcp.resource("content-rules://list")
     def list_content_rules() -> str:
         """List all configured content rule files."""
         import json
+
         rules = ctx.get_content_rules()
-        return json.dumps({
-            "count": len(rules),
-            "rules": [
-                {
-                    "file": str(r.file_path),
-                    "title": r.title,
-                    "type": r.type,
-                    "applies_to": r.applies_to,
-                }
-                for r in rules
-            ]
-        }, indent=2)
+        return json.dumps(
+            {
+                "count": len(rules),
+                "rules": [
+                    {
+                        "file": str(r.file_path),
+                        "title": r.title,
+                        "type": r.type,
+                        "applies_to": r.applies_to,
+                    }
+                    for r in rules
+                ],
+            },
+            indent=2,
+        )
 
     @mcp.resource("content-rules://{filename}")
     def get_content_rule(filename: str) -> str:
@@ -140,6 +149,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         requirement formats and authoring guidelines.
         """
         import json
+
         rules = ctx.get_content_rules()
         for rule in rules:
             if rule.file_path.name == filename or str(rule.file_path).endswith(filename):
@@ -150,6 +160,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
     def get_current_config() -> str:
         """Get the current elspais configuration."""
         import json
+
         return json.dumps(ctx.config, indent=2, default=str)
 
 
@@ -186,7 +197,10 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             "valid": len(errors) == 0,
             "errors": [serialize_violation(v) for v in errors],
             "warnings": [serialize_violation(v) for v in warnings],
-            "summary": f"{len(errors)} errors, {len(warnings)} warnings in {len(requirements)} requirements"
+            "summary": (
+                f"{len(errors)} errors, {len(warnings)} warnings "
+                f"in {len(requirements)} requirements"
+            ),
         }
 
     @mcp.tool()
@@ -209,9 +223,8 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         return {
             "count": len(requirements),
             "requirements": {
-                req_id: serialize_requirement(req)
-                for req_id, req in requirements.items()
-            }
+                req_id: serialize_requirement(req) for req_id, req in requirements.items()
+            },
         }
 
     @mcp.tool()
@@ -233,7 +246,7 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             "count": len(results),
             "query": query,
             "field": field,
-            "requirements": [serialize_requirement_summary(r) for r in results]
+            "requirements": [serialize_requirement_summary(r) for r in results],
         }
 
     @mcp.tool()
@@ -299,10 +312,12 @@ def _analyze_orphans(requirements: Dict[str, Any]) -> Dict[str, Any]:
     for req in requirements.values():
         for parent_id in req.implements:
             if parent_id not in all_ids:
-                orphans.append({
-                    "id": req.id,
-                    "missing_parent": parent_id,
-                })
+                orphans.append(
+                    {
+                        "id": req.id,
+                        "missing_parent": parent_id,
+                    }
+                )
 
     return {
         "count": len(orphans),

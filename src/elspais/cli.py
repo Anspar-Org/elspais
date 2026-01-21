@@ -10,7 +10,19 @@ from pathlib import Path
 from typing import List, Optional
 
 from elspais import __version__
-from elspais.commands import analyze, changed, config_cmd, edit, hash_cmd, index, init, rules_cmd, trace, validate, reformat_cmd
+from elspais.commands import (
+    analyze,
+    changed,
+    config_cmd,
+    edit,
+    hash_cmd,
+    index,
+    init,
+    reformat_cmd,
+    rules_cmd,
+    trace,
+    validate,
+)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -54,12 +66,14 @@ For detailed command help: elspais <command> --help
         metavar="PATH",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Verbose output",
     )
     parser.add_argument(
-        "-q", "--quiet",
+        "-q",
+        "--quiet",
         action="store_true",
         help="Suppress non-error output",
     )
@@ -105,7 +119,8 @@ Common rules to skip:
         metavar="RULE",
     )
     validate_parser.add_argument(
-        "-j", "--json",
+        "-j",
+        "--json",
         action="store_true",
         help="Output requirements as JSON (hht_diary compatible format)",
     )
@@ -262,12 +277,14 @@ Common rules to skip:
         metavar="BRANCH",
     )
     changed_parser.add_argument(
-        "-j", "--json",
+        "-j",
+        "--json",
         action="store_true",
         help="Output as JSON",
     )
     changed_parser.add_argument(
-        "-a", "--all",
+        "-a",
+        "--all",
         action="store_true",
         help="Include all changed files (not just spec)",
     )
@@ -374,7 +391,8 @@ JSON batch format:
         metavar="SECTION",
     )
     config_show.add_argument(
-        "-j", "--json",
+        "-j",
+        "--json",
         action="store_true",
         help="Output as JSON",
     )
@@ -389,7 +407,8 @@ JSON batch format:
         help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
     )
     config_get.add_argument(
-        "-j", "--json",
+        "-j",
+        "--json",
         action="store_true",
         help="Output as JSON",
     )
@@ -405,7 +424,7 @@ JSON batch format:
     )
     config_set.add_argument(
         "value",
-        help="Value to set (type auto-detected: true/false, numbers, JSON arrays/objects, or string)",
+        help="Value to set (auto-detected: bool, number, JSON array/object, string)",
     )
 
     # config unset
@@ -662,7 +681,7 @@ def mcp_command(args: argparse.Namespace) -> int:
         if hasattr(args, "spec_dir") and args.spec_dir:
             working_dir = args.spec_dir.parent
 
-        print(f"Starting elspais MCP server...")
+        print("Starting elspais MCP server...")
         print(f"Working directory: {working_dir}")
         print(f"Transport: {args.transport}")
 

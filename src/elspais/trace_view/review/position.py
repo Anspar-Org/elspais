@@ -16,11 +16,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .models import CommentPosition, PositionType
 
-
 # =============================================================================
 # Enums
 # REQ-tv-d00012-B: Confidence levels as string enums
 # =============================================================================
+
 
 class ResolutionConfidence(str, Enum):
     """
@@ -29,6 +29,7 @@ class ResolutionConfidence(str, Enum):
     REQ-tv-d00012-B: EXACT (hash matches), APPROXIMATE (fallback matched),
     or UNANCHORED (no match found).
     """
+
     EXACT = "exact"
     APPROXIMATE = "approximate"
     UNANCHORED = "unanchored"
@@ -37,6 +38,7 @@ class ResolutionConfidence(str, Enum):
 # =============================================================================
 # Data Classes
 # =============================================================================
+
 
 @dataclass
 class ResolvedPosition:
@@ -49,6 +51,7 @@ class ResolvedPosition:
     Contains all information needed to display a comment at its resolved
     location, including confidence level and original position for reference.
     """
+
     type: str  # Resolved position type (PositionType value)
     confidence: str  # ResolutionConfidence value
     lineNumber: Optional[int]  # Resolved line (1-based), None for general
@@ -66,8 +69,8 @@ class ResolvedPosition:
         line_range: Optional[Tuple[int, int]],
         char_range: Optional[Tuple[int, int]],
         matched_text: Optional[str],
-        original: CommentPosition
-    ) -> 'ResolvedPosition':
+        original: CommentPosition,
+    ) -> "ResolvedPosition":
         """
         Factory for exact resolution (hash matched).
 
@@ -81,7 +84,7 @@ class ResolvedPosition:
             charRange=char_range,
             matchedText=matched_text,
             originalPosition=original,
-            resolutionPath="hash_match"
+            resolutionPath="hash_match",
         )
 
     @classmethod
@@ -93,8 +96,8 @@ class ResolvedPosition:
         char_range: Optional[Tuple[int, int]],
         matched_text: Optional[str],
         original: CommentPosition,
-        resolution_path: str
-    ) -> 'ResolvedPosition':
+        resolution_path: str,
+    ) -> "ResolvedPosition":
         """
         Factory for approximate resolution (fallback succeeded).
 
@@ -108,11 +111,11 @@ class ResolvedPosition:
             charRange=char_range,
             matchedText=matched_text,
             originalPosition=original,
-            resolutionPath=resolution_path
+            resolutionPath=resolution_path,
         )
 
     @classmethod
-    def create_unanchored(cls, original: CommentPosition) -> 'ResolvedPosition':
+    def create_unanchored(cls, original: CommentPosition) -> "ResolvedPosition":
         """
         Factory for unanchored resolution (all fallbacks failed).
 
@@ -127,7 +130,7 @@ class ResolvedPosition:
             charRange=None,
             matchedText=None,
             originalPosition=original,
-            resolutionPath="fallback_exhausted"
+            resolutionPath="fallback_exhausted",
         )
 
     def validate(self) -> Tuple[bool, List[str]]:
@@ -163,45 +166,46 @@ class ResolvedPosition:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         result: Dict[str, Any] = {
-            'type': self.type,
-            'confidence': self.confidence,
-            'resolutionPath': self.resolutionPath,
-            'originalPosition': self.originalPosition.to_dict()
+            "type": self.type,
+            "confidence": self.confidence,
+            "resolutionPath": self.resolutionPath,
+            "originalPosition": self.originalPosition.to_dict(),
         }
         if self.lineNumber is not None:
-            result['lineNumber'] = self.lineNumber
+            result["lineNumber"] = self.lineNumber
         if self.lineRange is not None:
-            result['lineRange'] = list(self.lineRange)
+            result["lineRange"] = list(self.lineRange)
         if self.charRange is not None:
-            result['charRange'] = list(self.charRange)
+            result["charRange"] = list(self.charRange)
         if self.matchedText is not None:
-            result['matchedText'] = self.matchedText
+            result["matchedText"] = self.matchedText
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ResolvedPosition':
+    def from_dict(cls, data: Dict[str, Any]) -> "ResolvedPosition":
         """Create from dictionary (JSON deserialization)"""
-        line_range = data.get('lineRange')
+        line_range = data.get("lineRange")
         if line_range is not None:
             line_range = tuple(line_range)
-        char_range = data.get('charRange')
+        char_range = data.get("charRange")
         if char_range is not None:
             char_range = tuple(char_range)
         return cls(
-            type=data['type'],
-            confidence=data['confidence'],
-            lineNumber=data.get('lineNumber'),
+            type=data["type"],
+            confidence=data["confidence"],
+            lineNumber=data.get("lineNumber"),
             lineRange=line_range,
             charRange=char_range,
-            matchedText=data.get('matchedText'),
-            originalPosition=CommentPosition.from_dict(data['originalPosition']),
-            resolutionPath=data.get('resolutionPath', 'unknown')
+            matchedText=data.get("matchedText"),
+            originalPosition=CommentPosition.from_dict(data["originalPosition"]),
+            resolutionPath=data.get("resolutionPath", "unknown"),
         )
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def find_line_in_text(text: str, line_number: int) -> Optional[Tuple[int, int]]:
     """
@@ -218,7 +222,7 @@ def find_line_in_text(text: str, line_number: int) -> Optional[Tuple[int, int]]:
     if not text or line_number < 1:
         return None
 
-    lines = text.split('\n')
+    lines = text.split("\n")
 
     if line_number > len(lines):
         return None
@@ -255,11 +259,7 @@ def find_context_in_text(text: str, context: str) -> Optional[Tuple[int, int]]:
     return (index, index + len(context))
 
 
-def find_keyword_occurrence(
-    text: str,
-    keyword: str,
-    occurrence: int
-) -> Optional[Tuple[int, int]]:
+def find_keyword_occurrence(text: str, keyword: str, occurrence: int) -> Optional[Tuple[int, int]]:
     """
     Find character range of the Nth occurrence of a keyword.
 
@@ -312,20 +312,16 @@ def get_line_number_from_char_offset(text: str, char_offset: int) -> int:
     char_offset = min(char_offset, len(text) - 1)
 
     # Count newlines before offset
-    newline_count = text[:char_offset + 1].count('\n')
+    newline_count = text[: char_offset + 1].count("\n")
 
     # Special case: if offset is exactly on a newline, it belongs to previous line
-    if char_offset < len(text) and text[char_offset] == '\n':
+    if char_offset < len(text) and text[char_offset] == "\n":
         return newline_count  # Don't add 1 since we're ON the newline
 
     return newline_count + 1
 
 
-def get_line_range_from_char_range(
-    text: str,
-    start: int,
-    end: int
-) -> Tuple[int, int]:
+def get_line_range_from_char_range(text: str, start: int, end: int) -> Tuple[int, int]:
     """
     Convert character range to line range.
 
@@ -359,17 +355,16 @@ def get_total_lines(text: str) -> int:
     """
     if not text:
         return 0
-    return text.count('\n') + 1
+    return text.count("\n") + 1
 
 
 # =============================================================================
 # Core Resolution Functions
 # =============================================================================
 
+
 def resolve_position(
-    position: CommentPosition,
-    content: str,
-    current_hash: str
+    position: CommentPosition, content: str, current_hash: str
 ) -> ResolvedPosition:
     """
     Resolve a comment position against current requirement content.
@@ -414,10 +409,7 @@ def resolve_position(
         return _resolve_with_fallback(position, content)
 
 
-def _resolve_general(
-    position: CommentPosition,
-    content: str
-) -> ResolvedPosition:
+def _resolve_general(position: CommentPosition, content: str) -> ResolvedPosition:
     """
     Resolve GENERAL position type.
 
@@ -431,14 +423,11 @@ def _resolve_general(
         line_range=(1, total_lines) if total_lines > 0 else None,
         char_range=(0, len(content)) if content else None,
         matched_text=None,
-        original=position
+        original=position,
     )
 
 
-def _resolve_exact(
-    position: CommentPosition,
-    content: str
-) -> ResolvedPosition:
+def _resolve_exact(position: CommentPosition, content: str) -> ResolvedPosition:
     """
     Resolve position when hash matches (exact confidence).
 
@@ -458,7 +447,7 @@ def _resolve_exact(
         matched_text = None
 
         if char_range:
-            matched_text = content[char_range[0]:char_range[1]]
+            matched_text = content[char_range[0] : char_range[1]]
 
         return ResolvedPosition.create_exact(
             position_type=pos_type,
@@ -466,7 +455,7 @@ def _resolve_exact(
             line_range=(line_num, line_num) if line_num else None,
             char_range=char_range,
             matched_text=matched_text,
-            original=position
+            original=position,
         )
 
     elif pos_type == PositionType.BLOCK.value:
@@ -479,7 +468,7 @@ def _resolve_exact(
             matched_text = None
             if start_range and end_range:
                 char_range = (start_range[0], end_range[1])
-                matched_text = content[char_range[0]:char_range[1]]
+                matched_text = content[char_range[0] : char_range[1]]
 
             return ResolvedPosition.create_exact(
                 position_type=pos_type,
@@ -487,7 +476,7 @@ def _resolve_exact(
                 line_range=line_range,
                 char_range=char_range,
                 matched_text=matched_text,
-                original=position
+                original=position,
             )
         else:
             return ResolvedPosition.create_unanchored(position)
@@ -515,7 +504,7 @@ def _resolve_exact(
                 line_range=line_range_result,
                 char_range=char_range,
                 matched_text=matched_text,
-                original=position
+                original=position,
             )
         else:
             return ResolvedPosition.create_unanchored(position)
@@ -524,10 +513,7 @@ def _resolve_exact(
     return ResolvedPosition.create_unanchored(position)
 
 
-def _resolve_with_fallback(
-    position: CommentPosition,
-    content: str
-) -> ResolvedPosition:
+def _resolve_with_fallback(position: CommentPosition, content: str) -> ResolvedPosition:
     """
     Resolve position when hash differs (approximate confidence).
 
@@ -554,7 +540,7 @@ def _resolve_with_fallback(
         if 1 <= line_to_try <= total_lines:
             char_range = find_line_in_text(content, line_to_try)
             if char_range:
-                matched_text = content[char_range[0]:char_range[1]]
+                matched_text = content[char_range[0] : char_range[1]]
                 return ResolvedPosition.create_approximate(
                     position_type=PositionType.LINE.value,
                     line_number=line_to_try,
@@ -562,7 +548,7 @@ def _resolve_with_fallback(
                     char_range=char_range,
                     matched_text=matched_text,
                     original=position,
-                    resolution_path="fallback_line_number"
+                    resolution_path="fallback_line_number",
                 )
 
     # Strategy 2: Try fallbackContext
@@ -571,9 +557,7 @@ def _resolve_with_fallback(
         char_range = find_context_in_text(content, position.fallbackContext)
         if char_range:
             line_number = get_line_number_from_char_offset(content, char_range[0])
-            line_range = get_line_range_from_char_range(
-                content, char_range[0], char_range[1]
-            )
+            line_range = get_line_range_from_char_range(content, char_range[0], char_range[1])
             return ResolvedPosition.create_approximate(
                 position_type=PositionType.LINE.value,  # Resolved to line
                 line_number=line_number,
@@ -581,7 +565,7 @@ def _resolve_with_fallback(
                 char_range=char_range,
                 matched_text=position.fallbackContext,
                 original=position,
-                resolution_path="fallback_context"
+                resolution_path="fallback_context",
             )
 
     # Strategy 3: Try keyword occurrence
@@ -591,9 +575,7 @@ def _resolve_with_fallback(
         char_range = find_keyword_occurrence(content, position.keyword, occurrence)
         if char_range:
             line_number = get_line_number_from_char_offset(content, char_range[0])
-            line_range = get_line_range_from_char_range(
-                content, char_range[0], char_range[1]
-            )
+            line_range = get_line_range_from_char_range(content, char_range[0], char_range[1])
             return ResolvedPosition.create_approximate(
                 position_type=PositionType.WORD.value,
                 line_number=line_number,
@@ -601,7 +583,7 @@ def _resolve_with_fallback(
                 char_range=char_range,
                 matched_text=position.keyword,
                 original=position,
-                resolution_path="fallback_keyword"
+                resolution_path="fallback_keyword",
             )
 
     # Strategy 4: Fall back to general (unanchored)

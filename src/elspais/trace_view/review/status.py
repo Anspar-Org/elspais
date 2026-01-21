@@ -28,22 +28,20 @@ VALID_STATUSES = {"Draft", "Active", "Deprecated"}
 # Regex pattern to match the status line in a requirement
 # Matches: **Level**: Dev | **Status**: Draft | **Implements**: REQ-xxx
 STATUS_LINE_PATTERN = re.compile(
-    r'^(\*\*Level\*\*:\s+(?:PRD|Ops|Dev)\s+\|\s+'
-    r'\*\*Status\*\*:\s+)(Draft|Active|Deprecated)'
-    r'(\s+\|\s+\*\*Implements\*\*:\s+[^\n]*?)$',
-    re.MULTILINE
+    r"^(\*\*Level\*\*:\s+(?:PRD|Ops|Dev)\s+\|\s+"
+    r"\*\*Status\*\*:\s+)(Draft|Active|Deprecated)"
+    r"(\s+\|\s+\*\*Implements\*\*:\s+[^\n]*?)$",
+    re.MULTILINE,
 )
 
 # Pattern to find a REQ header (supports both REQ-tv-xxx and REQ-SPONSOR-xxx formats)
 REQ_HEADER_PATTERN = re.compile(
-    r'^#{1,6}\s+REQ-(?:([A-Za-z]{2,4})-)?([pod]\d{5}):\s+(.+)$',
-    re.MULTILINE
+    r"^#{1,6}\s+REQ-(?:([A-Za-z]{2,4})-)?([pod]\d{5}):\s+(.+)$", re.MULTILINE
 )
 
 # Pattern to find the End footer with hash
 REQ_FOOTER_PATTERN = re.compile(
-    r'^\*End\* \*([^*]+)\* \| \*\*Hash\*\*: ([a-f0-9]{8})$',
-    re.MULTILINE
+    r"^\*End\* \*([^*]+)\* \| \*\*Hash\*\*: ([a-f0-9]{8})$", re.MULTILINE
 )
 
 
@@ -52,9 +50,11 @@ REQ_FOOTER_PATTERN = re.compile(
 # REQ-tv-d00015-A: Return structured location information
 # =============================================================================
 
+
 @dataclass
 class ReqLocation:
     """Location of a requirement in a spec file."""
+
     file_path: Path
     line_number: int  # 1-based line number of status line
     current_status: str
@@ -65,6 +65,7 @@ class ReqLocation:
 # Hash Functions
 # REQ-tv-d00015-F: Content hash computation and update
 # =============================================================================
+
 
 def compute_req_hash(content: str) -> str:
     """
@@ -79,7 +80,7 @@ def compute_req_hash(content: str) -> str:
     Returns:
         8-character lowercase hex string
     """
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()[:8]
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:8]
 
 
 def _extract_req_content(file_content: str, req_id: str) -> Optional[Tuple[str, int, int]]:
@@ -96,18 +97,16 @@ def _extract_req_content(file_content: str, req_id: str) -> Optional[Tuple[str, 
 
     # Build pattern for this specific requirement
     # Handle both "tv-d00010" and "HHT-d00001" formats
-    if '-' in normalized_id:
-        parts = normalized_id.split('-', 1)
+    if "-" in normalized_id:
+        parts = normalized_id.split("-", 1)
         prefix = parts[0]
         base_id = parts[1]
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+(.+)$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+(.+)$", re.MULTILINE
         )
     else:
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+(.+)$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+(.+)$", re.MULTILINE
         )
 
     header_match = header_pattern.search(file_content)
@@ -120,8 +119,7 @@ def _extract_req_content(file_content: str, req_id: str) -> Optional[Tuple[str, 
     # Find the footer for this requirement
     # The footer format is: *End* *{title}* | **Hash**: {hash}
     footer_pattern = re.compile(
-        rf'^\*End\* \*{re.escape(req_title)}\* \| \*\*Hash\*\*: ([a-f0-9]{{8}})$',
-        re.MULTILINE
+        rf"^\*End\* \*{re.escape(req_title)}\* \| \*\*Hash\*\*: ([a-f0-9]{{8}})$", re.MULTILINE
     )
 
     # Search from after the header
@@ -155,8 +153,8 @@ def update_req_hash(file_path: Path, req_id: str) -> bool:
         True if hash was updated, False if requirement not found
     """
     try:
-        content = file_path.read_text(encoding='utf-8')
-    except (FileNotFoundError, IOError):
+        content = file_path.read_text(encoding="utf-8")
+    except (OSError, FileNotFoundError):
         return False
 
     result = _extract_req_content(content, req_id)
@@ -185,6 +183,7 @@ def update_req_hash(file_path: Path, req_id: str) -> bool:
 # REQ-tv-d00015-A: find_req_in_file() SHALL locate a requirement
 # =============================================================================
 
+
 def find_req_in_file(file_path: Path, req_id: str) -> Optional[ReqLocation]:
     """
     Find a requirement in a spec file and return its position info.
@@ -201,8 +200,8 @@ def find_req_in_file(file_path: Path, req_id: str) -> Optional[ReqLocation]:
         ReqLocation with req info if found, None otherwise
     """
     try:
-        content = file_path.read_text(encoding='utf-8')
-    except (FileNotFoundError, IOError):
+        content = file_path.read_text(encoding="utf-8")
+    except (OSError, FileNotFoundError):
         return None
 
     # Normalize req_id (remove REQ- prefix if present)
@@ -212,18 +211,16 @@ def find_req_in_file(file_path: Path, req_id: str) -> Optional[ReqLocation]:
 
     # Build pattern for this specific requirement
     # Handle both "tv-d00010" and "HHT-d00001" formats
-    if '-' in normalized_id:
-        parts = normalized_id.split('-', 1)
+    if "-" in normalized_id:
+        parts = normalized_id.split("-", 1)
         prefix = parts[0]
         base_id = parts[1]
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+.+$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+.+$", re.MULTILINE
         )
     else:
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+.+$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+.+$", re.MULTILINE
         )
 
     header_match = header_pattern.search(content)
@@ -246,13 +243,13 @@ def find_req_in_file(file_path: Path, req_id: str) -> Optional[ReqLocation]:
     current_status = status_match.group(2)
 
     # Calculate 1-based line number
-    line_number = content[:status_match.start()].count('\n') + 1
+    line_number = content[: status_match.start()].count("\n") + 1
 
     return ReqLocation(
         file_path=file_path,
         line_number=line_number,
         current_status=current_status,
-        req_id=normalized_id
+        req_id=normalized_id,
     )
 
 
@@ -273,7 +270,7 @@ def find_req_in_spec_dir(repo_root: Path, req_id: str) -> Optional[ReqLocation]:
     spec_dir = repo_root / "spec"
     if spec_dir.exists():
         for spec_file in spec_dir.glob("*.md"):
-            if spec_file.name in ('INDEX.md', 'README.md', 'requirements-format.md'):
+            if spec_file.name in ("INDEX.md", "README.md", "requirements-format.md"):
                 continue
             location = find_req_in_file(spec_file, req_id)
             if location:
@@ -287,7 +284,7 @@ def find_req_in_spec_dir(repo_root: Path, req_id: str) -> Optional[ReqLocation]:
                 sponsor_spec = sponsor / "spec"
                 if sponsor_spec.exists():
                     for spec_file in sponsor_spec.glob("*.md"):
-                        if spec_file.name in ('INDEX.md', 'README.md', 'requirements-format.md'):
+                        if spec_file.name in ("INDEX.md", "README.md", "requirements-format.md"):
                             continue
                         location = find_req_in_file(spec_file, req_id)
                         if location:
@@ -300,6 +297,7 @@ def find_req_in_spec_dir(repo_root: Path, req_id: str) -> Optional[ReqLocation]:
 # Status Read Function
 # REQ-tv-d00015-B: get_req_status() SHALL read and return current status
 # =============================================================================
+
 
 def get_req_status(repo_root: Path, req_id: str) -> Optional[str]:
     """
@@ -326,6 +324,7 @@ def get_req_status(repo_root: Path, req_id: str) -> Optional[str]:
 # REQ-tv-d00015-G: Failed status changes SHALL NOT corrupt the file
 # =============================================================================
 
+
 def _atomic_write_file(file_path: Path, content: str) -> None:
     """
     Atomically write content to a file.
@@ -341,13 +340,9 @@ def _atomic_write_file(file_path: Path, content: str) -> None:
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write to temp file in same directory (for atomic rename)
-    fd, temp_path = tempfile.mkstemp(
-        suffix='.md',
-        prefix='.tmp_',
-        dir=file_path.parent
-    )
+    fd, temp_path = tempfile.mkstemp(suffix=".md", prefix=".tmp_", dir=file_path.parent)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
         # Atomic rename
         os.rename(temp_path, file_path)
@@ -363,12 +358,8 @@ def _atomic_write_file(file_path: Path, content: str) -> None:
 # REQ-tv-d00015-C: change_req_status() SHALL update status atomically
 # =============================================================================
 
-def change_req_status(
-    repo_root: Path,
-    req_id: str,
-    new_status: str,
-    user: str
-) -> Tuple[bool, str]:
+
+def change_req_status(repo_root: Path, req_id: str, new_status: str, user: str) -> Tuple[bool, str]:
     """
     Change the status of a requirement in its spec file.
 
@@ -396,7 +387,7 @@ def change_req_status(
     """
     # Validate new_status (REQ-tv-d00015-D)
     if new_status not in VALID_STATUSES:
-        valid_list = ', '.join(sorted(VALID_STATUSES))
+        valid_list = ", ".join(sorted(VALID_STATUSES))
         return (False, f"Invalid status '{new_status}'. Valid statuses: {valid_list}")
 
     # Find the requirement
@@ -410,8 +401,8 @@ def change_req_status(
 
     # Read the file content
     try:
-        content = location.file_path.read_text(encoding='utf-8')
-    except IOError as e:
+        content = location.file_path.read_text(encoding="utf-8")
+    except OSError as e:
         return (False, f"Failed to read spec file: {e}")
 
     # Normalize req_id for pattern matching
@@ -420,18 +411,16 @@ def change_req_status(
         normalized_id = normalized_id[4:]
 
     # Build pattern for this specific requirement header
-    if '-' in normalized_id:
-        parts = normalized_id.split('-', 1)
+    if "-" in normalized_id:
+        parts = normalized_id.split("-", 1)
         prefix = parts[0]
         base_id = parts[1]
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+.+$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(prefix)}-{re.escape(base_id)}:\s+.+$", re.MULTILINE
         )
     else:
         header_pattern = re.compile(
-            rf'^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+.+$',
-            re.MULTILINE
+            rf"^#{{1,6}}\s+REQ-{re.escape(normalized_id)}:\s+.+$", re.MULTILINE
         )
 
     header_match = header_pattern.search(content)
@@ -451,16 +440,12 @@ def change_req_status(
     new_line = status_match.group(1) + new_status + status_match.group(3)
 
     # Replace the status line in content
-    new_content = (
-        content[:status_match.start()] +
-        new_line +
-        content[status_match.end():]
-    )
+    new_content = content[: status_match.start()] + new_line + content[status_match.end() :]
 
     # Write atomically (REQ-tv-d00015-G)
     try:
         _atomic_write_file(location.file_path, new_content)
-    except IOError as e:
+    except OSError as e:
         return (False, f"Failed to write spec file: {e}")
 
     # Update the hash (REQ-tv-d00015-F)

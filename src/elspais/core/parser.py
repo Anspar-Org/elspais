@@ -20,46 +20,39 @@ class RequirementParser:
     # Regex patterns for parsing
     # Generic pattern to find potential requirement headers
     # Actual ID validation is done by PatternValidator
-    HEADER_PATTERN = re.compile(
-        r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$"
-    )
+    HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
     LEVEL_STATUS_PATTERN = re.compile(
         r"\*\*Level\*\*:\s*(?P<level>\w+)"
         r"(?:\s*\|\s*\*\*Implements\*\*:\s*(?P<implements>[^|\n]+))?"
         r"(?:\s*\|\s*\*\*Status\*\*:\s*(?P<status>\w+))?"
     )
-    ALT_STATUS_PATTERN = re.compile(
-        r"\*\*Status\*\*:\s*(?P<status>\w+)"
-    )
-    IMPLEMENTS_PATTERN = re.compile(
-        r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)"
-    )
+    ALT_STATUS_PATTERN = re.compile(r"\*\*Status\*\*:\s*(?P<status>\w+)")
+    IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
     END_MARKER_PATTERN = re.compile(
-        r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?",
-        re.MULTILINE
+        r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?", re.MULTILINE
     )
-    RATIONALE_PATTERN = re.compile(
-        r"\*\*Rationale\*\*:\s*(.+?)(?=\n\n|\n\*\*|\Z)", re.DOTALL
-    )
+    RATIONALE_PATTERN = re.compile(r"\*\*Rationale\*\*:\s*(.+?)(?=\n\n|\n\*\*|\Z)", re.DOTALL)
     ACCEPTANCE_PATTERN = re.compile(
         r"\*\*Acceptance Criteria\*\*:\s*\n((?:\s*-\s*.+\n?)+)", re.MULTILINE
     )
     # Assertions section header (## Assertions or **Assertions**)
-    ASSERTIONS_HEADER_PATTERN = re.compile(
-        r"^##\s+Assertions\s*$", re.MULTILINE
-    )
+    ASSERTIONS_HEADER_PATTERN = re.compile(r"^##\s+Assertions\s*$", re.MULTILINE)
     # Individual assertion line: "A. The system SHALL..." or "01. ..." etc.
     # Captures: label (any alphanumeric), text (rest of line, may continue)
-    ASSERTION_LINE_PATTERN = re.compile(
-        r"^\s*([A-Z0-9]+)\.\s+(.+)$", re.MULTILINE
-    )
+    ASSERTION_LINE_PATTERN = re.compile(r"^\s*([A-Z0-9]+)\.\s+(.+)$", re.MULTILINE)
 
     # Default values that mean "no references" in Implements field
     DEFAULT_NO_REFERENCE_VALUES = ["-", "null", "none", "x", "X", "N/A", "n/a"]
 
     # Default placeholder values that indicate a removed/deprecated assertion
     DEFAULT_PLACEHOLDER_VALUES = [
-        "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+        "obsolete",
+        "removed",
+        "deprecated",
+        "N/A",
+        "n/a",
+        "-",
+        "reserved",
     ]
 
     def __init__(
@@ -272,9 +265,7 @@ class RequirementParser:
             else:
                 dir_path = base_path / dir_entry
             if dir_path.exists() and dir_path.is_dir():
-                result = self.parse_directory(
-                    dir_path, patterns=patterns, skip_files=skip_files
-                )
+                result = self.parse_directory(dir_path, patterns=patterns, skip_files=skip_files)
                 # Merge requirements, checking for cross-directory duplicates
                 for req_id, req in result.requirements.items():
                     if req_id in requirements:
@@ -385,7 +376,10 @@ class RequirementParser:
 
         warning = ParseWarning(
             requirement_id=original_id,
-            message=f"Duplicate ID found (first occurrence in {original_req.file_path}:{original_req.line_number})",
+            message=(
+                f"Duplicate ID found "
+                f"(first occurrence in {original_req.file_path}:{original_req.line_number})"
+            ),
             file_path=file_path,
             line_number=line_number,
         )
@@ -444,12 +438,14 @@ class RequirementParser:
         implements = self._parse_implements(implements_str)
         for ref in implements:
             if not self.validator.is_valid(ref):
-                block_warnings.append(ParseWarning(
-                    requirement_id=req_id,
-                    message=f"Invalid implements reference: {ref}",
-                    file_path=file_path,
-                    line_number=line_number,
-                ))
+                block_warnings.append(
+                    ParseWarning(
+                        requirement_id=req_id,
+                        message=f"Invalid implements reference: {ref}",
+                        file_path=file_path,
+                        line_number=line_number,
+                    )
+                )
 
         # Extract body (text between header and acceptance/end)
         body = self._extract_body(text)
@@ -475,12 +471,14 @@ class RequirementParser:
         assertions = self._extract_assertions(text)
         for assertion in assertions:
             if not self._is_valid_assertion_label(assertion.label):
-                block_warnings.append(ParseWarning(
-                    requirement_id=req_id,
-                    message=f"Invalid assertion label format: {assertion.label}",
-                    file_path=file_path,
-                    line_number=line_number,
-                ))
+                block_warnings.append(
+                    ParseWarning(
+                        requirement_id=req_id,
+                        message=f"Invalid assertion label format: {assertion.label}",
+                        file_path=file_path,
+                        line_number=line_number,
+                    )
+                )
 
         # Extract hash from end marker
         hash_value = None
@@ -511,17 +509,17 @@ class RequirementParser:
         Default expectation is uppercase letters A-Z.
         """
         # Check against configured assertion label pattern if available
-        assertion_config = getattr(self.pattern_config, 'assertions', None)
+        assertion_config = getattr(self.pattern_config, "assertions", None)
         if assertion_config:
-            label_style = assertion_config.get('label_style', 'uppercase')
-            if label_style == 'uppercase':
-                return bool(re.match(r'^[A-Z]$', label))
-            elif label_style == 'numeric':
-                return bool(re.match(r'^\d+$', label))
-            elif label_style == 'alphanumeric':
-                return bool(re.match(r'^[A-Z0-9]+$', label))
+            label_style = assertion_config.get("label_style", "uppercase")
+            if label_style == "uppercase":
+                return bool(re.match(r"^[A-Z]$", label))
+            elif label_style == "numeric":
+                return bool(re.match(r"^\d+$", label))
+            elif label_style == "alphanumeric":
+                return bool(re.match(r"^[A-Z0-9]+$", label))
         # Default: uppercase single letter
-        return bool(re.match(r'^[A-Z]$', label))
+        return bool(re.match(r"^[A-Z]$", label))
 
     def _parse_implements(self, implements_str: str) -> List[str]:
         """Parse comma-separated implements list.
@@ -608,9 +606,9 @@ class RequirementParser:
 
         # Find the end of the assertions section (next ## header, Rationale, or End marker)
         end_patterns = [
-            r"^##\s+",           # Next section header
-            r"^\*End\*",         # End marker
-            r"^---\s*$",         # Separator line
+            r"^##\s+",  # Next section header
+            r"^\*End\*",  # End marker
+            r"^---\s*$",  # Separator line
         ]
         end_pos = len(section_text)
         for pattern in end_patterns:
@@ -627,14 +625,15 @@ class RequirementParser:
 
             # Check if this is a placeholder
             is_placeholder = any(
-                assertion_text.lower().startswith(pv.lower())
-                for pv in self.placeholder_values
+                assertion_text.lower().startswith(pv.lower()) for pv in self.placeholder_values
             )
 
-            assertions.append(Assertion(
-                label=label,
-                text=assertion_text,
-                is_placeholder=is_placeholder,
-            ))
+            assertions.append(
+                Assertion(
+                    label=label,
+                    text=assertion_text,
+                    is_placeholder=is_placeholder,
+                )
+            )
 
         return assertions

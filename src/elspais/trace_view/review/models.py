@@ -21,19 +21,20 @@ IMPLEMENTS REQUIREMENTS:
 
 import re
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-
 
 # =============================================================================
 # Enums and Constants
 # REQ-tv-d00010-B: String enums for JSON compatibility
 # =============================================================================
 
+
 class PositionType(str, Enum):
     """Type of comment position anchor"""
+
     LINE = "line"
     BLOCK = "block"
     WORD = "word"
@@ -42,6 +43,7 @@ class PositionType(str, Enum):
 
 class RequestState(str, Enum):
     """State of a status change request"""
+
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -50,6 +52,7 @@ class RequestState(str, Enum):
 
 class ApprovalDecision(str, Enum):
     """Approval decision type"""
+
     APPROVE = "approve"
     REJECT = "reject"
 
@@ -61,13 +64,14 @@ VALID_REQ_STATUSES = {"Draft", "Active", "Deprecated"}
 DEFAULT_APPROVAL_RULES: Dict[str, List[str]] = {
     "Draft->Active": ["product_owner", "tech_lead"],
     "Active->Deprecated": ["product_owner"],
-    "Draft->Deprecated": ["product_owner"]
+    "Draft->Deprecated": ["product_owner"],
 }
 
 
 # =============================================================================
 # Utility Functions
 # =============================================================================
+
 
 def generate_uuid() -> str:
     """Generate a new UUID string"""
@@ -86,8 +90,8 @@ def now_iso() -> str:
 def parse_iso_datetime(iso_str: str) -> datetime:
     """Parse ISO 8601 datetime string to datetime object"""
     # Handle both with and without timezone, and Z suffix
-    if iso_str.endswith('Z'):
-        iso_str = iso_str[:-1] + '+00:00'
+    if iso_str.endswith("Z"):
+        iso_str = iso_str[:-1] + "+00:00"
     return datetime.fromisoformat(iso_str)
 
 
@@ -104,7 +108,7 @@ def validate_req_id(req_id: str) -> bool:
     if not req_id:
         return False
     # Negative lookahead to reject REQ- prefix; only sponsor prefixes allowed
-    pattern = r'^(?!REQ-)(?:[A-Z]{2,4}-)?[pod]\d{5}$'
+    pattern = r"^(?!REQ-)(?:[A-Z]{2,4}-)?[pod]\d{5}$"
     return bool(re.match(pattern, req_id))
 
 
@@ -112,7 +116,7 @@ def validate_hash(hash_value: str) -> bool:
     """Validate 8-character hex hash format"""
     if not hash_value:
         return False
-    return bool(re.match(r'^[a-fA-F0-9]{8}$', hash_value))
+    return bool(re.match(r"^[a-fA-F0-9]{8}$", hash_value))
 
 
 # =============================================================================
@@ -122,6 +126,7 @@ def validate_hash(hash_value: str) -> bool:
 # REQ-tv-d00010-D: Each dataclass implements from_dict()
 # REQ-tv-d00010-E: Each dataclass implements validate()
 # =============================================================================
+
 
 @dataclass
 class CommentPosition:
@@ -138,6 +143,7 @@ class CommentPosition:
 
     The hashWhenCreated allows detection of content drift.
     """
+
     type: str  # PositionType value as string for JSON compatibility
     hashWhenCreated: str  # 8-char REQ hash when comment was created
     lineNumber: Optional[int] = None
@@ -152,46 +158,46 @@ class CommentPosition:
             self.type = self.type.value
 
     @classmethod
-    def create_line(cls, hash_value: str, line_number: int,
-                    context: Optional[str] = None) -> 'CommentPosition':
+    def create_line(
+        cls, hash_value: str, line_number: int, context: Optional[str] = None
+    ) -> "CommentPosition":
         """Factory for line-anchored position"""
         return cls(
             type=PositionType.LINE.value,
             hashWhenCreated=hash_value,
             lineNumber=line_number,
-            fallbackContext=context
+            fallbackContext=context,
         )
 
     @classmethod
-    def create_block(cls, hash_value: str, start_line: int, end_line: int,
-                     context: Optional[str] = None) -> 'CommentPosition':
+    def create_block(
+        cls, hash_value: str, start_line: int, end_line: int, context: Optional[str] = None
+    ) -> "CommentPosition":
         """Factory for block-anchored position"""
         return cls(
             type=PositionType.BLOCK.value,
             hashWhenCreated=hash_value,
             lineRange=(start_line, end_line),
-            fallbackContext=context
+            fallbackContext=context,
         )
 
     @classmethod
-    def create_word(cls, hash_value: str, keyword: str, occurrence: int = 1,
-                    context: Optional[str] = None) -> 'CommentPosition':
+    def create_word(
+        cls, hash_value: str, keyword: str, occurrence: int = 1, context: Optional[str] = None
+    ) -> "CommentPosition":
         """Factory for word-anchored position"""
         return cls(
             type=PositionType.WORD.value,
             hashWhenCreated=hash_value,
             keyword=keyword,
             keywordOccurrence=occurrence,
-            fallbackContext=context
+            fallbackContext=context,
         )
 
     @classmethod
-    def create_general(cls, hash_value: str) -> 'CommentPosition':
+    def create_general(cls, hash_value: str) -> "CommentPosition":
         """Factory for general (whole REQ) position"""
-        return cls(
-            type=PositionType.GENERAL.value,
-            hashWhenCreated=hash_value
-        )
+        return cls(type=PositionType.GENERAL.value, hashWhenCreated=hash_value)
 
     def validate(self) -> Tuple[bool, List[str]]:
         """
@@ -236,40 +242,37 @@ class CommentPosition:
 
         REQ-tv-d00010-C: Returns JSON-serializable dict.
         """
-        result: Dict[str, Any] = {
-            'type': self.type,
-            'hashWhenCreated': self.hashWhenCreated
-        }
+        result: Dict[str, Any] = {"type": self.type, "hashWhenCreated": self.hashWhenCreated}
         if self.lineNumber is not None:
-            result['lineNumber'] = self.lineNumber
+            result["lineNumber"] = self.lineNumber
         if self.lineRange is not None:
-            result['lineRange'] = list(self.lineRange)  # Tuple to list for JSON
+            result["lineRange"] = list(self.lineRange)  # Tuple to list for JSON
         if self.keyword is not None:
-            result['keyword'] = self.keyword
+            result["keyword"] = self.keyword
         if self.keywordOccurrence is not None:
-            result['keywordOccurrence'] = self.keywordOccurrence
+            result["keywordOccurrence"] = self.keywordOccurrence
         if self.fallbackContext is not None:
-            result['fallbackContext'] = self.fallbackContext
+            result["fallbackContext"] = self.fallbackContext
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CommentPosition':
+    def from_dict(cls, data: Dict[str, Any]) -> "CommentPosition":
         """
         Create from dictionary (JSON deserialization).
 
         REQ-tv-d00010-D: Deserializes from dictionaries.
         """
-        line_range = data.get('lineRange')
+        line_range = data.get("lineRange")
         if line_range is not None:
             line_range = tuple(line_range)  # List to tuple
         return cls(
-            type=data['type'],
-            hashWhenCreated=data['hashWhenCreated'],
-            lineNumber=data.get('lineNumber'),
+            type=data["type"],
+            hashWhenCreated=data["hashWhenCreated"],
+            lineNumber=data.get("lineNumber"),
             lineRange=line_range,
-            keyword=data.get('keyword'),
-            keywordOccurrence=data.get('keywordOccurrence'),
-            fallbackContext=data.get('fallbackContext')
+            keyword=data.get("keyword"),
+            keywordOccurrence=data.get("keywordOccurrence"),
+            fallbackContext=data.get("fallbackContext"),
         )
 
 
@@ -281,25 +284,21 @@ class Comment:
     Comments are immutable once created - edits create new comments
     with references to the original.
     """
+
     id: str  # UUID
     author: str  # Username
     timestamp: str  # ISO 8601 datetime
     body: str  # Markdown content
 
     @classmethod
-    def create(cls, author: str, body: str) -> 'Comment':
+    def create(cls, author: str, body: str) -> "Comment":
         """
         Factory for creating new comment with auto-generated fields.
 
         REQ-tv-d00010-F: Auto-generates IDs and timestamps.
         REQ-tv-d00010-J: Uses UTC timestamps.
         """
-        return cls(
-            id=generate_uuid(),
-            author=author,
-            timestamp=now_iso(),
-            body=body
-        )
+        return cls(id=generate_uuid(), author=author, timestamp=now_iso(), body=body)
 
     def validate(self) -> Tuple[bool, List[str]]:
         """Validate comment fields"""
@@ -328,13 +327,10 @@ class Comment:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Comment':
+    def from_dict(cls, data: Dict[str, Any]) -> "Comment":
         """Create from dictionary"""
         return cls(
-            id=data['id'],
-            author=data['author'],
-            timestamp=data['timestamp'],
-            body=data['body']
+            id=data["id"], author=data["author"], timestamp=data["timestamp"], body=data["body"]
         )
 
 
@@ -348,6 +344,7 @@ class Thread:
 
     REQ-d00094-A: Thread model with packageId for package ownership.
     """
+
     threadId: str  # UUID
     reqId: str  # Requirement ID (e.g., "d00027")
     createdBy: str  # Username who started thread
@@ -361,9 +358,14 @@ class Thread:
     packageId: Optional[str] = None
 
     @classmethod
-    def create(cls, req_id: str, creator: str, position: CommentPosition,
-               initial_comment: Optional[str] = None,
-               package_id: Optional[str] = None) -> 'Thread':
+    def create(
+        cls,
+        req_id: str,
+        creator: str,
+        position: CommentPosition,
+        initial_comment: Optional[str] = None,
+        package_id: Optional[str] = None,
+    ) -> "Thread":
         """
         Factory for creating new thread.
 
@@ -383,7 +385,7 @@ class Thread:
             createdBy=creator,
             createdAt=now_iso(),
             position=position,
-            packageId=package_id
+            packageId=package_id,
         )
         if initial_comment:
             thread.add_comment(creator, initial_comment)
@@ -439,36 +441,36 @@ class Thread:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         result = {
-            'threadId': self.threadId,
-            'reqId': self.reqId,
-            'createdBy': self.createdBy,
-            'createdAt': self.createdAt,
-            'position': self.position.to_dict(),
-            'resolved': self.resolved,
-            'resolvedBy': self.resolvedBy,
-            'resolvedAt': self.resolvedAt,
-            'comments': [c.to_dict() for c in self.comments]
+            "threadId": self.threadId,
+            "reqId": self.reqId,
+            "createdBy": self.createdBy,
+            "createdAt": self.createdAt,
+            "position": self.position.to_dict(),
+            "resolved": self.resolved,
+            "resolvedBy": self.resolvedBy,
+            "resolvedAt": self.resolvedAt,
+            "comments": [c.to_dict() for c in self.comments],
         }
         # REQ-d00094-A: Include packageId if set
         if self.packageId is not None:
-            result['packageId'] = self.packageId
+            result["packageId"] = self.packageId
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Thread':
+    def from_dict(cls, data: Dict[str, Any]) -> "Thread":
         """Create from dictionary"""
         return cls(
-            threadId=data['threadId'],
-            reqId=data['reqId'],
-            createdBy=data['createdBy'],
-            createdAt=data['createdAt'],
-            position=CommentPosition.from_dict(data['position']),
-            resolved=data.get('resolved', False),
-            resolvedBy=data.get('resolvedBy'),
-            resolvedAt=data.get('resolvedAt'),
-            comments=[Comment.from_dict(c) for c in data.get('comments', [])],
+            threadId=data["threadId"],
+            reqId=data["reqId"],
+            createdBy=data["createdBy"],
+            createdAt=data["createdAt"],
+            position=CommentPosition.from_dict(data["position"]),
+            resolved=data.get("resolved", False),
+            resolvedBy=data.get("resolvedBy"),
+            resolvedAt=data.get("resolvedAt"),
+            comments=[Comment.from_dict(c) for c in data.get("comments", [])],
             # REQ-d00094-A: Package ownership (optional for backward compatibility)
-            packageId=data.get('packageId')
+            packageId=data.get("packageId"),
         )
 
 
@@ -480,6 +482,7 @@ class ReviewFlag:
     When a requirement is flagged, it signals that reviewers in the
     specified scope should examine it.
     """
+
     flaggedForReview: bool
     flaggedBy: str  # Username
     flaggedAt: str  # ISO 8601 datetime
@@ -487,33 +490,23 @@ class ReviewFlag:
     scope: List[str]  # List of roles/users who should review
 
     @classmethod
-    def create(cls, user: str, reason: str, scope: List[str]) -> 'ReviewFlag':
+    def create(cls, user: str, reason: str, scope: List[str]) -> "ReviewFlag":
         """Factory for creating new review flag"""
         return cls(
-            flaggedForReview=True,
-            flaggedBy=user,
-            flaggedAt=now_iso(),
-            reason=reason,
-            scope=scope
+            flaggedForReview=True, flaggedBy=user, flaggedAt=now_iso(), reason=reason, scope=scope
         )
 
     @classmethod
-    def cleared(cls) -> 'ReviewFlag':
+    def cleared(cls) -> "ReviewFlag":
         """Factory for an unflagged state"""
-        return cls(
-            flaggedForReview=False,
-            flaggedBy='',
-            flaggedAt='',
-            reason='',
-            scope=[]
-        )
+        return cls(flaggedForReview=False, flaggedBy="", flaggedAt="", reason="", scope=[])
 
     def clear(self) -> None:
         """Clear the review flag"""
         self.flaggedForReview = False
-        self.flaggedBy = ''
-        self.flaggedAt = ''
-        self.reason = ''
+        self.flaggedBy = ""
+        self.flaggedAt = ""
+        self.reason = ""
         self.scope = []
 
     def validate(self) -> Tuple[bool, List[str]]:
@@ -537,14 +530,14 @@ class ReviewFlag:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReviewFlag':
+    def from_dict(cls, data: Dict[str, Any]) -> "ReviewFlag":
         """Create from dictionary"""
         return cls(
-            flaggedForReview=data['flaggedForReview'],
-            flaggedBy=data.get('flaggedBy', ''),
-            flaggedAt=data.get('flaggedAt', ''),
-            reason=data.get('reason', ''),
-            scope=data.get('scope', [])
+            flaggedForReview=data["flaggedForReview"],
+            flaggedBy=data.get("flaggedBy", ""),
+            flaggedAt=data.get("flaggedAt", ""),
+            reason=data.get("reason", ""),
+            scope=data.get("scope", []),
         )
 
 
@@ -553,21 +546,16 @@ class Approval:
     """
     Single approval on a status change request.
     """
+
     user: str  # Username
     decision: str  # ApprovalDecision value
     at: str  # ISO 8601 datetime
     comment: Optional[str] = None
 
     @classmethod
-    def create(cls, user: str, decision: str,
-               comment: Optional[str] = None) -> 'Approval':
+    def create(cls, user: str, decision: str, comment: Optional[str] = None) -> "Approval":
         """Factory for creating new approval"""
-        return cls(
-            user=user,
-            decision=decision,
-            at=now_iso(),
-            comment=comment
-        )
+        return cls(user=user, decision=decision, at=now_iso(), comment=comment)
 
     def validate(self) -> Tuple[bool, List[str]]:
         """Validate approval"""
@@ -584,23 +572,16 @@ class Approval:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
-        result: Dict[str, Any] = {
-            'user': self.user,
-            'decision': self.decision,
-            'at': self.at
-        }
+        result: Dict[str, Any] = {"user": self.user, "decision": self.decision, "at": self.at}
         if self.comment is not None:
-            result['comment'] = self.comment
+            result["comment"] = self.comment
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Approval':
+    def from_dict(cls, data: Dict[str, Any]) -> "Approval":
         """Create from dictionary"""
         return cls(
-            user=data['user'],
-            decision=data['decision'],
-            at=data['at'],
-            comment=data.get('comment')
+            user=data["user"], decision=data["decision"], at=data["at"], comment=data.get("comment")
         )
 
 
@@ -617,6 +598,7 @@ class StatusRequest:
     - Active -> Deprecated (requires product_owner)
     - Draft -> Deprecated (requires product_owner)
     """
+
     requestId: str  # UUID
     reqId: str  # Requirement ID
     type: str  # Always "status_change"
@@ -630,9 +612,15 @@ class StatusRequest:
     state: str  # RequestState value
 
     @classmethod
-    def create(cls, req_id: str, from_status: str, to_status: str,
-               requested_by: str, justification: str,
-               required_approvers: Optional[List[str]] = None) -> 'StatusRequest':
+    def create(
+        cls,
+        req_id: str,
+        from_status: str,
+        to_status: str,
+        requested_by: str,
+        justification: str,
+        required_approvers: Optional[List[str]] = None,
+    ) -> "StatusRequest":
         """
         Factory for creating new status change request.
 
@@ -649,9 +637,7 @@ class StatusRequest:
         # Determine required approvers from defaults if not provided
         if required_approvers is None:
             transition_key = f"{from_status}->{to_status}"
-            required_approvers = DEFAULT_APPROVAL_RULES.get(
-                transition_key, ["product_owner"]
-            )
+            required_approvers = DEFAULT_APPROVAL_RULES.get(transition_key, ["product_owner"])
 
         return cls(
             requestId=generate_uuid(),
@@ -664,11 +650,10 @@ class StatusRequest:
             justification=justification,
             approvals=[],
             requiredApprovers=required_approvers,
-            state=RequestState.PENDING.value
+            state=RequestState.PENDING.value,
         )
 
-    def add_approval(self, user: str, decision: str,
-                     comment: Optional[str] = None) -> Approval:
+    def add_approval(self, user: str, decision: str, comment: Optional[str] = None) -> Approval:
         """Add an approval to the request"""
         approval = Approval.create(user, decision, comment)
         self.approvals.append(approval)
@@ -692,15 +677,11 @@ class StatusRequest:
 
         # Check if all required approvers have approved
         approved_users = {
-            a.user for a in self.approvals
-            if a.decision == ApprovalDecision.APPROVE.value
+            a.user for a in self.approvals if a.decision == ApprovalDecision.APPROVE.value
         }
 
         # Check if required approvers are satisfied
-        all_approved = all(
-            approver in approved_users
-            for approver in self.requiredApprovers
-        )
+        all_approved = all(approver in approved_users for approver in self.requiredApprovers)
 
         if all_approved:
             self.state = RequestState.APPROVED.value
@@ -746,34 +727,34 @@ class StatusRequest:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
-            'requestId': self.requestId,
-            'reqId': self.reqId,
-            'type': self.type,
-            'fromStatus': self.fromStatus,
-            'toStatus': self.toStatus,
-            'requestedBy': self.requestedBy,
-            'requestedAt': self.requestedAt,
-            'justification': self.justification,
-            'approvals': [a.to_dict() for a in self.approvals],
-            'requiredApprovers': self.requiredApprovers,
-            'state': self.state
+            "requestId": self.requestId,
+            "reqId": self.reqId,
+            "type": self.type,
+            "fromStatus": self.fromStatus,
+            "toStatus": self.toStatus,
+            "requestedBy": self.requestedBy,
+            "requestedAt": self.requestedAt,
+            "justification": self.justification,
+            "approvals": [a.to_dict() for a in self.approvals],
+            "requiredApprovers": self.requiredApprovers,
+            "state": self.state,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'StatusRequest':
+    def from_dict(cls, data: Dict[str, Any]) -> "StatusRequest":
         """Create from dictionary"""
         return cls(
-            requestId=data['requestId'],
-            reqId=data['reqId'],
-            type=data['type'],
-            fromStatus=data['fromStatus'],
-            toStatus=data['toStatus'],
-            requestedBy=data['requestedBy'],
-            requestedAt=data['requestedAt'],
-            justification=data['justification'],
-            approvals=[Approval.from_dict(a) for a in data.get('approvals', [])],
-            requiredApprovers=data.get('requiredApprovers', []),
-            state=data['state']
+            requestId=data["requestId"],
+            reqId=data["reqId"],
+            type=data["type"],
+            fromStatus=data["fromStatus"],
+            toStatus=data["toStatus"],
+            requestedBy=data["requestedBy"],
+            requestedAt=data["requestedAt"],
+            justification=data["justification"],
+            approvals=[Approval.from_dict(a) for a in data.get("approvals", [])],
+            requiredApprovers=data.get("requiredApprovers", []),
+            state=data["state"],
         )
 
 
@@ -784,6 +765,7 @@ class ReviewSession:
 
     Sessions help organize reviews and track progress over time.
     """
+
     sessionId: str  # UUID
     user: str  # Username
     name: str  # Session name (e.g., "Sprint 23 Review")
@@ -791,15 +773,14 @@ class ReviewSession:
     description: Optional[str] = None
 
     @classmethod
-    def create(cls, user: str, name: str,
-               description: Optional[str] = None) -> 'ReviewSession':
+    def create(cls, user: str, name: str, description: Optional[str] = None) -> "ReviewSession":
         """Factory for creating new session"""
         return cls(
             sessionId=generate_uuid(),
             user=user,
             name=name,
             createdAt=now_iso(),
-            description=description
+            description=description,
         )
 
     def validate(self) -> Tuple[bool, List[str]]:
@@ -820,24 +801,24 @@ class ReviewSession:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         result: Dict[str, Any] = {
-            'sessionId': self.sessionId,
-            'user': self.user,
-            'name': self.name,
-            'createdAt': self.createdAt
+            "sessionId": self.sessionId,
+            "user": self.user,
+            "name": self.name,
+            "createdAt": self.createdAt,
         }
         if self.description is not None:
-            result['description'] = self.description
+            result["description"] = self.description
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReviewSession':
+    def from_dict(cls, data: Dict[str, Any]) -> "ReviewSession":
         """Create from dictionary"""
         return cls(
-            sessionId=data['sessionId'],
-            user=data['user'],
-            name=data['name'],
-            createdAt=data['createdAt'],
-            description=data.get('description')
+            sessionId=data["sessionId"],
+            user=data["user"],
+            name=data["name"],
+            createdAt=data["createdAt"],
+            description=data.get("description"),
         )
 
 
@@ -846,17 +827,16 @@ class ReviewConfig:
     """
     System configuration for the review system.
     """
+
     approvalRules: Dict[str, List[str]]  # Status transition -> required approvers
     pushOnComment: bool = True  # Auto git push when adding comments
     autoFetchOnOpen: bool = True  # Auto git fetch when opening reviews
 
     @classmethod
-    def default(cls) -> 'ReviewConfig':
+    def default(cls) -> "ReviewConfig":
         """Factory for default configuration"""
         return cls(
-            approvalRules=DEFAULT_APPROVAL_RULES.copy(),
-            pushOnComment=True,
-            autoFetchOnOpen=True
+            approvalRules=DEFAULT_APPROVAL_RULES.copy(), pushOnComment=True, autoFetchOnOpen=True
         )
 
     def get_required_approvers(self, from_status: str, to_status: str) -> List[str]:
@@ -870,7 +850,7 @@ class ReviewConfig:
 
         # Validate approval rules
         for transition, approvers in self.approvalRules.items():
-            parts = transition.split('->')
+            parts = transition.split("->")
             if len(parts) != 2:
                 errors.append(f"Invalid transition format: {transition}")
                 continue
@@ -887,18 +867,18 @@ class ReviewConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
-            'approvalRules': self.approvalRules,
-            'pushOnComment': self.pushOnComment,
-            'autoFetchOnOpen': self.autoFetchOnOpen
+            "approvalRules": self.approvalRules,
+            "pushOnComment": self.pushOnComment,
+            "autoFetchOnOpen": self.autoFetchOnOpen,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReviewConfig':
+    def from_dict(cls, data: Dict[str, Any]) -> "ReviewConfig":
         """Create from dictionary"""
         return cls(
-            approvalRules=data.get('approvalRules', DEFAULT_APPROVAL_RULES.copy()),
-            pushOnComment=data.get('pushOnComment', True),
-            autoFetchOnOpen=data.get('autoFetchOnOpen', True)
+            approvalRules=data.get("approvalRules", DEFAULT_APPROVAL_RULES.copy()),
+            pushOnComment=data.get("pushOnComment", True),
+            autoFetchOnOpen=data.get("autoFetchOnOpen", True),
         )
 
 
@@ -920,6 +900,7 @@ class ReviewPackage:
     REQ-d00097: Review Package Archival
     REQ-d00098: Review Git Audit Trail
     """
+
     packageId: str  # UUID
     name: str
     description: str
@@ -941,9 +922,14 @@ class ReviewPackage:
     isDefault: bool = False
 
     @classmethod
-    def create(cls, name: str, description: str, created_by: str,
-               branch_name: Optional[str] = None,
-               commit_hash: Optional[str] = None) -> 'ReviewPackage':
+    def create(
+        cls,
+        name: str,
+        description: str,
+        created_by: str,
+        branch_name: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+    ) -> "ReviewPackage":
         """
         Factory for creating new package.
 
@@ -967,11 +953,11 @@ class ReviewPackage:
             branchName=branch_name,
             creationCommitHash=commit_hash,
             lastReviewedCommitHash=commit_hash,
-            isDefault=False
+            isDefault=False,
         )
 
     @classmethod
-    def create_default(cls) -> 'ReviewPackage':
+    def create_default(cls) -> "ReviewPackage":
         """
         Create the default package.
 
@@ -979,10 +965,11 @@ class ReviewPackage:
         This method is kept for backward compatibility during migration.
         """
         import warnings
+
         warnings.warn(
             "create_default() is deprecated. Packages should be explicitly created.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         return cls(
             packageId="default",
@@ -991,7 +978,7 @@ class ReviewPackage:
             reqIds=[],
             createdBy="system",
             createdAt=now_iso(),
-            isDefault=True
+            isDefault=True,
         )
 
     def update_last_reviewed_commit(self, commit_hash: str) -> None:
@@ -1042,7 +1029,11 @@ class ReviewPackage:
                 errors.append("archivedBy is required when archivedAt is set")
             if not self.archiveReason:
                 errors.append("archiveReason is required when archivedAt is set")
-            elif self.archiveReason not in (ARCHIVE_REASON_RESOLVED, ARCHIVE_REASON_DELETED, ARCHIVE_REASON_MANUAL):
+            elif self.archiveReason not in (
+                ARCHIVE_REASON_RESOLVED,
+                ARCHIVE_REASON_DELETED,
+                ARCHIVE_REASON_MANUAL,
+            ):
                 errors.append(f"Invalid archiveReason: {self.archiveReason}")
 
         return len(errors) == 0, errors
@@ -1050,54 +1041,54 @@ class ReviewPackage:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         result: Dict[str, Any] = {
-            'packageId': self.packageId,
-            'name': self.name,
-            'description': self.description,
-            'reqIds': self.reqIds.copy(),
-            'createdBy': self.createdBy,
-            'createdAt': self.createdAt,
+            "packageId": self.packageId,
+            "name": self.name,
+            "description": self.description,
+            "reqIds": self.reqIds.copy(),
+            "createdBy": self.createdBy,
+            "createdAt": self.createdAt,
         }
 
         # REQ-d00098: Git audit trail (only include if set)
         if self.branchName is not None:
-            result['branchName'] = self.branchName
+            result["branchName"] = self.branchName
         if self.creationCommitHash is not None:
-            result['creationCommitHash'] = self.creationCommitHash
+            result["creationCommitHash"] = self.creationCommitHash
         if self.lastReviewedCommitHash is not None:
-            result['lastReviewedCommitHash'] = self.lastReviewedCommitHash
+            result["lastReviewedCommitHash"] = self.lastReviewedCommitHash
 
         # REQ-d00097: Archive metadata (only include if archived)
         if self.archivedAt is not None:
-            result['archivedAt'] = self.archivedAt
-            result['archivedBy'] = self.archivedBy
-            result['archiveReason'] = self.archiveReason
+            result["archivedAt"] = self.archivedAt
+            result["archivedBy"] = self.archivedBy
+            result["archiveReason"] = self.archiveReason
 
         # Deprecated field - still included for backward compatibility
         if self.isDefault:
-            result['isDefault'] = self.isDefault
+            result["isDefault"] = self.isDefault
 
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReviewPackage':
+    def from_dict(cls, data: Dict[str, Any]) -> "ReviewPackage":
         """Create from dictionary"""
         return cls(
-            packageId=data.get('packageId', ''),
-            name=data.get('name', ''),
-            description=data.get('description', ''),
-            reqIds=data.get('reqIds', []).copy(),
-            createdBy=data.get('createdBy', ''),
-            createdAt=data.get('createdAt', ''),
+            packageId=data.get("packageId", ""),
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            reqIds=data.get("reqIds", []).copy(),
+            createdBy=data.get("createdBy", ""),
+            createdAt=data.get("createdAt", ""),
             # REQ-d00098: Git audit trail
-            branchName=data.get('branchName'),
-            creationCommitHash=data.get('creationCommitHash'),
-            lastReviewedCommitHash=data.get('lastReviewedCommitHash'),
+            branchName=data.get("branchName"),
+            creationCommitHash=data.get("creationCommitHash"),
+            lastReviewedCommitHash=data.get("lastReviewedCommitHash"),
             # REQ-d00097: Archive metadata
-            archivedAt=data.get('archivedAt'),
-            archivedBy=data.get('archivedBy'),
-            archiveReason=data.get('archiveReason'),
+            archivedAt=data.get("archivedAt"),
+            archivedBy=data.get("archivedBy"),
+            archiveReason=data.get("archiveReason"),
             # Deprecated field
-            isDefault=data.get('isDefault', False)
+            isDefault=data.get("isDefault", False),
         )
 
 
@@ -1106,9 +1097,11 @@ class ReviewPackage:
 # REQ-tv-d00010-G: Container classes with version tracking
 # =============================================================================
 
+
 @dataclass
 class ThreadsFile:
     """Container for threads.json file contents"""
+
     reqId: str
     threads: List[Thread]
     version: str = "1.0"
@@ -1116,24 +1109,25 @@ class ThreadsFile:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
-            'version': self.version,
-            'reqId': self.reqId,
-            'threads': [t.to_dict() for t in self.threads]
+            "version": self.version,
+            "reqId": self.reqId,
+            "threads": [t.to_dict() for t in self.threads],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ThreadsFile':
+    def from_dict(cls, data: Dict[str, Any]) -> "ThreadsFile":
         """Create from dictionary"""
         return cls(
-            version=data.get('version', '1.0'),
-            reqId=data['reqId'],
-            threads=[Thread.from_dict(t) for t in data.get('threads', [])]
+            version=data.get("version", "1.0"),
+            reqId=data["reqId"],
+            threads=[Thread.from_dict(t) for t in data.get("threads", [])],
         )
 
 
 @dataclass
 class StatusFile:
     """Container for status.json file contents"""
+
     reqId: str
     requests: List[StatusRequest]
     version: str = "1.0"
@@ -1141,24 +1135,25 @@ class StatusFile:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
-            'version': self.version,
-            'reqId': self.reqId,
-            'requests': [r.to_dict() for r in self.requests]
+            "version": self.version,
+            "reqId": self.reqId,
+            "requests": [r.to_dict() for r in self.requests],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'StatusFile':
+    def from_dict(cls, data: Dict[str, Any]) -> "StatusFile":
         """Create from dictionary"""
         return cls(
-            version=data.get('version', '1.0'),
-            reqId=data['reqId'],
-            requests=[StatusRequest.from_dict(r) for r in data.get('requests', [])]
+            version=data.get("version", "1.0"),
+            reqId=data["reqId"],
+            requests=[StatusRequest.from_dict(r) for r in data.get("requests", [])],
         )
 
 
 @dataclass
 class PackagesFile:
     """Container for packages.json file contents"""
+
     packages: List[ReviewPackage]
     activePackageId: Optional[str] = None
     version: str = "1.0"
@@ -1166,19 +1161,19 @@ class PackagesFile:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary"""
         return {
-            'version': self.version,
-            'packages': [p.to_dict() for p in self.packages],
-            'activePackageId': self.activePackageId
+            "version": self.version,
+            "packages": [p.to_dict() for p in self.packages],
+            "activePackageId": self.activePackageId,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PackagesFile':
+    def from_dict(cls, data: Dict[str, Any]) -> "PackagesFile":
         """Create from dictionary"""
-        packages = [ReviewPackage.from_dict(p) for p in data.get('packages', [])]
+        packages = [ReviewPackage.from_dict(p) for p in data.get("packages", [])]
         return cls(
-            version=data.get('version', '1.0'),
+            version=data.get("version", "1.0"),
             packages=packages,
-            activePackageId=data.get('activePackageId')
+            activePackageId=data.get("activePackageId"),
         )
 
     def get_default(self) -> Optional[ReviewPackage]:

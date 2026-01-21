@@ -5,7 +5,6 @@ Content rules are markdown files that provide semantic validation guidance
 for requirements authoring. They can include YAML frontmatter for metadata.
 """
 
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 

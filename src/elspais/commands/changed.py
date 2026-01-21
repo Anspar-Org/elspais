@@ -11,13 +11,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, load_config
 from elspais.core.git import (
-    GitChangeInfo,
-    MovedRequirement,
     detect_moved_requirements,
     filter_spec_files,
     get_current_req_locations,
@@ -76,9 +74,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Detect moved requirements
     current_locations = get_current_req_locations(repo_root, spec_dir)
-    moved = detect_moved_requirements(
-        changes.committed_req_locations, current_locations
-    )
+    moved = detect_moved_requirements(changes.committed_req_locations, current_locations)
 
     # Build result
     result = {

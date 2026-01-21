@@ -9,7 +9,7 @@ a traversable hierarchy based on implements relationships.
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     from elspais.core.models import Requirement
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 @dataclass
 class RequirementNode:
     """Represents a requirement with its metadata and hierarchy info."""
+
     req_id: str
     title: str
     body: str
@@ -76,10 +77,10 @@ def get_all_requirements(
     Returns:
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
     """
-    from elspais.config.loader import load_config, find_config_file, get_spec_directories
+    from elspais.commands.validate import load_requirements_from_repo
+    from elspais.config.loader import find_config_file, get_spec_directories, load_config
     from elspais.core.parser import RequirementParser
     from elspais.core.patterns import PatternConfig
-    from elspais.commands.validate import load_requirements_from_repo
 
     # Find and load config
     if config_path is None:
@@ -140,7 +141,7 @@ def build_hierarchy(requirements: Dict[str, RequirementNode]) -> Dict[str, Requi
     for req_id, node in requirements.items():
         for parent_id in node.implements:
             # Normalize parent ID format
-            parent_key = parent_id if parent_id.startswith('REQ-') else f"REQ-{parent_id}"
+            parent_key = parent_id if parent_id.startswith("REQ-") else f"REQ-{parent_id}"
             if parent_key in requirements:
                 requirements[parent_key].children.append(req_id)
 
@@ -155,7 +156,7 @@ def traverse_top_down(
     requirements: Dict[str, RequirementNode],
     start_req: str,
     max_depth: Optional[int] = None,
-    callback: Optional[Callable[[RequirementNode, int], None]] = None
+    callback: Optional[Callable[[RequirementNode, int], None]] = None,
 ) -> List[str]:
     """
     Traverse hierarchy from start_req downward using BFS.
@@ -214,8 +215,8 @@ def normalize_req_id(req_id: str, validator: Optional["PatternValidator"] = None
     Returns:
         Normalized ID in canonical format from config
     """
-    from elspais.config.loader import load_config, find_config_file
-    from elspais.core.patterns import PatternValidator, PatternConfig
+    from elspais.config.loader import find_config_file, load_config
+    from elspais.core.patterns import PatternConfig, PatternValidator
 
     # Create validator if not provided
     if validator is None:

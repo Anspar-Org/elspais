@@ -13,6 +13,7 @@ from dataclasses import dataclass
 @dataclass
 class FormatAnalysis:
     """Result of format detection analysis."""
+
     is_new_format: bool
     has_assertions_section: bool
     has_labeled_assertions: bool
@@ -46,36 +47,28 @@ def detect_format(body: str, rationale: str = "") -> FormatAnalysis:
     full_text = f"{body}\n{rationale}".strip()
 
     # Check for ## Assertions section
-    has_assertions_section = bool(
-        re.search(r'^##\s+Assertions\s*$', full_text, re.MULTILINE)
-    )
+    has_assertions_section = bool(re.search(r"^##\s+Assertions\s*$", full_text, re.MULTILINE))
 
     # Check for labeled assertions (A., B., C., etc. followed by SHALL somewhere in the line)
     labeled_assertions = re.findall(
-        r'^[A-Z]\.\s+.*\bSHALL\b',
-        full_text,
-        re.MULTILINE | re.IGNORECASE
+        r"^[A-Z]\.\s+.*\bSHALL\b", full_text, re.MULTILINE | re.IGNORECASE
     )
     has_labeled_assertions = len(labeled_assertions) >= 1
     assertion_count = len(labeled_assertions)
 
     # Check for Acceptance Criteria section
-    has_acceptance_criteria = bool(re.search(
-        r'\*?\*?Acceptance\s+Criteria\*?\*?\s*:',
-        full_text,
-        re.IGNORECASE
-    ))
+    has_acceptance_criteria = bool(
+        re.search(r"\*?\*?Acceptance\s+Criteria\*?\*?\s*:", full_text, re.IGNORECASE)
+    )
 
     # Check for SHALL language usage anywhere
-    shall_count = len(re.findall(r'\bSHALL\b', full_text, re.IGNORECASE))
+    shall_count = len(re.findall(r"\bSHALL\b", full_text, re.IGNORECASE))
     uses_shall_language = shall_count >= 1
 
     # Determine if new format
     # New format: has Assertions section with labeled assertions, no Acceptance Criteria
     is_new_format = (
-        has_assertions_section and
-        has_labeled_assertions and
-        not has_acceptance_criteria
+        has_assertions_section and has_labeled_assertions and not has_acceptance_criteria
     )
 
     # Calculate confidence score
@@ -100,7 +93,7 @@ def detect_format(body: str, rationale: str = "") -> FormatAnalysis:
         has_acceptance_criteria=has_acceptance_criteria,
         uses_shall_language=uses_shall_language,
         assertion_count=assertion_count,
-        confidence=confidence
+        confidence=confidence,
     )
 
 
