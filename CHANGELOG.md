@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-01-21
+
+### Fixed
+
+- Fixed `elspais trace --view` crash caused by missing `is_cycle` and
+  `cycle_path` properties in `TraceViewRequirement`
+
+### Added
+
+- Comprehensive git hooks (pre-commit, pre-push) with branch protection,
+  linting, and secret detection
+
+### Changed
+
+- Applied ruff and black formatting fixes across the codebase
+
 ## [0.11.1] - 2026-01-15
 
 ### Changed
