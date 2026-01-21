@@ -1,5 +1,8 @@
 # Changelog
 
+<!-- markdownlint-disable MD022 MD032 -->
+<!-- Compact changelog format: no blank lines around headings/lists -->
+
 All notable changes to elspais will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

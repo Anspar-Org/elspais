@@ -1,0 +1,9 @@
+{
+  // Line length: Disabled because modern viewers wrap dynamically.
+  // Hard breaks at 80 chars create awkward formatting in rendered output.
+  "MD013": false,
+
+  // Duplicate headings: Disabled because changelogs naturally repeat
+  // section headings (### Added, ### Fixed, ### Changed) per version.
+  "MD024": false
+}
