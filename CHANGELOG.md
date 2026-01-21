@@ -14,13 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed `elspais trace --view` crash caused by missing `is_cycle` and
-  `cycle_path` properties in `TraceViewRequirement`
+- Fixed `elspais trace --view` crash caused by missing `is_cycle` and `cycle_path` properties in `TraceViewRequirement`
 
 ### Added
 
-- Comprehensive git hooks (pre-commit, pre-push) with branch protection,
-  linting, and secret detection
+- Comprehensive git hooks (pre-commit, pre-push) with branch protection, linting, and secret detection
 
 ### Changed
 
