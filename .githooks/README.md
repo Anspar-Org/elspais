@@ -13,6 +13,23 @@ git config core.hooksPath .githooks
 
 ## Hooks
 
+### commit-msg
+
+Validates commit message format:
+
+| Check | Description | Required Tool |
+| --- | --- | --- |
+| Ticket number | Message must start with `[TICKET-NUMBER]` | - |
+
+**Format**: `[XXX-NNN] description` where XXX is 2-10 uppercase letters.
+
+**Examples**:
+
+- `[CUR-514] fix: Add validation for user input`
+- `[PROJ-123] feat: Implement new feature`
+
+**Skipped for**: Merge commits, revert commits, fixup/squash commits.
+
 ### pre-commit
 
 Runs before each commit to validate staged changes:

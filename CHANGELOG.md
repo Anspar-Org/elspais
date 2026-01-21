@@ -1,11 +1,30 @@
 # Changelog
 
+<!-- markdownlint-disable MD022 MD032 -->
+<!-- Compact changelog format: no blank lines around headings/lists -->
+
 All notable changes to elspais will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.11.2] - 2026-01-21
+
+### Fixed
+
+- Fixed `elspais trace --view` crash caused by missing `is_cycle` and `cycle_path` properties in `TraceViewRequirement`
+
+### Added
+
+- Comprehensive git hooks (pre-commit, pre-push, commit-msg) with branch protection, linting, secret detection, and commit message format validation
+- Commit message format validation requiring `[TICKET-NUMBER]` prefix (e.g., `[CUR-514]`)
+- Markdownlint configuration (`.markdownlint.json`) disabling line length and duplicate heading rules
+
+### Changed
+
+- Applied ruff and black formatting fixes across the codebase
 
 ## [0.11.1] - 2026-01-15
 
