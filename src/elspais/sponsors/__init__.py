@@ -69,8 +69,6 @@ def parse_yaml(content: str) -> Dict[str, Any]:
     current_key: Optional[str] = None
     current_list: Optional[List[Dict]] = None
     current_dict: Optional[Dict[str, Any]] = None
-    list_key: Optional[str] = None
-    indent_stack: List[tuple] = []  # (indent_level, container)
 
     lines = content.split("\n")
 

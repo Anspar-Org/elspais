@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from elspais.config.loader import find_config_file, load_config
-from elspais.core.content_rules import load_content_rules, load_content_rule
+from elspais.core.content_rules import load_content_rule, load_content_rules
 
 
 def run(args: argparse.Namespace) -> int:
@@ -56,7 +56,11 @@ def cmd_list(args: argparse.Namespace) -> int:
     print("Content Rules:")
     print("-" * 60)
     for rule in rules:
-        rel_path = rule.file_path.relative_to(base_path) if base_path in rule.file_path.parents else rule.file_path
+        rel_path = (
+            rule.file_path.relative_to(base_path)
+            if base_path in rule.file_path.parents
+            else rule.file_path
+        )
         print(f"  {rel_path}")
         print(f"    Title: {rule.title}")
         print(f"    Type: {rule.type}")

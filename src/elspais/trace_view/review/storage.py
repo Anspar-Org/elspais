@@ -22,24 +22,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .models import (
+    Approval,
+    Comment,
+    PackagesFile,
     ReviewConfig,
     ReviewFlag,
-    Thread,
-    Comment,
-    ThreadsFile,
+    ReviewPackage,
     StatusFile,
     StatusRequest,
-    Approval,
-    ReviewPackage,
-    PackagesFile,
+    Thread,
+    ThreadsFile,
     parse_iso_datetime,
 )
-
 
 # =============================================================================
 # Helper Functions
 # REQ-tv-d00011-A: Atomic write operations
 # =============================================================================
+
 
 def atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
     """
@@ -56,13 +56,9 @@ def atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write to temp file in same directory (for atomic rename)
-    fd, temp_path = tempfile.mkstemp(
-        suffix='.json',
-        prefix='.tmp_',
-        dir=path.parent
-    )
+    fd, temp_path = tempfile.mkstemp(suffix=".json", prefix=".tmp_", dir=path.parent)
     try:
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, "w") as f:
             json.dump(data, f, indent=2)
         # Atomic rename
         os.rename(temp_path, path)
@@ -87,7 +83,7 @@ def read_json(path: Path) -> Dict[str, Any]:
         FileNotFoundError: If file doesn't exist
         json.JSONDecodeError: If file contains invalid JSON
     """
-    with open(path, 'r') as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -96,6 +92,7 @@ def read_json(path: Path) -> Dict[str, Any]:
 # REQ-tv-d00011-H: Storage paths convention
 # REQ-tv-d00011-I: Requirement ID normalization
 # =============================================================================
+
 
 def normalize_req_id(req_id: str) -> str:
     """
@@ -109,7 +106,7 @@ def normalize_req_id(req_id: str) -> str:
     Returns:
         Normalized requirement ID safe for file paths
     """
-    return re.sub(r'[:/]', '_', req_id)
+    return re.sub(r"[:/]", "_", req_id)
 
 
 def get_reviews_root(repo_root: Path) -> Path:
@@ -124,7 +121,7 @@ def get_reviews_root(repo_root: Path) -> Path:
     Returns:
         Path to .reviews directory
     """
-    return repo_root / '.reviews'
+    return repo_root / ".reviews"
 
 
 def get_req_dir(repo_root: Path, req_id: str) -> Path:
@@ -141,7 +138,7 @@ def get_req_dir(repo_root: Path, req_id: str) -> Path:
         Path to requirement's review directory
     """
     normalized = normalize_req_id(req_id)
-    return get_reviews_root(repo_root) / 'reqs' / normalized
+    return get_reviews_root(repo_root) / "reqs" / normalized
 
 
 def get_threads_path(repo_root: Path, req_id: str) -> Path:
@@ -157,7 +154,7 @@ def get_threads_path(repo_root: Path, req_id: str) -> Path:
     Returns:
         Path to threads.json
     """
-    return get_req_dir(repo_root, req_id) / 'threads.json'
+    return get_req_dir(repo_root, req_id) / "threads.json"
 
 
 def get_status_path(repo_root: Path, req_id: str) -> Path:
@@ -173,7 +170,7 @@ def get_status_path(repo_root: Path, req_id: str) -> Path:
     Returns:
         Path to status.json
     """
-    return get_req_dir(repo_root, req_id) / 'status.json'
+    return get_req_dir(repo_root, req_id) / "status.json"
 
 
 def get_review_flag_path(repo_root: Path, req_id: str) -> Path:
@@ -189,7 +186,7 @@ def get_review_flag_path(repo_root: Path, req_id: str) -> Path:
     Returns:
         Path to flag.json
     """
-    return get_req_dir(repo_root, req_id) / 'flag.json'
+    return get_req_dir(repo_root, req_id) / "flag.json"
 
 
 def get_config_path(repo_root: Path) -> Path:
@@ -204,7 +201,7 @@ def get_config_path(repo_root: Path) -> Path:
     Returns:
         Path to config.json
     """
-    return get_reviews_root(repo_root) / 'config.json'
+    return get_reviews_root(repo_root) / "config.json"
 
 
 def get_packages_path(repo_root: Path) -> Path:
@@ -219,13 +216,14 @@ def get_packages_path(repo_root: Path) -> Path:
     Returns:
         Path to packages.json
     """
-    return get_reviews_root(repo_root) / 'packages.json'
+    return get_reviews_root(repo_root) / "packages.json"
 
 
 # =============================================================================
 # V2 Path Functions (Package-Centric Storage)
 # REQ-d00096: Review Storage Architecture
 # =============================================================================
+
 
 def get_index_path(repo_root: Path) -> Path:
     """
@@ -239,7 +237,7 @@ def get_index_path(repo_root: Path) -> Path:
     Returns:
         Path to index.json
     """
-    return get_reviews_root(repo_root) / 'index.json'
+    return get_reviews_root(repo_root) / "index.json"
 
 
 def get_package_dir(repo_root: Path, package_id: str) -> Path:
@@ -255,7 +253,7 @@ def get_package_dir(repo_root: Path, package_id: str) -> Path:
     Returns:
         Path to package directory
     """
-    return get_reviews_root(repo_root) / 'packages' / package_id
+    return get_reviews_root(repo_root) / "packages" / package_id
 
 
 def get_package_metadata_path(repo_root: Path, package_id: str) -> Path:
@@ -271,7 +269,7 @@ def get_package_metadata_path(repo_root: Path, package_id: str) -> Path:
     Returns:
         Path to package.json
     """
-    return get_package_dir(repo_root, package_id) / 'package.json'
+    return get_package_dir(repo_root, package_id) / "package.json"
 
 
 def get_package_threads_path(repo_root: Path, package_id: str, req_id: str) -> Path:
@@ -289,7 +287,7 @@ def get_package_threads_path(repo_root: Path, package_id: str, req_id: str) -> P
         Path to threads.json
     """
     normalized = normalize_req_id(req_id)
-    return get_package_dir(repo_root, package_id) / 'reqs' / normalized / 'threads.json'
+    return get_package_dir(repo_root, package_id) / "reqs" / normalized / "threads.json"
 
 
 def get_archive_dir(repo_root: Path) -> Path:
@@ -304,7 +302,7 @@ def get_archive_dir(repo_root: Path) -> Path:
     Returns:
         Path to archive directory
     """
-    return get_reviews_root(repo_root) / 'archive'
+    return get_reviews_root(repo_root) / "archive"
 
 
 def get_archived_package_dir(repo_root: Path, package_id: str) -> Path:
@@ -336,14 +334,10 @@ def get_archived_package_metadata_path(repo_root: Path, package_id: str) -> Path
     Returns:
         Path to archived package.json
     """
-    return get_archived_package_dir(repo_root, package_id) / 'package.json'
+    return get_archived_package_dir(repo_root, package_id) / "package.json"
 
 
-def get_archived_package_threads_path(
-    repo_root: Path,
-    package_id: str,
-    req_id: str
-) -> Path:
+def get_archived_package_threads_path(repo_root: Path, package_id: str, req_id: str) -> Path:
     """
     Get path to threads.json file for a requirement within an archived package.
 
@@ -358,13 +352,14 @@ def get_archived_package_threads_path(
         Path to archived threads.json
     """
     normalized = normalize_req_id(req_id)
-    return get_archived_package_dir(repo_root, package_id) / 'reqs' / normalized / 'threads.json'
+    return get_archived_package_dir(repo_root, package_id) / "reqs" / normalized / "threads.json"
 
 
 # =============================================================================
 # Config Operations
 # REQ-tv-d00011-F: Config storage operations
 # =============================================================================
+
 
 def load_config(repo_root: Path) -> ReviewConfig:
     """
@@ -403,6 +398,7 @@ def save_config(repo_root: Path, config: ReviewConfig) -> None:
 # Review Flag Operations
 # REQ-tv-d00011-D: Review flag storage operations
 # =============================================================================
+
 
 def load_review_flag(repo_root: Path, req_id: str) -> ReviewFlag:
     """
@@ -443,6 +439,7 @@ def save_review_flag(repo_root: Path, req_id: str, flag: ReviewFlag) -> None:
 # Thread Operations
 # REQ-tv-d00011-B: Thread storage operations
 # =============================================================================
+
 
 def load_threads(repo_root: Path, req_id: str) -> ThreadsFile:
     """
@@ -501,11 +498,7 @@ def add_thread(repo_root: Path, req_id: str, thread: Thread) -> Thread:
 
 
 def add_comment_to_thread(
-    repo_root: Path,
-    req_id: str,
-    thread_id: str,
-    author: str,
-    body: str
+    repo_root: Path, req_id: str, thread_id: str, author: str, body: str
 ) -> Comment:
     """
     Add a comment to an existing thread.
@@ -542,12 +535,7 @@ def add_comment_to_thread(
     return comment
 
 
-def resolve_thread(
-    repo_root: Path,
-    req_id: str,
-    thread_id: str,
-    user: str
-) -> bool:
+def resolve_thread(repo_root: Path, req_id: str, thread_id: str, user: str) -> bool:
     """
     Mark a thread as resolved.
 
@@ -603,6 +591,7 @@ def unresolve_thread(repo_root: Path, req_id: str, thread_id: str) -> bool:
 # REQ-tv-d00011-C: Status request storage operations
 # =============================================================================
 
+
 def load_status_requests(repo_root: Path, req_id: str) -> StatusFile:
     """
     Load status requests for a requirement.
@@ -639,11 +628,7 @@ def save_status_requests(repo_root: Path, req_id: str, status_file: StatusFile) 
     atomic_write_json(status_path, status_file.to_dict())
 
 
-def create_status_request(
-    repo_root: Path,
-    req_id: str,
-    request: StatusRequest
-) -> StatusRequest:
+def create_status_request(repo_root: Path, req_id: str, request: StatusRequest) -> StatusRequest:
     """
     Create a new status change request.
 
@@ -669,7 +654,7 @@ def add_approval(
     request_id: str,
     user: str,
     decision: str,
-    comment: Optional[str] = None
+    comment: Optional[str] = None,
 ) -> Approval:
     """
     Add an approval to a status request.
@@ -739,6 +724,7 @@ def mark_request_applied(repo_root: Path, req_id: str, request_id: str) -> bool:
 # Package Operations
 # REQ-tv-d00011-E: Package storage operations
 # =============================================================================
+
 
 def load_packages(repo_root: Path) -> PackagesFile:
     """
@@ -907,6 +893,7 @@ def remove_req_from_package(repo_root: Path, package_id: str, req_id: str) -> bo
 # REQ-tv-d00011-J: Deduplication and timestamp-based conflict resolution
 # =============================================================================
 
+
 def merge_threads(local: ThreadsFile, remote: ThreadsFile) -> ThreadsFile:
     """
     Merge thread files from local and remote.
@@ -985,7 +972,7 @@ def _merge_single_thread(local: Thread, remote: Thread) -> Thread:
         resolved=resolved,
         resolvedBy=resolved_by,
         resolvedAt=resolved_at,
-        comments=merged_comments
+        comments=merged_comments,
     )
 
 
@@ -1073,7 +1060,7 @@ def _merge_single_request(local: StatusRequest, remote: StatusRequest) -> Status
         justification=local.justification,
         approvals=merged_approvals,
         requiredApprovers=local.requiredApprovers,
-        state=local.state  # Will be recalculated
+        state=local.state,  # Will be recalculated
     )
 
     # Recalculate state based on merged approvals
@@ -1125,7 +1112,7 @@ def merge_review_flags(local: ReviewFlag, remote: ReviewFlag) -> ReviewFlag:
             flaggedBy=remote.flaggedBy,
             flaggedAt=remote.flaggedAt,
             reason=remote.reason,
-            scope=merged_scope
+            scope=merged_scope,
         )
     else:
         # Local is newer
@@ -1134,7 +1121,7 @@ def merge_review_flags(local: ReviewFlag, remote: ReviewFlag) -> ReviewFlag:
             flaggedBy=local.flaggedBy,
             flaggedAt=local.flaggedAt,
             reason=local.reason,
-            scope=merged_scope
+            scope=merged_scope,
         )
 
 
@@ -1143,12 +1130,8 @@ def merge_review_flags(local: ReviewFlag, remote: ReviewFlag) -> ReviewFlag:
 # REQ-d00097: Review Package Archival
 # =============================================================================
 
-def archive_package(
-    repo_root: Path,
-    package_id: str,
-    reason: str,
-    user: str
-) -> bool:
+
+def archive_package(repo_root: Path, package_id: str, reason: str, user: str) -> bool:
     """
     Archive a package by moving it to the archive directory.
 
@@ -1169,9 +1152,9 @@ def archive_package(
         ValueError: If reason is not valid
     """
     from .models import (
-        ARCHIVE_REASON_RESOLVED,
         ARCHIVE_REASON_DELETED,
         ARCHIVE_REASON_MANUAL,
+        ARCHIVE_REASON_RESOLVED,
     )
 
     valid_reasons = {ARCHIVE_REASON_RESOLVED, ARCHIVE_REASON_DELETED, ARCHIVE_REASON_MANUAL}
@@ -1239,7 +1222,7 @@ def list_archived_packages(repo_root: Path) -> List[ReviewPackage]:
     packages = []
     for pkg_dir in archive_root.iterdir():
         if pkg_dir.is_dir():
-            metadata_path = pkg_dir / 'package.json'
+            metadata_path = pkg_dir / "package.json"
             if metadata_path.exists():
                 try:
                     data = read_json(metadata_path)
@@ -1250,10 +1233,7 @@ def list_archived_packages(repo_root: Path) -> List[ReviewPackage]:
                     continue
 
     # Sort by archive date (most recent first)
-    packages.sort(
-        key=lambda p: p.archivedAt or '',
-        reverse=True
-    )
+    packages.sort(key=lambda p: p.archivedAt or "", reverse=True)
 
     return packages
 
@@ -1282,11 +1262,7 @@ def get_archived_package(repo_root: Path, package_id: str) -> Optional[ReviewPac
         return None
 
 
-def load_archived_threads(
-    repo_root: Path,
-    package_id: str,
-    req_id: str
-) -> Optional[ThreadsFile]:
+def load_archived_threads(repo_root: Path, package_id: str, req_id: str) -> Optional[ThreadsFile]:
     """
     Load threads for a requirement from an archived package.
 

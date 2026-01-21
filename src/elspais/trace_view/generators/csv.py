@@ -90,14 +90,10 @@ def generate_planning_csv(
     writer = csv.writer(output)
 
     # Header
-    writer.writerow(
-        ["REQ ID", "Title", "Level", "Status", "Impl Status", "Coverage", "Code Refs"]
-    )
+    writer.writerow(["REQ ID", "Title", "Level", "Status", "Impl Status", "Coverage", "Code Refs"])
 
     # Filter to actionable requirements (Active or Draft status)
-    actionable_reqs = [
-        req for req in requirements.values() if req.status in ["Active", "Draft"]
-    ]
+    actionable_reqs = [req for req in requirements.values() if req.status in ["Active", "Draft"]]
 
     # Sort by ID
     actionable_reqs.sort(key=lambda r: r.id)

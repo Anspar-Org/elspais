@@ -14,23 +14,31 @@ JSON_SCHEMA = {
     "properties": {
         "rationale": {
             "type": "string",
-            "description": "Non-normative context explaining why this requirement exists. No SHALL/MUST language."
+            "description": (
+                "Non-normative context explaining why this requirement exists. "
+                "No SHALL/MUST language."
+            ),
         },
         "assertions": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "List of assertions, each starting with 'The system SHALL...' or similar prescriptive language."
-        }
+            "description": (
+                "List of assertions, each starting with 'The system SHALL...' "
+                "or similar prescriptive language."
+            ),
+        },
     },
-    "required": ["rationale", "assertions"]
+    "required": ["rationale", "assertions"],
 }
 
-JSON_SCHEMA_STR = json.dumps(JSON_SCHEMA, separators=(',', ':'))
+JSON_SCHEMA_STR = json.dumps(JSON_SCHEMA, separators=(",", ":"))
 
 # System prompt for requirement reformatting
-REFORMAT_SYSTEM_PROMPT = """You are a requirements engineering expert specializing in FDA 21 CFR Part 11 compliant clinical trial systems.
+REFORMAT_SYSTEM_PROMPT = """You are a requirements engineering expert specializing in \
+FDA 21 CFR Part 11 compliant clinical trial systems.
 
-Your task is to reformat requirements from an old descriptive format to a new prescriptive assertion-based format.
+Your task is to reformat requirements from an old descriptive format to a new \
+prescriptive assertion-based format.
 
 EXTRACTION RULES:
 1. Extract ALL obligations from the old format (body text, bullet points, acceptance criteria)
@@ -47,7 +55,7 @@ RATIONALE RULES:
 1. The rationale provides context for WHY this requirement exists
 2. Rationale MUST NOT introduce new obligations
 3. Rationale MUST NOT use SHALL/MUST language
-4. Rationale can explain regulatory context, design decisions, or relationships to other requirements
+4. Rationale can explain regulatory context, design decisions, or relationships
 
 LANGUAGE GUIDELINES:
 - Use "The system SHALL..." for system behaviors
@@ -59,11 +67,12 @@ LANGUAGE GUIDELINES:
 OUTPUT FORMAT:
 Return a JSON object with:
 - "rationale": A paragraph explaining the requirement's purpose (no SHALL language)
-- "assertions": An array of strings, each being a complete assertion starting with the subject and SHALL
+- "assertions": An array of strings, each a complete assertion with subject and SHALL
 
 Example output:
 {
-  "rationale": "This requirement ensures complete audit trails for regulatory compliance. FDA 21 CFR Part 11 mandates that electronic records maintain tamper-evident histories of all modifications.",
+  "rationale": "This requirement ensures complete audit trails for regulatory compliance. \
+FDA 21 CFR Part 11 mandates tamper-evident histories of all modifications.",
   "assertions": [
     "The system SHALL store all data changes as immutable events.",
     "The system SHALL preserve the complete history of all modifications.",
@@ -80,7 +89,7 @@ def build_user_prompt(
     status: str,
     implements: list,
     body: str,
-    rationale: str = ""
+    rationale: str = "",
 ) -> str:
     """
     Build the user prompt for reformatting a requirement.
@@ -118,6 +127,7 @@ CURRENT RATIONALE:
 """
 
     prompt += """
-Extract all obligations and convert them to labeled assertions. Return ONLY the JSON object with "rationale" and "assertions" fields."""
+Extract all obligations and convert them to labeled assertions. \
+Return ONLY the JSON object with "rationale" and "assertions" fields."""
 
     return prompt

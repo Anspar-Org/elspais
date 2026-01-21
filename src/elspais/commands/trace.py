@@ -24,11 +24,11 @@ def run(args: argparse.Namespace) -> int:
     """
     # Check if enhanced trace-view features are requested
     use_trace_view = (
-        getattr(args, 'view', False) or
-        getattr(args, 'embed_content', False) or
-        getattr(args, 'edit_mode', False) or
-        getattr(args, 'review_mode', False) or
-        getattr(args, 'server', False)
+        getattr(args, "view", False)
+        or getattr(args, "embed_content", False)
+        or getattr(args, "edit_mode", False)
+        or getattr(args, "review_mode", False)
+        or getattr(args, "server", False)
     )
 
     if use_trace_view:
@@ -119,7 +119,7 @@ def run_trace_view(args: argparse.Namespace) -> int:
     except ImportError as e:
         print("Error: trace-view features require additional dependencies.", file=sys.stderr)
         print("Install with: pip install elspais[trace-view]", file=sys.stderr)
-        if args.verbose if hasattr(args, 'verbose') else False:
+        if args.verbose if hasattr(args, "verbose") else False:
             print(f"Import error: {e}", file=sys.stderr)
         return 1
 
@@ -151,8 +151,8 @@ def run_trace_view(args: argparse.Namespace) -> int:
     generator = TraceViewGenerator(
         spec_dir=spec_dir,
         impl_dirs=impl_dirs,
-        sponsor=getattr(args, 'sponsor', None),
-        mode=getattr(args, 'mode', 'core'),
+        sponsor=getattr(args, "sponsor", None),
+        mode=getattr(args, "mode", "core"),
         repo_root=repo_root,
         config=config,
     )
@@ -174,13 +174,13 @@ def run_trace_view(args: argparse.Namespace) -> int:
             output_file = Path("traceability_matrix.md")
 
     # Generate
-    quiet = getattr(args, 'quiet', False)
+    quiet = getattr(args, "quiet", False)
     generator.generate(
         format=output_format,
         output_file=output_file,
-        embed_content=getattr(args, 'embed_content', False),
-        edit_mode=getattr(args, 'edit_mode', False),
-        review_mode=getattr(args, 'review_mode', False),
+        embed_content=getattr(args, "embed_content", False),
+        edit_mode=getattr(args, "edit_mode", False),
+        review_mode=getattr(args, "review_mode", False),
         quiet=quiet,
     )
 
@@ -194,7 +194,7 @@ def run_review_server(args: argparse.Namespace) -> int:
                       elspais[trace-review] extra.
     """
     try:
-        from elspais.trace_view.review import create_app, FLASK_AVAILABLE
+        from elspais.trace_view.review import FLASK_AVAILABLE, create_app
     except ImportError:
         print("Error: Review server requires additional dependencies.", file=sys.stderr)
         print("Install with: pip install elspais[trace-review]", file=sys.stderr)
@@ -212,9 +212,10 @@ def run_review_server(args: argparse.Namespace) -> int:
     else:
         repo_root = Path.cwd()
 
-    port = getattr(args, 'port', 8080)
+    port = getattr(args, "port", 8080)
 
-    print(f"""
+    print(
+        f"""
 ======================================
   elspais Review Server
 ======================================
@@ -223,11 +224,12 @@ Repository: {repo_root}
 Server:     http://localhost:{port}
 
 Press Ctrl+C to stop
-""")
+"""
+    )
 
     app = create_app(repo_root, auto_sync=True)
     try:
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(host="0.0.0.0", port=port, debug=False)
     except KeyboardInterrupt:
         print("\nServer stopped.")
 
@@ -323,7 +325,7 @@ def generate_html_matrix(requirements: Dict[str, Requirement]) -> str:
             status_class = f"status-{req.status.lower()}"
             subdir_attr = f'data-subdir="{req.subdir}"'
             html += (
-                f'        <tr {subdir_attr}><td>{req_id}</td><td>{req.title}</td>'
+                f"        <tr {subdir_attr}><td>{req_id}</td><td>{req.title}</td>"
                 f'<td>{impl_str}</td><td class="{status_class}">{req.status}</td></tr>\n'
             )
 
@@ -343,7 +345,9 @@ def generate_csv_matrix(requirements: Dict[str, Requirement]) -> str:
     for req_id, req in sorted(requirements.items()):
         impl_str = ";".join(req.implements) if req.implements else ""
         title = req.title.replace('"', '""')
-        lines.append(f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}","{req.subdir}"')
+        lines.append(
+            f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}","{req.subdir}"'
+        )
 
     return "\n".join(lines)
 

@@ -101,9 +101,9 @@ class FormatConfig:
     require_shall: bool = True
     labels_sequential: bool = True
     labels_unique: bool = True
-    placeholder_values: List[str] = field(default_factory=lambda: [
-        "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
-    ])
+    placeholder_values: List[str] = field(
+        default_factory=lambda: ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"]
+    )
 
 
 @dataclass
@@ -142,9 +142,10 @@ class RulesConfig:
             require_shall=format_data.get("require_shall", True),
             labels_sequential=format_data.get("labels_sequential", True),
             labels_unique=format_data.get("labels_unique", True),
-            placeholder_values=format_data.get("placeholder_values", [
-                "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
-            ]),
+            placeholder_values=format_data.get(
+                "placeholder_values",
+                ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"],
+            ),
         )
 
         return cls(hierarchy=hierarchy, format=format_config)
@@ -169,9 +170,7 @@ class RuleEngine:
         """
         self.config = config
         self.pattern_config = pattern_config
-        self.pattern_validator = (
-            PatternValidator(pattern_config) if pattern_config else None
-        )
+        self.pattern_validator = PatternValidator(pattern_config) if pattern_config else None
 
     def validate(self, requirements: Dict[str, Requirement]) -> List[RuleViolation]:
         """
@@ -381,9 +380,7 @@ class RuleEngine:
 
         return violations
 
-    def _check_assertions(
-        self, req_id: str, req: Requirement
-    ) -> List[RuleViolation]:
+    def _check_assertions(self, req_id: str, req: Requirement) -> List[RuleViolation]:
         """Check assertion-specific validation rules."""
         violations = []
 
@@ -426,9 +423,7 @@ class RuleEngine:
         if self.config.format.labels_sequential and self.pattern_validator:
             expected_labels = []
             for i in range(len(labels)):
-                expected_labels.append(
-                    self.pattern_validator.format_assertion_label(i)
-                )
+                expected_labels.append(self.pattern_validator.format_assertion_label(i))
             if labels != expected_labels:
                 msg = f"Labels not sequential: {labels} (expected {expected_labels})"
                 violations.append(

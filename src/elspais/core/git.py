@@ -123,9 +123,7 @@ def get_modified_files(repo_root: Path) -> Tuple[Set[str], Set[str]]:
         return set(), set()
 
 
-def get_changed_vs_branch(
-    repo_root: Path, base_branch: str = "main"
-) -> Set[str]:
+def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> Set[str]:
     """Get set of files changed between current branch and base branch.
 
     Args:
@@ -181,9 +179,7 @@ def get_committed_req_locations(
 
     req_locations: Dict[str, str] = {}
     # Pattern matches REQ headers with optional associated prefix
-    req_pattern = re.compile(
-        r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE
-    )
+    req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
 
     try:
         # Get list of spec files in committed state
@@ -246,9 +242,7 @@ def get_current_req_locations(
         exclude_files = ["INDEX.md", "README.md", "requirements-format.md"]
 
     req_locations: Dict[str, str] = {}
-    req_pattern = re.compile(
-        r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE
-    )
+    req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
 
     spec_path = repo_root / spec_dir
     if not spec_path.exists():
@@ -266,7 +260,7 @@ def get_current_req_locations(
                 req_id = match.group(1)
                 req_locations[req_id] = rel_path
 
-        except (IOError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError):
             continue
 
     return req_locations

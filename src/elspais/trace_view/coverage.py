@@ -5,7 +5,7 @@ Provides functions to calculate implementation coverage and status
 for requirements.
 """
 
-from typing import Dict, List, Union
+from typing import Dict, List
 
 from elspais.trace_view.models import TraceViewRequirement
 
@@ -124,9 +124,7 @@ def get_implementation_status(requirements: ReqDict, req_id: str) -> str:
         return "Partial"
 
 
-def generate_coverage_report(
-    requirements: ReqDict, get_status_fn=None
-) -> str:
+def generate_coverage_report(requirements: ReqDict, get_status_fn=None) -> str:
     """Generate text-based coverage report with summary statistics.
 
     Args:
@@ -141,7 +139,9 @@ def generate_coverage_report(
         - Breakdown by implementation status (Full/Partial/Unimplemented)
     """
     if get_status_fn is None:
-        get_status_fn = lambda req_id: get_implementation_status(requirements, req_id)
+
+        def get_status_fn(req_id):
+            return get_implementation_status(requirements, req_id)
 
     lines = []
     lines.append("=== Coverage Report ===")

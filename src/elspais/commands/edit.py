@@ -22,7 +22,7 @@ def run(args: argparse.Namespace) -> int:
     from elspais.config.loader import find_config_file, get_spec_directories, load_config
 
     # Load configuration
-    config_path = args.config if hasattr(args, 'config') else None
+    config_path = args.config if hasattr(args, "config") else None
     if config_path is None:
         config_path = find_config_file(Path.cwd())
     if config_path and config_path.exists():
@@ -31,7 +31,7 @@ def run(args: argparse.Namespace) -> int:
         config = DEFAULT_CONFIG
 
     # Get spec directories
-    spec_dir = args.spec_dir if hasattr(args, 'spec_dir') and args.spec_dir else None
+    spec_dir = args.spec_dir if hasattr(args, "spec_dir") and args.spec_dir else None
     spec_dirs = get_spec_directories(spec_dir, config)
     if not spec_dirs:
         print("Error: No spec directories found", file=sys.stderr)
@@ -40,16 +40,16 @@ def run(args: argparse.Namespace) -> int:
     # Use first spec dir as base
     base_spec_dir = spec_dirs[0]
 
-    dry_run = getattr(args, 'dry_run', False)
+    dry_run = getattr(args, "dry_run", False)
 
-    validate_refs = getattr(args, 'validate_refs', False)
+    validate_refs = getattr(args, "validate_refs", False)
 
     # Handle batch mode
-    if hasattr(args, 'from_json') and args.from_json:
+    if hasattr(args, "from_json") and args.from_json:
         return run_batch_edit(args.from_json, base_spec_dir, dry_run, validate_refs)
 
     # Handle single edit mode
-    if hasattr(args, 'req_id') and args.req_id:
+    if hasattr(args, "req_id") and args.req_id:
         return run_single_edit(args, base_spec_dir, dry_run)
 
     print("Error: Must specify --req-id or --from-json", file=sys.stderr)
@@ -109,18 +109,18 @@ def run_single_edit(args: argparse.Namespace, spec_dir: Path, dry_run: bool) -> 
     results = []
 
     # Apply implements change
-    if hasattr(args, 'implements') and args.implements is not None:
+    if hasattr(args, "implements") and args.implements is not None:
         impl_list = [i.strip() for i in args.implements.split(",")]
         result = modify_implements(file_path, req_id, impl_list, dry_run=dry_run)
         results.append(("implements", result))
 
     # Apply status change
-    if hasattr(args, 'status') and args.status:
+    if hasattr(args, "status") and args.status:
         result = modify_status(file_path, req_id, args.status, dry_run=dry_run)
         results.append(("status", result))
 
     # Apply move
-    if hasattr(args, 'move_to') and args.move_to:
+    if hasattr(args, "move_to") and args.move_to:
         dest_path = spec_dir / args.move_to
         result = move_requirement(file_path, dest_path, req_id, dry_run=dry_run)
         results.append(("move", result))
@@ -157,14 +157,14 @@ def find_requirement_in_files(
         Dict with file_path, req_id, line_number, or None if not found
     """
     # Pattern to match requirement header
-    pattern = re.compile(rf'^#\s*{re.escape(req_id)}:', re.MULTILINE)
+    pattern = re.compile(rf"^#\s*{re.escape(req_id)}:", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
         match = pattern.search(content)
         if match:
             # Count line number
-            line_number = content[:match.start()].count('\n') + 1
+            line_number = content[: match.start()].count("\n") + 1
             return {
                 "file_path": md_file,
                 "req_id": req_id,
@@ -195,7 +195,7 @@ def modify_implements(
     content = file_path.read_text()
 
     # Find the requirement header
-    req_pattern = re.compile(rf'^(#\s*{re.escape(req_id)}:[^\n]*\n)', re.MULTILINE)
+    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
     req_match = req_pattern.search(content)
 
     if not req_match:
@@ -203,9 +203,9 @@ def modify_implements(
 
     # Find the **Implements**: field after the header
     start_pos = req_match.end()
-    search_region = content[start_pos:start_pos + 500]
+    search_region = content[start_pos : start_pos + 500]
 
-    impl_pattern = re.compile(r'(\*\*Implements\*\*:\s*)([^|\n]+)')
+    impl_pattern = re.compile(r"(\*\*Implements\*\*:\s*)([^|\n]+)")
     impl_match = impl_pattern.search(search_region)
 
     if not impl_match:
@@ -272,7 +272,7 @@ def modify_status(
     content = file_path.read_text()
 
     # Find the requirement header
-    req_pattern = re.compile(rf'^(#\s*{re.escape(req_id)}:[^\n]*\n)', re.MULTILINE)
+    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
     req_match = req_pattern.search(content)
 
     if not req_match:
@@ -280,9 +280,9 @@ def modify_status(
 
     # Find the **Status**: field after the header
     start_pos = req_match.end()
-    search_region = content[start_pos:start_pos + 500]
+    search_region = content[start_pos : start_pos + 500]
 
-    status_pattern = re.compile(r'(\*\*Status\*\*:\s*)(\w+)')
+    status_pattern = re.compile(r"(\*\*Status\*\*:\s*)(\w+)")
     status_match = status_pattern.search(search_region)
 
     if not status_match:
@@ -342,11 +342,8 @@ def move_requirement(
     # Find the requirement block
     # Pattern: # REQ-xxx: title ... *End* *title* | **Hash**: xxx\n---
     req_pattern = re.compile(
-        rf'(^#\s*{re.escape(req_id)}:[^\n]*\n'
-        rf'.*?'
-        rf'\*End\*[^\n]*\n'
-        rf'(?:---\n)?)',
-        re.MULTILINE | re.DOTALL
+        rf"(^#\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
+        re.MULTILINE | re.DOTALL,
     )
 
     req_match = req_pattern.search(source_content)
@@ -361,9 +358,9 @@ def move_requirement(
         req_block = req_block.rstrip() + "\n---\n"
 
     # Remove from source
-    new_source_content = source_content[:req_match.start()] + source_content[req_match.end():]
+    new_source_content = source_content[: req_match.start()] + source_content[req_match.end() :]
     # Clean up extra blank lines
-    new_source_content = re.sub(r'\n{3,}', '\n\n', new_source_content)
+    new_source_content = re.sub(r"\n{3,}", "\n\n", new_source_content)
 
     # Add to destination
     dest_content = dest_file.read_text() if dest_file.exists() else ""
@@ -400,8 +397,9 @@ def collect_all_req_ids(spec_dir: Path) -> set:
         Set of requirement IDs found (short form, e.g., "p00001")
     """
     import re
+
     req_ids = set()
-    pattern = re.compile(r'^#\s*(REQ-[A-Za-z0-9-]+):', re.MULTILINE)
+    pattern = re.compile(r"^#\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
@@ -453,11 +451,13 @@ def batch_edit(
         # Find the requirement
         location = find_requirement_in_files(spec_dir, req_id)
         if not location:
-            results.append({
-                "success": False,
-                "req_id": req_id,
-                "error": f"Requirement {req_id} not found",
-            })
+            results.append(
+                {
+                    "success": False,
+                    "req_id": req_id,
+                    "error": f"Requirement {req_id} not found",
+                }
+            )
             continue
 
         file_path = location["file_path"]
@@ -493,9 +493,7 @@ def batch_edit(
 
         # Apply status change
         if "status" in change:
-            status_result = modify_status(
-                file_path, req_id, change["status"], dry_run=dry_run
-            )
+            status_result = modify_status(file_path, req_id, change["status"], dry_run=dry_run)
             if not status_result["success"]:
                 result = status_result
                 result["req_id"] = req_id
@@ -506,9 +504,7 @@ def batch_edit(
         # Apply move (must be last since it changes file location)
         if "move_to" in change:
             dest_path = spec_dir / change["move_to"]
-            move_result = move_requirement(
-                file_path, dest_path, req_id, dry_run=dry_run
-            )
+            move_result = move_requirement(file_path, dest_path, req_id, dry_run=dry_run)
             if not move_result["success"]:
                 result = move_result
                 result["req_id"] = req_id

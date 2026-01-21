@@ -15,11 +15,11 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
-from elspais.config.loader import load_config, find_config_file, get_spec_directories
+from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternValidator, PatternConfig
+from elspais.core.patterns import PatternConfig, PatternValidator
 from elspais.core.rules import RuleEngine, RulesConfig
 
 
@@ -30,15 +30,14 @@ def run(args: argparse.Namespace) -> int:
     to the new Assertions format using Claude AI.
     """
     from elspais.reformat import (
-        get_all_requirements,
+        assemble_new_format,
         build_hierarchy,
-        traverse_top_down,
+        get_all_requirements,
+        normalize_line_breaks,
         normalize_req_id,
         reformat_requirement,
-        assemble_new_format,
+        traverse_top_down,
         validate_reformatted_content,
-        normalize_line_breaks,
-        fix_requirement_line_breaks,
     )
 
     print("elspais reformat-with-claude")
@@ -55,10 +54,10 @@ def run(args: argparse.Namespace) -> int:
     backup = args.backup
     force = args.force
     fix_line_breaks = args.fix_line_breaks
-    verbose = getattr(args, 'verbose', False)
-    mode = getattr(args, 'mode', 'combined')
+    verbose = getattr(args, "verbose", False)
+    mode = getattr(args, "mode", "combined")
 
-    print(f"Options:")
+    print("Options:")
     print(f"  Start REQ:       {start_req or 'All PRD requirements'}")
     print(f"  Max depth:       {max_depth or 'Unlimited'}")
     print(f"  Mode:            {mode}")
@@ -86,8 +85,7 @@ def run(args: argparse.Namespace) -> int:
     requirements = get_all_requirements(mode=mode)
     if not requirements:
         print("FAILED")
-        print("Error: Could not load requirements. Run 'elspais validate' first.",
-              file=sys.stderr)
+        print("Error: Could not load requirements. Run 'elspais validate' first.", file=sys.stderr)
         return 1
     print(f"found {len(requirements)} requirements")
 
@@ -108,13 +106,10 @@ def run(args: argparse.Namespace) -> int:
 
         print(f"Traversing from {start_req}...", flush=True)
         req_ids = traverse_top_down(requirements, start_req, max_depth)
-        print(f"Traversal complete", flush=True)
+        print("Traversal complete", flush=True)
     else:
         # Process all PRD requirements first, then their descendants
-        prd_reqs = [
-            req_id for req_id, node in requirements.items()
-            if node.level.upper() == 'PRD'
-        ]
+        prd_reqs = [req_id for req_id, node in requirements.items() if node.level.upper() == "PRD"]
         prd_reqs.sort()
 
         print(f"Processing {len(prd_reqs)} PRD requirements and their descendants...")
@@ -167,8 +162,8 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         # Validate the result
-        rationale = result.get('rationale', '')
-        assertions = result.get('assertions', [])
+        rationale = result.get("rationale", "")
+        assertions = result.get("assertions", [])
 
         is_valid, warnings = validate_reformatted_content(node, rationale, assertions)
 
@@ -177,7 +172,7 @@ def run(args: argparse.Namespace) -> int:
                 print(f"  WARNING: {warning}")
 
         if not is_valid:
-            print(f"  INVALID: Skipping due to validation errors")
+            print("  INVALID: Skipping due to validation errors")
             errors += 1
             continue
 
@@ -189,7 +184,7 @@ def run(args: argparse.Namespace) -> int:
             status=node.status,
             implements=node.implements,
             rationale=rationale,
-            assertions=assertions
+            assertions=assertions,
         )
 
         # Optionally normalize line breaks
@@ -207,7 +202,7 @@ def run(args: argparse.Namespace) -> int:
                 file_path = Path(node.file_path)
 
                 if backup:
-                    backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
                     shutil.copy2(file_path, backup_path)
                     print(f"  Backup: {backup_path}")
 
@@ -226,7 +221,7 @@ def run(args: argparse.Namespace) -> int:
                     print(f"  Written: {file_path}")
                     reformatted += 1
                 else:
-                    print(f"  ERROR: Could not locate requirement in file")
+                    print("  ERROR: Could not locate requirement in file")
                     errors += 1
 
             except Exception as e:
@@ -236,7 +231,7 @@ def run(args: argparse.Namespace) -> int:
     # Summary
     print()
     print("=" * 60)
-    print(f"Summary:")
+    print("Summary:")
     print(f"  Reformatted: {reformatted}")
     print(f"  Skipped:     {skipped}")
     print(f"  Errors:      {errors}")
@@ -247,10 +242,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def replace_requirement_content(
-    file_content: str,
-    req_id: str,
-    title: str,
-    new_content: str
+    file_content: str, req_id: str, title: str, new_content: str
 ) -> Optional[str]:
     """
     Replace a requirement's content in a file.
@@ -271,13 +263,13 @@ def replace_requirement_content(
 
     # Pattern to match the requirement header
     # # REQ-d00027: Title
-    header_pattern = rf'^# {re.escape(req_id)}:\s*'
+    header_pattern = rf"^# {re.escape(req_id)}:\s*"
 
     # Pattern to match the footer
     # *End* *Title* | **Hash**: xxxxxxxx
-    footer_pattern = rf'^\*End\*\s+\*{re.escape(title)}\*\s+\|\s+\*\*Hash\*\*:\s*[a-fA-F0-9]+'
+    footer_pattern = rf"^\*End\*\s+\*{re.escape(title)}\*\s+\|\s+\*\*Hash\*\*:\s*[a-fA-F0-9]+"
 
-    lines = file_content.split('\n')
+    lines = file_content.split("\n")
     result_lines = []
     in_requirement = False
     found = False
@@ -292,7 +284,7 @@ def replace_requirement_content(
                 in_requirement = True
                 found = True
                 # Insert new content (without trailing newline, we'll add it)
-                new_lines = new_content.rstrip('\n').split('\n')
+                new_lines = new_content.rstrip("\n").split("\n")
                 result_lines.extend(new_lines)
                 i += 1
                 continue
@@ -307,7 +299,7 @@ def replace_requirement_content(
                 in_requirement = False
                 i += 1
                 # Skip any trailing blank lines after the footer
-                while i < len(lines) and lines[i].strip() == '':
+                while i < len(lines) and lines[i].strip() == "":
                     i += 1
             else:
                 # Skip this line (part of old requirement)
@@ -316,15 +308,15 @@ def replace_requirement_content(
     if not found:
         return None
 
-    return '\n'.join(result_lines)
+    return "\n".join(result_lines)
 
 
 def run_line_breaks_only(args: argparse.Namespace) -> int:
     """Run line break normalization only."""
     from elspais.reformat import (
+        detect_line_break_issues,
         get_all_requirements,
         normalize_line_breaks,
-        detect_line_break_issues,
     )
 
     dry_run = args.dry_run
@@ -358,7 +350,7 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     unchanged = 0
     errors = 0
 
-    for file_path_str, req_ids in sorted(files_to_process.items()):
+    for file_path_str, _req_ids in sorted(files_to_process.items()):
         file_path = Path(file_path_str)
 
         try:
@@ -381,7 +373,7 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
             fixed_content = normalize_line_breaks(content)
 
             if backup:
-                backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+                backup_path = file_path.with_suffix(file_path.suffix + ".bak")
                 shutil.copy2(file_path, backup_path)
 
             file_path.write_text(fixed_content)
@@ -393,7 +385,7 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
 
     print()
     print("=" * 60)
-    print(f"Summary:")
+    print("Summary:")
     print(f"  Fixed:     {fixed}")
     print(f"  Unchanged: {unchanged}")
     print(f"  Errors:    {errors}")
@@ -435,10 +427,7 @@ def get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
     violations = engine.validate(requirements)
 
     # Filter to acceptance_criteria violations
-    return {
-        v.requirement_id for v in violations
-        if v.rule_name == "format.acceptance_criteria"
-    }
+    return {v.requirement_id for v in violations if v.rule_name == "format.acceptance_criteria"}
 
 
 def is_local_file(file_path: str, base_path: Path) -> bool:

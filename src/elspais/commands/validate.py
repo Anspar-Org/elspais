@@ -43,10 +43,10 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     # Add sponsor spec directories if mode is "combined" and include_associated is enabled
-    mode = getattr(args, 'mode', 'combined')
-    include_associated = config.get('traceability', {}).get('include_associated', True)
+    mode = getattr(args, "mode", "combined")
+    include_associated = config.get("traceability", {}).get("include_associated", True)
 
-    if mode == 'combined' and include_associated:
+    if mode == "combined" and include_associated:
         base_path = find_project_root(spec_dirs)
         sponsor_dirs = get_sponsor_spec_directories(config, base_path)
         if sponsor_dirs:
@@ -103,12 +103,11 @@ def run(args: argparse.Namespace) -> int:
     # Filter skipped rules
     if args.skip_rule:
         violations = [
-            v for v in violations
-            if not any(skip in v.rule_name for skip in args.skip_rule)
+            v for v in violations if not any(skip in v.rule_name for skip in args.skip_rule)
         ]
 
     # JSON output mode - output and exit
-    if getattr(args, 'json', False):
+    if getattr(args, "json", False):
         # Test mapping (if enabled)
         test_data = None
         testing_config = TestingConfig.from_dict(config.get("testing", {}))
@@ -191,9 +190,9 @@ def should_scan_tests(args: argparse.Namespace, config: TestingConfig) -> bool:
     Returns:
         True if test scanning should run
     """
-    if getattr(args, 'no_tests', False):
+    if getattr(args, "no_tests", False):
         return False
-    if getattr(args, 'tests', False):
+    if getattr(args, "tests", False):
         return True
     return config.enabled
 
@@ -409,8 +408,7 @@ def format_requirements_json(
                 cycle_path = v.message
 
         # Build requirement data matching hht_diary format
-        # Use the original ID (strip __conflict suffix) for output key
-        output_key = req_id.replace("__conflict", "") if req.is_conflict else req_id
+        # Note: req_id includes __conflict suffix for conflicts to avoid key collision
         output[req_id] = {
             "title": req.title,
             "status": req.status,

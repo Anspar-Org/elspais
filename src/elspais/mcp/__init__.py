@@ -33,10 +33,12 @@ __all__ = [
 def create_server(working_dir=None):
     """Create MCP server instance."""
     from elspais.mcp.server import create_server as _create
+
     return _create(working_dir)
 
 
 def run_server(working_dir=None, transport="stdio"):
     """Run MCP server."""
     from elspais.mcp.server import run_server as _run
+
     return _run(working_dir, transport)

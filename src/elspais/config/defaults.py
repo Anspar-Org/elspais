@@ -96,7 +96,13 @@ DEFAULT_CONFIG = {
             "labels_sequential": True,
             "labels_unique": True,
             "placeholder_values": [
-                "obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"
+                "obsolete",
+                "removed",
+                "deprecated",
+                "N/A",
+                "n/a",
+                "-",
+                "reserved",
             ],
         },
         "traceability": {
