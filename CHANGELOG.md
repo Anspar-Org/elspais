@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Comprehensive git hooks (pre-commit, pre-push) with branch protection, linting, and secret detection
+- Comprehensive git hooks (pre-commit, pre-push, commit-msg) with branch protection, linting, secret detection, and commit message format validation
+- Commit message format validation requiring `[TICKET-NUMBER]` prefix (e.g., `[CUR-514]`)
+- Markdownlint configuration (`.markdownlint.json`) disabling line length and duplicate heading rules
 
 ### Changed
 
