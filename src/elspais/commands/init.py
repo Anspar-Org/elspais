@@ -8,6 +8,36 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+# Example requirement template for --template flag
+EXAMPLE_REQUIREMENT = """# REQ-d00001: Example Requirement Title
+
+**Level**: Dev | **Status**: Draft | **Implements**: -
+
+## Assertions
+
+A. The system SHALL demonstrate the assertion format.
+B. The system SHALL show proper use of SHALL language.
+
+## Rationale
+
+This is an example requirement demonstrating the proper format.
+Delete this file after reviewing the structure.
+
+---
+
+**Format Notes** (delete this section):
+
+- **Title line**: `# REQ-{type}{id}: Title` where type is p/o/d for PRD/OPS/DEV
+- **Metadata line**: Level, Status, and Implements (use `-` for top-level reqs)
+- **Assertions**: Labeled A-Z, each using SHALL for required behavior
+- **Rationale**: Optional explanation section (non-normative)
+- **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais hash update`
+
+Run `elspais format` for more templates and `elspais validate` to check this file.
+
+*End* *Example Requirement Title* | **Hash**: 00000000
+"""
+
 
 def run(args: argparse.Namespace) -> int:
     """
@@ -19,6 +49,10 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Exit code (0 for success)
     """
+    # Handle --template flag separately
+    if getattr(args, "template", False):
+        return create_template_requirement(args)
+
     config_path = Path.cwd() / ".elspais.toml"
 
     if config_path.exists() and not args.force:
@@ -40,6 +74,44 @@ def run(args: argparse.Namespace) -> int:
     # Write file
     config_path.write_text(config_content)
     print(f"Created configuration: {config_path}")
+
+    return 0
+
+
+def create_template_requirement(args: argparse.Namespace) -> int:
+    """Create an example requirement file in the spec directory."""
+    from elspais.config.loader import load_config
+
+    # Try to load config to find spec directory
+    try:
+        config = load_config(args.config if hasattr(args, "config") else None)
+        spec_dir_name = config.get("directories", {}).get("spec", "spec")
+    except Exception:
+        spec_dir_name = "spec"
+
+    spec_dir = Path.cwd() / spec_dir_name
+
+    # Create spec directory if it doesn't exist
+    if not spec_dir.exists():
+        spec_dir.mkdir(parents=True)
+        print(f"Created directory: {spec_dir}")
+
+    # Create example file
+    example_path = spec_dir / "EXAMPLE-requirement.md"
+
+    if example_path.exists() and not getattr(args, "force", False):
+        print(f"Example file already exists: {example_path}")
+        print("Use --force to overwrite.")
+        return 1
+
+    example_path.write_text(EXAMPLE_REQUIREMENT)
+    print(f"Created example requirement: {example_path}")
+    print()
+    print("Next steps:")
+    print("  1. Review the example to understand the format")
+    print("  2. Delete or rename it when creating real requirements")
+    print("  3. Run `elspais validate` to check format compliance")
+    print("  4. Run `elspais hash update` to compute content hashes")
 
     return 0
 

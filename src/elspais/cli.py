@@ -15,6 +15,7 @@ from elspais.commands import (
     changed,
     config_cmd,
     edit,
+    example_cmd,
     hash_cmd,
     index,
     init,
@@ -42,6 +43,13 @@ Examples:
   elspais analyze hierarchy     # Show requirement hierarchy tree
   elspais config show           # View current configuration
   elspais init                  # Create .elspais.toml configuration
+  elspais example               # Quick format reference
+
+Documentation:
+  Format examples: elspais example (quick reference)
+  Full spec:       elspais example --full (displays spec/requirements-spec.md)
+  Configuration:   docs/configuration.md
+  Init example:    elspais init --template (creates example requirement)
 
 For detailed command help: elspais <command> --help
         """,
@@ -201,6 +209,17 @@ Common rules to skip:
         help="Sponsor name for sponsor-specific reports",
         metavar="NAME",
     )
+    # Tree-based trace options
+    trace_parser.add_argument(
+        "--tree",
+        action="store_true",
+        help="Use unified traceability tree (includes assertions as nodes)",
+    )
+    trace_parser.add_argument(
+        "--tree-json",
+        action="store_true",
+        help="Output tree structure as JSON",
+    )
 
     # hash command
     hash_parser = subparsers.add_parser(
@@ -319,6 +338,38 @@ Common rules to skip:
         "--force",
         action="store_true",
         help="Overwrite existing configuration",
+    )
+    init_parser.add_argument(
+        "--template",
+        action="store_true",
+        help="Create an example requirement file in spec/",
+    )
+
+    # example command
+    example_parser = subparsers.add_parser(
+        "example",
+        help="Display requirement format examples and templates",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Subcommands:
+  elspais example             Quick reference (default)
+  elspais example requirement Full requirement template with all sections
+  elspais example journey     User journey template
+  elspais example assertion   Assertion rules and examples
+  elspais example ids         Show ID patterns from current config
+  elspais example --full      Display spec/requirements-spec.md (if exists)
+""",
+    )
+    example_parser.add_argument(
+        "example_type",
+        nargs="?",
+        choices=["requirement", "journey", "assertion", "ids"],
+        help="Example type to display",
+    )
+    example_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Display the full requirements specification file",
     )
 
     # edit command
@@ -631,6 +682,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return version_command(args)
         elif args.command == "init":
             return init.run(args)
+        elif args.command == "example":
+            return example_cmd.run(args)
         elif args.command == "edit":
             return edit.run(args)
         elif args.command == "config":

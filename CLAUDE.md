@@ -6,12 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
-## Active Refactor: Hierarchy Scanning
+**IMPORTANT**: When working on refactoring, read these files first:
 
-**IMPORTANT**: When working on hierarchy-related changes, read these files first:
-
-- Workflow: `~/.claude/hierarchy-refactor-workflow.md`
-- Reference: `~/.claude/hierarchy-refactor-reference.md`
+- Workflow: `~/.claude/refactor-workflow.md`
 - Plan: `~/.claude/plans/synchronous-gliding-chipmunk.md`
 
 Read these after every compact event to restore context.
@@ -58,12 +55,30 @@ elspais trace --view --review-mode   # Enable collaborative review
 elspais trace --server               # Start Flask review server on port 8080
 elspais trace --server --port 3000   # Start on custom port
 
+# Tree-based traceability (unified Requirements → Assertions → Code → Tests graph)
+elspais trace --tree                 # Generate tree-based traceability matrix
+elspais trace --tree --format html   # Generate HTML tree with collapsible hierarchy
+elspais trace --tree-json            # Output full tree structure as JSON
+
 # AI-assisted requirement reformatting
 elspais reformat-with-claude --dry-run              # Preview reformatting
 elspais reformat-with-claude --backup               # Create backups before changes
 elspais reformat-with-claude --start-req X          # Start from requirement X
 elspais reformat-with-claude --mode combined        # Cross-repo hierarchy support
 elspais reformat-with-claude --mode local-only      # Only local requirements
+
+# Format examples (learn requirement format)
+elspais example                   # Quick format reference
+elspais example requirement       # Full requirement template
+elspais example journey           # User journey template
+elspais example assertion         # Assertion rules and examples
+elspais example ids               # ID patterns from current config
+elspais example --full            # Display spec/requirements-spec.md
+
+# Project initialization
+elspais init                      # Create .elspais.toml configuration
+elspais init --template           # Create example requirement file
+elspais init --type associated    # Initialize associated repository
 ```
 
 ## Architecture
@@ -81,10 +96,13 @@ elspais reformat-with-claude --mode local-only      # Only local requirements
   - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
   - **hierarchy.py**: Centralized hierarchy scanning utilities (`find_requirement`, `find_children`, `find_children_ids`, `build_children_index`, `detect_cycles`, `find_roots`, `find_orphans`, `CycleInfo` dataclass) - replaces duplicated logic across analyze, trace, and trace_view modules
   - **loader.py**: Centralized requirement loading (`load_requirements_from_repo`) - moved from validate.py to break circular dependencies
+  - **tree.py**: Unified traceability tree (`SourceLocation`, `NodeKind`, `TraceNode`, `TraceTree`, `CodeReference`, `TestReference`, `TestResult`, `UserJourney`) - represents full Requirements → Assertions → Code → Tests → Results graph
+  - **tree_schema.py**: Schema-driven tree configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `TreeSchema`) - enables custom node types and relationships via config
+  - **tree_builder.py**: Tree construction (`TraceTreeBuilder`, `ValidationResult`, `build_tree_from_requirements`, `build_tree_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
   - **defaults.py**: Default configuration values
-- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd)
+- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd, example_cmd)
 - **testing/**: Test mapping and coverage functionality
   - **config.py**: `TestingConfig` - configuration for test scanning
   - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
@@ -121,6 +139,14 @@ elspais reformat-with-claude --mode local-only      # Only local requirements
   - **prompts.py**: System prompts and JSON schema for Claude
   - **line_breaks.py**: `normalize_line_breaks`, `fix_requirement_line_breaks`
   - **hierarchy.py**: `RequirementNode`, `build_hierarchy`, `traverse_top_down`
+- **parsers/**: Parser plugin system for traceability tree
+  - **\_\_init\_\_.py**: `SpecParser` protocol, `ParserRegistry`, `get_parser()` for parser discovery
+  - **requirement.py**: Requirement parser wrapping core parser
+  - **journey.py**: User journey parser for JNY-xxx-NN format
+  - **code.py**: Code reference parser for `# Implements:` comments
+  - **test.py**: Test file parser for REQ-xxx patterns
+  - **junit_xml.py**: JUnit XML test result parser
+  - **pytest_json.py**: pytest JSON test result parser
 
 ### Key Design Patterns
 
@@ -151,6 +177,10 @@ elspais reformat-with-claude --mode local-only      # Only local requirements
 11. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
 
 12. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
+
+13. **Unified Traceability Tree**: The `core/tree.py` module provides a unified DAG structure representing the full traceability graph. `TraceNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceTreeBuilder` constructs trees from requirements with automatic hierarchy linking. Schema-driven via `tree_schema.py` for custom node types and relationships.
+
+14. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
 ### Requirement Format (Updated)
 
