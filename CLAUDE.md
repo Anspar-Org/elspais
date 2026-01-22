@@ -6,6 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
+## Active Refactor: Hierarchy Scanning
+
+**IMPORTANT**: When working on hierarchy-related changes, read these files first:
+
+- Workflow: `~/.claude/hierarchy-refactor-workflow.md`
+- Reference: `~/.claude/hierarchy-refactor-reference.md`
+- Plan: `~/.claude/plans/synchronous-gliding-chipmunk.md`
+
+Read these after every compact event to restore context.
+
 ## Commands
 
 ```bash
@@ -69,6 +79,8 @@ elspais reformat-with-claude --mode local-only      # Only local requirements
   - **hasher.py**: SHA-256 content hashing for change detection
   - **content_rules.py**: Content rule loading and parsing (AI agent guidance)
   - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
+  - **hierarchy.py**: Centralized hierarchy scanning utilities (`find_requirement`, `find_children`, `find_children_ids`, `build_children_index`, `detect_cycles`, `find_roots`, `find_orphans`, `CycleInfo` dataclass) - replaces duplicated logic across analyze, trace, and trace_view modules
+  - **loader.py**: Centralized requirement loading (`load_requirements_from_repo`) - moved from validate.py to break circular dependencies
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
   - **defaults.py**: Default configuration values
@@ -162,6 +174,7 @@ B. The system SHALL do another thing.
 ```
 
 Key format rules:
+
 - **Assertions replace Acceptance Criteria** - labeled A-Z, each uses SHALL
 - **Assertion IDs** - tests can reference `REQ-d00001` or `REQ-d00001-A`
 - **One-way traceability** - children reference parents via `Implements:`, never reverse
@@ -197,6 +210,7 @@ Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, 
 ### Test Fixtures
 
 `tests/fixtures/` contains example repository structures:
+
 - `hht-like/`: HHT-style requirements (`REQ-p00001`)
 - `fda-style/`: Strict hierarchy requirements
 - `jira-style/`: Jira-like IDs (`PROJ-123`)
@@ -206,6 +220,7 @@ Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, 
 - `invalid/`: Invalid cases (circular deps, broken links, missing hashes)
 
 `tests/test_trace_view/` contains trace_view integration tests:
+
 - Tests use `pytest.importorskip()` for optional dependencies (jinja2, flask)
 - `test_integration.py`: Import tests, model tests, format detection tests
 

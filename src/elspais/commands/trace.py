@@ -8,10 +8,11 @@ Supports both basic matrix generation and enhanced trace-view features.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
+from elspais.core.hierarchy import find_children_ids
 from elspais.core.models import Requirement
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
@@ -251,7 +252,7 @@ def generate_markdown_matrix(requirements: Dict[str, Requirement]) -> str:
         lines.append("| ID | Title | Status | Implemented By |")
         lines.append("|---|---|---|---|")
         for req_id, req in sorted(prd_reqs.items()):
-            impl_by = find_implementers(req_id, requirements)
+            impl_by = find_children_ids(req_id, requirements)
             impl_str = ", ".join(impl_by) if impl_by else "-"
             lines.append(f"| {req_id} | {req.title} | {req.status} | {impl_str} |")
         lines.append("")
@@ -350,17 +351,3 @@ def generate_csv_matrix(requirements: Dict[str, Requirement]) -> str:
         )
 
     return "\n".join(lines)
-
-
-def find_implementers(req_id: str, requirements: Dict[str, Requirement]) -> List[str]:
-    """Find requirements that implement the given requirement."""
-    implementers = []
-    short_id = req_id.split("-")[-1] if "-" in req_id else req_id
-
-    for other_id, other_req in requirements.items():
-        for impl in other_req.implements:
-            if impl == req_id or impl == short_id or impl.endswith(short_id):
-                implementers.append(other_id)
-                break
-
-    return implementers

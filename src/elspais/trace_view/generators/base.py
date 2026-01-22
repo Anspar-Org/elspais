@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.git import get_git_changes
+from elspais.core.hierarchy import detect_cycles
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
 from elspais.trace_view.coverage import (
@@ -248,46 +249,20 @@ class TraceViewGenerator:
                 print(f"   Found {cycle_count} requirements in dependency cycles")
 
     def _detect_and_mark_cycles(self, quiet: bool = False):
-        """Detect and mark requirements that are part of dependency cycles."""
-        # Simple cycle detection using DFS
-        visited = set()
-        rec_stack = set()
-        cycle_members = set()
+        """Detect and mark requirements that are part of dependency cycles.
 
-        def dfs(req_id: str, path: List[str]) -> bool:
-            if req_id in rec_stack:
-                # Found cycle - mark all members in the cycle path
-                cycle_start = path.index(req_id)
-                for member in path[cycle_start:]:
-                    cycle_members.add(member)
-                return True
+        Uses centralized detect_cycles() from core.hierarchy for cycle detection,
+        then marks affected requirements locally.
+        """
+        # Build dict of core requirements for cycle detection
+        core_requirements = {req_id: req.core for req_id, req in self.requirements.items()}
 
-            if req_id in visited:
-                return False
-
-            visited.add(req_id)
-            rec_stack.add(req_id)
-
-            req = self.requirements.get(req_id)
-            if req:
-                for parent_id in req.implements:
-                    # Normalize parent_id
-                    parent_id = parent_id.replace("REQ-", "")
-                    if parent_id in self.requirements:
-                        if dfs(parent_id, path + [req_id]):
-                            cycle_members.add(req_id)
-
-            rec_stack.remove(req_id)
-            return False
-
-        # Run DFS from each requirement
-        for req_id in self.requirements:
-            if req_id not in visited:
-                dfs(req_id, [])
+        # Use centralized cycle detection (pure function - no mutation)
+        cycle_info = detect_cycles(core_requirements)
 
         # Clear implements for cycle members so they appear as orphaned
         cycle_count = 0
-        for req_id in cycle_members:
+        for req_id in cycle_info.cycle_members:
             if req_id in self.requirements:
                 req = self.requirements[req_id]
                 if req.implements:

@@ -77,8 +77,8 @@ def get_all_requirements(
     Returns:
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
     """
-    from elspais.commands.validate import load_requirements_from_repo
     from elspais.config.loader import find_config_file, get_spec_directories, load_config
+    from elspais.core.loader import load_requirements_from_repo
     from elspais.core.parser import RequirementParser
     from elspais.core.patterns import PatternConfig
 

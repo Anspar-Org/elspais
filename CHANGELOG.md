@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Centralized hierarchy scanning** via new `core/hierarchy.py` module
+  - `find_requirement()`, `resolve_id()`, `normalize_req_id()` for flexible ID matching
+  - `find_children()`, `find_children_ids()` for parent/child discovery
+  - `build_children_index()` for efficient hierarchy traversal
+  - `detect_cycles()` with `CycleInfo` dataclass for pure cycle detection
+  - `find_roots()`, `find_orphans()` for hierarchy analysis
+- New `core/loader.py` with `load_requirements_from_repo()` for centralized requirement loading
+
+### Changed
+- `commands/analyze.py` now uses centralized hierarchy functions from `core/hierarchy.py`
+- `commands/trace.py` now uses `find_children_ids()` instead of local `find_implementers()`
+- `trace_view/generators/base.py` now uses centralized `detect_cycles()` from `core/hierarchy`
+- `reformat/hierarchy.py` now imports `load_requirements_from_repo` from `core/loader`
+
 ## [0.11.2] - 2026-01-21
 
 ### Fixed

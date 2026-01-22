@@ -5,10 +5,11 @@ elspais.commands.analyze - Analyze requirements command.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
+from elspais.core.hierarchy import find_children, find_requirement
 from elspais.core.models import Requirement
 from elspais.core.parser import RequirementParser
 from elspais.core.patterns import PatternConfig
@@ -189,29 +190,3 @@ def load_requirements(args: argparse.Namespace) -> Dict[str, Requirement]:
     except Exception as e:
         print(f"Error parsing requirements: {e}", file=sys.stderr)
         return {}
-
-
-def find_children(req_id: str, requirements: Dict[str, Requirement]) -> List[Requirement]:
-    """Find requirements that implement the given requirement."""
-    children = []
-    short_id = req_id.split("-")[-1] if "-" in req_id else req_id
-
-    for other_req in requirements.values():
-        for impl in other_req.implements:
-            if impl == req_id or impl == short_id or impl.endswith(short_id):
-                children.append(other_req)
-                break
-
-    return sorted(children, key=lambda r: r.id)
-
-
-def find_requirement(impl_id: str, requirements: Dict[str, Requirement]) -> Optional[Requirement]:
-    """Find a requirement by full or partial ID."""
-    if impl_id in requirements:
-        return requirements[impl_id]
-
-    for req_id, req in requirements.items():
-        if req_id.endswith(impl_id) or req_id.endswith(f"-{impl_id}"):
-            return req
-
-    return None
