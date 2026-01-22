@@ -10,8 +10,10 @@ CRUD operations for the review system:
 - Package operations (load/save/create/update/delete)
 - Merge operations for combining multiple user branches
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00011: Review Storage Operations
+Implements:
+    REQ-d00002: Review Storage Architecture
+    REQ-d00003: Review Package Archival
+    REQ-d00007: Review Storage Operations
 """
 
 import json
@@ -37,7 +39,7 @@ from .models import (
 
 # =============================================================================
 # Helper Functions
-# REQ-tv-d00011-A: Atomic write operations
+# REQ-d00007-A: Atomic write operations
 # =============================================================================
 
 
@@ -45,7 +47,7 @@ def atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
     """
     Atomically write JSON data to a file.
 
-    REQ-tv-d00011-A: Uses temp file + rename pattern to ensure file is either
+    REQ-d00007-A: Uses temp file + rename pattern to ensure file is either
     fully written or not changed at all.
 
     Args:
@@ -89,8 +91,8 @@ def read_json(path: Path) -> Dict[str, Any]:
 
 # =============================================================================
 # Path Functions
-# REQ-tv-d00011-H: Storage paths convention
-# REQ-tv-d00011-I: Requirement ID normalization
+# REQ-d00007-H: Storage paths convention
+# REQ-d00007-I: Requirement ID normalization
 # =============================================================================
 
 
@@ -98,7 +100,7 @@ def normalize_req_id(req_id: str) -> str:
     """
     Normalize requirement ID for use in file paths.
 
-    REQ-tv-d00011-I: Replace colons and slashes with underscores.
+    REQ-d00007-I: Replace colons and slashes with underscores.
 
     Args:
         req_id: Original requirement ID
@@ -113,7 +115,7 @@ def get_reviews_root(repo_root: Path) -> Path:
     """
     Get the root directory for review storage.
 
-    REQ-tv-d00011-H: Returns .reviews directory.
+    REQ-d00007-H: Returns .reviews directory.
 
     Args:
         repo_root: Repository root path
@@ -128,7 +130,7 @@ def get_req_dir(repo_root: Path, req_id: str) -> Path:
     """
     Get the directory for a specific requirement's review data.
 
-    REQ-tv-d00011-H: Returns .reviews/reqs/{normalized-req-id}/
+    REQ-d00007-H: Returns .reviews/reqs/{normalized-req-id}/
 
     Args:
         repo_root: Repository root path
@@ -145,7 +147,7 @@ def get_threads_path(repo_root: Path, req_id: str) -> Path:
     """
     Get path to threads.json file for a requirement.
 
-    REQ-tv-d00011-H: Returns .reviews/reqs/{normalized-req-id}/threads.json
+    REQ-d00007-H: Returns .reviews/reqs/{normalized-req-id}/threads.json
 
     Args:
         repo_root: Repository root path
@@ -161,7 +163,7 @@ def get_status_path(repo_root: Path, req_id: str) -> Path:
     """
     Get path to status.json file for a requirement.
 
-    REQ-tv-d00011-H: Returns .reviews/reqs/{normalized-req-id}/status.json
+    REQ-d00007-H: Returns .reviews/reqs/{normalized-req-id}/status.json
 
     Args:
         repo_root: Repository root path
@@ -177,7 +179,7 @@ def get_review_flag_path(repo_root: Path, req_id: str) -> Path:
     """
     Get path to flag.json file for a requirement.
 
-    REQ-tv-d00011-H: Returns .reviews/reqs/{normalized-req-id}/flag.json
+    REQ-d00007-H: Returns .reviews/reqs/{normalized-req-id}/flag.json
 
     Args:
         repo_root: Repository root path
@@ -193,7 +195,7 @@ def get_config_path(repo_root: Path) -> Path:
     """
     Get path to config.json file.
 
-    REQ-tv-d00011-H: Returns .reviews/config.json
+    REQ-d00007-H: Returns .reviews/config.json
 
     Args:
         repo_root: Repository root path
@@ -208,7 +210,7 @@ def get_packages_path(repo_root: Path) -> Path:
     """
     Get path to packages.json file (v1 format).
 
-    REQ-tv-d00011-H: Returns .reviews/packages.json
+    REQ-d00007-H: Returns .reviews/packages.json
 
     Args:
         repo_root: Repository root path
@@ -220,8 +222,12 @@ def get_packages_path(repo_root: Path) -> Path:
 
 
 # =============================================================================
-# V2 Path Functions (Package-Centric Storage)
-# REQ-d00096: Review Storage Architecture
+# V2 Path Functions (Package-Centric Storage) - ASPIRATIONAL
+# REQ-d00002: Review Storage Architecture
+#
+# These functions define V2 storage layout where threads are scoped per-package.
+# Currently UNUSED - kept for future migration from V1 (per-REQ threads).
+# DO NOT DELETE - intentionally preserved for planned V2 migration.
 # =============================================================================
 
 
@@ -229,7 +235,7 @@ def get_index_path(repo_root: Path) -> Path:
     """
     Get path to index.json file (v2 format).
 
-    REQ-d00096-D: Returns .reviews/index.json
+    REQ-d00002-D: Returns .reviews/index.json
 
     Args:
         repo_root: Repository root path
@@ -244,7 +250,7 @@ def get_package_dir(repo_root: Path, package_id: str) -> Path:
     """
     Get the directory for a specific package (v2 format).
 
-    REQ-d00096-A: Returns .reviews/packages/{pkg-id}/
+    REQ-d00002-A: Returns .reviews/packages/{pkg-id}/
 
     Args:
         repo_root: Repository root path
@@ -260,7 +266,7 @@ def get_package_metadata_path(repo_root: Path, package_id: str) -> Path:
     """
     Get path to package.json file for a package (v2 format).
 
-    REQ-d00096-B: Returns .reviews/packages/{pkg-id}/package.json
+    REQ-d00002-B: Returns .reviews/packages/{pkg-id}/package.json
 
     Args:
         repo_root: Repository root path
@@ -276,7 +282,7 @@ def get_package_threads_path(repo_root: Path, package_id: str, req_id: str) -> P
     """
     Get path to threads.json file for a requirement within a package (v2 format).
 
-    REQ-d00096-C: Returns .reviews/packages/{pkg-id}/reqs/{req-id}/threads.json
+    REQ-d00002-C: Returns .reviews/packages/{pkg-id}/reqs/{req-id}/threads.json
 
     Args:
         repo_root: Repository root path
@@ -294,7 +300,7 @@ def get_archive_dir(repo_root: Path) -> Path:
     """
     Get the root directory for archived packages.
 
-    REQ-d00097-A: Returns .reviews/archive/
+    REQ-d00003-A: Returns .reviews/archive/
 
     Args:
         repo_root: Repository root path
@@ -309,7 +315,7 @@ def get_archived_package_dir(repo_root: Path, package_id: str) -> Path:
     """
     Get the directory for an archived package.
 
-    REQ-d00097-A: Returns .reviews/archive/{pkg-id}/
+    REQ-d00003-A: Returns .reviews/archive/{pkg-id}/
 
     Args:
         repo_root: Repository root path
@@ -325,7 +331,7 @@ def get_archived_package_metadata_path(repo_root: Path, package_id: str) -> Path
     """
     Get path to package.json file for an archived package.
 
-    REQ-d00097-B: Returns .reviews/archive/{pkg-id}/package.json
+    REQ-d00003-B: Returns .reviews/archive/{pkg-id}/package.json
 
     Args:
         repo_root: Repository root path
@@ -341,7 +347,7 @@ def get_archived_package_threads_path(repo_root: Path, package_id: str, req_id: 
     """
     Get path to threads.json file for a requirement within an archived package.
 
-    REQ-d00097-B: Returns .reviews/archive/{pkg-id}/reqs/{req-id}/threads.json
+    REQ-d00003-B: Returns .reviews/archive/{pkg-id}/reqs/{req-id}/threads.json
 
     Args:
         repo_root: Repository root path
@@ -357,7 +363,7 @@ def get_archived_package_threads_path(repo_root: Path, package_id: str, req_id: 
 
 # =============================================================================
 # Config Operations
-# REQ-tv-d00011-F: Config storage operations
+# REQ-d00007-F: Config storage operations
 # =============================================================================
 
 
@@ -365,7 +371,7 @@ def load_config(repo_root: Path) -> ReviewConfig:
     """
     Load review system configuration.
 
-    REQ-tv-d00011-F: Returns default config if file doesn't exist.
+    REQ-d00007-F: Returns default config if file doesn't exist.
 
     Args:
         repo_root: Repository root path
@@ -384,7 +390,7 @@ def save_config(repo_root: Path, config: ReviewConfig) -> None:
     """
     Save review system configuration.
 
-    REQ-tv-d00011-F: Uses atomic write for safety.
+    REQ-d00007-F: Uses atomic write for safety.
 
     Args:
         repo_root: Repository root path
@@ -396,7 +402,7 @@ def save_config(repo_root: Path, config: ReviewConfig) -> None:
 
 # =============================================================================
 # Review Flag Operations
-# REQ-tv-d00011-D: Review flag storage operations
+# REQ-d00007-D: Review flag storage operations
 # =============================================================================
 
 
@@ -404,7 +410,7 @@ def load_review_flag(repo_root: Path, req_id: str) -> ReviewFlag:
     """
     Load review flag for a requirement.
 
-    REQ-tv-d00011-D: Returns cleared flag if file doesn't exist.
+    REQ-d00007-D: Returns cleared flag if file doesn't exist.
 
     Args:
         repo_root: Repository root path
@@ -424,7 +430,7 @@ def save_review_flag(repo_root: Path, req_id: str, flag: ReviewFlag) -> None:
     """
     Save review flag for a requirement.
 
-    REQ-tv-d00011-D: Uses atomic write for safety.
+    REQ-d00007-D: Uses atomic write for safety.
 
     Args:
         repo_root: Repository root path
@@ -437,7 +443,7 @@ def save_review_flag(repo_root: Path, req_id: str, flag: ReviewFlag) -> None:
 
 # =============================================================================
 # Thread Operations
-# REQ-tv-d00011-B: Thread storage operations
+# REQ-d00007-B: Thread storage operations
 # =============================================================================
 
 
@@ -445,7 +451,7 @@ def load_threads(repo_root: Path, req_id: str) -> ThreadsFile:
     """
     Load threads for a requirement.
 
-    REQ-tv-d00011-B: Returns empty threads file if doesn't exist.
+    REQ-d00007-B: Returns empty threads file if doesn't exist.
 
     Args:
         repo_root: Repository root path
@@ -466,7 +472,7 @@ def save_threads(repo_root: Path, req_id: str, threads_file: ThreadsFile) -> Non
     """
     Save threads file for a requirement.
 
-    REQ-tv-d00011-B: Uses atomic write for safety.
+    REQ-d00007-B: Uses atomic write for safety.
 
     Args:
         repo_root: Repository root path
@@ -481,7 +487,7 @@ def add_thread(repo_root: Path, req_id: str, thread: Thread) -> Thread:
     """
     Add a new thread to a requirement.
 
-    REQ-tv-d00011-B: Creates file if needed and appends thread.
+    REQ-d00007-B: Creates file if needed and appends thread.
 
     Args:
         repo_root: Repository root path
@@ -503,7 +509,7 @@ def add_comment_to_thread(
     """
     Add a comment to an existing thread.
 
-    REQ-tv-d00011-B: Persists comment and returns it.
+    REQ-d00007-B: Persists comment and returns it.
 
     Args:
         repo_root: Repository root path
@@ -539,7 +545,7 @@ def resolve_thread(repo_root: Path, req_id: str, thread_id: str, user: str) -> b
     """
     Mark a thread as resolved.
 
-    REQ-tv-d00011-B: Persists resolution state.
+    REQ-d00007-B: Persists resolution state.
 
     Args:
         repo_root: Repository root path
@@ -565,7 +571,7 @@ def unresolve_thread(repo_root: Path, req_id: str, thread_id: str) -> bool:
     """
     Mark a thread as unresolved.
 
-    REQ-tv-d00011-B: Persists unresolved state.
+    REQ-d00007-B: Persists unresolved state.
 
     Args:
         repo_root: Repository root path
@@ -588,7 +594,7 @@ def unresolve_thread(repo_root: Path, req_id: str, thread_id: str) -> bool:
 
 # =============================================================================
 # Status Request Operations
-# REQ-tv-d00011-C: Status request storage operations
+# REQ-d00007-C: Status request storage operations
 # =============================================================================
 
 
@@ -596,7 +602,7 @@ def load_status_requests(repo_root: Path, req_id: str) -> StatusFile:
     """
     Load status requests for a requirement.
 
-    REQ-tv-d00011-C: Returns empty status file if doesn't exist.
+    REQ-d00007-C: Returns empty status file if doesn't exist.
 
     Args:
         repo_root: Repository root path
@@ -617,7 +623,7 @@ def save_status_requests(repo_root: Path, req_id: str, status_file: StatusFile) 
     """
     Save status requests file for a requirement.
 
-    REQ-tv-d00011-C: Uses atomic write for safety.
+    REQ-d00007-C: Uses atomic write for safety.
 
     Args:
         repo_root: Repository root path
@@ -632,7 +638,7 @@ def create_status_request(repo_root: Path, req_id: str, request: StatusRequest) 
     """
     Create a new status change request.
 
-    REQ-tv-d00011-C: Persists request and returns it.
+    REQ-d00007-C: Persists request and returns it.
 
     Args:
         repo_root: Repository root path
@@ -659,7 +665,7 @@ def add_approval(
     """
     Add an approval to a status request.
 
-    REQ-tv-d00011-C: Persists approval and returns it.
+    REQ-d00007-C: Persists approval and returns it.
 
     Args:
         repo_root: Repository root path
@@ -696,7 +702,7 @@ def mark_request_applied(repo_root: Path, req_id: str, request_id: str) -> bool:
     """
     Mark a status request as applied.
 
-    REQ-tv-d00011-C: Persists applied state.
+    REQ-d00007-C: Persists applied state.
 
     Args:
         repo_root: Repository root path
@@ -722,7 +728,7 @@ def mark_request_applied(repo_root: Path, req_id: str, request_id: str) -> bool:
 
 # =============================================================================
 # Package Operations
-# REQ-tv-d00011-E: Package storage operations
+# REQ-d00007-E: Package storage operations
 # =============================================================================
 
 
@@ -730,35 +736,26 @@ def load_packages(repo_root: Path) -> PackagesFile:
     """
     Load packages file.
 
-    REQ-tv-d00011-E: Returns file with default package if doesn't exist.
+    REQ-d00007-E: Returns empty PackagesFile if file doesn't exist.
 
     Args:
         repo_root: Repository root path
 
     Returns:
-        PackagesFile instance
+        PackagesFile instance (may be empty if no packages created yet)
     """
     packages_path = get_packages_path(repo_root)
     if not packages_path.exists():
-        # Create default package
-        default_pkg = ReviewPackage.create_default()
-        return PackagesFile(packages=[default_pkg])
+        return PackagesFile(packages=[])
     data = read_json(packages_path)
-    packages_file = PackagesFile.from_dict(data)
-
-    # Ensure default package exists
-    if packages_file.get_default() is None:
-        default_pkg = ReviewPackage.create_default()
-        packages_file.packages.insert(0, default_pkg)
-
-    return packages_file
+    return PackagesFile.from_dict(data)
 
 
 def save_packages(repo_root: Path, packages_file: PackagesFile) -> None:
     """
     Save packages file.
 
-    REQ-tv-d00011-E: Uses atomic write for safety.
+    REQ-d00007-E: Uses atomic write for safety.
 
     Args:
         repo_root: Repository root path
@@ -772,7 +769,7 @@ def create_package(repo_root: Path, package: ReviewPackage) -> ReviewPackage:
     """
     Create a new package.
 
-    REQ-tv-d00011-E: Persists package and returns it.
+    REQ-d00007-E: Persists package and returns it.
 
     Args:
         repo_root: Repository root path
@@ -791,7 +788,7 @@ def update_package(repo_root: Path, package: ReviewPackage) -> bool:
     """
     Update an existing package.
 
-    REQ-tv-d00011-E: Persists updated package.
+    REQ-d00007-E: Persists updated package.
 
     Args:
         repo_root: Repository root path
@@ -815,7 +812,7 @@ def delete_package(repo_root: Path, package_id: str) -> bool:
     """
     Delete a package by ID.
 
-    REQ-tv-d00011-E: Removes package and persists change.
+    REQ-d00007-E: Removes package and persists change.
 
     Args:
         repo_root: Repository root path
@@ -839,7 +836,7 @@ def add_req_to_package(repo_root: Path, package_id: str, req_id: str) -> bool:
     """
     Add a requirement ID to a package.
 
-    REQ-tv-d00011-E: Prevents duplicates.
+    REQ-d00007-E: Prevents duplicates.
 
     Args:
         repo_root: Repository root path
@@ -865,7 +862,7 @@ def remove_req_from_package(repo_root: Path, package_id: str, req_id: str) -> bo
     """
     Remove a requirement ID from a package.
 
-    REQ-tv-d00011-E: Persists change.
+    REQ-d00007-E: Persists change.
 
     Args:
         repo_root: Repository root path
@@ -889,8 +886,8 @@ def remove_req_from_package(repo_root: Path, package_id: str, req_id: str) -> bo
 
 # =============================================================================
 # Merge Operations
-# REQ-tv-d00011-G: Merge operations
-# REQ-tv-d00011-J: Deduplication and timestamp-based conflict resolution
+# REQ-d00007-G: Merge operations
+# REQ-d00007-J: Deduplication and timestamp-based conflict resolution
 # =============================================================================
 
 
@@ -898,8 +895,8 @@ def merge_threads(local: ThreadsFile, remote: ThreadsFile) -> ThreadsFile:
     """
     Merge thread files from local and remote.
 
-    REQ-tv-d00011-G: Combines data from multiple user branches.
-    REQ-tv-d00011-J: Deduplicates by ID and uses timestamp-based conflict resolution.
+    REQ-d00007-G: Combines data from multiple user branches.
+    REQ-d00007-J: Deduplicates by ID and uses timestamp-based conflict resolution.
 
     Strategy:
     - Unique threads (by threadId) are combined
@@ -940,7 +937,7 @@ def _merge_single_thread(local: Thread, remote: Thread) -> Thread:
     """
     Merge two versions of the same thread.
 
-    REQ-tv-d00011-J: Deduplicates comments by ID and sorts by timestamp.
+    REQ-d00007-J: Deduplicates comments by ID and sorts by timestamp.
     """
     # Merge comments by ID
     local_comment_map = {c.id: c for c in local.comments}
@@ -980,8 +977,8 @@ def merge_status_files(local: StatusFile, remote: StatusFile) -> StatusFile:
     """
     Merge status files from local and remote.
 
-    REQ-tv-d00011-G: Combines data from multiple user branches.
-    REQ-tv-d00011-J: Deduplicates by ID and uses timestamp-based conflict resolution.
+    REQ-d00007-G: Combines data from multiple user branches.
+    REQ-d00007-J: Deduplicates by ID and uses timestamp-based conflict resolution.
 
     Strategy:
     - Unique requests (by requestId) are combined
@@ -1022,7 +1019,7 @@ def _merge_single_request(local: StatusRequest, remote: StatusRequest) -> Status
     """
     Merge two versions of the same status request.
 
-    REQ-tv-d00011-J: Uses timestamp-based conflict resolution for approvals.
+    REQ-d00007-J: Uses timestamp-based conflict resolution for approvals.
     """
     # Merge approvals by user (later approval wins)
     local_approval_map = {a.user: a for a in local.approvals}
@@ -1073,8 +1070,8 @@ def merge_review_flags(local: ReviewFlag, remote: ReviewFlag) -> ReviewFlag:
     """
     Merge review flags from local and remote.
 
-    REQ-tv-d00011-G: Combines data from multiple user branches.
-    REQ-tv-d00011-J: Uses timestamp-based conflict resolution.
+    REQ-d00007-G: Combines data from multiple user branches.
+    REQ-d00007-J: Uses timestamp-based conflict resolution.
 
     Strategy:
     - If neither flagged, return unflagged
@@ -1127,7 +1124,7 @@ def merge_review_flags(local: ReviewFlag, remote: ReviewFlag) -> ReviewFlag:
 
 # =============================================================================
 # Archive Operations
-# REQ-d00097: Review Package Archival
+# REQ-d00003: Review Package Archival
 # =============================================================================
 
 
@@ -1135,9 +1132,9 @@ def archive_package(repo_root: Path, package_id: str, reason: str, user: str) ->
     """
     Archive a package by moving it to the archive directory.
 
-    REQ-d00097-D: Archive SHALL be triggered by resolution, deletion, or manual action.
-    REQ-d00097-E: Deleting a package SHALL move it to archive rather than destroying.
-    REQ-d00097-C: Archive metadata SHALL be added to package.json.
+    REQ-d00003-D: Archive SHALL be triggered by resolution, deletion, or manual action.
+    REQ-d00003-E: Deleting a package SHALL move it to archive rather than destroying.
+    REQ-d00003-C: Archive metadata SHALL be added to package.json.
 
     Args:
         repo_root: Repository root path
@@ -1207,7 +1204,7 @@ def list_archived_packages(repo_root: Path) -> List[ReviewPackage]:
     """
     List all archived packages.
 
-    REQ-d00097: Provides read access to archived packages for the archive viewer.
+    REQ-d00003: Provides read access to archived packages for the archive viewer.
 
     Args:
         repo_root: Repository root path
@@ -1242,7 +1239,7 @@ def get_archived_package(repo_root: Path, package_id: str) -> Optional[ReviewPac
     """
     Get a specific archived package by ID.
 
-    REQ-d00097: Provides read access to archived package details.
+    REQ-d00003: Provides read access to archived package details.
 
     Args:
         repo_root: Repository root path
@@ -1266,7 +1263,7 @@ def load_archived_threads(repo_root: Path, package_id: str, req_id: str) -> Opti
     """
     Load threads for a requirement from an archived package.
 
-    REQ-d00097-F: Archived data SHALL be read-only.
+    REQ-d00003-F: Archived data SHALL be read-only.
 
     Args:
         repo_root: Repository root path
@@ -1291,7 +1288,7 @@ def check_auto_archive(repo_root: Path, package_id: str, user: str) -> bool:
     """
     Check if a package should be auto-archived (all threads resolved) and archive if so.
 
-    REQ-d00097-D: Resolving all threads in a package SHALL trigger auto-archive.
+    REQ-d00003-D: Resolving all threads in a package SHALL trigger auto-archive.
 
     Args:
         repo_root: Repository root path

@@ -255,7 +255,7 @@ const TraceView = (function() {
             const reviewActive = (window.ReviewSystem && window.ReviewSystem.isReviewModeActive && window.ReviewSystem.isReviewModeActive()) ||
                                  state.reviewModeActive;
             if (reviewActive) {
-                // Apply interactive line numbers with click handlers (REQ-d00092)
+                // Apply interactive line numbers with click handlers (REQ-d00012)
                 if (window.ReviewSystem && window.ReviewSystem.applyLineNumbersToCard) {
                     window.ReviewSystem.applyLineNumbersToCard(card, reqId);
                 } else if (window.TraceView && window.TraceView.review && window.TraceView.review.applyLineNumbersToCard) {
@@ -1611,7 +1611,7 @@ const TraceView = (function() {
             }
         });
 
-        // Sync review mode state with review system (REQ-d00092)
+        // Sync review mode state with review system (REQ-d00012)
         // The review system dispatches this event when mode changes
         document.addEventListener('rs:review-mode-changed', function(e) {
             state.reviewModeActive = e.detail.active;

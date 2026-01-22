@@ -6,8 +6,8 @@ Resolves comment positions within requirement text, handling content drift
 when REQ hashes don't match. Uses fallback strategies to locate anchors
 with varying confidence levels.
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00012: Position Resolution
+Implements:
+    REQ-d00008: Position Resolution
 """
 
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ from .models import CommentPosition, PositionType
 
 # =============================================================================
 # Enums
-# REQ-tv-d00012-B: Confidence levels as string enums
+# REQ-d00008-B: Confidence levels as string enums
 # =============================================================================
 
 
@@ -26,7 +26,7 @@ class ResolutionConfidence(str, Enum):
     """
     Confidence level for resolved position.
 
-    REQ-tv-d00012-B: EXACT (hash matches), APPROXIMATE (fallback matched),
+    REQ-d00008-B: EXACT (hash matches), APPROXIMATE (fallback matched),
     or UNANCHORED (no match found).
     """
 
@@ -45,8 +45,8 @@ class ResolvedPosition:
     """
     Result of resolving a CommentPosition against current REQ content.
 
-    REQ-tv-d00012-A: Resolves CommentPosition anchors to current document coordinates.
-    REQ-tv-d00012-I: Includes resolutionPath describing the fallback strategy used.
+    REQ-d00008-A: Resolves CommentPosition anchors to current document coordinates.
+    REQ-d00008-I: Includes resolutionPath describing the fallback strategy used.
 
     Contains all information needed to display a comment at its resolved
     location, including confidence level and original position for reference.
@@ -74,7 +74,7 @@ class ResolvedPosition:
         """
         Factory for exact resolution (hash matched).
 
-        REQ-tv-d00012-C: Hash match yields EXACT confidence.
+        REQ-d00008-C: Hash match yields EXACT confidence.
         """
         return cls(
             type=position_type,
@@ -101,7 +101,7 @@ class ResolvedPosition:
         """
         Factory for approximate resolution (fallback succeeded).
 
-        REQ-tv-d00012-D: Fallback resolution yields APPROXIMATE confidence.
+        REQ-d00008-D: Fallback resolution yields APPROXIMATE confidence.
         """
         return cls(
             type=position_type,
@@ -119,7 +119,7 @@ class ResolvedPosition:
         """
         Factory for unanchored resolution (all fallbacks failed).
 
-        REQ-tv-d00012-J: When no fallback succeeds, resolve as UNANCHORED
+        REQ-d00008-J: When no fallback succeeds, resolve as UNANCHORED
         with original position preserved.
         """
         return cls(
@@ -263,7 +263,7 @@ def find_keyword_occurrence(text: str, keyword: str, occurrence: int) -> Optiona
     """
     Find character range of the Nth occurrence of a keyword.
 
-    REQ-tv-d00012-G: For WORD positions, find the Nth occurrence based on keywordOccurrence.
+    REQ-d00008-G: For WORD positions, find the Nth occurrence based on keywordOccurrence.
 
     Args:
         text: The text to search in
@@ -369,7 +369,7 @@ def resolve_position(
     """
     Resolve a comment position against current requirement content.
 
-    REQ-tv-d00012-A: Resolves CommentPosition anchors to current document coordinates.
+    REQ-d00008-A: Resolves CommentPosition anchors to current document coordinates.
 
     This is the main entry point for position resolution. It determines
     the current location of a comment anchor, accounting for potential
@@ -395,17 +395,17 @@ def resolve_position(
     if not content:
         return ResolvedPosition.create_unanchored(position)
 
-    # REQ-tv-d00012-H: GENERAL positions always resolve with EXACT confidence
+    # REQ-d00008-H: GENERAL positions always resolve with EXACT confidence
     if position.type == PositionType.GENERAL.value:
         return _resolve_general(position, content)
 
-    # REQ-tv-d00012-C: Check if hash matches (exact resolution) - case insensitive
+    # REQ-d00008-C: Check if hash matches (exact resolution) - case insensitive
     hash_matches = position.hashWhenCreated.lower() == current_hash.lower()
 
     if hash_matches:
         return _resolve_exact(position, content)
     else:
-        # REQ-tv-d00012-D: Hash differs, attempt fallback resolution
+        # REQ-d00008-D: Hash differs, attempt fallback resolution
         return _resolve_with_fallback(position, content)
 
 
@@ -413,7 +413,7 @@ def _resolve_general(position: CommentPosition, content: str) -> ResolvedPositio
     """
     Resolve GENERAL position type.
 
-    REQ-tv-d00012-H: GENERAL positions always resolve with EXACT confidence
+    REQ-d00008-H: GENERAL positions always resolve with EXACT confidence
     since they apply to the entire requirement.
     """
     total_lines = get_total_lines(content)
@@ -431,7 +431,7 @@ def _resolve_exact(position: CommentPosition, content: str) -> ResolvedPosition:
     """
     Resolve position when hash matches (exact confidence).
 
-    REQ-tv-d00012-C: When the document hash matches, the position resolves
+    REQ-d00008-C: When the document hash matches, the position resolves
     with EXACT confidence using stored coordinates.
 
     Trusts the original position data since content hasn't changed.
@@ -517,10 +517,10 @@ def _resolve_with_fallback(position: CommentPosition, content: str) -> ResolvedP
     """
     Resolve position when hash differs (approximate confidence).
 
-    REQ-tv-d00012-D: When document hash differs, attempt fallback resolution.
-    REQ-tv-d00012-E: For LINE positions, search for context string.
-    REQ-tv-d00012-F: For BLOCK positions, search for context and expand.
-    REQ-tv-d00012-G: For WORD positions, search for keyword at Nth occurrence.
+    REQ-d00008-D: When document hash differs, attempt fallback resolution.
+    REQ-d00008-E: For LINE positions, search for context string.
+    REQ-d00008-F: For BLOCK positions, search for context and expand.
+    REQ-d00008-G: For WORD positions, search for keyword at Nth occurrence.
 
     Tries fallback strategies in order:
     1. lineNumber (if within valid range)
@@ -552,7 +552,7 @@ def _resolve_with_fallback(position: CommentPosition, content: str) -> ResolvedP
                 )
 
     # Strategy 2: Try fallbackContext
-    # REQ-tv-d00012-E: For LINE positions, search for context string
+    # REQ-d00008-E: For LINE positions, search for context string
     if position.fallbackContext:
         char_range = find_context_in_text(content, position.fallbackContext)
         if char_range:
@@ -569,7 +569,7 @@ def _resolve_with_fallback(position: CommentPosition, content: str) -> ResolvedP
             )
 
     # Strategy 3: Try keyword occurrence
-    # REQ-tv-d00012-G: For WORD positions, search for keyword
+    # REQ-d00008-G: For WORD positions, search for keyword
     if position.keyword:
         occurrence = position.keywordOccurrence or 1
         char_range = find_keyword_occurrence(content, position.keyword, occurrence)
@@ -587,5 +587,5 @@ def _resolve_with_fallback(position: CommentPosition, content: str) -> ResolvedP
             )
 
     # Strategy 4: Fall back to general (unanchored)
-    # REQ-tv-d00012-J: When no fallback succeeds, resolve as UNANCHORED
+    # REQ-d00008-J: When no fallback succeeds, resolve as UNANCHORED
     return ResolvedPosition.create_unanchored(position)

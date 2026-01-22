@@ -10,7 +10,7 @@
  *
  * IMPLEMENTS REQUIREMENTS:
  *   REQ-tv-d00016: Review JavaScript Integration
- *   REQ-d00092: Click-to-Highlight Positions
+ *   REQ-d00012: Click-to-Highlight Positions
  *   REQ-d00087: Position Resolution with Fallback
  */
 
@@ -27,7 +27,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Create thread list container HTML
-     * REQ-d00099: Support read-only mode for archived packages
+     * REQ-d00005: Support read-only mode for archived packages
      * @param {string} reqId - Requirement ID
      * @returns {string} HTML
      */
@@ -55,7 +55,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Create thread HTML
-     * REQ-d00099-C: Hide action buttons in archive mode
+     * REQ-d00005-C: Hide action buttons in archive mode
      * @param {Thread} thread - Thread object
      * @returns {string} HTML
      */
@@ -66,7 +66,7 @@ TraceView.review = TraceView.review || {};
         const confidenceClass = getConfidenceClass(thread);
         const isArchiveMode = review.packages && review.packages.isArchiveMode;
 
-        // REQ-d00099-C: No action buttons in archive mode
+        // REQ-d00005-C: No action buttons in archive mode
         const actionButtonsHtml = isArchiveMode ? '' : `
             ${thread.resolved ?
                 `<button class="rs-btn rs-btn-sm rs-unresolve-btn">Reopen</button>` :
@@ -74,7 +74,7 @@ TraceView.review = TraceView.review || {};
             }
         `;
 
-        // REQ-d00099-C: No reply form in archive mode
+        // REQ-d00005-C: No reply form in archive mode
         const replyHtml = isArchiveMode ? '' : `
             <div class="rs-reply-form" style="display: none;">
                 <textarea class="rs-reply-input" placeholder="Write a reply..."></textarea>
@@ -224,7 +224,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Get confidence class for position label styling
-     * REQ-d00092: Click-to-Highlight Positions
+     * REQ-d00012: Click-to-Highlight Positions
      * REQ-d00087: Position Resolution with Fallback
      * @param {Thread} thread - Thread object
      * @returns {string} CSS class name
@@ -242,7 +242,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Get highlight class for line highlighting based on confidence
-     * REQ-d00092: Click-to-Highlight Positions
+     * REQ-d00012: Click-to-Highlight Positions
      * REQ-d00087: Position Resolution with Fallback
      * @param {Thread} thread - Thread object
      * @returns {string} CSS class name for highlighting
@@ -334,12 +334,12 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Show new comment form
-     * REQ-d00099: Block in archive mode
+     * REQ-d00005: Block in archive mode
      * @param {Element} container - Container element (optional - uses current selection if not provided)
      * @param {string} reqId - Requirement ID (optional - uses current selection if not provided)
      */
     function showNewCommentForm(container, reqId) {
-        // REQ-d00099-C: Block comment creation in archive mode
+        // REQ-d00005-C: Block comment creation in archive mode
         if (review.packages && review.packages.isArchiveMode) {
             alert('This package is archived and read-only.\n\nComments cannot be added to archived packages.');
             return;
@@ -441,14 +441,14 @@ TraceView.review = TraceView.review || {};
      * @param {string} reqId - Requirement ID
      */
     function submitNewComment(form, reqId) {
-        // REQ-d00095-B: Require explicit package selection
+        // REQ-d00001-B: Require explicit package selection
         const activePackageId = review.packages && review.packages.activeId;
         if (!activePackageId) {
             alert('Please select a package first.\n\nThreads must be owned by a package.');
             return;
         }
 
-        // REQ-d00095-B: Verify the active package actually exists
+        // REQ-d00001-B: Verify the active package actually exists
         const activePackage = review.packages.items.find(p => p.packageId === activePackageId);
         if (!activePackage) {
             console.error('Active package not found in packages list:', activePackageId);
@@ -600,7 +600,7 @@ TraceView.review = TraceView.review || {};
             });
         });
 
-        // REQ-d00092: Position label click handler with toggle behavior
+        // REQ-d00012: Position label click handler with toggle behavior
         container.querySelectorAll('.rs-position-label').forEach(positionLabel => {
             positionLabel.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -654,7 +654,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Highlight the position referenced by a thread in the REQ card
-     * REQ-d00092: Click-to-Highlight Positions
+     * REQ-d00012: Click-to-Highlight Positions
      * @param {string} threadId - Thread ID
      * @param {Element} container - Container element
      */
@@ -673,7 +673,7 @@ TraceView.review = TraceView.review || {};
 
         const position = thread.position;
 
-        // REQ-d00092: Get confidence-based highlight class
+        // REQ-d00012: Get confidence-based highlight class
         const highlightClass = getHighlightClassForThread(thread);
 
         // Find the REQ card's line-numbered view
@@ -688,7 +688,7 @@ TraceView.review = TraceView.review || {};
             clearCommentHighlights(lineContainer);
         }
 
-        // REQ-d00092: For GENERAL position type, highlight the whole card
+        // REQ-d00012: For GENERAL position type, highlight the whole card
         if (position.type === 'general' || position.type === review.PositionType?.GENERAL) {
             reqCard.classList.add('rs-card-highlight');
             reqCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -729,8 +729,8 @@ TraceView.review = TraceView.review || {};
                 const lineRow = lineContainer.querySelector(`.rs-line-row[data-line="${lineNum}"]`);
                 if (lineRow) {
                     lineRow.classList.add('rs-comment-highlight');
-                    lineRow.classList.add(highlightClass);  // REQ-d00092: Add confidence class
-                    lineRow.setAttribute('data-highlight-thread', threadId);  // REQ-d00092: Track thread
+                    lineRow.classList.add(highlightClass);  // REQ-d00012: Add confidence class
+                    lineRow.setAttribute('data-highlight-thread', threadId);  // REQ-d00012: Track thread
                     if (!firstRow) firstRow = lineRow;
                 }
             });
@@ -745,7 +745,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Clear all position highlights (card-level highlights for GENERAL position)
-     * REQ-d00092: Click-to-Highlight Positions
+     * REQ-d00012: Click-to-Highlight Positions
      * REQ-d00087: Position Resolution with Fallback
      */
     function clearAllPositionHighlights() {
@@ -753,7 +753,7 @@ TraceView.review = TraceView.review || {};
         document.querySelectorAll('.rs-card-highlight').forEach(el => {
             el.classList.remove('rs-card-highlight');
         });
-        // REQ-d00092: Clear highlight classes from req cards
+        // REQ-d00012: Clear highlight classes from req cards
         document.querySelectorAll('[data-req-id]').forEach(reqCard => {
             reqCard.classList.remove('rs-highlight-unanchored', 'rs-card-highlight');
         });
@@ -762,7 +762,7 @@ TraceView.review = TraceView.review || {};
 
     /**
      * Clear comment highlights from line container
-     * REQ-d00092: Enhanced to remove all highlight-related classes and attributes
+     * REQ-d00012: Enhanced to remove all highlight-related classes and attributes
      * @param {Element} lineContainer - The lines table element
      */
     function clearCommentHighlights(lineContainer) {
@@ -915,7 +915,7 @@ TraceView.review = TraceView.review || {};
     document.addEventListener('traceview:review-panel-ready', handleReviewPanelReady);
 
     // ==========================================================================
-    // RS Namespace Exports (REQ-d00092: Test Accessibility)
+    // RS Namespace Exports (REQ-d00012: Test Accessibility)
     // ==========================================================================
     // Export functions to RS namespace for test access
     if (typeof window.RS === 'undefined') {

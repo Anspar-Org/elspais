@@ -1,7 +1,7 @@
 /**
  * TraceView Review Init Module
  * Orchestrates review mode initialization and provides global functions.
- * IMPLEMENTS REQUIREMENTS: REQ-d00092
+ * IMPLEMENTS REQUIREMENTS: REQ-d00012
  */
 window.TraceView = window.TraceView || {};
 TraceView.review = TraceView.review || {};
@@ -30,7 +30,7 @@ var RS = window.ReviewSystem;
         const btn = document.getElementById('btnReviewMode');
         const packagesPanel = document.getElementById('reviewPackagesPanel');
 
-        // Use classList.toggle for body class (REQ-d00092-G)
+        // Use classList.toggle for body class (REQ-d00012-G)
         document.body.classList.toggle('review-mode-active', reviewModeActive);
 
         if (reviewModeActive) {
@@ -70,11 +70,11 @@ var RS = window.ReviewSystem;
             if (btn) btn.classList.remove('active');
             if (packagesPanel) packagesPanel.style.display = 'none';
 
-            // Clear selection when deactivating (REQ-d00092-G)
+            // Clear selection when deactivating (REQ-d00012-G)
             clearCurrentSelection();
         }
 
-        // Dispatch event for review mode change (REQ-d00092-E)
+        // Dispatch event for review mode change (REQ-d00012-E)
         document.dispatchEvent(new CustomEvent('rs:review-mode-changed', {
             detail: { active: reviewModeActive }
         }));
@@ -103,7 +103,7 @@ var RS = window.ReviewSystem;
      * @param {string} reqId - Requirement ID
      */
     function applyLineNumbersToReqCard(cardElement, reqId) {
-        // Use RS namespace to apply line numbers (REQ-d00092)
+        // Use RS namespace to apply line numbers (REQ-d00012)
         if (RS.applyLineNumbersToCard) {
             RS.applyLineNumbersToCard(cardElement, reqId);
         }
@@ -130,7 +130,7 @@ var RS = window.ReviewSystem;
             selectedCardElement = cardElement;
             cardElement.classList.add('rs-selected');
 
-            // Apply line numbers to the selected card (REQ-d00092-E)
+            // Apply line numbers to the selected card (REQ-d00012-E)
             applyLineNumbersToReqCard(cardElement, reqId);
         }
 

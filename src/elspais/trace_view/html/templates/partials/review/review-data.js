@@ -954,7 +954,7 @@ TraceView.review = TraceView.review || {};
 
 })(TraceView.review);
 
-// Create window.ReviewSystem alias for backwards compatibility (REQ-d00092)
+// Create window.ReviewSystem alias for backwards compatibility (REQ-d00012)
 // This allows tests and templates to use window.ReviewSystem while
 // the implementation uses TraceView.review namespace
 window.ReviewSystem = window.ReviewSystem || {};

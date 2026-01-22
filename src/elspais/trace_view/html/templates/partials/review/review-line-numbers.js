@@ -1,14 +1,14 @@
 /**
  * TraceView Review Line Numbers Module
  * Add line numbers to requirement content for click-to-comment.
- * IMPLEMENTS REQUIREMENTS: REQ-d00092
+ * IMPLEMENTS REQUIREMENTS: REQ-d00012
  */
 window.TraceView = window.TraceView || {};
 TraceView.review = TraceView.review || {};
 window.ReviewSystem = window.ReviewSystem || {};
 var RS = window.ReviewSystem;
 
-// Global selection state (REQ-d00092-H)
+// Global selection state (REQ-d00012-H)
 window.selectedLineNumber = null;
 window.selectedLineRange = null;
 
@@ -146,7 +146,7 @@ window.selectedLineRange = null;
      * @param {number} lineNumber - Primary line number
      */
     function dispatchSelectionEvent(reqId, lineNumber) {
-        // Dispatch event for line selection (REQ-d00092-C)
+        // Dispatch event for line selection (REQ-d00012-C)
         document.dispatchEvent(new CustomEvent('rs:line-selected', {
             detail: {
                 reqId: reqId,
@@ -391,7 +391,7 @@ window.selectedLineRange = null;
     }
 
     /**
-     * Handle keyboard events for line selection (REQ-d00092-I)
+     * Handle keyboard events for line selection (REQ-d00012-I)
      * @param {KeyboardEvent} event - Keyboard event
      */
     function handleKeyboard(event) {
@@ -401,7 +401,7 @@ window.selectedLineRange = null;
         }
     }
 
-    // Bind keyboard handler (REQ-d00092-I)
+    // Bind keyboard handler (REQ-d00012-I)
     document.addEventListener('keydown', handleKeyboard);
 
     // Export to review namespace

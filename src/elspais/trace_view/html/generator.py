@@ -190,7 +190,7 @@ class HTMLGenerator:
         if not review_dir.exists():
             return ""
 
-        # Load modules in dependency order (REQ-d00092)
+        # Load modules in dependency order (REQ-d00012)
         module_order = [
             "review-data.js",  # Data models and state (no deps)
             "review-position.js",  # Position resolution (depends on data)

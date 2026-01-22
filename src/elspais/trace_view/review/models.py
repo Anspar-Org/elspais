@@ -13,10 +13,11 @@ Data classes for the review system including:
 - ReviewConfig: System configuration
 - ReviewPackage: Named collections of REQs under review with audit trail
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00010: Review Data Models
-    REQ-d00094: TraceView Review System Core
-    REQ-d00095: Review Package Management
+Implements:
+    REQ-d00001: Review Package Management
+    REQ-d00003: Review Package Archival
+    REQ-d00004: Review Git Audit Trail
+    REQ-d00006: Review Threads and Comments
 """
 
 import re
@@ -28,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # =============================================================================
 # Enums and Constants
-# REQ-tv-d00010-B: String enums for JSON compatibility
+# REQ-d00006-B: String enums for JSON compatibility
 # =============================================================================
 
 
@@ -82,7 +83,7 @@ def now_iso() -> str:
     """
     Get current UTC timestamp in ISO 8601 format.
 
-    REQ-tv-d00010-J: All timestamps SHALL be UTC in ISO 8601 format.
+    REQ-d00006-J: All timestamps SHALL be UTC in ISO 8601 format.
     """
     return datetime.now(timezone.utc).isoformat()
 
@@ -121,10 +122,10 @@ def validate_hash(hash_value: str) -> bool:
 
 # =============================================================================
 # Data Classes
-# REQ-tv-d00010-A: All types implemented as dataclasses
-# REQ-tv-d00010-C: Each dataclass implements to_dict()
-# REQ-tv-d00010-D: Each dataclass implements from_dict()
-# REQ-tv-d00010-E: Each dataclass implements validate()
+# REQ-d00006-A: All types implemented as dataclasses
+# REQ-d00006-A: Each dataclass implements to_dict()
+# REQ-d00006-A: Each dataclass implements from_dict()
+# REQ-d00006-A: Each dataclass implements validate()
 # =============================================================================
 
 
@@ -133,7 +134,7 @@ class CommentPosition:
     """
     Position anchor for a comment within a requirement.
 
-    REQ-tv-d00010-H: Supports four anchor types: LINE, BLOCK, WORD, GENERAL.
+    REQ-d00006-E: Supports four anchor types: LINE, BLOCK, WORD, GENERAL.
 
     Supports multiple anchor types:
     - "line": Specific line number
@@ -203,7 +204,7 @@ class CommentPosition:
         """
         Validate position fields based on type.
 
-        REQ-tv-d00010-E: Returns (is_valid, list_of_error_messages)
+        REQ-d00006-A: Returns (is_valid, list_of_error_messages)
         """
         errors = []
 
@@ -240,7 +241,7 @@ class CommentPosition:
         """
         Convert to JSON-serializable dictionary.
 
-        REQ-tv-d00010-C: Returns JSON-serializable dict.
+        REQ-d00006-A: Returns JSON-serializable dict.
         """
         result: Dict[str, Any] = {"type": self.type, "hashWhenCreated": self.hashWhenCreated}
         if self.lineNumber is not None:
@@ -260,7 +261,7 @@ class CommentPosition:
         """
         Create from dictionary (JSON deserialization).
 
-        REQ-tv-d00010-D: Deserializes from dictionaries.
+        REQ-d00006-A: Deserializes from dictionaries.
         """
         line_range = data.get("lineRange")
         if line_range is not None:
@@ -295,8 +296,8 @@ class Comment:
         """
         Factory for creating new comment with auto-generated fields.
 
-        REQ-tv-d00010-F: Auto-generates IDs and timestamps.
-        REQ-tv-d00010-J: Uses UTC timestamps.
+        REQ-d00006-F: Auto-generates IDs and timestamps.
+        REQ-d00006-J: Uses UTC timestamps.
         """
         return cls(id=generate_uuid(), author=author, timestamp=now_iso(), body=body)
 
@@ -342,7 +343,7 @@ class Thread:
     A thread is a collection of comments about a specific location
     in a requirement. Threads can be resolved.
 
-    REQ-d00094-A: Thread model with packageId for package ownership.
+    REQ-d00001-E: Thread model with packageId for package ownership.
     """
 
     threadId: str  # UUID
@@ -354,7 +355,7 @@ class Thread:
     resolvedBy: Optional[str] = None
     resolvedAt: Optional[str] = None
     comments: List[Comment] = field(default_factory=list)
-    # REQ-d00094-A: Package ownership (optional for backward compatibility)
+    # REQ-d00001-E: Package ownership (optional for backward compatibility)
     packageId: Optional[str] = None
 
     @classmethod
@@ -369,8 +370,8 @@ class Thread:
         """
         Factory for creating new thread.
 
-        REQ-tv-d00010-F: Auto-generates IDs and timestamps.
-        REQ-d00094-A: Supports package ownership.
+        REQ-d00006-F: Auto-generates IDs and timestamps.
+        REQ-d00001-E: Supports package ownership.
 
         Args:
             req_id: Requirement ID this thread is about
@@ -451,7 +452,7 @@ class Thread:
             "resolvedAt": self.resolvedAt,
             "comments": [c.to_dict() for c in self.comments],
         }
-        # REQ-d00094-A: Include packageId if set
+        # REQ-d00001-E: Include packageId if set
         if self.packageId is not None:
             result["packageId"] = self.packageId
         return result
@@ -469,7 +470,7 @@ class Thread:
             resolvedBy=data.get("resolvedBy"),
             resolvedAt=data.get("resolvedAt"),
             comments=[Comment.from_dict(c) for c in data.get("comments", [])],
-            # REQ-d00094-A: Package ownership (optional for backward compatibility)
+            # REQ-d00001-E: Package ownership (optional for backward compatibility)
             packageId=data.get("packageId"),
         )
 
@@ -590,7 +591,7 @@ class StatusRequest:
     """
     Request to change a requirement's status.
 
-    REQ-tv-d00010-I: Automatically calculates state based on approval votes.
+    REQ-d00006-I: Automatically calculates state based on approval votes.
 
     Status changes require approvals from designated approvers.
     Valid transitions:
@@ -624,7 +625,7 @@ class StatusRequest:
         """
         Factory for creating new status change request.
 
-        REQ-tv-d00010-F: Auto-generates IDs and timestamps.
+        REQ-d00006-F: Auto-generates IDs and timestamps.
 
         Args:
             req_id: Requirement ID
@@ -664,7 +665,7 @@ class StatusRequest:
         """
         Update state based on approvals.
 
-        REQ-tv-d00010-I: State automatically calculated from approval votes.
+        REQ-d00006-I: State automatically calculated from approval votes.
         """
         if self.state == RequestState.APPLIED.value:
             return  # Already applied, don't change
@@ -896,9 +897,9 @@ class ReviewPackage:
     Packages group related requirements for coordinated review.
     Supports audit trail and archival metadata.
 
-    REQ-d00095: Review Package Management
-    REQ-d00097: Review Package Archival
-    REQ-d00098: Review Git Audit Trail
+    REQ-d00001: Review Package Management
+    REQ-d00003: Review Package Archival
+    REQ-d00004: Review Git Audit Trail
     """
 
     packageId: str  # UUID
@@ -908,12 +909,12 @@ class ReviewPackage:
     createdBy: str  # Username
     createdAt: str  # ISO 8601 datetime
 
-    # REQ-d00098: Git Audit Trail
+    # REQ-d00004: Git Audit Trail
     branchName: Optional[str] = None  # Git branch when package created
     creationCommitHash: Optional[str] = None  # HEAD commit when created
     lastReviewedCommitHash: Optional[str] = None  # Updated on comment activity
 
-    # REQ-d00097: Archive metadata
+    # REQ-d00003: Archive metadata
     archivedAt: Optional[str] = None  # ISO 8601 datetime when archived
     archivedBy: Optional[str] = None  # Username who triggered archive
     archiveReason: Optional[str] = None  # "resolved", "deleted", or "manual"
@@ -933,8 +934,8 @@ class ReviewPackage:
         """
         Factory for creating new package.
 
-        REQ-tv-d00010-F: Auto-generates IDs and timestamps.
-        REQ-d00098: Records git context when available.
+        REQ-d00006-F: Auto-generates IDs and timestamps.
+        REQ-d00004: Records git context when available.
 
         Args:
             name: Package display name
@@ -956,36 +957,11 @@ class ReviewPackage:
             isDefault=False,
         )
 
-    @classmethod
-    def create_default(cls) -> "ReviewPackage":
-        """
-        Create the default package.
-
-        DEPRECATED: Default packages are no longer recommended per REQ-d00095-B.
-        This method is kept for backward compatibility during migration.
-        """
-        import warnings
-
-        warnings.warn(
-            "create_default() is deprecated. Packages should be explicitly created.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return cls(
-            packageId="default",
-            name="Default",
-            description="REQs manually set to Review status",
-            reqIds=[],
-            createdBy="system",
-            createdAt=now_iso(),
-            isDefault=True,
-        )
-
     def update_last_reviewed_commit(self, commit_hash: str) -> None:
         """
         Update the last reviewed commit hash.
 
-        REQ-d00098-C: Updated on each comment activity.
+        REQ-d00004-C: Updated on each comment activity.
         """
         self.lastReviewedCommitHash = commit_hash
 
@@ -993,7 +969,7 @@ class ReviewPackage:
         """
         Mark package as archived.
 
-        REQ-d00097-C: Sets archive metadata.
+        REQ-d00003-C: Sets archive metadata.
 
         Args:
             user: Username who triggered archive
@@ -1049,7 +1025,7 @@ class ReviewPackage:
             "createdAt": self.createdAt,
         }
 
-        # REQ-d00098: Git audit trail (only include if set)
+        # REQ-d00004: Git audit trail (only include if set)
         if self.branchName is not None:
             result["branchName"] = self.branchName
         if self.creationCommitHash is not None:
@@ -1057,7 +1033,7 @@ class ReviewPackage:
         if self.lastReviewedCommitHash is not None:
             result["lastReviewedCommitHash"] = self.lastReviewedCommitHash
 
-        # REQ-d00097: Archive metadata (only include if archived)
+        # REQ-d00003: Archive metadata (only include if archived)
         if self.archivedAt is not None:
             result["archivedAt"] = self.archivedAt
             result["archivedBy"] = self.archivedBy
@@ -1079,11 +1055,11 @@ class ReviewPackage:
             reqIds=data.get("reqIds", []).copy(),
             createdBy=data.get("createdBy", ""),
             createdAt=data.get("createdAt", ""),
-            # REQ-d00098: Git audit trail
+            # REQ-d00004: Git audit trail
             branchName=data.get("branchName"),
             creationCommitHash=data.get("creationCommitHash"),
             lastReviewedCommitHash=data.get("lastReviewedCommitHash"),
-            # REQ-d00097: Archive metadata
+            # REQ-d00003: Archive metadata
             archivedAt=data.get("archivedAt"),
             archivedBy=data.get("archivedBy"),
             archiveReason=data.get("archiveReason"),
@@ -1094,7 +1070,7 @@ class ReviewPackage:
 
 # =============================================================================
 # Container Classes for JSON File Contents
-# REQ-tv-d00010-G: Container classes with version tracking
+# REQ-d00006-G: Container classes with version tracking
 # =============================================================================
 
 

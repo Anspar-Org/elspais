@@ -529,7 +529,7 @@ TraceView.review = TraceView.review || {};
         }
     });
 
-    // REQ-d00099: Listen for archive events to refresh sync status
+    // REQ-d00005: Listen for archive events to refresh sync status
     document.addEventListener('traceview:archive-view-opened', async (e) => {
         console.log('Archive view opened:', e.detail.package?.name);
         // Update git sync indicator to show read-only mode

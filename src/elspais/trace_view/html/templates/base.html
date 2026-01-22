@@ -70,7 +70,7 @@
                 <span class="version-badge">v{{ version }}</span>
                 <button class="btn btn-legend" onclick="openLegendModal()"
                         title="Generated: {{ timestamp }}">ℹ️ Legend</button>
-                {# Mode toggle buttons in a unified group (REQ-d00092) #}
+                {# Mode toggle buttons in a unified group (REQ-d00012) #}
                 <div class="mode-toggle-group">
                     {% if edit_mode %}
                     <button class="mode-toggle-btn" id="btnEditMode" onclick="toggleEditMode()">Edit Mode</button>
@@ -212,7 +212,7 @@
     {% endblock %}
     {% endif %}
 
-    {# Review panel (only in review mode) - wrapped in review-column (REQ-d00092) #}
+    {# Review panel (only in review mode) - wrapped in review-column (REQ-d00012) #}
     {% if review_mode %}
     {% block review_panel %}
     <div id="review-column" class="review-column hidden">
@@ -239,14 +239,14 @@
 {% endblock %}
 {% endif %}
 
-{# Review mode data (REQ-d00092) #}
+{# Review mode data (REQ-d00012) #}
 {% if review_mode %}
 {% block review_data %}
 <script id="review-data" type="application/json">
 {{ review_json_data|safe }}
 </script>
 <script>
-    // Load review data into global scope (REQ-d00092)
+    // Load review data into global scope (REQ-d00012)
     window.REVIEW_DATA = JSON.parse(document.getElementById('review-data').textContent);
     // API URL for review operations (relative path for same-origin requests)
     window.REVIEW_API_URL = '/api/reviews';

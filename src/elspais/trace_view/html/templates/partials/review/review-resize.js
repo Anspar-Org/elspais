@@ -1,7 +1,7 @@
 /**
  * TraceView Review Resize Module
  * Handle resizable review panel.
- * IMPLEMENTS REQUIREMENTS: REQ-d00092
+ * IMPLEMENTS REQUIREMENTS: REQ-d00012
  */
 window.TraceView = window.TraceView || {};
 TraceView.review = TraceView.review || {};

@@ -603,7 +603,7 @@ TraceView.review = TraceView.review || {};
 
 })(TraceView.review);
 
-// Add ReviewSystem alias with help functions (REQ-d00092)
+// Add ReviewSystem alias with help functions (REQ-d00012)
 window.ReviewSystem = window.ReviewSystem || {};
 var RS = window.ReviewSystem;
 

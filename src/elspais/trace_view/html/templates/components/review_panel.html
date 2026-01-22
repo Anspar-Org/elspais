@@ -1,10 +1,10 @@
 {# IMPLEMENTS REQUIREMENTS:
      REQ-tv-d00016: Review JavaScript Integration
-     REQ-d00092: Review System
+     REQ-d00012: Review System
    Review panel component for trace_view
 #}
 
-{# Packages Panel (REQ-d00092-PKG-AJ: Must appear BEFORE review-panel in DOM) #}
+{# Packages Panel (REQ-d00012-PKG-AJ: Must appear BEFORE review-panel in DOM) #}
 <div id="reviewPackagesPanel" class="review-packages-panel" style="display: none;">
     <div class="packages-header" onclick="ReviewSystem.togglePackagesPanel()">
         <span class="collapse-icon">▼</span>
@@ -22,7 +22,7 @@
 </div>
 
 <div id="review-panel" class="review-panel">
-    {# Help Menu (REQ-d00092) #}
+    {# Help Menu (REQ-d00012) #}
     <div id="rs-help-menu" class="rs-help-menu-container">
         <button id="rs-help-menu-btn" class="rs-help-menu-btn"
                 onclick="ReviewSystem.help && ReviewSystem.help.toggleHelpMenuFromBtn ? ReviewSystem.help.toggleHelpMenuFromBtn(this) : null">
@@ -56,7 +56,7 @@
         </div>
     </div>
 
-    {# Help Panel (REQ-d00092) #}
+    {# Help Panel (REQ-d00012) #}
     <div class="rs-help-panel hidden" id="rs-help-panel">
         <div class="rs-help-panel-header">
             <h3>Help</h3>
@@ -90,7 +90,7 @@
     {# Panel Content (populated dynamically) #}
     <div id="review-panel-content" class="review-panel-content" style="display: none;"></div>
 
-    {# Combined View Container (REQ-d00092) #}
+    {# Combined View Container (REQ-d00012) #}
     <div id="review-panel-combined" class="review-panel-combined" style="display: none;">
         {# Status Section (appears first) #}
         <div id="rs-status-section" class="rs-status-section">

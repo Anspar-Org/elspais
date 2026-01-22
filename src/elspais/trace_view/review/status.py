@@ -6,8 +6,8 @@ Provides functions to change the status field of requirements in spec/*.md files
 Supports finding requirements, reading status, changing status atomically,
 and updating content hashes.
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00015: Status Modifier
+Implements:
+    REQ-d00011: Status Modifier
 """
 
 import hashlib
@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 
 # =============================================================================
 # Constants
-# REQ-tv-d00015-D: Status values SHALL be validated against allowed set
+# REQ-d00011-D: Status values SHALL be validated against allowed set
 # =============================================================================
 
 VALID_STATUSES = {"Draft", "Active", "Deprecated"}
@@ -47,7 +47,7 @@ REQ_FOOTER_PATTERN = re.compile(
 
 # =============================================================================
 # Data Classes
-# REQ-tv-d00015-A: Return structured location information
+# REQ-d00011-A: Return structured location information
 # =============================================================================
 
 
@@ -63,7 +63,7 @@ class ReqLocation:
 
 # =============================================================================
 # Hash Functions
-# REQ-tv-d00015-F: Content hash computation and update
+# REQ-d00011-F: Content hash computation and update
 # =============================================================================
 
 
@@ -71,7 +71,7 @@ def compute_req_hash(content: str) -> str:
     """
     Compute an 8-character hex hash of requirement content.
 
-    REQ-tv-d00015-F: The status modifier SHALL update the requirement's
+    REQ-d00011-F: The status modifier SHALL update the requirement's
     content hash footer after status changes.
 
     Args:
@@ -142,7 +142,7 @@ def update_req_hash(file_path: Path, req_id: str) -> bool:
     """
     Update the content hash for a requirement in a spec file.
 
-    REQ-tv-d00015-F: The status modifier SHALL update the requirement's
+    REQ-d00011-F: The status modifier SHALL update the requirement's
     content hash footer after status changes.
 
     Args:
@@ -180,7 +180,7 @@ def update_req_hash(file_path: Path, req_id: str) -> bool:
 
 # =============================================================================
 # File Search Functions
-# REQ-tv-d00015-A: find_req_in_file() SHALL locate a requirement
+# REQ-d00011-A: find_req_in_file() SHALL locate a requirement
 # =============================================================================
 
 
@@ -188,7 +188,7 @@ def find_req_in_file(file_path: Path, req_id: str) -> Optional[ReqLocation]:
     """
     Find a requirement in a spec file and return its position info.
 
-    REQ-tv-d00015-A: find_req_in_file(file_path, req_id) SHALL locate a
+    REQ-d00011-A: find_req_in_file(file_path, req_id) SHALL locate a
     requirement in a spec file and return the status line information.
 
     Args:
@@ -295,7 +295,7 @@ def find_req_in_spec_dir(repo_root: Path, req_id: str) -> Optional[ReqLocation]:
 
 # =============================================================================
 # Status Read Function
-# REQ-tv-d00015-B: get_req_status() SHALL read and return current status
+# REQ-d00011-B: get_req_status() SHALL read and return current status
 # =============================================================================
 
 
@@ -303,7 +303,7 @@ def get_req_status(repo_root: Path, req_id: str) -> Optional[str]:
     """
     Get the current status of a requirement.
 
-    REQ-tv-d00015-B: get_req_status(repo_root, req_id) SHALL read and return
+    REQ-d00011-B: get_req_status(repo_root, req_id) SHALL read and return
     the current status value from the spec file.
 
     Args:
@@ -321,7 +321,7 @@ def get_req_status(repo_root: Path, req_id: str) -> Optional[str]:
 
 # =============================================================================
 # Atomic File Operations
-# REQ-tv-d00015-G: Failed status changes SHALL NOT corrupt the file
+# REQ-d00011-G: Failed status changes SHALL NOT corrupt the file
 # =============================================================================
 
 
@@ -329,7 +329,7 @@ def _atomic_write_file(file_path: Path, content: str) -> None:
     """
     Atomically write content to a file.
 
-    REQ-tv-d00015-G: Uses temp file + rename pattern to ensure file is either
+    REQ-d00011-G: Uses temp file + rename pattern to ensure file is either
     fully written or not changed at all.
 
     Args:
@@ -355,7 +355,7 @@ def _atomic_write_file(file_path: Path, content: str) -> None:
 
 # =============================================================================
 # Status Change Function
-# REQ-tv-d00015-C: change_req_status() SHALL update status atomically
+# REQ-d00011-C: change_req_status() SHALL update status atomically
 # =============================================================================
 
 
@@ -363,17 +363,17 @@ def change_req_status(repo_root: Path, req_id: str, new_status: str, user: str) 
     """
     Change the status of a requirement in its spec file.
 
-    REQ-tv-d00015-C: change_req_status(repo_root, req_id, new_status, user)
+    REQ-d00011-C: change_req_status(repo_root, req_id, new_status, user)
     SHALL update the status value in the spec file atomically.
 
-    REQ-tv-d00015-D: Status values SHALL be validated against the allowed set.
+    REQ-d00011-D: Status values SHALL be validated against the allowed set.
 
-    REQ-tv-d00015-E: The status modifier SHALL preserve all other content.
+    REQ-d00011-E: The status modifier SHALL preserve all other content.
 
-    REQ-tv-d00015-F: The status modifier SHALL update the requirement's
+    REQ-d00011-F: The status modifier SHALL update the requirement's
     content hash footer after status changes.
 
-    REQ-tv-d00015-G: Failed status changes SHALL NOT leave the spec file
+    REQ-d00011-G: Failed status changes SHALL NOT leave the spec file
     in a corrupted or partial state.
 
     Args:
@@ -385,7 +385,7 @@ def change_req_status(repo_root: Path, req_id: str, new_status: str, user: str) 
     Returns:
         Tuple of (success: bool, message: str)
     """
-    # Validate new_status (REQ-tv-d00015-D)
+    # Validate new_status (REQ-d00011-D)
     if new_status not in VALID_STATUSES:
         valid_list = ", ".join(sorted(VALID_STATUSES))
         return (False, f"Invalid status '{new_status}'. Valid statuses: {valid_list}")
@@ -436,19 +436,19 @@ def change_req_status(repo_root: Path, req_id: str, new_status: str, user: str) 
     if not status_match:
         return (False, f"Status line not found for REQ-{req_id}")
 
-    # Build the new status line (REQ-tv-d00015-E: preserve formatting)
+    # Build the new status line (REQ-d00011-E: preserve formatting)
     new_line = status_match.group(1) + new_status + status_match.group(3)
 
     # Replace the status line in content
     new_content = content[: status_match.start()] + new_line + content[status_match.end() :]
 
-    # Write atomically (REQ-tv-d00015-G)
+    # Write atomically (REQ-d00011-G)
     try:
         _atomic_write_file(location.file_path, new_content)
     except OSError as e:
         return (False, f"Failed to write spec file: {e}")
 
-    # Update the hash (REQ-tv-d00015-F)
+    # Update the hash (REQ-d00011-F)
     update_req_hash(location.file_path, req_id)
 
     old_status = location.current_status

@@ -6,8 +6,9 @@ REQ-int-d00006-A: All trace_view tests SHALL be migrated to tests/test_trace_vie
 REQ-int-d00006-B: Tests requiring optional deps SHALL use pytest.importorskip().
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestTraceViewImports:
@@ -15,7 +16,8 @@ class TestTraceViewImports:
 
     def test_import_models(self):
         """Test TraceViewRequirement model can be imported."""
-        from elspais.trace_view.models import TraceViewRequirement, TestInfo, GitChangeInfo
+        from elspais.trace_view.models import GitChangeInfo, TestInfo, TraceViewRequirement
+
         assert TraceViewRequirement is not None
         assert TestInfo is not None
         assert GitChangeInfo is not None
@@ -23,20 +25,21 @@ class TestTraceViewImports:
     def test_import_generator(self):
         """Test TraceViewGenerator can be imported."""
         from elspais.trace_view.generators.base import TraceViewGenerator
+
         assert TraceViewGenerator is not None
 
     def test_import_coverage(self):
         """Test coverage module can be imported."""
         from elspais.trace_view.coverage import (
             calculate_coverage,
-            count_by_level,
-            find_orphaned_requirements,
         )
+
         assert calculate_coverage is not None
 
     def test_import_scanning(self):
         """Test scanning module can be imported."""
         from elspais.trace_view.scanning import scan_implementation_files
+
         assert scan_implementation_files is not None
 
 
@@ -45,13 +48,15 @@ class TestTraceViewHTMLImports:
 
     def test_import_html_generator(self):
         """Test HTMLGenerator can be imported when jinja2 is available."""
-        jinja2 = pytest.importorskip("jinja2")
+        pytest.importorskip("jinja2")
         from elspais.trace_view.html import HTMLGenerator
+
         assert HTMLGenerator is not None
 
     def test_import_html_availability_flag(self):
         """Test JINJA2_AVAILABLE flag is exported."""
         from elspais.trace_view.html import JINJA2_AVAILABLE
+
         # Should be True since we successfully imported jinja2 above
         assert isinstance(JINJA2_AVAILABLE, bool)
 
@@ -64,21 +69,22 @@ class TestTraceViewReviewImports:
         from elspais.trace_view.review import (
             Comment,
             Thread,
-            ReviewFlag,
-            StatusRequest,
         )
+
         assert Comment is not None
         assert Thread is not None
 
     def test_import_review_server(self):
         """Test create_app can be imported when flask is available."""
-        flask = pytest.importorskip("flask")
+        pytest.importorskip("flask")
         from elspais.trace_view.review import create_app
+
         assert create_app is not None
 
     def test_flask_availability_flag(self):
         """Test FLASK_AVAILABLE flag is exported."""
         from elspais.trace_view.review import FLASK_AVAILABLE
+
         assert isinstance(FLASK_AVAILABLE, bool)
 
 
@@ -88,17 +94,20 @@ class TestReformatImports:
     def test_import_detector(self):
         """Test format detection can be imported."""
         from elspais.reformat import detect_format, needs_reformatting
+
         assert detect_format is not None
         assert needs_reformatting is not None
 
     def test_import_line_breaks(self):
         """Test line break functions can be imported."""
-        from elspais.reformat import normalize_line_breaks, fix_requirement_line_breaks
+        from elspais.reformat import normalize_line_breaks
+
         assert normalize_line_breaks is not None
 
     def test_import_hierarchy(self):
         """Test hierarchy functions can be imported."""
-        from elspais.reformat import RequirementNode, build_hierarchy
+        from elspais.reformat import RequirementNode
+
         assert RequirementNode is not None
 
 

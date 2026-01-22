@@ -56,16 +56,16 @@
     const review = TraceView.review;
 
     // Package state
-    // REQ-d00095-B: No automatic "default" package - packages must be explicitly created
-    // REQ-d00099: Archive state for viewing archived packages
+    // REQ-d00001-B: No automatic "default" package - packages must be explicitly created
+    // REQ-d00005: Archive state for viewing archived packages
     review.packages = {
         items: [],
-        archivedItems: [],  // REQ-d00099: Archived packages list
+        archivedItems: [],  // REQ-d00005: Archived packages list
         activeId: null,
         panelExpanded: true,
-        archivePanelExpanded: false,  // REQ-d00099: Archive viewer collapse state
+        archivePanelExpanded: false,  // REQ-d00005: Archive viewer collapse state
         filterEnabled: false,  // Whether "Show only Package REQs" is active
-        isArchiveMode: false  // REQ-d00099: Whether viewing archived package (read-only)
+        isArchiveMode: false  // REQ-d00005: Whether viewing archived package (read-only)
     };
 
     // ==========================================================================
@@ -128,7 +128,7 @@
 
     /**
      * Fetch all packages from the API
-     * REQ-d00095-B: No default package - packages must be explicitly created
+     * REQ-d00001-B: No default package - packages must be explicitly created
      */
     async function fetchPackages() {
         try {
@@ -140,7 +140,7 @@
             review.packages.items = data.packages || [];
             review.packages.activeId = data.activePackageId || null;
 
-            // REQ-d00095-B: Validate activePackageId exists in packages list
+            // REQ-d00001-B: Validate activePackageId exists in packages list
             if (review.packages.activeId) {
                 const exists = review.packages.items.some(p => p.packageId === review.packages.activeId);
                 if (!exists) {
@@ -175,7 +175,7 @@
 
     /**
      * Fetch archived packages from the API
-     * REQ-d00099: Read-only access to archived packages
+     * REQ-d00005: Read-only access to archived packages
      */
     async function fetchArchivedPackages() {
         try {
@@ -258,8 +258,8 @@
     }
 
     /**
-     * Delete a package (archives it per REQ-d00097-E)
-     * REQ-d00095-F: Package deletion SHALL archive (not destroy) the package
+     * Delete a package (archives it per REQ-d00003-E)
+     * REQ-d00001-F: Package deletion SHALL archive (not destroy) the package
      */
     async function deletePackage(packageId) {
         try {
@@ -274,7 +274,7 @@
             const result = await response.json();
             if (result.success) {
                 await fetchPackages();
-                await fetchArchivedPackages();  // REQ-d00097: Deleted packages go to archive
+                await fetchArchivedPackages();  // REQ-d00003: Deleted packages go to archive
                 renderPackagesPanel();
             }
             return result;
@@ -286,7 +286,7 @@
 
     /**
      * Manually archive a package
-     * REQ-d00097-D: Manual archive action
+     * REQ-d00003-D: Manual archive action
      */
     async function archivePackage(packageId, reason = 'manual') {
         const user = review.state.currentUser || 'anonymous';
@@ -317,7 +317,7 @@
 
     /**
      * View an archived package (read-only mode)
-     * REQ-d00099-B: Archived packages open in read-only mode
+     * REQ-d00005-B: Archived packages open in read-only mode
      */
     async function viewArchivedPackage(packageId) {
         try {
@@ -588,7 +588,7 @@
 
     /**
      * Add REQ to active package
-     * REQ-d00095-B: Requires explicit package selection (no default)
+     * REQ-d00001-B: Requires explicit package selection (no default)
      */
     async function addReqToActivePackage(reqId) {
         const packageId = review.packages.activeId;
@@ -606,8 +606,8 @@
 
     /**
      * Render the packages panel
-     * REQ-d00095-B: No default package concept
-     * REQ-d00099: Include archive viewer section
+     * REQ-d00001-B: No default package concept
+     * REQ-d00005: Include archive viewer section
      */
     function renderPackagesPanel() {
         const panel = document.getElementById('reviewPackagesPanel');
@@ -636,7 +636,7 @@
             </label>
         `;
 
-        // Package items - REQ-d00095-B: All packages are explicit (no default)
+        // Package items - REQ-d00001-B: All packages are explicit (no default)
         for (const pkg of items) {
             const isActive = pkg.packageId === activeId;
             const reqCount = pkg.reqIds ? pkg.reqIds.length : 0;
@@ -689,7 +689,7 @@
 
         html += '</div>';
 
-        // REQ-d00099: Archive viewer section
+        // REQ-d00005: Archive viewer section
         if (archivedItems.length > 0) {
             const archiveExpanded = review.packages.archivePanelExpanded;
             html += `
@@ -729,7 +729,7 @@
 
     /**
      * Toggle archive panel expansion
-     * REQ-d00099: Archive viewer
+     * REQ-d00005: Archive viewer
      */
     function toggleArchivePanel() {
         review.packages.archivePanelExpanded = !review.packages.archivePanelExpanded;
@@ -738,7 +738,7 @@
 
     /**
      * Render archive viewer for a specific archived package
-     * REQ-d00099: Read-only archive viewer
+     * REQ-d00005: Read-only archive viewer
      */
     function renderArchiveViewer(pkg) {
         let viewer = document.getElementById('archiveViewer');
@@ -749,8 +749,8 @@
             document.body.appendChild(viewer);
         }
 
-        // REQ-d00099-D: Display archival metadata
-        // REQ-d00099-E: Display git audit trail information
+        // REQ-d00005-D: Display archival metadata
+        // REQ-d00005-E: Display git audit trail information
         viewer.innerHTML = `
             <div class="archive-viewer-overlay" onclick="TraceView.review.closeArchiveViewer()"></div>
             <div class="archive-viewer-content">
@@ -860,7 +860,7 @@
     }
 
     /**
-     * Confirm and delete package (archives it per REQ-d00095-F)
+     * Confirm and delete package (archives it per REQ-d00001-F)
      */
     function confirmDeletePackage(packageId, event) {
         if (event) event.stopPropagation();
@@ -875,7 +875,7 @@
 
     /**
      * Confirm and archive a package manually
-     * REQ-d00097-D: Manual archive action
+     * REQ-d00003-D: Manual archive action
      */
     function confirmArchivePackage(packageId, event) {
         if (event) event.stopPropagation();
@@ -958,12 +958,12 @@
 
     /**
      * Initialize packages panel when review mode is activated
-     * REQ-d00099: Also fetch archived packages
+     * REQ-d00005: Also fetch archived packages
      */
     async function initPackagesPanel() {
         await Promise.all([
             fetchPackages(),
-            fetchArchivedPackages()  // REQ-d00099: Load archived packages
+            fetchArchivedPackages()  // REQ-d00005: Load archived packages
         ]);
         renderPackagesPanel();
         applyPackageFilter();
@@ -974,13 +974,13 @@
     // ==========================================================================
 
     review.fetchPackages = fetchPackages;
-    review.fetchArchivedPackages = fetchArchivedPackages;  // REQ-d00099
+    review.fetchArchivedPackages = fetchArchivedPackages;  // REQ-d00005
     review.createPackage = createPackage;
     review.updatePackage = updatePackage;
     review.deletePackage = deletePackage;
-    review.archivePackage = archivePackage;  // REQ-d00097
-    review.viewArchivedPackage = viewArchivedPackage;  // REQ-d00099
-    review.closeArchiveViewer = closeArchiveViewer;  // REQ-d00099
+    review.archivePackage = archivePackage;  // REQ-d00003
+    review.viewArchivedPackage = viewArchivedPackage;  // REQ-d00005
+    review.closeArchiveViewer = closeArchiveViewer;  // REQ-d00005
     review.setActivePackage = setActivePackage;
     review.switchToPackageBranch = switchToPackageBranch;
     review.fetchConsolidatedPackageData = fetchConsolidatedPackageData;
@@ -991,23 +991,23 @@
     review.addReqToActivePackage = addReqToActivePackage;
     review.renderPackagesPanel = renderPackagesPanel;
     review.togglePackagesPanel = togglePackagesPanel;
-    review.toggleArchivePanel = toggleArchivePanel;  // REQ-d00099
+    review.toggleArchivePanel = toggleArchivePanel;  // REQ-d00005
     review.togglePackageFilter = togglePackageFilter;
     review.showCreatePackageDialog = showCreatePackageDialog;
     review.editPackageDialog = editPackageDialog;
     review.confirmDeletePackage = confirmDeletePackage;
-    review.confirmArchivePackage = confirmArchivePackage;  // REQ-d00097
+    review.confirmArchivePackage = confirmArchivePackage;  // REQ-d00003
     review.initPackagesPanel = initPackagesPanel;
     review.applyPackageFilter = applyPackageFilter;
     review.applyPackageContext = applyPackageContext;
 
 })();
 
-// Export to ReviewSystem alias with RS. pattern (REQ-d00092)
+// Export to ReviewSystem alias with RS. pattern (REQ-d00012)
 window.ReviewSystem = window.ReviewSystem || {};
 var RS = window.ReviewSystem;
 
-// Initialize packages state on ReviewSystem (REQ-d00092)
+// Initialize packages state on ReviewSystem (REQ-d00012)
 RS.packages = {
     items: [],
     activeId: null,
@@ -1018,12 +1018,12 @@ RS.packages = {
 RS.renderPackagesPanel = TraceView.review.renderPackagesPanel;
 RS.togglePackagesPanel = TraceView.review.togglePackagesPanel;
 RS.togglePackageFilter = TraceView.review.togglePackageFilter;
-RS.toggleArchivePanel = TraceView.review.toggleArchivePanel;  // REQ-d00099
+RS.toggleArchivePanel = TraceView.review.toggleArchivePanel;  // REQ-d00005
 RS.showCreatePackageDialog = TraceView.review.showCreatePackageDialog;
 RS.setActivePackage = TraceView.review.setActivePackage;
 RS.initPackagesPanel = TraceView.review.initPackagesPanel;
 RS.applyPackageFilter = TraceView.review.applyPackageFilter;
-RS.archivePackage = TraceView.review.archivePackage;  // REQ-d00097
-RS.viewArchivedPackage = TraceView.review.viewArchivedPackage;  // REQ-d00099
-RS.closeArchiveViewer = TraceView.review.closeArchiveViewer;  // REQ-d00099
-RS.confirmArchivePackage = TraceView.review.confirmArchivePackage;  // REQ-d00097
+RS.archivePackage = TraceView.review.archivePackage;  // REQ-d00003
+RS.viewArchivedPackage = TraceView.review.viewArchivedPackage;  // REQ-d00005
+RS.closeArchiveViewer = TraceView.review.closeArchiveViewer;  // REQ-d00005
+RS.confirmArchivePackage = TraceView.review.confirmArchivePackage;  // REQ-d00003

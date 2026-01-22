@@ -12,8 +12,9 @@ Branch naming convention: reviews/{package_id}/{username}
 - Package-first naming enables discovery of all branches for a package
 - User-specific branches enable isolated work without merge conflicts
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00013: Git Branch Management
+Implements:
+    REQ-d00004: Review Git Audit Trail
+    REQ-d00009: Git Branch Management
 """
 
 import re
@@ -31,7 +32,7 @@ REVIEW_BRANCH_PREFIX = "reviews/"
 
 
 # =============================================================================
-# Data Classes (REQ-tv-d00013)
+# Data Classes (REQ-d00009)
 # =============================================================================
 
 
@@ -40,7 +41,7 @@ class BranchInfo:
     """
     Metadata about a review branch for CLI display.
 
-    REQ-tv-d00013: Branch info data class for listing and cleanup operations.
+    REQ-d00009: Branch info data class for listing and cleanup operations.
     """
 
     name: str  # Full branch name: reviews/{pkg}/{user}
@@ -65,7 +66,7 @@ class BranchInfo:
 
 
 # =============================================================================
-# Branch Naming (REQ-tv-d00013-A, B)
+# Branch Naming (REQ-d00009-A, B)
 # =============================================================================
 
 
@@ -73,9 +74,9 @@ def get_review_branch_name(package_id: str, user: str) -> str:
     """
     Generate a review branch name from package and user.
 
-    REQ-tv-d00013-A: Review branches SHALL follow the naming convention
+    REQ-d00009-A: Review branches SHALL follow the naming convention
                      `reviews/{package_id}/{username}`.
-    REQ-tv-d00013-B: This function SHALL return the formatted branch name.
+    REQ-d00009-B: This function SHALL return the formatted branch name.
 
     Args:
         package_id: Review package identifier (e.g., 'default', 'q1-2025-review')
@@ -113,7 +114,7 @@ def _sanitize_branch_name(name: str) -> str:
 
 
 # =============================================================================
-# Branch Parsing (REQ-tv-d00013-C, D)
+# Branch Parsing (REQ-d00009-C, D)
 # =============================================================================
 
 
@@ -121,7 +122,7 @@ def parse_review_branch_name(branch_name: str) -> Optional[Tuple[str, str]]:
     """
     Parse a review branch name into (package_id, user).
 
-    REQ-tv-d00013-C: This function SHALL extract and return a tuple of
+    REQ-d00009-C: This function SHALL extract and return a tuple of
                      `(package_id, username)` from a valid branch name.
 
     Args:
@@ -156,7 +157,7 @@ def is_review_branch(branch_name: str) -> bool:
     """
     Check if a branch name is a valid review branch.
 
-    REQ-tv-d00013-D: This function SHALL return True only for branches
+    REQ-d00009-D: This function SHALL return True only for branches
                      matching the `reviews/{package}/{user}` pattern.
 
     Args:
@@ -247,7 +248,7 @@ def get_remote_name(repo_root: Path) -> Optional[str]:
 
 
 # =============================================================================
-# Git Audit Trail (REQ-d00098)
+# Git Audit Trail (REQ-d00004)
 # =============================================================================
 
 
@@ -255,8 +256,8 @@ def get_head_commit_hash(repo_root: Path) -> Optional[str]:
     """
     Get the current HEAD commit hash (full 40 characters).
 
-    REQ-d00098-A: Package SHALL record creationCommitHash when created.
-    REQ-d00098-C: Package SHALL update lastReviewedCommitHash on each comment activity.
+    REQ-d00004-A: Package SHALL record creationCommitHash when created.
+    REQ-d00004-C: Package SHALL update lastReviewedCommitHash on each comment activity.
 
     Args:
         repo_root: Repository root path
@@ -291,7 +292,7 @@ def get_git_context(repo_root: Path) -> dict:
     """
     Get current git context (branch name and commit hash) for audit trail.
 
-    REQ-d00098: Track git context for review packages.
+    REQ-d00004: Track git context for review packages.
 
     Args:
         repo_root: Repository root path
@@ -309,7 +310,7 @@ def commit_exists(repo_root: Path, commit_hash: str) -> bool:
     """
     Check if a commit exists in the repository.
 
-    REQ-d00098-F: Commit tracking SHALL handle squash-merge scenarios gracefully.
+    REQ-d00004-F: Commit tracking SHALL handle squash-merge scenarios gracefully.
 
     This is useful for checking if archived commit hashes still exist after
     squash-merge operations.
@@ -357,7 +358,7 @@ def remote_branch_exists(repo_root: Path, branch_name: str, remote: str = "origi
 
 
 # =============================================================================
-# Branch Metadata (REQ-tv-d00013 Service Layer)
+# Branch Metadata (REQ-d00009 Service Layer)
 # =============================================================================
 
 
@@ -365,7 +366,7 @@ def get_branch_last_commit_date(repo_root: Path, branch_name: str) -> Optional[d
     """
     Get the date of the last commit on a branch.
 
-    REQ-tv-d00013: Service layer function for CLI branch listing.
+    REQ-d00009: Service layer function for CLI branch listing.
 
     Args:
         repo_root: Repository root path
@@ -399,7 +400,7 @@ def is_branch_merged(repo_root: Path, branch_name: str, target_branch: str = "ma
     """
     Check if a branch has been merged into the target branch.
 
-    REQ-tv-d00013: Service layer function for cleanup operations.
+    REQ-d00009: Service layer function for cleanup operations.
 
     Args:
         repo_root: Repository root path
@@ -434,7 +435,7 @@ def has_unpushed_commits(repo_root: Path, branch_name: str, remote: str = "origi
     """
     Check if a branch has commits not pushed to remote.
 
-    REQ-tv-d00013: Safety check before branch deletion.
+    REQ-d00009: Safety check before branch deletion.
 
     Args:
         repo_root: Repository root path
@@ -468,7 +469,7 @@ def get_branch_info(repo_root: Path, branch_name: str) -> Optional[BranchInfo]:
     """
     Get detailed metadata about a review branch.
 
-    REQ-tv-d00013: Service layer function combining all branch metadata.
+    REQ-d00009: Service layer function combining all branch metadata.
 
     Args:
         repo_root: Repository root path
@@ -523,7 +524,7 @@ def get_branch_info(repo_root: Path, branch_name: str) -> Optional[BranchInfo]:
 
 
 # =============================================================================
-# Package Context (REQ-tv-d00013-F)
+# Package Context (REQ-d00009-F)
 # =============================================================================
 
 
@@ -531,7 +532,7 @@ def get_current_package_context(repo_root: Path) -> Tuple[Optional[str], Optiona
     """
     Get current (package_id, user) from branch name.
 
-    REQ-tv-d00013-F: This function SHALL return `(package_id, username)` when
+    REQ-d00009-F: This function SHALL return `(package_id, username)` when
                      on a review branch, or `(None, None)` otherwise.
 
     Args:
@@ -557,7 +558,7 @@ def get_current_package_context(repo_root: Path) -> Tuple[Optional[str], Optiona
 
 
 # =============================================================================
-# Branch Discovery (REQ-tv-d00013-E)
+# Branch Discovery (REQ-d00009-E)
 # =============================================================================
 
 
@@ -565,7 +566,7 @@ def list_package_branches(repo_root: Path, package_id: str) -> List[str]:
     """
     List all local review branches for a specific package.
 
-    REQ-tv-d00013-E: This function SHALL return all branch names for a given
+    REQ-d00009-E: This function SHALL return all branch names for a given
                      package across all users.
 
     Args:
@@ -702,7 +703,7 @@ def has_uncommitted_changes(repo_root: Path) -> bool:
     """
     Check if there are uncommitted changes.
 
-    REQ-tv-d00013-H: Part of conflict detection - detects local changes.
+    REQ-d00009-H: Part of conflict detection - detects local changes.
 
     Args:
         repo_root: Repository root path
@@ -736,7 +737,7 @@ def has_conflicts(repo_root: Path) -> bool:
     """
     Check if there are merge conflicts in the repository.
 
-    REQ-tv-d00013-H: Branch operations SHALL detect and report conflicts.
+    REQ-d00009-H: Branch operations SHALL detect and report conflicts.
 
     Args:
         repo_root: Repository root path
@@ -762,7 +763,7 @@ def has_conflicts(repo_root: Path) -> bool:
 
 
 # =============================================================================
-# Commit and Push Operations (REQ-tv-d00013-G)
+# Commit and Push Operations (REQ-d00009-G)
 # =============================================================================
 
 
@@ -799,7 +800,7 @@ def commit_and_push_reviews(
     """
     Commit changes to .reviews/ and push to remote.
 
-    REQ-tv-d00013-G: This function SHALL commit all changes in `.reviews/`
+    REQ-d00009-G: This function SHALL commit all changes in `.reviews/`
                      and push to the remote tracking branch.
 
     Args:
@@ -844,7 +845,7 @@ def commit_and_push_reviews(
 
 
 # =============================================================================
-# Fetch Operations (REQ-tv-d00013-I)
+# Fetch Operations (REQ-d00009-I)
 # =============================================================================
 
 
@@ -852,7 +853,7 @@ def fetch_package_branches(repo_root: Path, package_id: str, remote: str = "orig
     """
     Fetch all remote branches for a package.
 
-    REQ-tv-d00013-I: This function SHALL fetch all remote branches for a
+    REQ-d00009-I: This function SHALL fetch all remote branches for a
                      package to enable merge operations.
 
     Args:
@@ -911,7 +912,7 @@ def fetch_review_branches(repo_root: Path, remote: str = "origin") -> bool:
 
 
 # =============================================================================
-# Branch Listing and Cleanup (REQ-tv-d00013 CLI Service Layer)
+# Branch Listing and Cleanup (REQ-d00009 CLI Service Layer)
 # =============================================================================
 
 
@@ -920,7 +921,7 @@ class CleanupResult:
     """
     Result of a branch cleanup operation.
 
-    REQ-tv-d00013: Cleanup result for CLI feedback.
+    REQ-d00009: Cleanup result for CLI feedback.
     """
 
     deleted_local: List[str]  # Branches deleted locally
@@ -937,7 +938,7 @@ def list_review_branches_with_info(
     """
     List all review branches with their metadata.
 
-    REQ-tv-d00013: Service layer function for CLI --review-branches.
+    REQ-d00009: Service layer function for CLI --review-branches.
 
     Args:
         repo_root: Repository root path
@@ -990,7 +991,7 @@ def delete_review_branch(
     """
     Delete a review branch with safety checks.
 
-    REQ-tv-d00013: Service layer function for CLI cleanup.
+    REQ-d00009: Service layer function for CLI cleanup.
 
     Args:
         repo_root: Repository root path
@@ -1061,7 +1062,7 @@ def cleanup_review_branches(
     """
     Delete review branches matching criteria.
 
-    REQ-tv-d00013: Service layer function for CLI --cleanup-reviews
+    REQ-d00009: Service layer function for CLI --cleanup-reviews
     and --cleanup-stale-reviews.
 
     Args:

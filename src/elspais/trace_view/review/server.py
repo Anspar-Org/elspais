@@ -1,4 +1,3 @@
-# Implements: REQ-tv-d00014 (Review API Server)
 """
 Review API Server for trace_view
 
@@ -9,8 +8,11 @@ Flask-based API server for the review system that handles:
 - Package management
 - Git sync operations
 
-IMPLEMENTS REQUIREMENTS:
-    REQ-tv-d00014: Review API Server
+Implements:
+    REQ-d00003: Review Package Archival
+    REQ-d00004: Review Git Audit Trail
+    REQ-d00005: Review Archive Viewer
+    REQ-d00010: Review API Server
 """
 
 from pathlib import Path
@@ -23,7 +25,7 @@ from .branches import (
     commit_and_push_reviews,
     fetch_package_branches,
     get_current_package_context,
-    # REQ-d00098: Git audit trail
+    # REQ-d00004: Git audit trail
     get_git_context,
     has_reviews_changes,
 )
@@ -40,7 +42,7 @@ from .storage import (
     add_comment_to_thread,
     add_req_to_package,
     add_thread,
-    # REQ-d00097: Archive operations
+    # REQ-d00003: Archive operations
     archive_package,
     check_auto_archive,
     create_package,
@@ -70,7 +72,7 @@ def create_app(
     """
     Create Flask app with review API endpoints.
 
-    REQ-tv-d00014-A: The API server SHALL be implemented as a Flask
+    REQ-d00010-A: The API server SHALL be implemented as a Flask
     application with a `create_app(repo_root, static_dir)` factory function.
 
     Args:
@@ -84,7 +86,7 @@ def create_app(
         Flask application
     """
     app = Flask(__name__)
-    # REQ-tv-d00014-F: Enable CORS for cross-origin requests
+    # REQ-d00010-F: Enable CORS for cross-origin requests
     CORS(app)
 
     # Store configuration in app config
@@ -96,7 +98,7 @@ def create_app(
         """
         Trigger auto-sync if enabled.
 
-        REQ-tv-d00014-H: All write endpoints SHALL optionally trigger
+        REQ-d00010-H: All write endpoints SHALL optionally trigger
         auto-sync based on configuration.
 
         Args:
@@ -115,7 +117,7 @@ def create_app(
 
     # ==========================================================================
     # Static File Serving
-    # REQ-tv-d00014-G: Serve static files from the configured static directory
+    # REQ-d00010-G: Serve static files from the configured static directory
     # ==========================================================================
 
     if register_static_routes:
@@ -132,7 +134,7 @@ def create_app(
 
     # ==========================================================================
     # Health Check
-    # REQ-tv-d00014-J: Provide /api/health endpoint for health checks
+    # REQ-d00010-J: Provide /api/health endpoint for health checks
     # ==========================================================================
 
     @app.route("/api/health", methods=["GET"])
@@ -188,7 +190,7 @@ def create_app(
 
     # ==========================================================================
     # Thread API
-    # REQ-tv-d00014-B: Thread endpoints for create, comment, resolve, unresolve
+    # REQ-d00010-B: Thread endpoints for create, comment, resolve, unresolve
     # ==========================================================================
 
     @app.route("/api/reviews/reqs/<req_id>/threads", methods=["POST"])
@@ -196,7 +198,7 @@ def create_app(
         """
         Create a new comment thread.
 
-        REQ-tv-d00014-B: POST create thread endpoint.
+        REQ-d00010-B: POST create thread endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -209,7 +211,7 @@ def create_app(
             thread = Thread.from_dict(data)
             add_thread(repo, normalized_id, thread)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             user = thread.createdBy or "system"
             sync_result = trigger_auto_sync(f"New thread on REQ-{normalized_id}", user)
 
@@ -226,7 +228,7 @@ def create_app(
         """
         Add a comment to an existing thread.
 
-        REQ-tv-d00014-B: POST add comment endpoint.
+        REQ-d00010-B: POST add comment endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -246,7 +248,7 @@ def create_app(
 
             comment = add_comment_to_thread(repo, normalized_id, thread_id, author, body)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Comment on REQ-{normalized_id}", author)
 
             response = {"success": True, "comment": comment.to_dict()}
@@ -262,8 +264,8 @@ def create_app(
         """
         Resolve a thread.
 
-        REQ-tv-d00014-B: POST resolve endpoint.
-        REQ-d00097-D: Resolving all threads in a package SHALL trigger auto-archive.
+        REQ-d00010-B: POST resolve endpoint.
+        REQ-d00003-D: Resolving all threads in a package SHALL trigger auto-archive.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -274,14 +276,14 @@ def create_app(
         try:
             resolve_thread(repo, normalized_id, thread_id, user)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Resolved thread on REQ-{normalized_id}", user)
 
             response = {"success": True}
             if sync_result:
                 response["sync"] = sync_result
 
-            # REQ-d00097-D: Check for auto-archive if packageId provided
+            # REQ-d00003-D: Check for auto-archive if packageId provided
             if package_id:
                 was_archived = check_auto_archive(repo, package_id, user)
                 if was_archived:
@@ -297,7 +299,7 @@ def create_app(
         """
         Unresolve a thread.
 
-        REQ-tv-d00014-B: POST unresolve endpoint.
+        REQ-d00010-B: POST unresolve endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -307,7 +309,7 @@ def create_app(
         try:
             unresolve_thread(repo, normalized_id, thread_id)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Unresolved thread on REQ-{normalized_id}", user)
 
             response = {"success": True}
@@ -344,7 +346,7 @@ def create_app(
             flag = ReviewFlag.from_dict(data)
             save_review_flag(repo, normalized_id, flag)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             user = flag.flaggedBy or "system"
             sync_result = trigger_auto_sync(f"Flagged REQ-{normalized_id} for review", user)
 
@@ -367,7 +369,7 @@ def create_app(
         flag = ReviewFlag.cleared()
         save_review_flag(repo, normalized_id, flag)
 
-        # REQ-tv-d00014-H: Auto-sync after write operation
+        # REQ-d00010-H: Auto-sync after write operation
         sync_result = trigger_auto_sync(f"Cleared flag on REQ-{normalized_id}", user)
 
         response = {"success": True}
@@ -378,7 +380,7 @@ def create_app(
 
     # ==========================================================================
     # Status Request API
-    # REQ-tv-d00014-C: Status endpoints for GET/POST requests and approvals
+    # REQ-d00010-C: Status endpoints for GET/POST requests and approvals
     # ==========================================================================
 
     @app.route("/api/reviews/reqs/<req_id>/status", methods=["GET"])
@@ -386,7 +388,7 @@ def create_app(
         """
         Get the current status of a requirement from the spec file.
 
-        REQ-tv-d00014-C: GET status endpoint.
+        REQ-d00010-C: GET status endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -402,7 +404,7 @@ def create_app(
         """
         Change the status of a requirement in its spec file.
 
-        REQ-tv-d00014-C: POST change status endpoint.
+        REQ-d00010-C: POST change status endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -420,7 +422,7 @@ def create_app(
         success, message = change_req_status(repo, normalized_id, new_status, user)
 
         if success:
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(
                 f"Changed REQ-{normalized_id} status to {new_status}", user
             )
@@ -438,7 +440,7 @@ def create_app(
         """
         Get status change requests for a requirement.
 
-        REQ-tv-d00014-C: GET requests endpoint.
+        REQ-d00010-C: GET requests endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -450,7 +452,7 @@ def create_app(
         """
         Create a status change request.
 
-        REQ-tv-d00014-C: POST requests endpoint.
+        REQ-d00010-C: POST requests endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -463,7 +465,7 @@ def create_app(
             status_request = StatusRequest.from_dict(data)
             create_status_request(repo, normalized_id, status_request)
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             user = status_request.requestedBy or "system"
             sync_result = trigger_auto_sync(
                 f"Status change request for REQ-{normalized_id}: "
@@ -484,7 +486,7 @@ def create_app(
         """
         Add an approval to a status change request.
 
-        REQ-tv-d00014-C: POST approvals endpoint.
+        REQ-d00010-C: POST approvals endpoint.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -499,7 +501,7 @@ def create_app(
                 repo, normalized_id, request_id, approval.user, approval.decision, approval.comment
             )
 
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             user = approval.user or "system"
             sync_result = trigger_auto_sync(
                 f"Approval on REQ-{normalized_id} status request: {approval.decision}", user
@@ -515,7 +517,7 @@ def create_app(
 
     # ==========================================================================
     # Review Packages API
-    # REQ-tv-d00014-D: Package endpoints for CRUD and membership
+    # REQ-d00010-D: Package endpoints for CRUD and membership
     # ==========================================================================
 
     @app.route("/api/reviews/packages", methods=["GET"])
@@ -523,7 +525,7 @@ def create_app(
         """
         Get all review packages.
 
-        REQ-tv-d00014-D: GET packages endpoint.
+        REQ-d00010-D: GET packages endpoint.
         """
         repo = app.config["REPO_ROOT"]
         pf = load_packages(repo)
@@ -536,9 +538,9 @@ def create_app(
         """
         Create a new review package.
 
-        REQ-tv-d00014-D: POST packages endpoint.
-        REQ-d00098-A: Package SHALL record branchName when created.
-        REQ-d00098-B: Package SHALL record creationCommitHash when created.
+        REQ-d00010-D: POST packages endpoint.
+        REQ-d00004-A: Package SHALL record branchName when created.
+        REQ-d00004-B: Package SHALL record creationCommitHash when created.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True)
@@ -555,7 +557,7 @@ def create_app(
 
         pkg = ReviewPackage.create(name, description, user)
 
-        # REQ-d00098: Add git context for audit trail
+        # REQ-d00004: Add git context for audit trail
         git_context = get_git_context(repo)
         pkg.branchName = git_context.get("branchName")
         pkg.creationCommitHash = git_context.get("commitHash")
@@ -563,7 +565,7 @@ def create_app(
 
         create_package(repo, pkg)
 
-        # REQ-tv-d00014-H: Auto-sync after write operation
+        # REQ-d00010-H: Auto-sync after write operation
         sync_result = trigger_auto_sync(f"Created package: {name}", user)
 
         response = {"success": True, "package": pkg.to_dict()}
@@ -577,7 +579,7 @@ def create_app(
         """
         Get a specific package.
 
-        REQ-tv-d00014-D: GET package by ID endpoint.
+        REQ-d00010-D: GET package by ID endpoint.
         """
         repo = app.config["REPO_ROOT"]
         pf = load_packages(repo)
@@ -593,7 +595,7 @@ def create_app(
         """
         Update a package.
 
-        REQ-tv-d00014-D: PUT package endpoint.
+        REQ-d00010-D: PUT package endpoint.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True)
@@ -619,7 +621,7 @@ def create_app(
         success = update_package(repo, pkg)
 
         if success:
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Updated package: {pkg.name}", user)
 
             response = {"success": True, "package": pkg.to_dict()}
@@ -635,8 +637,8 @@ def create_app(
         """
         Delete a package (archives it instead of destroying).
 
-        REQ-tv-d00014-D: DELETE package endpoint.
-        REQ-d00097-E: Deleting a package SHALL move it to archive rather than destroying.
+        REQ-d00010-D: DELETE package endpoint.
+        REQ-d00003-E: Deleting a package SHALL move it to archive rather than destroying.
         """
         from .models import ARCHIVE_REASON_DELETED
 
@@ -657,12 +659,12 @@ def create_app(
 
         pkg_name = pkg.name
 
-        # REQ-d00097-E: Archive instead of delete
+        # REQ-d00003-E: Archive instead of delete
         try:
             success = archive_package(repo, package_id, ARCHIVE_REASON_DELETED, user)
 
             if success:
-                # REQ-tv-d00014-H: Auto-sync after write operation
+                # REQ-d00010-H: Auto-sync after write operation
                 sync_result = trigger_auto_sync(f"Archived (deleted) package: {pkg_name}", user)
 
                 response = {"success": True, "archived": True}
@@ -680,7 +682,7 @@ def create_app(
         """
         Add a REQ to a package.
 
-        REQ-tv-d00014-D: POST membership endpoint.
+        REQ-d00010-D: POST membership endpoint.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True) or {}
@@ -690,7 +692,7 @@ def create_app(
         success = add_req_to_package(repo, package_id, normalized_id)
 
         if success:
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Added REQ-{normalized_id} to package", user)
 
             response = {"success": True}
@@ -706,7 +708,7 @@ def create_app(
         """
         Remove a REQ from a package.
 
-        REQ-tv-d00014-D: DELETE membership endpoint.
+        REQ-d00010-D: DELETE membership endpoint.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True) or {}
@@ -716,7 +718,7 @@ def create_app(
         success = remove_req_from_package(repo, package_id, normalized_id)
 
         if success:
-            # REQ-tv-d00014-H: Auto-sync after write operation
+            # REQ-d00010-H: Auto-sync after write operation
             sync_result = trigger_auto_sync(f"Removed REQ-{normalized_id} from package", user)
 
             response = {"success": True}
@@ -732,7 +734,7 @@ def create_app(
         """
         Get the currently active package.
 
-        REQ-tv-d00014-D: GET active endpoint.
+        REQ-d00010-D: GET active endpoint.
         """
         repo = app.config["REPO_ROOT"]
         pf = load_packages(repo)
@@ -748,7 +750,7 @@ def create_app(
         """
         Set the active package.
 
-        REQ-tv-d00014-D: PUT active endpoint.
+        REQ-d00010-D: PUT active endpoint.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True) or {}
@@ -767,7 +769,7 @@ def create_app(
         pf.activePackageId = package_id
         save_packages(repo, pf)
 
-        # REQ-tv-d00014-H: Auto-sync after write operation
+        # REQ-d00010-H: Auto-sync after write operation
         msg = f"Set active package: {package_id}" if package_id else "Cleared active package"
         sync_result = trigger_auto_sync(msg, user)
 
@@ -779,8 +781,8 @@ def create_app(
 
     # ==========================================================================
     # Archive API
-    # REQ-d00097: Review Package Archival
-    # REQ-d00099: Review Archive Viewer
+    # REQ-d00003: Review Package Archival
+    # REQ-d00005: Review Archive Viewer
     # ==========================================================================
 
     @app.route("/api/reviews/packages/<package_id>/archive", methods=["POST"])
@@ -788,7 +790,7 @@ def create_app(
         """
         Manually archive a package.
 
-        REQ-d00097-D: Archive SHALL be triggered by manual action (reason: "manual").
+        REQ-d00003-D: Archive SHALL be triggered by manual action (reason: "manual").
         """
         from .models import ARCHIVE_REASON_MANUAL
 
@@ -813,7 +815,7 @@ def create_app(
             success = archive_package(repo, package_id, ARCHIVE_REASON_MANUAL, user)
 
             if success:
-                # REQ-tv-d00014-H: Auto-sync after write operation
+                # REQ-d00010-H: Auto-sync after write operation
                 sync_result = trigger_auto_sync(f"Archived package: {pkg_name}", user)
 
                 response = {"success": True, "archived": True, "packageId": package_id}
@@ -831,7 +833,7 @@ def create_app(
         """
         List all archived packages.
 
-        REQ-d00099-A: The UI SHALL display a list of archived packages.
+        REQ-d00005-A: The UI SHALL display a list of archived packages.
         """
         repo = app.config["REPO_ROOT"]
         packages = list_archived_packages(repo)
@@ -842,7 +844,7 @@ def create_app(
         """
         Get a specific archived package.
 
-        REQ-d00099-B: Archived packages SHALL open in read-only mode.
+        REQ-d00005-B: Archived packages SHALL open in read-only mode.
         """
         repo = app.config["REPO_ROOT"]
         pkg = get_archived_package(repo, package_id)
@@ -857,8 +859,8 @@ def create_app(
         """
         Get threads for a requirement from an archived package.
 
-        REQ-d00099-B: Archived packages SHALL open in read-only mode.
-        REQ-d00097-F: Archived data SHALL be read-only.
+        REQ-d00005-B: Archived packages SHALL open in read-only mode.
+        REQ-d00003-F: Archived data SHALL be read-only.
         """
         repo = app.config["REPO_ROOT"]
         normalized_id = normalize_req_id(req_id)
@@ -872,7 +874,7 @@ def create_app(
 
     # ==========================================================================
     # Git Sync API
-    # REQ-tv-d00014-E: Sync endpoints for status, push, fetch, fetch-all-package
+    # REQ-d00010-E: Sync endpoints for status, push, fetch, fetch-all-package
     # ==========================================================================
 
     @app.route("/api/reviews/sync/status", methods=["GET"])
@@ -880,7 +882,7 @@ def create_app(
         """
         Get the current sync status.
 
-        REQ-tv-d00014-E: GET status endpoint.
+        REQ-d00010-E: GET status endpoint.
         """
         repo = app.config["REPO_ROOT"]
 
@@ -902,7 +904,7 @@ def create_app(
         """
         Manually trigger a sync (commit and push).
 
-        REQ-tv-d00014-E: POST push endpoint.
+        REQ-d00010-E: POST push endpoint.
         """
         repo = app.config["REPO_ROOT"]
         data = request.get_json(silent=True) or {}
@@ -917,7 +919,7 @@ def create_app(
         """
         Fetch latest review data from remote.
 
-        REQ-tv-d00014-E: POST fetch endpoint.
+        REQ-d00010-E: POST fetch endpoint.
         """
         repo = app.config["REPO_ROOT"]
 
@@ -938,7 +940,7 @@ def create_app(
         """
         Fetch and merge review data from all users' branches for the current package.
 
-        REQ-tv-d00014-E: POST fetch-all-package endpoint.
+        REQ-d00010-E: POST fetch-all-package endpoint.
         """
         repo = app.config["REPO_ROOT"]
 
