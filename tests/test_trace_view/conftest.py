@@ -113,6 +113,14 @@ A. Test assertion.
     reviews_dir = tmp_path / ".reviews"
     reviews_dir.mkdir()
 
+    # Disable hooks for test repo (prevent inheriting parent repo's hook requirements)
+    subprocess.run(
+        ["git", "config", "core.hooksPath", "/dev/null"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
     # Initial commit
     subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
