@@ -6,13 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
-**IMPORTANT**: When working on refactoring, read these files first:
-
-- Workflow: `~/.claude/refactor-workflow.md`
-- Plan: `~/.claude/plans/synchronous-gliding-chipmunk.md`
-
-Read these after every compact event to restore context.
-
 ## Commands
 
 ```bash
