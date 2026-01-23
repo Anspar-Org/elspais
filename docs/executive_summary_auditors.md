@@ -5,6 +5,7 @@
 This system is designed to make **audit questions answerable by inspection**, not reconstruction.
 
 It ensures that:
+
 - obligations are explicitly stated,
 - responsibilities are identifiable,
 - changes are controlled,
@@ -21,28 +22,37 @@ It ensures that:
 ## Comparison to formal systems
 
 ### GAMP-style documentation models
-**Similarities**
+
+#### Similarities
+
 - Lifecycle-based validation
 - Risk-based thinking
 
-**Differences**
+#### Differences
+
 - Live, self-consistent artifacts
 - Structural guarantees over procedural compliance
 
 ### Requirements traceability matrices
-**Similarities**
+
+#### Similarities
+
 - Clear lineage from requirement to test
 
-**Differences**
+#### Differences
+
 - Semantic traceability instead of tabular
 - Continuous validation rather than periodic
 
 ### Model-Based Systems Engineering (MBSE)
-**Similarities**
+
+#### Similarities
+
 - Formal structure
 - Explicit relationships
 
-**Differences**
+#### Differences
+
 - Text-first and human-readable
 - No proprietary modeling tools required
 

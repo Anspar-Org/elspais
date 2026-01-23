@@ -255,6 +255,7 @@ elspais reformat-with-claude --verbose
 When working in an associated repository that implements requirements from a core repository:
 
 **Scenario**: You have:
+
 - Core repo with `REQ-p00001` (PRD requirement)
 - Associated repo with `REQ-d00027` that implements `REQ-p00001`
 
@@ -279,6 +280,7 @@ elspais reformat-with-claude --start-req REQ-p00001 --mode combined
 ```
 
 This will:
+
 1. Load requirements from both repositories
 2. Build complete hierarchy graph with cross-repo links
 3. Traverse from `REQ-p00001` → `REQ-d00027` and any other children
@@ -346,6 +348,7 @@ elspais changed --base-branch develop
 ### Output
 
 The command reports:
+
 - Modified spec files (uncommitted changes)
 - Files changed vs base branch
 - Requirements moved between files
@@ -638,6 +641,7 @@ elspais version
 ### Output
 
 Displays:
+
 - Current installed version
 - Python version
 - Platform information

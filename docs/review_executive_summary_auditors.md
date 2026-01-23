@@ -12,6 +12,7 @@
 The executive summary for auditors presents elspais as a compliance-oriented requirements management system with strong guarantees around traceability, tamper-evidence, and audit-readiness. While the document accurately captures the **philosophical intent** and **design principles** of the system, it makes several **claims that overstate current implementation maturity** and uses terminology that suggests formal verification capabilities not fully present in the codebase.
 
 **Recommendation**: Revise the document to distinguish between:
+
 1. **Design principles** (what the system enables)
 2. **Current capabilities** (what is implemented)
 3. **User discipline requirements** (what users must do to achieve the guarantees)
@@ -25,6 +26,7 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ✅ **ACCURATE**
 
 **Evidence**:
+
 - SHA-256 hashing implemented in `src/elspais/core/hasher.py`
 - Hash verification in validation pipeline (`validate_hashes` in `commands/validate.py`)
 - Hash mismatch detection triggers validation errors
@@ -39,11 +41,13 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **PARTIALLY ACCURATE - Requires User Discipline**
 
 **Evidence**:
+
 - Requirements use formal `## Assertions` sections with SHALL/SHALL NOT language
 - `require_shall` validation rule enforces SHALL language (configurable)
 - Parser extracts assertions separately from non-normative rationale
 
 **Gap**: The system **enables** explicit normativity but **does not enforce** it automatically. Users can:
+
 - Disable `require_assertions` or `require_shall` in config
 - Write normative language in rationale sections (not validated)
 - Create obligations in code comments or documentation outside `spec/`
@@ -57,6 +61,7 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ✅ **ACCURATE**
 
 **Evidence**:
+
 - Hierarchy validation in `src/elspais/core/rules.py` (`_check_circular`)
 - Cycle detection via depth-first search
 - Requirements reference parents via `Implements:` field only (one-way)
@@ -71,12 +76,14 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **MISLEADING - No Automated Enforcement**
 
 **Evidence**:
+
 - Git-based change detection (`src/elspais/core/git.py`)
 - `elspais changed` command shows uncommitted spec changes
 - Hash changes are **detectable** but don't **trigger** anything automatically
 - No workflow enforcement (no blocking mechanisms)
 
 **Gap**: The tool provides **visibility** into changes but does not **mandate** or **enforce** review. There is no:
+
 - Git hook integration (blocking commits with hash mismatches)
 - CI/CD integration examples
 - Workflow automation for review routing
@@ -91,11 +98,13 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **ASPIRATIONAL - Not Enforced**
 
 **Evidence**:
+
 - Requirements have optional `## Rationale` sections
 - `require_rationale` config option exists (defaults to `false`)
 - No specific fields for risk acceptance, trade-off analysis, or ownership
 
 **Gap**: The system supports documenting rationale but:
+
 - Rationale is optional by default
 - No structured format for risk acceptance
 - No validation of rationale content
@@ -112,11 +121,13 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **OVERSTATED**
 
 **Evidence**:
+
 - Requirements are versioned with code (Markdown in `spec/`)
 - Validation checks consistency (links, hierarchy, format)
 - Traceability matrix generation shows requirement→test mapping
 
 **Gap**: "Self-consistent" implies automatic consistency maintenance. The tool:
+
 - Detects **inconsistencies** (broken links, hash mismatches, orphans)
 - Does not **auto-correct** them
 - Does not prevent inconsistent states from being committed (no pre-commit hooks in codebase)
@@ -130,11 +141,13 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **MISLEADING**
 
 **Evidence**:
+
 - Validation can be run continuously (CLI command)
 - No built-in continuous integration
 - No automatic validation on file save, commit, or push
 
 **Gap**: "Continuous validation" suggests automated, ongoing checks. The tool provides:
+
 - **On-demand validation** via CLI (`elspais validate`)
 - **Manual invocation** required
 - No built-in watchers, CI/CD examples, or automation
@@ -148,6 +161,7 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ✅ **ACCURATE**
 
 **Evidence**:
+
 - Traceability uses directed graph structure (DAG)
 - Requirements reference parents via `Implements:`
 - Tree-based traceability (`elspais trace --tree`) represents full Requirements → Assertions → Code → Tests graph
@@ -162,23 +176,27 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 **Status**: ⚠️ **OVERSTATED**
 
 **Evidence**:
+
 - Traceability matrix shows requirement→assertion→test linkage
 - Hash verification detects content changes
 - Git history provides change tracking
 - Validation reports show compliance status
 
 **Gap**: This claim assumes:
+
 - **Complete adoption**: All requirements in tool, all tests properly tagged
 - **Process discipline**: Validation run regularly, failures addressed
 - **Workflow integration**: Tool integrated into development/review processes
 
 **Reality**: The tool **enables** confirmation-style audits by providing structured, verifiable artifacts. Whether audits become "confirmation exercises" depends entirely on:
+
 - Organizational process maturity
 - Consistent tool usage
 - Governance around requirement changes
 - Test coverage discipline
 
 An auditor could still face a forensic investigation if:
+
 - Requirements are incomplete or outdated
 - Tests don't properly reference requirements
 - Validation failures are ignored
@@ -201,6 +219,7 @@ The document uses strong language ("guarantees", "ensures", "mandatory") that im
 Claims like "continuous validation" assume integration that doesn't exist out-of-the-box. The tool provides CLI commands; users must build automation.
 
 **Missing**:
+
 - Git hooks for pre-commit validation
 - CI/CD pipeline examples
 - Workflow templates for review processes
@@ -211,6 +230,7 @@ Claims like "continuous validation" assume integration that doesn't exist out-of
 ### 3. **Structural Guarantees vs. Procedural Compliance**
 
 The document contrasts "structural guarantees" with "procedural compliance" (GAMP), implying the tool provides **automatic structural enforcement**. Reality:
+
 - Structure is **checkable** (via validation)
 - Compliance is still **procedural** (users must run validation and act on results)
 
@@ -219,6 +239,7 @@ The document contrasts "structural guarantees" with "procedural compliance" (GAM
 ### 4. **Completeness Assumptions**
 
 Several claims assume:
+
 - All obligations are captured in requirements
 - All requirements have assertions
 - All tests reference requirements
@@ -275,6 +296,7 @@ Rationale: Default usage is on-demand/periodic.
 ### 1. **Reframe as a Capability Model**
 
 Structure the document around:
+
 - **What the tool detects**: Hash mismatches, broken links, circular deps, orphans, format violations
 - **What the tool enables**: Explicit normativity, hierarchical traceability, change visibility
 - **What users must do**: Run validation, integrate into CI/CD, enforce process discipline
@@ -284,6 +306,7 @@ Structure the document around:
 ### 2. **Add a "Requirements for Audit-Readiness" Section**
 
 Explain the organizational practices needed to achieve audit-ready state:
+
 - Regular validation (CI/CD integration)
 - Test discipline (proper requirement references)
 - Hash management (updating after approved changes)
@@ -294,6 +317,7 @@ Explain the organizational practices needed to achieve audit-ready state:
 ### 3. **Distinguish Design Principles from Implementation**
 
 Clearly separate:
+
 - **Foundational principles**: Explicit normativity, one-way refinement (good!)
 - **Current implementation**: Hash-based change detection, cycle detection, traceability matrix
 - **Future work**: Automated enforcement, workflow integration, approval tracking
@@ -303,6 +327,7 @@ Clearly separate:
 ### 4. **Use Precise Language**
 
 Replace guarantee/enforcement language with enablement language:
+
 - ❌ "ensures that obligations are explicitly stated"
 - ✅ "enables obligations to be explicitly stated in assertions"
 
@@ -314,6 +339,7 @@ Replace guarantee/enforcement language with enablement language:
 ### 5. **Add a "Limitations" Section**
 
 Be transparent about:
+
 - User discipline required
 - Integration effort needed
 - Completeness assumptions (all requirements captured, all tests tagged)
@@ -328,6 +354,7 @@ The executive summary for auditors accurately captures the **design philosophy**
 The tool is best described as a **compliance enablement platform** rather than a **compliance enforcement system**. It provides the technical primitives (hashing, validation, traceability) needed for audit-ready requirements management, but achieving "audits as confirmation exercises" requires organizational process maturity and discipline.
 
 **Recommended Action**: Revise the document to distinguish between:
+
 1. What the tool **detects** (violations)
 2. What the tool **enables** (best practices)
 3. What **users must do** (integrate, validate, review)

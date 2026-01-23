@@ -9,5 +9,13 @@
 
   // Multiple H1 headings: Disabled because requirement spec files use
   // # for each requirement ID which is intentional.
-  "MD025": false
+  "MD025": false,
+
+  // Emphasis as heading: Disabled because *italics* are sometimes used
+  // intentionally for stylistic sub-sections, not as heading replacements.
+  "MD036": false,
+
+  // Table column style: Disabled because pipe spacing style is a preference
+  // and does not affect rendering or readability.
+  "MD060": false
 }

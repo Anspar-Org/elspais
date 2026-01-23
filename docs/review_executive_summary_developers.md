@@ -99,6 +99,7 @@ The executive summary makes the following implicit and explicit claims:
 **Issue**: The document implies automated verification and impact analysis that doesn't exist.
 
 **Evidence**:
+
 - "proves how correctness is demonstrated" → Only *maps* tests, doesn't prove anything
 - "shows what changes impact" → Shows hierarchy, but no automated impact analysis
 
@@ -109,6 +110,7 @@ The executive summary makes the following implicit and explicit claims:
 **Issue**: Document doesn't mention that key features require optional dependencies.
 
 **Evidence** (from `pyproject.toml`):
+
 ```toml
 [project.optional-dependencies]
 trace-view = ["jinja2>=3.0"]  # HTML generation
@@ -117,6 +119,7 @@ mcp = ["mcp>=1.0"]  # AI integration
 ```
 
 **Missing Context**:
+
 - Enhanced HTML views require `elspais[trace-view]`
 - Collaborative review requires `elspais[trace-review]`
 - AI integration requires `elspais[mcp]`
@@ -129,6 +132,7 @@ mcp = ["mcp>=1.0"]  # AI integration
 **Issue**: "No after-the-fact documentation scramble" implies continuous integration that must be manually enforced.
 
 **Evidence**:
+
 - No automatic requirement creation from code
 - No hooks to prevent commits without requirement updates
 - Requires discipline to maintain requirements alongside code
@@ -141,11 +145,13 @@ mcp = ["mcp>=1.0"]  # AI integration
 **Issue**: Comparisons to JIRA, TDD, and ALM platforms are too abstract.
 
 **Problems**:
+
 - "Focuses on meaning, not workflow" → elspais has no workflow management at all
 - "Tests prove compliance" → elspais doesn't run tests or verify compliance
 - "Supports AI-assisted workflows naturally" → Requires optional MCP server
 
 **Better Framing**:
+
 - vs. JIRA: "elspais is a validation tool, not a project management system"
 - vs. TDD: "elspais provides requirement structure; you still write tests"
 - vs. ALM: "elspais is a CLI tool that complements ALM platforms"
@@ -153,6 +159,7 @@ mcp = ["mcp>=1.0"]  # AI integration
 ### 5. Missing Developer-Critical Information
 
 **Absent from Document**:
+
 1. **Learning Curve**: Requirement format has specific rules (assertions, SHALL, hashes)
 2. **Configuration Required**: `.elspais.toml` setup is mandatory
 3. **Validation Workflow**: How to integrate into CI/CD
@@ -164,6 +171,7 @@ mcp = ["mcp>=1.0"]  # AI integration
 ### Immediate Updates
 
 1. **Add "Limitations" Section**:
+
    ```markdown
    ## What elspais does NOT do
    - Does not manage workflow or project tracking
@@ -173,6 +181,7 @@ mcp = ["mcp>=1.0"]  # AI integration
    ```
 
 2. **Clarify Feature Tiers**:
+
    ```markdown
    ## Core vs. Enhanced Features
 
@@ -194,6 +203,7 @@ mcp = ["mcp>=1.0"]  # AI integration
    - Replace "shows what changes impact" with "visualizes requirement hierarchy"
 
 4. **Add Concrete Examples**:
+
    ```markdown
    ## Example Workflow
 
@@ -238,6 +248,7 @@ mcp = ["mcp>=1.0"]  # AI integration
 The executive summary for developers captures the *spirit* of elspais correctly but fails to accurately represent its *capabilities*. It reads like a vision document rather than a factual summary of what the tool actually does.
 
 **Key Issues**:
+
 1. Overstates automation (impact analysis, correctness verification)
 2. Omits critical context (optional dependencies, configuration requirements)
 3. Makes unsubstantiated claims (reduces rework, safer refactoring)
@@ -246,6 +257,7 @@ The executive summary for developers captures the *spirit* of elspais correctly 
 **Recommended Action**: **Major revision** required before distribution to developer audience.
 
 The document should be rewritten to:
+
 - Focus on concrete capabilities, not abstract benefits
 - Clearly distinguish core vs. enhanced features
 - Add practical examples and integration guidance
@@ -253,6 +265,7 @@ The document should be rewritten to:
 - Include limitations and learning curve information
 
 **Alternative Approach**: Consider creating two documents:
+
 1. **"Vision Document"** (current content) - for stakeholder buy-in
 2. **"Developer Guide"** (new content) - for technical audience with practical details
 

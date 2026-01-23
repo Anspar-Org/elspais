@@ -5,6 +5,7 @@
 This system exists to give sponsors **confidence**.
 
 Confidence that:
+
 - the software you are relying on does what it claims,
 - requirements are explicit and testable,
 - changes are controlled and reviewable,
@@ -15,11 +16,13 @@ It is designed specifically to support **regulated clinical and research workflo
 ## Why it matters to sponsors
 
 Sponsors are accountable for:
+
 - data integrity,
 - system validation,
 - and regulatory submissions.
 
 This framework provides:
+
 - a clear chain from intent → requirement → implementation → verification,
 - documented rationale for design decisions and accepted risks,
 - and traceable evidence suitable for UAT, validation packages, and audits.
@@ -30,21 +33,27 @@ You are given **structured, inspectable evidence**.
 ## Comparison to common approaches
 
 ### Vendor validation binders / static documentation
-**Similarities**
+
+#### Similarities
+
 - Formal, reviewable artifacts
 - Supports validation and traceability expectations
 
-**Differences**
+#### Differences
+
 - Evidence is continuously maintained, not assembled after the fact
 - Artifacts remain consistent with the deployed system
 - Change impact is surfaced automatically
 
 ### Traditional ALM tools (e.g., Jama, DOORS)
-**Similarities**
+
+#### Similarities
+
 - Formal requirements
 - Traceability and change control
 
-**Differences**
+#### Differences
+
 - Lower friction for development teams
 - Stronger semantic guarantees
 - Validation evidence is intrinsic to development
@@ -52,6 +61,7 @@ You are given **structured, inspectable evidence**.
 ## Bottom line for sponsors
 
 This system reduces sponsor risk by:
+
 - simplifying validation,
 - aligning engineering rigor with regulatory expectations,
 - and ensuring deployed software matches approved intent.

@@ -127,12 +127,14 @@ The document doesn't mention **limitations** that sponsors would need to know:
 
 ### 1. Revise Regulatory Language (CRITICAL)
 
-**Current problematic statements:**
+#### Current problematic statements
+
 - "specifically to support regulated clinical and research workflows"
 - "FDA 21 CFR Part 11–adjacent use cases"
 - "suitable for UAT, validation packages, and audits"
 
-**Recommended revision:**
+#### Recommended revision
+
 ```markdown
 This system is designed to support rigorous requirements management
 practices that *align with* validation workflows common in regulated
@@ -219,6 +221,7 @@ Provide a table showing how elspais features *support* (not *ensure*) compliance
 **Core Issue**: The document conflates "supports validation workflows" with "provides validation/compliance features." The tool is excellent at the former, but the document suggests the latter.
 
 **Recommended Action**:
+
 1. **Immediate**: Add disclaimer about regulatory limitations
 2. **Short-term**: Revise language from "FDA 21 CFR Part 11-adjacent" to "validation-supportive"
 3. **Long-term**: Create separate documents for:

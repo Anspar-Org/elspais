@@ -5,6 +5,7 @@
 This system is designed to **reduce cognitive overhead**, not add it.
 
 It clarifies:
+
 - what must be built,
 - why it matters,
 - what changes impact,
@@ -22,33 +23,43 @@ It treats software development as a **discovery process**, while preserving rigo
 ## Comparison to familiar systems
 
 ### Ticket-driven development (e.g., JIRA)
-**Similarities**
+
+#### Similarities
+
 - Tracks work and change
 
-**Differences**
+#### Differences
+
 - Focuses on meaning, not workflow
 - Obligations persist beyond tickets
 
 ### Test-Driven Development (TDD)
-**Similarities**
+
+#### Similarities
+
 - Verification-first mindset
 
-**Differences**
+#### Differences
+
 - Requirements define meaning
 - Tests prove compliance
 
 ### ALM platforms
-**Similarities**
+
+#### Similarities
+
 - Traceability
 - Change awareness
 
-**Differences**
+#### Differences
+
 - IDE-friendly and automation-friendly
 - Supports AI-assisted workflows naturally
 
 ## Bottom line for developers
 
 The framework:
+
 - clarifies expectations,
 - reduces rework,
 - and makes refactoring safer.
