@@ -74,3 +74,7 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated traceability output
+traceability.html
+traceability.md
