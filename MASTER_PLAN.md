@@ -240,6 +240,38 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
+### [x] 3.2.5 Add Graph Manipulation Foundation
+
+- **Priority**: P1 - Foundation for all write operations
+- **Description**: Add foundational primitives for graph manipulation including node serialization, AI transformation, and session annotations.
+- **Files**:
+  - `src/elspais/mcp/serializers.py` - Added serialize_node_full()
+  - `src/elspais/mcp/transforms.py` (new) - AITransformer class
+  - `src/elspais/mcp/annotations.py` (new) - Session-scoped storage
+  - `src/elspais/mcp/git_safety.py` (new) - Branch management
+  - `src/elspais/mcp/server.py` - Added new tools
+- **Tasks**:
+  - Implement `get_node_as_json(node_id)` for full node serialization
+  - Implement `transform_with_ai(node_id, prompt, output_mode, save_branch, dry_run)`
+  - Add git safety utilities (create safety branch, restore)
+  - Implement session annotation system (add_annotation, add_tag, etc.)
+- **Tests**: `tests/test_mcp/test_transforms.py`, `tests/test_mcp/test_annotations.py`, `tests/test_mcp/test_git_safety.py`
+- **Acceptance criteria**:
+  - [x] get_node_as_json returns complete node data including text, metrics, relationships
+  - [x] transform_with_ai successfully calls claude -p and applies changes
+  - [x] Git safety branch is created before modifications
+  - [x] Annotations persist within session but not to files
+  - [x] dry_run mode previews without applying
+- **Resolution**: Added 4 new modules:
+  - `git_safety.py`: `GitSafetyManager` with `create_safety_branch()`, `restore_from_branch()`, `list_safety_branches()`, `delete_safety_branch()`
+  - `annotations.py`: `AnnotationStore` with add/get/remove annotation/tag methods, tags index for fast lookup
+  - `transforms.py`: `AITransformer` with `transform()` method supporting replace/operations output modes, `ClaudeInvoker` for subprocess calls
+  - `serializers.py`: Added `serialize_node_full()` with full text, metrics, relationships, coverage info
+  - Added 14 new MCP tools: `get_node_as_json`, `transform_with_ai`, `restore_from_safety_branch`, `list_safety_branches`, `add_annotation`, `get_annotations`, `add_tag`, `remove_tag`, `list_tagged`, `list_all_tags`, `nodes_with_annotation`, `clear_annotations`, `annotation_stats`
+  - 59 new tests added covering all modules.
+
+---
+
 ### [ ] 3.3 Implement Reference Specialization
 
 - **Priority**: P2 - Key UC1 capability

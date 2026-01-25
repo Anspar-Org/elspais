@@ -9,6 +9,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.18.0] - 2026-01-25
+### Added
+- **Graph Manipulation Foundation** - Foundation for AI-assisted graph operations via MCP
+  - `git_safety.py`: `GitSafetyManager` for creating safety branches before risky operations
+    - `create_safety_branch()`, `restore_from_branch()`, `list_safety_branches()`, `delete_safety_branch()`
+    - Automatic stash handling when repo has uncommitted changes
+  - `annotations.py`: `AnnotationStore` for session-scoped annotations and tags
+    - In-memory storage that doesn't modify spec files
+    - `add_annotation()`, `get_annotations()`, `add_tag()`, `remove_tag()`, `list_tagged()`
+    - Tags index for fast node lookup by tag
+  - `transforms.py`: `AITransformer` for AI-assisted requirement transformations
+    - `transform()` method with replace/operations output modes
+    - `ClaudeInvoker` for subprocess calls to `claude -p`
+    - Git safety branch creation before changes
+    - dry_run mode for previewing transformations
+  - `serializers.py`: Added `serialize_node_full()` for complete node serialization
+    - Full requirement text from file
+    - All assertions with coverage info
+    - Metrics, relationships, source location
+- **14 new MCP tools** for graph manipulation and annotations:
+  - `get_node_as_json()` - Full node serialization for AI processing
+  - `transform_with_ai()` - AI-assisted requirement transformation
+  - `restore_from_safety_branch()`, `list_safety_branches()` - Git branch management
+  - `add_annotation()`, `get_annotations()`, `add_tag()`, `remove_tag()`, `list_tagged()`, `list_all_tags()`, `nodes_with_annotation()`, `clear_annotations()`, `annotation_stats()` - Session annotations
+- 59 new tests in `test_annotations.py`, `test_transforms.py`, `test_git_safety.py`, `test_serializers.py`
+
+## [0.17.0] - 2026-01-25
 ### Added
 - **Partial graph refresh** in MCP context - Performance optimization for incremental updates
   - `partial_refresh(changed_files)` method only re-parses modified/deleted/new files

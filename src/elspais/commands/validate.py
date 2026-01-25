@@ -13,9 +13,8 @@ from typing import Any, Dict, List, Optional
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hasher import calculate_hash, verify_hash
+from elspais.core.loader import load_requirements_from_repo, parse_requirements_from_directories
 from elspais.core.models import ParseWarning, Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
 from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
 from elspais.sponsors import get_sponsor_spec_directories
 from elspais.testing.config import TestingConfig
@@ -61,15 +60,9 @@ def run(args: argparse.Namespace) -> int:
         else:
             print(f"Validating requirements in: {', '.join(str(d) for d in spec_dirs)}")
 
-    # Parse requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    skip_files = spec_config.get("skip_files", [])
-
+    # Parse requirements using centralized loader
     try:
-        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        parse_result = parse_requirements_from_directories(spec_dirs, config, recursive=True)
         requirements = dict(parse_result)  # ParseResult supports dict-like access
     except Exception as e:
         print(f"Error parsing requirements: {e}", file=sys.stderr)
@@ -323,42 +316,6 @@ def convert_parse_warnings_to_violations(
                 )
             )
     return violations
-
-
-def load_requirements_from_repo(repo_path: Path, config: Dict) -> Dict[str, Requirement]:
-    """Load requirements from any repository path.
-
-    Args:
-        repo_path: Path to the repository root
-        config: Configuration dict (used as fallback if repo has no config)
-
-    Returns:
-        Dict mapping requirement ID to Requirement object
-    """
-    if not repo_path.exists():
-        return {}
-
-    # Find repo config
-    repo_config_path = repo_path / ".elspais.toml"
-    if repo_config_path.exists():
-        repo_config = load_config(repo_config_path)
-    else:
-        repo_config = config  # Use same config
-
-    spec_dir = repo_path / repo_config.get("directories", {}).get("spec", "spec")
-    if not spec_dir.exists():
-        return {}
-
-    pattern_config = PatternConfig.from_dict(repo_config.get("patterns", {}))
-    spec_config = repo_config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    skip_files = spec_config.get("skip_files", [])
-
-    try:
-        return parser.parse_directory(spec_dir, skip_files=skip_files)
-    except Exception:
-        return {}
 
 
 def format_requirements_json(

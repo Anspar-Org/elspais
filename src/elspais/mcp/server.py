@@ -15,9 +15,11 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
+from elspais.mcp.annotations import AnnotationStore
 from elspais.mcp.context import WorkspaceContext
 from elspais.mcp.serializers import (
     serialize_content_rule,
+    serialize_node_full,
     serialize_requirement,
     serialize_requirement_summary,
     serialize_violation,
@@ -49,6 +51,9 @@ def create_server(working_dir: Optional[Path] = None) -> "FastMCP":
     # Initialize workspace context
     ctx = WorkspaceContext.from_directory(working_dir)
 
+    # Initialize session-scoped annotation store
+    annotation_store = AnnotationStore()
+
     # Create FastMCP server
     mcp = FastMCP(
         name="elspais",
@@ -58,7 +63,7 @@ def create_server(working_dir: Optional[Path] = None) -> "FastMCP":
     _register_resources(mcp, ctx)
 
     # Register tools
-    _register_tools(mcp, ctx)
+    _register_tools(mcp, ctx, annotation_store)
 
     return mcp
 
@@ -515,7 +520,9 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         )
 
 
-def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
+def _register_tools(
+    mcp: "FastMCP", ctx: WorkspaceContext, annotation_store: AnnotationStore
+) -> None:
     """Register MCP tools."""
 
     @mcp.tool()
@@ -1213,6 +1220,349 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             ctx._graph_state = None
 
         return response
+
+    @mcp.tool()
+    def get_node_as_json(
+        node_id: str,
+        include_full_text: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Get complete JSON representation of a node for AI processing.
+
+        Returns comprehensive node data including:
+        - Full requirement text from source file
+        - All assertions with coverage info
+        - Metrics (coverage, tests, pass rates)
+        - Relationships (implements, implemented_by, refines)
+        - Source location with line range
+
+        This is the primary input format for AI transformation operations.
+
+        Args:
+            node_id: The requirement ID (e.g., "REQ-p00001")
+            include_full_text: Include full requirement text from file
+
+        Returns:
+            Complete node data suitable for AI processing
+        """
+        req = ctx.get_requirement(node_id)
+        if req is None:
+            return {"error": f"Requirement {node_id} not found"}
+
+        return serialize_node_full(req, ctx, include_full_text=include_full_text)
+
+    @mcp.tool()
+    def transform_with_ai(
+        node_id: str,
+        prompt: str,
+        output_mode: str = "replace",
+        save_branch: bool = True,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Transform a requirement using AI (Claude).
+
+        This tool invokes Claude with a prompt and the node's JSON data,
+        then applies the transformation to the spec file.
+
+        Output modes:
+        - "replace": Claude returns new requirement markdown (applied to file)
+        - "operations": Claude returns JSON list of operations (informational)
+        - "patch": Claude returns diff (not yet implemented)
+
+        Safety:
+        - If save_branch=True, creates a git branch before changes
+        - Use dry_run=True to preview without applying
+        - Restore with restore_from_safety_branch if needed
+
+        Args:
+            node_id: The requirement ID to transform
+            prompt: What transformation to perform
+            output_mode: How Claude returns results ("replace", "operations")
+            save_branch: Create git safety branch before changes
+            dry_run: Preview without applying changes
+
+        Returns:
+            TransformResult with before/after text, safety branch, etc.
+        """
+        from elspais.mcp.transforms import AITransformer
+
+        transformer = AITransformer(ctx.working_dir)
+        result = transformer.transform(
+            node_id=node_id,
+            prompt=prompt,
+            output_mode=output_mode,
+            save_branch=save_branch,
+            dry_run=dry_run,
+            context=ctx,
+        )
+
+        response: Dict[str, Any] = {
+            "success": result.success,
+            "node_id": result.node_id,
+            "dry_run": result.dry_run,
+        }
+
+        if result.safety_branch:
+            response["safety_branch"] = result.safety_branch
+        if result.before_text:
+            response["before_text"] = result.before_text
+        if result.after_text:
+            response["after_text"] = result.after_text
+        if result.operations:
+            response["operations"] = result.operations
+        if result.error:
+            response["error"] = result.error
+        if result.file_path:
+            response["file_path"] = result.file_path
+
+        return response
+
+    @mcp.tool()
+    def restore_from_safety_branch(branch_name: str) -> Dict[str, Any]:
+        """
+        Restore the repository from a safety branch.
+
+        Use this to undo changes made by transform_with_ai or other
+        mutation operations. The branch name is returned by those
+        operations when save_branch=True.
+
+        Args:
+            branch_name: Name of the safety branch to restore from
+
+        Returns:
+            Result of the restore operation
+        """
+        from elspais.mcp.transforms import restore_from_safety_branch as restore
+
+        success, message = restore(ctx.working_dir, branch_name)
+
+        if success:
+            # Invalidate caches after restore
+            ctx.invalidate_cache()
+
+        return {
+            "success": success,
+            "message": message,
+            "branch_name": branch_name,
+        }
+
+    @mcp.tool()
+    def list_safety_branches() -> Dict[str, Any]:
+        """
+        List all safety branches created by elspais.
+
+        Safety branches are created by mutation operations when
+        save_branch=True. They can be used to restore the repository
+        to a previous state.
+
+        Returns:
+            List of safety branch names
+        """
+        from elspais.mcp.git_safety import GitSafetyManager
+
+        manager = GitSafetyManager(ctx.working_dir)
+        branches = manager.list_safety_branches()
+
+        return {
+            "count": len(branches),
+            "branches": branches,
+        }
+
+    # Annotation tools
+
+    @mcp.tool()
+    def add_annotation(
+        node_id: str,
+        key: str,
+        value: Any,
+        source: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add or update an annotation on a node.
+
+        Annotations are session-scoped metadata that don't modify files.
+        Useful for tracking review status, marking nodes for attention,
+        or adding temporary notes during analysis.
+
+        Args:
+            node_id: The ID of the node to annotate
+            key: The annotation key (e.g., "review_status", "priority")
+            value: The annotation value
+            source: Optional source identifier (e.g., "claude", "user")
+
+        Returns:
+            The created annotation
+        """
+        annotation = annotation_store.add_annotation(node_id, key, value, source)
+        return {
+            "node_id": node_id,
+            "key": annotation.key,
+            "value": annotation.value,
+            "source": annotation.source,
+            "created_at": annotation.created_at.isoformat(),
+        }
+
+    @mcp.tool()
+    def get_annotations(node_id: str) -> Dict[str, Any]:
+        """
+        Get all annotations for a node.
+
+        Args:
+            node_id: The ID of the node
+
+        Returns:
+            Dict of annotation keys to values, plus tags
+        """
+        annotations = annotation_store.get_annotations(node_id)
+        tags = list(annotation_store.get_tags(node_id))
+
+        return {
+            "node_id": node_id,
+            "annotations": annotations,
+            "tags": tags,
+        }
+
+    @mcp.tool()
+    def add_tag(node_id: str, tag: str) -> Dict[str, Any]:
+        """
+        Add a tag to a node.
+
+        Tags are lightweight markers for categorizing nodes.
+        Unlike annotations, tags are simple strings without values.
+
+        Args:
+            node_id: The ID of the node to tag
+            tag: The tag to add
+
+        Returns:
+            Result of the operation
+        """
+        added = annotation_store.add_tag(node_id, tag)
+        return {
+            "node_id": node_id,
+            "tag": tag,
+            "added": added,  # False if already present
+            "message": f"Added tag '{tag}'" if added else f"Tag '{tag}' already present",
+        }
+
+    @mcp.tool()
+    def remove_tag(node_id: str, tag: str) -> Dict[str, Any]:
+        """
+        Remove a tag from a node.
+
+        Args:
+            node_id: The ID of the node
+            tag: The tag to remove
+
+        Returns:
+            Result of the operation
+        """
+        removed = annotation_store.remove_tag(node_id, tag)
+        return {
+            "node_id": node_id,
+            "tag": tag,
+            "removed": removed,
+            "message": f"Removed tag '{tag}'" if removed else f"Tag '{tag}' not found",
+        }
+
+    @mcp.tool()
+    def list_tagged(tag: str) -> Dict[str, Any]:
+        """
+        Get all node IDs with a specific tag.
+
+        Args:
+            tag: The tag to search for
+
+        Returns:
+            List of node IDs with this tag
+        """
+        node_ids = annotation_store.list_tagged(tag)
+        return {
+            "tag": tag,
+            "count": len(node_ids),
+            "node_ids": node_ids,
+        }
+
+    @mcp.tool()
+    def list_all_tags() -> Dict[str, Any]:
+        """
+        Get all unique tags in use.
+
+        Returns:
+            List of tag names and counts
+        """
+        tags = annotation_store.list_all_tags()
+        tag_counts = {tag: len(annotation_store.list_tagged(tag)) for tag in tags}
+
+        return {
+            "count": len(tags),
+            "tags": tag_counts,
+        }
+
+    @mcp.tool()
+    def nodes_with_annotation(
+        key: str,
+        value: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Find nodes with a specific annotation.
+
+        Args:
+            key: The annotation key to search for
+            value: Optional value to match (if None, matches any value)
+
+        Returns:
+            List of matching node IDs
+        """
+        node_ids = list(annotation_store.nodes_with_annotation(key, value))
+        return {
+            "key": key,
+            "value": value,
+            "count": len(node_ids),
+            "node_ids": node_ids,
+        }
+
+    @mcp.tool()
+    def clear_annotations(node_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Clear annotations and tags.
+
+        If node_id is provided, clears only that node.
+        If node_id is None, clears all annotations in the session.
+
+        Args:
+            node_id: Optional specific node to clear
+
+        Returns:
+            Result of the operation
+        """
+        if node_id:
+            cleared = annotation_store.clear_node(node_id)
+            return {
+                "node_id": node_id,
+                "cleared": cleared,
+                "message": f"Cleared annotations for {node_id}" if cleared else f"Node {node_id} had no annotations",
+            }
+        else:
+            count = annotation_store.clear()
+            return {
+                "cleared_nodes": count,
+                "message": f"Cleared all annotations ({count} nodes)",
+            }
+
+    @mcp.tool()
+    def annotation_stats() -> Dict[str, Any]:
+        """
+        Get statistics about the annotation store.
+
+        Returns stats about nodes, annotations, and tags in the
+        current session.
+
+        Returns:
+            Statistics dict
+        """
+        return annotation_store.stats()
 
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:

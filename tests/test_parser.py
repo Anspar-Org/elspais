@@ -1267,3 +1267,149 @@ A. The system SHALL do something.
         # Both should be parsed
         assert len(req.assertions) == 1
         assert len(req.acceptance_criteria) == 1
+
+
+class TestRecursiveParsing:
+    """Tests for recursive directory parsing."""
+
+    def test_parse_directory_recursive_finds_nested_files(self, tmp_path):
+        """Test that recursive=True finds files in subdirectories."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create spec directory structure
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Root level requirement
+        (spec_dir / "prd-core.md").write_text("""
+# REQ-p00001: Root Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. Root requirement assertion.
+
+*End* *Root Requirement* | **Hash**: root1234
+---
+""")
+
+        # Nested subdirectory
+        regulations_dir = spec_dir / "regulations" / "fda"
+        regulations_dir.mkdir(parents=True)
+        (regulations_dir / "fda-requirements.md").write_text("""
+# REQ-p00002: FDA Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. FDA requirement assertion.
+
+*End* *FDA Requirement* | **Hash**: fda12345
+---
+""")
+
+        # Without recursive - should only find root
+        result = parser.parse_directory(spec_dir, recursive=False)
+        assert "REQ-p00001" in result
+        assert "REQ-p00002" not in result
+
+        # With recursive - should find both
+        result = parser.parse_directory(spec_dir, recursive=True)
+        assert "REQ-p00001" in result
+        assert "REQ-p00002" in result
+
+    def test_parse_directory_recursive_sets_subdir(self, tmp_path):
+        """Test that recursive parsing sets subdir from relative path."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create nested structure
+        spec_dir = tmp_path / "spec"
+        nested_dir = spec_dir / "regulations" / "fda"
+        nested_dir.mkdir(parents=True)
+
+        (nested_dir / "test.md").write_text("""
+# REQ-p00001: Nested Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. Test assertion.
+
+*End* *Nested Requirement* | **Hash**: nest1234
+---
+""")
+
+        result = parser.parse_directory(spec_dir, recursive=True)
+        req = result["REQ-p00001"]
+
+        # Subdir should be set to the relative path
+        assert req.subdir == "regulations/fda"
+
+    def test_parse_directory_recursive_default_is_false(self, tmp_path):
+        """Test that recursive defaults to False for backward compatibility."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        nested = spec_dir / "nested"
+        nested.mkdir()
+
+        (spec_dir / "root.md").write_text("""
+# REQ-p00001: Root
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. Root assertion.
+
+*End* *Root* | **Hash**: root1234
+---
+""")
+        (nested / "nested.md").write_text("""
+# REQ-p00002: Nested
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. Nested assertion.
+
+*End* *Nested* | **Hash**: nest1234
+---
+""")
+
+        # Default behavior should not be recursive
+        result = parser.parse_directory(spec_dir)
+        assert "REQ-p00001" in result
+        assert "REQ-p00002" not in result

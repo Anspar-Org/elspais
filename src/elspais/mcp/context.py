@@ -16,9 +16,9 @@ from elspais.core.content_rules import load_content_rules
 from elspais.core.graph import TraceGraph
 from elspais.core.graph_builder import TraceGraphBuilder, ValidationResult
 from elspais.core.graph_schema import GraphSchema
+from elspais.core.loader import create_parser, load_requirements_from_directories
 from elspais.core.models import ContentRule, Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+from elspais.core.parser import RequirementParser  # Only for _parser type in partial_refresh
 
 
 @dataclass
@@ -485,8 +485,7 @@ class WorkspaceContext:
 
         # Re-parse modified and new files
         if self._parser is None:
-            pattern_config = PatternConfig.from_dict(self.config.get("patterns", {}))
-            self._parser = RequirementParser(pattern_config)
+            self._parser = create_parser(self.config)
 
         for path in modified_files + new_files:
             file_reqs = self._parser.parse_file(path)
@@ -584,22 +583,17 @@ class WorkspaceContext:
         return False
 
     def _parse_requirements(self) -> Dict[str, Requirement]:
-        """Parse requirements from spec directories."""
-        if self._parser is None:
-            pattern_config = PatternConfig.from_dict(self.config.get("patterns", {}))
-            self._parser = RequirementParser(pattern_config)
+        """Parse requirements from spec directories.
 
+        Uses the centralized loader from elspais.core.loader.
+        """
         spec_dirs = get_spec_directories(None, self.config, self.working_dir)
-        skip_files = self.config.get("spec", {}).get("skip_files", [])
+        existing_dirs = [d for d in spec_dirs if d.exists()]
 
-        all_requirements: Dict[str, Requirement] = {}
+        if not existing_dirs:
+            return {}
 
-        for spec_dir in spec_dirs:
-            if spec_dir.exists():
-                requirements = self._parser.parse_directory(spec_dir, skip_files=skip_files)
-                all_requirements.update(requirements)
-
-        return all_requirements
+        return load_requirements_from_directories(existing_dirs, self.config, recursive=True)
 
     def _matches(self, req: Requirement, pattern: re.Pattern, field: str) -> bool:
         """Check if requirement matches search pattern."""

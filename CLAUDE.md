@@ -96,7 +96,7 @@ elspais init --type associated    # Initialize associated repository
   - **content_rules.py**: Content rule loading and parsing (AI agent guidance)
   - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
   - **hierarchy.py**: Centralized hierarchy scanning utilities (`find_requirement`, `find_children`, `find_children_ids`, `build_children_index`, `detect_cycles`, `find_roots`, `find_orphans`, `CycleInfo` dataclass) - replaces duplicated logic across analyze, trace, and trace_view modules
-  - **loader.py**: Centralized requirement loading (`load_requirements_from_repo`) - moved from validate.py to break circular dependencies
+  - **loader.py**: Centralized requirement loading - single source of truth for parsing spec files. Provides `create_parser()`, `parse_requirements_from_directories()` (returns ParseResult with warnings), `load_requirements_from_directories()` (returns Dict), `load_requirements_from_repo()`. Used by context.py, validate.py, and other modules.
   - **graph.py**: Unified traceability graph (`SourceLocation`, `NodeKind`, `TraceNode`, `TraceGraph`, `CodeReference`, `TestReference`, `TestResult`, `UserJourney`) - represents full Requirements → Assertions → Code → Tests → Results DAG
   - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics` with coverage source tracking, `MetricsConfig` with `strict_mode`, `ReportSchema`, `CoverageSource` enum) - enables custom node types, relationships, and configurable reports via config
   - **graph_builder.py**: Graph construction (`TraceGraphBuilder`, `ValidationResult`, `build_graph_from_requirements`, `build_graph_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
@@ -114,7 +114,11 @@ elspais init --type associated    # Initialize associated repository
 - **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
   - **server.py**: MCP server with resources and tools
   - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching, file-to-node tracking, and incremental refresh via `partial_refresh(changed_files)`
-  - **serializers.py**: JSON serialization helpers for MCP responses
+  - **serializers.py**: JSON serialization helpers including `serialize_node_full()` for AI transformations
+  - **mutator.py**: `GraphMutator` for graph-to-filesystem sync operations (`change_reference_type`, requirement text extraction/replacement)
+  - **transforms.py**: `AITransformer` for AI-assisted requirement transformations, `ClaudeInvoker` for subprocess calls to `claude -p`
+  - **annotations.py**: `AnnotationStore` for session-scoped annotations and tags (in-memory, not persisted to files)
+  - **git_safety.py**: `GitSafetyManager` for creating safety branches before risky operations, with restore capability
   - **Resources**: Read-only data access
     - `requirements://all`, `requirements://{req_id}`, `requirements://level/{level}`
     - `content-rules://list`, `content-rules://{filename}`
@@ -128,6 +132,11 @@ elspais init --type associated    # Initialize associated repository
     - `validate()`, `parse_requirement()`, `search()`, `get_requirement()`, `analyze()`
     - `get_graph_status()`, `refresh_graph()`, `get_hierarchy()`, `get_traceability_path()`
     - `get_coverage_breakdown()`, `list_by_criteria()`, `show_requirement_context()`
+    - `change_reference_type()` - switch Implements ↔ Refines in spec files
+    - `get_node_as_json()` - full node serialization for AI processing
+    - `transform_with_ai()` - AI-assisted requirement transformation with git safety
+    - `restore_from_safety_branch()`, `list_safety_branches()` - git branch management
+    - `add_annotation()`, `get_annotations()`, `add_tag()`, `remove_tag()`, `list_tagged()`, `list_all_tags()`, `nodes_with_annotation()`, `clear_annotations()`, `annotation_stats()` - session-scoped annotation system
 - **trace_view/**: Enhanced traceability visualization (optional, requires `elspais[trace-view]`)
   - **models.py**: `TraceViewRequirement` adapter wrapping `core.models.Requirement`, `TestInfo`, `GitChangeInfo`
   - **coverage.py**: Coverage calculation (`calculate_coverage`, `count_by_level`, `find_orphaned_requirements`)
