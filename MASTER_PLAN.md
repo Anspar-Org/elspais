@@ -1,6 +1,9 @@
-# Master Plan: elspais Enhancement Issues
+# Master Plan: MCP Graph Integration
 
-This file tracks a queue of enhancement issues to be implemented sequentially. After each `/clear`, Claude should read this file and continue with the next incomplete issue.
+This file tracks a queue of enhancement issues for MCP graph integration. After each `/clear`, Claude should read this file and continue with the next incomplete issue.
+
+**Branch:** feature/CUR-514-viewtrace-port
+**Reference:** `.claude/future-mcp-graph-integration.md`
 
 ## Workflow
 
@@ -15,122 +18,294 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 
 ---
 
-## Issue Queue (Prioritized)
+## Phase 1: Read-Only Graph with Lazy Refresh
 
-### Priority 1: Fix HTML hierarchy toggle state in --view
-- **Status**: [x] Complete
-- **Priority**: P1 - Bug fix (quick win, immediate UX improvement)
-- **Description**: Open/close markers in `--view` HTML hierarchy default to the wrong state. Users have to double-toggle them to get them to work.
-- **Files likely involved**: `src/elspais/trace_view/html/static/`, JavaScript
+### [x] 1.1 Add GraphState to MCP Context
+
+- **Priority**: P1 - Foundation for all graph features
+- **Description**: Add `TraceGraph` caching with staleness tracking to `WorkspaceContext`.
+- **Files**:
+  - `src/elspais/mcp/context.py`
+- **Tasks**:
+  - Add `GraphState` dataclass with `graph`, `validation`, `file_mtimes`
+  - Add `_graph_state: Optional[GraphState]` to `WorkspaceContext`
+  - Implement `get_graph(force_refresh=False)` method
+  - Implement `_build_graph()` using `TraceGraphBuilder`
+  - Implement `is_stale()` checking file mtimes
+- **Tests**: `tests/mcp/test_context_graph.py`
 - **Acceptance criteria**:
-  - [x] Toggle markers work on first click
-  - [x] Default state is consistent and expected
-  - [x] Test toggle behavior (all 713 tests pass)
-- **Resolution**: Fixed hierarchy view initialization to set ALL expandable items to collapsed state (not just roots), ensuring icon state matches visual state.
+  - [x] GraphState dataclass defined
+  - [x] get_graph() returns cached graph on repeated calls
+  - [x] is_stale() returns True when spec files change
+  - [x] force_refresh=True rebuilds graph
+- **Resolution**: Added `GraphState` dataclass with graph, validation, file_mtimes, and built_at fields. Implemented `get_graph()`, `is_graph_stale()`, `get_stale_files()`, `get_graph_built_at()`, `_build_graph()`, and `_get_spec_file_mtimes()` methods. Graph auto-refreshes when stale files detected. 16 new tests added.
 
 ---
 
-### Priority 2: Assertion-level references in all contexts
-- **Status**: [x] Complete
-- **Priority**: P1 - Core correctness (builds on recent work)
-- **Description**: Ensure assertion-level references (REQ-xxx-A) are handled properly in all contexts throughout the codebase.
-- **Files likely involved**: All parsers, graph builder, reporters
+### [ ] 1.2 Add Graph Status MCP Tool
+
+- **Priority**: P1 - Enables graph introspection
+- **Description**: Expose graph state information via MCP tool.
+- **Files**:
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Add `get_graph_status()` tool returning:
+    - `is_stale`: bool
+    - `stale_files`: List of changed files
+    - `node_counts`: Dict by NodeKind
+    - `last_built`: timestamp
+  - Add `refresh_graph(full=False)` tool
+- **Tests**: `tests/test_mcp/test_graph_tools.py`
 - **Acceptance criteria**:
-  - [x] Audit all contexts where requirement refs are used
-  - [x] Verify assertion refs work in each context
-  - [x] Add tests for any gaps found (6 new tests)
-- **Resolution**: Comprehensive audit of 10+ contexts. Found 1 real gap in `trace_view/scanning.py` - fixed. All other "gaps" were either intentional design or false positives.
+  - [ ] get_graph_status returns correct staleness
+  - [ ] Node counts match actual graph
+  - [ ] refresh_graph triggers rebuild
 
 ---
 
-### Priority 3: Update coverage report with direct/explicit vs inferred breakdown
-- **Status**: [x] Complete
-- **Priority**: P2 - Feature completion (completes coverage semantics work)
-- **Description**: Coverage report should treat direct and explicit coverage equally. Report both "Direct/Explicit" numbers and "Inferred (including direct/explicit)" numbers. Avoid double-counting.
-- **Files likely involved**: `src/elspais/core/graph_builder.py`, `src/elspais/core/graph_schema.py`, report generators
+### [ ] 1.3 Add Hierarchy Navigation Tools
+
+- **Priority**: P1 - Core auditor review capability
+- **Description**: MCP tools for traversing requirement hierarchy.
+- **Files**:
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Add `get_hierarchy(req_id)` tool:
+    - `ancestors`: List of parent IDs
+    - `children`: List of child IDs
+    - `depth`: Node depth in graph
+  - Add `get_traceability_path(req_id)` tool:
+    - Returns tree structure: REQ → Assertions → Code → Tests → Results
+- **Tests**: `tests/test_mcp/test_hierarchy_tools.py`
 - **Acceptance criteria**:
-  - [x] Report shows "Direct/Explicit" coverage count
-  - [x] Report shows "Inferred (total including direct/explicit)" count
-  - [x] Inferred count >= Direct/Explicit count (no double-counting)
-  - [x] Update any affected tests (all 719 tests pass)
-- **Resolution**: Added direct_covered, explicit_covered, inferred_covered to standard/full report presets. Updated summary metrics table to show breakdown with "Direct/Explicit (high confidence)" combined count.
+  - [ ] get_hierarchy returns correct ancestors
+  - [ ] get_hierarchy returns correct children
+  - [ ] get_traceability_path shows full path to tests
 
 ---
 
-### Priority 4: Fix local links in static HTML (--view without --embed-content)
-- **Status**: [x] Complete
-- **Priority**: P2 - UX fix (may require investigation)
-- **Description**: Opening links from static HTML without `--embed-content` doesn't work. Either fix the links, remove them, or detect if they'll work and enable/disable accordingly.
-- **Files likely involved**: `src/elspais/trace_view/html/`, JavaScript files
+### [ ] 1.4 Add Coverage Query Tools
+
+- **Priority**: P2 - Key auditor review capability
+- **Description**: MCP tools for coverage analysis (auditor review use case).
+- **Files**:
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Add `get_coverage_breakdown(req_id)` tool:
+    - Per-assertion coverage status
+    - Coverage sources (direct/explicit/inferred)
+    - Implementing code references
+    - Validating tests with pass/fail
+    - Gaps (uncovered assertions)
+  - Add `list_by_criteria(level, status, coverage_below, has_gaps)` tool
+- **Tests**: `tests/test_mcp/test_coverage_tools.py`
 - **Acceptance criteria**:
-  - [x] Investigate if local file links can work (security restrictions)
-  - [x] If they can work sometimes: detect and enable/disable dynamically
-  - [x] If they can never work: remove or hide the broken links
-  - [x] Document the behavior
-- **Resolution**: Added info banner when not using --embed-content explaining that file links are disabled due to browser security. Banner shows available options: --embed-content or --server.
+  - [ ] get_coverage_breakdown shows assertion-level detail
+  - [ ] Coverage sources correctly identified
+  - [ ] list_by_criteria filters correctly
 
 ---
 
-### Priority 5: Diff view for changed files in --view
-- **Status**: [x] Complete (infrastructure)
-- **Priority**: P3 - Feature enhancement
-- **Description**: In `--view` mode, changes are indicated but there's no way to see the actual file diff. Add diff visualization for changed files.
-- **Files likely involved**: `src/elspais/trace_view/`, `src/elspais/commands/trace.py`
+### [ ] 1.5 Add Requirement Context Tool
+
+- **Priority**: P2 - Auditor review UX
+- **Description**: Display requirement with full context for auditor review.
+- **Files**:
+  - `src/elspais/mcp/server.py`
+  - `src/elspais/mcp/serializers.py`
+- **Tasks**:
+  - Add `show_requirement_context(req_id, include_assertions, include_implementers)` tool:
+    - Full requirement text
+    - Assertion labels and text
+    - Source file and line range
+    - Coverage metrics summary
+  - Add serialization helpers for rich output
+- **Tests**: `tests/test_mcp/test_context_tools.py`
 - **Acceptance criteria**:
-  - [x] Show file diff when change is indicated (infrastructure ready)
-  - [x] Integrate with git diff or compute diff inline (diff.py module)
-  - [x] Display in HTML view with syntax highlighting (CSS/JS/modal added)
-- **Resolution**: Added diff infrastructure:
-  - `trace_view/diff.py`: Diff generation using difflib (unified diff format)
-  - `styles.css`: Diff viewer styling (added/removed/context coloring)
-  - `scripts.js`: Diff modal JavaScript (showDiffModal/closeDiffModal)
-  - `base.html`: Diff modal HTML structure
-  - 13 new tests for diff module
-  - Note: Full generator integration to auto-add "View Diff" buttons is follow-up work
+  - [ ] Returns full requirement text
+  - [ ] Shows assertions when requested
+  - [ ] Shows implementers when requested
+  - [ ] Includes file path and line numbers
 
 ---
 
-### Priority 6: Configurable graph depth scoping
-- **Status**: [x] Complete
-- **Priority**: P3 - Feature enhancement
-- **Description**: Graph generation should support scoping to various depth levels: requirements, assertions, files, tests, etc. Since this is a configurable system, depth levels should come from config.
-- **Files likely involved**: `src/elspais/core/graph_schema.py`, `src/elspais/commands/trace.py`
+### [ ] 1.6 Add Graph MCP Resources
+
+- **Priority**: P3 - Alternative access pattern
+- **Description**: Expose graph data via MCP resources.
+- **Files**:
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Add resource `graph://status` - staleness and statistics
+  - Add resource `graph://validation` - current warnings/errors
+  - Add resource `traceability://{id}` - full path for requirement
+  - Add resource `coverage://{id}` - coverage breakdown
+  - Add resource `hierarchy://{id}/ancestors` and `hierarchy://{id}/descendants`
+- **Tests**: `tests/test_mcp/test_graph_resources.py`
 - **Acceptance criteria**:
-  - [x] Add `--depth` flag or similar to control graph scope
-  - [x] Depth levels derived from schema/config
-  - [x] Document the depth options (in --help and tests)
-- **Resolution**: Added `--depth` flag to trace command. Supports numeric values (0, 1, 2, 3) or named levels (requirements, assertions, implementation, full). Uses existing max_depth infrastructure in ReportSchema. Added 6 tests for CLI flag and depth mapping semantics.
+  - [ ] All resources return valid data
+  - [ ] ID-based resources handle invalid IDs gracefully
 
 ---
 
-### Priority 7: INDEX regeneration should pass markdownlint
-- **Status**: [x] Complete
-- **Priority**: P4 - Polish
-- **Description**: Regenerating INDEX files should produce output that passes markdown lint validation.
-- **Files likely involved**: `src/elspais/commands/index.py`, output generation
+## Phase 2: Incremental Refresh
+
+### [ ] 2.1 Add TrackedFile Registry
+
+- **Priority**: P2 - Performance optimization foundation
+- **Description**: Track which nodes come from which files for incremental updates.
+- **Files**:
+  - `src/elspais/mcp/context.py`
+- **Tasks**:
+  - Add `TrackedFile` dataclass: `path`, `mtime`, `node_ids`
+  - Add file → node_ids mapping during graph build
+  - Update `is_stale()` to identify specific stale files
+- **Tests**: `tests/test_mcp/test_tracked_files.py`
 - **Acceptance criteria**:
-  - [x] Generated INDEX files pass markdownlint
-  - [x] Proper heading structure, spacing, and formatting
-- **Resolution**: Added trailing newline to generated INDEX.md files (MD047 compliance). Code analysis confirmed headings, blank lines, and structure already compliant. Added 5 tests for markdownlint compliance.
+  - [ ] TrackedFile records which nodes from each file
+  - [ ] is_stale() returns list of changed files
 
 ---
 
-### Priority 8: MCP TODO items
-- **Status**: [x] Complete (no items found)
-- **Priority**: P4 - Unknown scope (needs file location)
-- **Description**: Address items from MCP TODO file. (Note: File location needs to be provided by user)
-- **Files likely involved**: `src/elspais/mcp/`
+### [ ] 2.2 Implement Partial Graph Refresh
+
+- **Priority**: P3 - Performance optimization
+- **Description**: Re-parse only changed files, update affected subgraph.
+- **Files**:
+  - `src/elspais/mcp/context.py`
+  - `src/elspais/core/graph_builder.py` (if needed)
+- **Tasks**:
+  - Implement `partial_refresh(changed_files)` method
+  - Remove nodes from changed files
+  - Re-parse changed files
+  - Re-add nodes to graph
+  - Recompute affected metrics only
+- **Tests**: `tests/test_mcp/test_incremental_refresh.py`
 - **Acceptance criteria**:
-  - [x] Locate MCP TODO file
-  - [x] Implement each item (none found)
-  - [x] Test MCP functionality (no changes needed)
-- **Resolution**: Searched for MCP TODO file - none found in repository. Searched MCP code (server.py, context.py, serializers.py) for TODO/FIXME comments - none found. Found `.claude/future-mcp-graph-integration.md` which is a Phase 2 roadmap document (not actionable TODOs). MCP code is currently complete. If user has specific MCP TODO items, they should create a new issue with details.
+  - [ ] Only changed files re-parsed
+  - [ ] Graph structure correct after partial refresh
+  - [ ] Metrics updated correctly
 
 ---
 
-## Completed Issues
+## Phase 3: Write Operations
 
-(Move completed issues here with completion date)
+### [ ] 3.1 Create GraphMutator Class
+
+- **Priority**: P2 - Foundation for write operations
+- **Description**: Encapsulate graph-to-filesystem sync operations.
+- **Files**:
+  - `src/elspais/mcp/mutator.py` (new file)
+- **Tasks**:
+  - Create `GraphMutator` class
+  - Implement `_read_spec_file(path)` with line tracking
+  - Implement `_write_spec_file(path, content)` preserving format
+  - Implement `_find_requirement_lines(content, req_id)` to locate requirement in file
+- **Tests**: `tests/test_mcp/test_mutator_base.py`
+- **Acceptance criteria**:
+  - [ ] Can read spec file and track lines
+  - [ ] Can write spec file preserving format
+  - [ ] Can locate requirement by ID in file
+
+---
+
+### [ ] 3.2 Implement Reference Type Change
+
+- **Priority**: P2 - Key UC2 capability
+- **Description**: Change Implements ↔ Refines in spec files.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `change_reference_type(source_id, target_id, new_type)` in mutator
+  - Parse requirement header to find Implements:/Refines: line
+  - Replace reference type while preserving other references
+  - Add MCP tool `change_reference_type()`
+- **Tests**: `tests/test_mcp/test_reference_change.py`
+- **Acceptance criteria**:
+  - [ ] Can change Implements to Refines
+  - [ ] Can change Refines to Implements
+  - [ ] Preserves other references on same line
+  - [ ] Graph updates after change
+
+---
+
+### [ ] 3.3 Implement Reference Specialization
+
+- **Priority**: P2 - Key UC1 capability
+- **Description**: Convert REQ→REQ to REQ→Assertion references.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `specialize_reference(source_id, target_id, assertions)` in mutator
+  - Convert `Implements: REQ-p00001` to `Implements: REQ-p00001-A-B`
+  - Handle multi-assertion syntax
+  - Add MCP tool `specialize_reference()`
+- **Tests**: `tests/test_mcp/test_reference_specialize.py`
+- **Acceptance criteria**:
+  - [ ] Can specialize REQ ref to assertion ref
+  - [ ] Multi-assertion syntax works (A-B-C)
+  - [ ] Graph edges update correctly
+
+---
+
+### [ ] 3.4 Implement Requirement Move
+
+- **Priority**: P3 - UC3 capability
+- **Description**: Move requirements between spec files.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `move_requirement(req_id, target_file, position, after_id)` in mutator
+  - Extract requirement text from source file
+  - Insert at target file with proper positioning
+  - Remove from source file
+  - Add MCP tool `move_requirement()`
+- **Tests**: `tests/test_mcp/test_requirement_move.py`
+- **Acceptance criteria**:
+  - [ ] Requirement removed from source file
+  - [ ] Requirement added to target file
+  - [ ] Position options work (start/end/after)
+  - [ ] References remain valid
+
+---
+
+### [ ] 3.5 Implement File Deletion Workflow
+
+- **Priority**: P3 - UC4 capability
+- **Description**: Prepare and execute spec file deletion.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `analyze_file_for_deletion(source_file)`:
+    - Find remaining REQ/JNY entries
+    - Extract non-requirement content
+    - Return deletion readiness status
+  - Implement `extract_and_delete(source_file, content_target)`:
+    - Extract content to target file
+    - Delete source file
+  - Add MCP tools `prepare_file_deletion()` and `extract_and_delete()`
+- **Tests**: `tests/test_mcp/test_file_deletion.py`
+- **Acceptance criteria**:
+  - [ ] Detects remaining requirements
+  - [ ] Extracts non-requirement content
+  - [ ] Refuses to delete file with remaining requirements
+  - [ ] Deletes empty file successfully
+
+---
+
+## Completion Checklist
+
+- [ ] All Phase 1 items complete
+- [ ] All Phase 2 items complete
+- [ ] All Phase 3 items complete
+- [ ] All tests passing
+- [ ] Documentation updated in CLAUDE.md
+- [ ] Version bumped in pyproject.toml
+- [ ] CHANGELOG.md updated
 
 ---
 
@@ -138,16 +313,19 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 
 | Priority | Meaning |
 |----------|---------|
-| P1 | Bug fixes, core correctness - do first |
-| P2 | Feature completion, UX fixes |
-| P3 | Feature enhancements |
-| P4 | Polish, unknown scope |
+| P1 | Foundation, critical path - do first |
+| P2 | Key feature capability |
+| P3 | Enhancement, optimization |
 
 ---
 
 ## Notes
 
 - Each issue should result in a single commit or small commit series
+- Phase 2 depends on Phase 1 completion
+- Phase 3 depends on Phase 2 completion (except 3.1 which can start after 1.1)
 - Run full test suite before marking complete
 - Update CHANGELOG.md for user-visible changes
 - Update CLAUDE.md if architecture changes significantly
+- Commit with `[CUR-514]` prefix
+- Use `/clear` between issues to manage context
