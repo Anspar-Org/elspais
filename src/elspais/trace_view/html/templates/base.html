@@ -107,6 +107,17 @@
             </div>
             {% endblock %}
 
+            {# Warning banner for standalone mode (no embedded content) #}
+            {% if not embed_content %}
+            <div class="standalone-mode-banner">
+                <span class="banner-icon">ℹ️</span>
+                <span class="banner-text">
+                    <strong>Standalone mode:</strong> File links are disabled.
+                    Use <code>--embed-content</code> to view linked content, or <code>--server</code> for full interactivity.
+                </span>
+            </div>
+            {% endif %}
+
             {# Edit mode panel (only shown in edit mode) #}
             {% if edit_mode %}
             {% block edit_mode_panel %}

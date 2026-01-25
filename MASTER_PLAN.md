@@ -58,15 +58,16 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 4: Fix local links in static HTML (--view without --embed-content)
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P2 - UX fix (may require investigation)
 - **Description**: Opening links from static HTML without `--embed-content` doesn't work. Either fix the links, remove them, or detect if they'll work and enable/disable accordingly.
 - **Files likely involved**: `src/elspais/trace_view/html/`, JavaScript files
 - **Acceptance criteria**:
-  - [ ] Investigate if local file links can work (security restrictions)
-  - [ ] If they can work sometimes: detect and enable/disable dynamically
-  - [ ] If they can never work: remove or hide the broken links
-  - [ ] Document the behavior
+  - [x] Investigate if local file links can work (security restrictions)
+  - [x] If they can work sometimes: detect and enable/disable dynamically
+  - [x] If they can never work: remove or hide the broken links
+  - [x] Document the behavior
+- **Resolution**: Added info banner when not using --embed-content explaining that file links are disabled due to browser security. Banner shows available options: --embed-content or --server.
 
 ---
 
