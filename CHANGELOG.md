@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-01-25
+### Added
+- **`--depth` flag** for trace command - Control graph output depth
+  - Numeric values: `--depth 0` (roots only), `--depth 1`, `--depth 2`, etc.
+  - Named levels: `--depth requirements` (1), `--depth assertions` (2), `--depth implementation` (3), `--depth full` (unlimited)
+  - Can be combined with `--report` to override preset's max_depth
+- **Coverage breakdown in reports** - Standard/full reports now show direct_covered, explicit_covered, inferred_covered metrics
+- **Diff viewer infrastructure** for `--view` mode
+  - New `trace_view/diff.py` module with difflib-based diff generation
+  - Diff modal HTML/CSS/JS in base.html and styles.css
+  - `showDiffModal()` and `closeDiffModal()` JavaScript functions
+- **Standalone mode banner** - Info banner when using `--view` without `--embed-content` explaining file link limitations
+- **INDEX.md markdownlint compliance** - Generated INDEX files now end with trailing newline (MD047)
+- New test classes: `TestCLIDepthFlag`, `TestDepthMapping`, `TestGenerateIndex`
+
+### Fixed
+- **Assertion-level references in scanning.py** - Pattern now matches `REQ-d00001-A` style assertion refs
+- **Summary metrics table** - Shows coverage breakdown with Direct/Explicit (high confidence) combined count
+
 ## [0.14.0] - 2026-01-25
 ### Added
 - **Refines relationship** - New `Refines:` field for requirements that add detail without claiming coverage
