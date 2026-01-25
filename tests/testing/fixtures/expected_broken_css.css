@@ -1,0 +1,12 @@
+/* elspais: expected-broken-links 1 */
+/* Test fixture with CSS-style comment marker. */
+
+/* Validates: REQ-cssmock001 - this should be suppressed */
+.test-first {
+    color: green;
+}
+
+/* Validates: REQ-cssmock002 - this should NOT be suppressed */
+.test-second {
+    color: red;
+}

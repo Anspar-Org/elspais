@@ -1,0 +1,28 @@
+# Named requirements configuration
+# Uses REQ-UserAuth, REQ-DataExport format
+
+[project]
+name = "named-reqs-fixture"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{id}"
+prefix = "REQ"
+
+[patterns.types]
+req = { id = "", name = "Requirement", level = 1 }
+
+[patterns.id_format]
+style = "named"
+pattern = "[A-Z][a-zA-Z0-9]+"
+max_length = 32
+
+[spec.file_patterns]
+"*.md" = "req"
+
+[rules.hierarchy]
+allowed_implements = ["req -> req"]
+allow_orphans = true

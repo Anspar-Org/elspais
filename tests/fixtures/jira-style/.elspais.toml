@@ -1,0 +1,30 @@
+# Jira-style configuration
+# Uses PROJ-123 format (no type distinction, variable length IDs)
+
+[project]
+name = "jira-style-fixture"
+type = "core"
+
+[directories]
+spec = "requirements"
+
+[patterns]
+id_template = "{prefix}-{id}"
+prefix = "PROJ"
+
+[patterns.types]
+req = { id = "", name = "Requirement", level = 1 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 0  # Variable length
+leading_zeros = false
+
+[spec.file_patterns]
+"*.md" = "req"
+
+[rules.hierarchy]
+allowed_implements = [
+    "req -> req",
+]
+allow_orphans = true

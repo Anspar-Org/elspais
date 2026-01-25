@@ -1,0 +1,74 @@
+# HHT-Diary style configuration
+# This fixture matches the hht-diary repository structure
+
+[project]
+name = "hht-like-fixture"
+type = "core"
+
+[directories]
+spec = "spec"
+docs = "docs"
+database = "database"
+code = ["apps", "packages", "server", "tools"]
+ignore = ["node_modules", ".git", "build", "dist"]
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", name = "Product Requirement", level = 1 }
+ops = { id = "o", name = "Operations Requirement", level = 2 }
+dev = { id = "d", name = "Development Requirement", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.associated]
+enabled = true
+position = "after_prefix"
+format = "uppercase"
+length = 3
+separator = "-"
+
+[spec]
+index_file = "INDEX.md"
+skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
+
+[spec.file_patterns]
+"prd-*.md" = "prd"
+"ops-*.md" = "ops"
+"dev-*.md" = "dev"
+
+[rules.hierarchy]
+allowed_implements = [
+    "dev -> ops, prd",
+    "ops -> prd",
+    "prd -> prd",
+]
+allow_circular = false
+allow_orphans = false
+max_depth = 5
+
+[rules.format]
+require_hash = true
+require_rationale = false
+require_assertions = true
+require_status = true
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+[validation]
+strict_hierarchy = true
+hash_algorithm = "sha256"
+hash_length = 8
+
+[traceability]
+output_formats = ["markdown", "html"]
+output_dir = "."
+scan_patterns = [
+    "database/**/*.sql",
+    "apps/**/*.dart",
+    "packages/**/*.dart",
+]

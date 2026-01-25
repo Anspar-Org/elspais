@@ -1,0 +1,37 @@
+# FDA-style configuration
+# Uses PRD-00001, OPS-00001, DEV-00001 format
+
+[project]
+name = "fda-style-fixture"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{type}-{id}"
+
+[patterns.types]
+PRD = { id = "PRD", name = "Product Requirement", level = 1 }
+OPS = { id = "OPS", name = "Operations Requirement", level = 2 }
+DEV = { id = "DEV", name = "Development Requirement", level = 3 }
+TST = { id = "TST", name = "Test Requirement", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[spec.file_patterns]
+"prd-*.md" = "PRD"
+"ops-*.md" = "OPS"
+"dev-*.md" = "DEV"
+"tst-*.md" = "TST"
+
+[rules.hierarchy]
+allowed_implements = [
+    "DEV -> OPS, PRD",
+    "TST -> DEV, PRD",
+    "OPS -> PRD",
+    "PRD -> PRD",
+]

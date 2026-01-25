@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Traceability Report: Minimal</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
+        h1 { color: #333; }
+        .tree { margin: 1rem 0; }
+        .tree ul { list-style-type: none; padding-left: 20px; }
+        .tree li { margin: 0.3rem 0; }
+        .node { padding: 0.3rem 0.5rem; border-radius: 4px; display: inline-block; }
+        .requirement { background: #e3f2fd; border: 1px solid #2196f3; }
+        .assertion { background: #f3e5f5; border: 1px solid #9c27b0; font-size: 0.9em; }
+        .code { background: #e8f5e9; border: 1px solid #4caf50; }
+        .test { background: #fff3e0; border: 1px solid #ff9800; }
+        .status-active { color: #2e7d32; }
+        .status-draft { color: #f57c00; }
+        .toggle { cursor: pointer; margin-right: 0.5rem; }
+        .collapsed > ul { display: none; }
+        .stats { margin-top: 2rem; }
+        .stats table { border-collapse: collapse; }
+        .stats th, .stats td { border: 1px solid #ddd; padding: 0.5rem; }
+        .stats th { background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <h1>Traceability Graph</h1>
+    <p>Total nodes: <strong>342</strong></p>
+
+    <div class="graph">
+        <ul>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00001</strong>: Requirements Management Tool <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00001-A</strong>: The tool SHALL provide command-line validation of requirement documents stored a...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00001-B</strong>: The tool SHALL generate traceability matrices showing requirement relationships....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00001-C</strong>: The tool SHALL detect changes to requirements using content hashing and git inte...</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00002</strong>: Requirements Validation <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00002-A</strong>: The tool SHALL validate requirement format against configurable patterns and rul...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00002-B</strong>: The tool SHALL detect and report hierarchy violations including circular depende...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00002-C</strong>: The tool SHALL verify content hashes match requirement body text....</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_has_empty_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_metrics_mutable</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_index_built_automatically</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_all_nodes</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_nodes_by_kind</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_defaults</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_spec_path</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_handles_malformed_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_with_list</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_does_not_recurse</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_with_skip_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directory_with_subdirs_auto_detects</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directory_with_subdirs_multiple</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_subdir_field_roadmap</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00003</strong>: Traceability Matrix Generation <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00003-A</strong>: The tool SHALL generate traceability matrices in Markdown, HTML, and CSV formats...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00003-B</strong>: The tool SHALL derive traceability from `Implements:` metadata without manual ma...</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00006</strong>: Interactive Traceability Viewer <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00006-A</strong>: The tool SHALL generate an interactive HTML view with clickable requirement navi...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00006-B</strong>: The tool SHALL display test coverage information per requirement when test data ...</span></li>
+</ul></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_creation_minimal</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directory_with_subdirs_multiple</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_graph.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_subdir_field_custom</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00004</strong>: Change Detection and Auditability <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00004-A</strong>: The tool SHALL compute and verify content hashes for change detection....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00004-B</strong>: The tool SHALL detect uncommitted and branch-relative changes to requirement fil...</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00005</strong>: Multi-Repository Requirements <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00005-A</strong>: The tool SHALL support requirement references across repository boundaries using...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00005-B</strong>: The tool SHALL generate combined traceability matrices spanning multiple reposit...</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00007</strong>: Collaborative Review System <span class="status-active">[Active]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00007-A</strong>: The tool SHALL support threaded comments attached to individual requirements....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00007-B</strong>: The tool SHALL allow users to group requirements into review packages for focuse...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00007-C</strong>: The tool SHALL display the git commit context for each review, enabling users to...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00007-D</strong>: The tool SHALL provide access to archived reviews for audit and historical refer...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00007-E</strong>: The tool SHALL preserve review history through archival rather than deletion....</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00008</strong>: Review User Interface <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-A</strong>: The UI SHALL provide a review mode toggle that activates interactive review feat...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-B</strong>: The UI SHALL display interactive line numbers that users can click to select com...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-C</strong>: The UI SHALL highlight the anchored position when a user clicks on a comment's p...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-D</strong>: The UI SHALL visually indicate when comment positions may have drifted due to co...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-E</strong>: The UI SHALL provide a resizable review panel for managing threads and comments....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00008-F</strong>: The UI SHALL provide contextual help explaining review workflows and features....</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00012</strong>: Review UI Framework <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-A</strong>: The UI SHALL provide a review mode toggle button that adds/removes `review-mode`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-B</strong>: The UI SHALL render interactive line numbers for requirement content when review...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-C</strong>: Line numbers SHALL be clickable to select anchor positions for new comments....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-D</strong>: The UI SHALL support keyboard navigation for line selection (arrow keys, shift f...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-E</strong>: Clicking a position label SHALL highlight the corresponding lines in the require...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-F</strong>: Highlight styling SHALL reflect position confidence: `highlight-exact`, `highlig...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-G</strong>: For GENERAL position type, the entire requirement card SHALL be highlighted....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-H</strong>: The review panel SHALL be resizable via a drag handle....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-I</strong>: The UI SHALL dispatch custom events for review state changes (`traceview:review-...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-J</strong>: The UI SHALL provide a help panel with onboarding guidance and tooltips....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00012-K</strong>: JavaScript modules SHALL be loaded in dependency order via the `ReviewSystem` (R...</span></li>
+</ul></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00009</strong>: Review Data Model <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00009-A</strong>: The system SHALL define a package model for grouping requirements into reviewabl...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00009-B</strong>: The system SHALL define a thread model for comment discussions attached to requi...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00009-C</strong>: The system SHALL define storage structures that persist review data reliably wit...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00009-D</strong>: The system SHALL support position anchoring that identifies specific locations w...</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00001</strong>: Review Package Management <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-A</strong>: The Package model SHALL contain:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-B</strong>: Packages SHALL be explicitly created by users; the system SHALL NOT auto-create ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-C</strong>: A requirement SHALL belong to at most one package at a time within a branch....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-D</strong>: The system SHALL allow a requirement to belong to different packages over time (...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-E</strong>: All threads and comments SHALL be owned by exactly one package....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00001-F</strong>: Package deletion SHALL archive (not destroy) the package and its threads....</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_init_template_creates_example</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_init_template_overwrites_with_force</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_example_has_all_sections</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_graph_builder.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_add_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_linking</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_assertions_as_children</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_add_test_nodes</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_validate_detects_broken_links</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_suffix_match</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_children_none</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_rule_valid</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_rule_invalid</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_circular_dependency_detection</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_orphan_detection</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_violation_creation</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_example_requirement_subcommand</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_example_ids_subcommand_no_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_text_returns_parse_result</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_has_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_has_warnings</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_subscript_access</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_contains</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_len</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_warning_has_required_fields</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_warning_has_optional_location</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_extracted_with_metadata</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_extracted_without_metadata</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_extracted_with_only_assertions</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_duplicate_id_keeps_first</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_duplicate_id_generates_warning</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_duplicate_creates_conflict_entry</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_has_is_conflict_flag</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_has_conflict_with</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_has_empty_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_original_entry_not_conflict</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_preserves_content</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_result_count_includes_conflicts</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_valid_implements_accepted</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_invalid_implements_generates_warning</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_valid_assertion_labels_accepted</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_invalid_assertion_labels_generate_warning</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_minimal</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_type_property</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_compute_metrics_single_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_compute_metrics_with_test_coverage</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_compute_metrics_hierarchy_rollup</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_deprecated_requirement_excluded</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_draft_requirement_excluded_by_default</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_custom_exclusion_list</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_test_pass_rate_calculation</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_skipped_tests_counted</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_zero_assertions_zero_coverage</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_partial_coverage_calculation</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_full_coverage_calculation</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_correct_hash_read_from_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_boundaries_correct</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_update_hash_only_affects_target_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_update_hash_scoped_to_requirement_end_marker</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_json_output_shows_stored_hash_not_calculated</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_excludes_index_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_single_value</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_multiple_values</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_to_none</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_dry_run</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_req_not_found</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_status</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_status_dry_run</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_implements_field_missing</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_modify_status_field_missing</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement_dry_run</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement_creates_dest_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement_source_becomes_empty</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement_not_found</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_requirement_in_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_requirement_not_found</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_validates_implements_refs</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_no_validation_by_default</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_from_json</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_with_move</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_dry_run</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_python_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_multiple_refs</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_login_success</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_js_test</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_simple_results</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_pytest_json_report</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_kind_values</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_preorder</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_postorder</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_level</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_metrics_mutable</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_index_built_automatically</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_all_nodes</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_all_nodes_order</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_nodes_by_kind</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_with_rationale</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_cycle_detection</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_multiple_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_core_path_from_config_fallback</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_core_path_cli_overrides_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_broken_link_without_core_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_extracts_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_valid_reference_not_treated_as_no_reference</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_assertions_with_placeholder</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_assertions_fixture</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00002</strong>: Review Storage Architecture <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-A</strong>: Review data SHALL be stored under `.reviews/` directory in the repository root....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-B</strong>: Package metadata SHALL be stored at: `.reviews/packages.json` containing:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-C</strong>: Threads for each requirement SHALL be stored at: `.reviews/reqs/{req-id}/threads...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-D</strong>: Review flags SHALL be stored at: `.reviews/reqs/{req-id}/flag.json`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-E</strong>: Status requests SHALL be stored at: `.reviews/reqs/{req-id}/status.json`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-F</strong>: Configuration SHALL be stored at: `.reviews/config.json`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-G</strong>: Storage operations SHALL use atomic writes (temp file + rename pattern)....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00002-H</strong>: Requirement IDs in paths SHALL be normalized (colons/slashes replaced with under...</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_circular_dependency_detection</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_result_len</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_result_count_includes_conflicts</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_deprecated_requirement_excluded</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_correct_hash_read_from_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_boundaries_correct</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_update_hash_only_affects_target_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_json_output_shows_stored_hash_not_calculated</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_excludes_index_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_from_json</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_multiple_refs</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_js_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_with_assertions</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00006</strong>: Review Threads and Comments <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-A</strong>: All review data types SHALL be implemented as dataclasses with:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-B</strong>: Enums SHALL use string values for JSON compatibility (PositionType, RequestState...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-C</strong>: The Thread model SHALL contain:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-D</strong>: The Comment model SHALL contain:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-E</strong>: The CommentPosition model SHALL support anchor types:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-F</strong>: Factory methods (`create()`) SHALL auto-generate UUIDs and timestamps....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-G</strong>: Container classes (ThreadsFile, StatusFile, PackagesFile) SHALL include version ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-H</strong>: CommentPosition SHALL include `hashWhenCreated` for content drift detection and ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-I</strong>: StatusRequest state SHALL be automatically calculated from approval votes....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00006-J</strong>: All timestamps SHALL be UTC in ISO 8601 format....</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00007</strong>: Review Storage Operations <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-A</strong>: Storage operations SHALL use atomic writes (temp file + rename pattern) for all ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-B</strong>: Thread operations SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-C</strong>: Status request operations SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-D</strong>: Review flag operations SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-E</strong>: Package operations SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-F</strong>: Configuration operations SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-G</strong>: Merge operations SHALL combine data from multiple user branches:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-H</strong>: Storage paths SHALL follow convention: `.reviews/reqs/{normalized-req-id}/`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-I</strong>: Requirement IDs SHALL be normalized (colons/slashes replaced with underscores)....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00007-J</strong>: Merge conflict resolution SHALL use timestamp-based deduplication for overlappin...</span></li>
+</ul></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00010</strong>: Review Git Integration <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00010-A</strong>: The system SHALL record the git commit context when reviews are created or updat...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00010-B</strong>: The system SHALL support review branches that isolate reviewer work until ready ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00010-C</strong>: The system SHALL merge review data from multiple contributor branches....</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00004</strong>: Review Git Audit Trail <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-A</strong>: Package SHALL record `branchName` when created (current git branch)....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-B</strong>: Package SHALL record `creationCommitHash` when created (HEAD commit)....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-C</strong>: Package SHALL update `lastReviewedCommitHash` on each comment activity....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-D</strong>: Archived packages SHALL preserve all commit hash references for audit....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-E</strong>: The UI SHALL display commit information with appropriate context:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00004-F</strong>: Commit tracking SHALL handle squash-merge scenarios gracefully (archived hash ma...</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00009</strong>: Git Branch Management <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-A</strong>: Review branches SHALL follow naming convention: `reviews/{package_id}/{username}...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-B</strong>: `get_review_branch_name()` SHALL return formatted branch name from package and u...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-C</strong>: `parse_review_branch_name()` SHALL extract (package_id, username) from valid bra...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-D</strong>: `is_review_branch()` SHALL return True only for branches matching the naming pat...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-E</strong>: `list_package_branches()` SHALL return all branch names for a given package acro...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-F</strong>: `get_current_package_context()` SHALL return (package_id, username) when on a re...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-G</strong>: `commit_and_push_reviews()` SHALL commit all changes in `.reviews/` and push to ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-H</strong>: Branch operations SHALL detect and report conflicts via `has_conflicts()` and `h...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-I</strong>: `fetch_package_branches()` SHALL fetch all remote branches for a package to enab...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00009-J</strong>: Branch cleanup operations SHALL:...</span></li>
+</ul></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00011</strong>: Review Package Lifecycle <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00011-A</strong>: The system SHALL support archiving completed review packages rather than deletin...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00011-B</strong>: The system SHALL preserve archived reviews in a read-only state for audit purpos...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00011-C</strong>: The system SHALL provide access to view archived packages and their contents....</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00003</strong>: Review Package Archival <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-A</strong>: Archived packages SHALL be stored at: `.reviews/archive/{pkg-id}/`...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-B</strong>: Archive SHALL preserve complete package structure:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-C</strong>: Archive metadata SHALL include:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-D</strong>: Archive SHALL be triggered by:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-E</strong>: Deleting a package SHALL move it to archive rather than destroying it....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00003-F</strong>: Archived data SHALL be read-only and preserved indefinitely....</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_correct_hash_read_from_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_boundaries_correct</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_excludes_index_files</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00005</strong>: Review Archive Viewer <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-A</strong>: The API SHALL provide endpoints to list archived packages with:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-B</strong>: Archived packages SHALL be accessible in read-only mode via API....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-C</strong>: The API SHALL NOT allow adding or editing comments in archived packages....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-D</strong>: The archive API SHALL return archival metadata:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-E</strong>: The archive API SHALL return git audit trail information:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-F</strong>: The UI SHALL provide visual indication of read-only state for archived packages....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-G</strong>: The UI SHALL display a collapsible archive panel listing all archived packages....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-H</strong>: The UI SHALL provide an archive viewer modal showing package details, metadata, ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00005-I</strong>: The UI SHALL display commit hashes with warning that they may not exist post-squ...</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_calculated_hash_differs_from_stored</span></li>
+</ul></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-p00012</strong>: Review Backend Services <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00012-A</strong>: The system SHALL resolve comment positions to current document locations, handli...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00012-B</strong>: The system SHALL provide API endpoints for creating, reading, updating, and mana...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-p00012-C</strong>: The system SHALL support modifying requirement status in spec files based on rev...</span></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00008</strong>: Position Resolution <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-A</strong>: `resolve_position()` SHALL resolve CommentPosition anchors to current document c...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-B</strong>: Resolution confidence levels SHALL be:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-C</strong>: When document hash matches position's `hashWhenCreated`, resolution SHALL be EXA...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-D</strong>: When hash differs, fallback resolution SHALL be attempted yielding APPROXIMATE c...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-E</strong>: For LINE positions with hash mismatch, SHALL search for `fallbackContext` string...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-F</strong>: For BLOCK positions with hash mismatch, SHALL search for context and expand to b...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-G</strong>: For WORD positions, SHALL find the Nth occurrence based on `keywordOccurrence` f...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-H</strong>: GENERAL positions SHALL always resolve with EXACT confidence (apply to entire RE...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-I</strong>: ResolvedPosition SHALL include `resolutionPath` describing the fallback strategy...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00008-J</strong>: When no fallback succeeds, SHALL resolve as UNANCHORED with original position pr...</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00010</strong>: Review API Server <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-A</strong>: The API server SHALL be implemented as a Flask application with `create_app(repo...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-B</strong>: Thread endpoints SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-C</strong>: Status endpoints SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-D</strong>: Package endpoints SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-E</strong>: Sync endpoints SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-F</strong>: CORS SHALL be enabled for cross-origin requests....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-G</strong>: Static file serving SHALL be supported from configured directory....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-H</strong>: All write endpoints SHALL optionally trigger auto-sync based on configuration....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-I</strong>: Archive endpoints SHALL support:...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00010-J</strong>: Health check endpoint SHALL be available at `/api/health`....</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_move_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_read_from_correct_footer_line</span></li>
+</ul></li>
+<li><span class="node requirement"><span class="toggle">▶</span><strong>REQ-d00011</strong>: Status Modifier <span class="status-draft">[Draft]</span></span>
+<ul><li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-A</strong>: `find_req_in_file()` SHALL locate a requirement in a spec file and return status...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-B</strong>: `get_req_status()` SHALL read and return the current status value from the spec ...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-C</strong>: `change_req_status()` SHALL update the status value in the spec file atomically....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-D</strong>: Status values SHALL be validated against allowed set: Draft, Active, Deprecated....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-E</strong>: The status modifier SHALL preserve all other content in the spec file....</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-F</strong>: The status modifier SHALL update the requirement's content hash footer after sta...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-G</strong>: Failed status changes SHALL NOT leave the spec file in a corrupted or partial st...</span></li>
+<li><span class="node assertion"><span style="margin-right:1.1rem"></span><strong>REQ-d00011-H</strong>: `find_req_in_spec_dir()` SHALL search both core spec/ and sponsor/*/spec/ direct...</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_read_from_correct_footer_line</span></li>
+</ul></li>
+</ul></li>
+</ul></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_graph_builder.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_add_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_linking</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_rule_valid</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hierarchy_rule_invalid</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_example_requirement_subcommand</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_example_ids_subcommand_no_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_entry_has_empty_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_valid_implements_accepted</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_invalid_implements_generates_warning</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_type_property</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_compute_metrics_hierarchy_rollup</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_deprecated_requirement_excluded</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_draft_requirement_excluded_by_default</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_custom_exclusion_list</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hash_bugs.py</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_requirement_in_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_batch_edit_validates_implements_refs</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_kind_values</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_preorder</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_postorder</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_level</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_metrics_mutable</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_index_built_automatically</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_all_nodes</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_all_nodes_order</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_nodes_by_kind</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_multiple_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_core_path_from_config_fallback</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_core_path_cli_overrides_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_broken_link_without_core_config</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_extracts_implements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_assertions_fixture</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_build_tree</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_defaults</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_build_graph_from_requirements</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_hht_pattern_parse</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_invalid_id_returns_none</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_format_id</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_validate_id</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_exact_match</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_short_id_match</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_empty_dict</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_resolve_exact</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_resolve_short_id</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_adds_prefix</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_keeps_existing_prefix</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_children_of_prd</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_children_sorted</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_returns_ids</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_matches_find_children</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_builds_index</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_format_rule_missing_hash</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_format_rule_missing_assertions</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_violation_str</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_creation</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_subdir_default</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_subdir_roadmap</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_subdir_other</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_requirement_spec_path</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parsed_requirement_no_associated</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_body_starts_after_status_line</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_creation_minimal</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_walk_single_node</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_ancestors_single_parent</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_find_by_id_exists</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_basic_requirement_output</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_conflict_detection</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_empty_optional_fields</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_subdir_field_default</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_single_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_file</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_extracts_acceptance_criteria</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_tracks_location</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_handles_malformed_requirement</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_with_string</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_with_list</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_skips_nonexistent</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_does_not_recurse</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directories_with_skip_files</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_dash_is_no_reference</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_null_is_no_reference</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_custom_no_reference_values</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_file_with_subdir</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_file_no_subdir</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directory_with_subdirs_auto_detects</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_directory_with_subdirs_multiple</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_assertions_section</span></li>
+<li><span class="node test"><span style="margin-right:1.1rem"></span>test_parse_mixed_format</span></li>
+</ul></li>
+        </ul>
+    </div>
+
+    <div class="stats">
+        <h2>Statistics</h2>
+        <table>
+            <tr><th>Type</th><th>Count</th></tr>
+            <tr><td>Assertion</td><td>142</td></tr>
+            <tr><td>Requirement</td><td>24</td></tr>
+            <tr><td>Test</td><td>176</td></tr>
+        </table>
+    </div>
+
+    <script>
+        document.querySelectorAll('.toggle').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                const li = e.target.closest('li');
+                li.classList.toggle('collapsed');
+                e.target.textContent = li.classList.contains('collapsed') ? '▶' : '▼';
+            });
+        });
+        // Start expanded
+        document.querySelectorAll('.toggle').forEach(t => t.textContent = '▼');
+    </script>
+
+    <hr>
+    <p><em>Generated by elspais (graph mode)</em></p>
+</body>
+</html>

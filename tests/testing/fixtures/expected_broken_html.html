@@ -1,0 +1,16 @@
+<!-- elspais: expected-broken-links 1 -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Fixture</title>
+</head>
+<body>
+    <!-- Test fixture with HTML-style comment marker. -->
+
+    <!-- Validates: REQ-htmlmock001 - this should be suppressed -->
+    <div class="test1">First test</div>
+
+    <!-- Validates: REQ-htmlmock002 - this should NOT be suppressed -->
+    <div class="test2">Second test - should warn</div>
+</body>
+</html>
