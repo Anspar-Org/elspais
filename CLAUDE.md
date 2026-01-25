@@ -113,7 +113,7 @@ elspais init --type associated    # Initialize associated repository
   - **\_\_init\_\_.py**: `Sponsor`, `SponsorsConfig` dataclasses, zero-dependency YAML parser, `load_sponsors_config()`, `resolve_sponsor_spec_dir()`, `get_sponsor_spec_directories()` for multi-repo spec scanning
 - **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
   - **server.py**: MCP server with resources and tools
-  - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching and file-to-node tracking for incremental updates
+  - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching, file-to-node tracking, and incremental refresh via `partial_refresh(changed_files)`
   - **serializers.py**: JSON serialization helpers for MCP responses
   - **Resources**: Read-only data access
     - `requirements://all`, `requirements://{req_id}`, `requirements://level/{level}`

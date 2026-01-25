@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- **Partial graph refresh** in MCP context - Performance optimization for incremental updates
+  - `partial_refresh(changed_files)` method only re-parses modified/deleted/new files
+  - Preserves requirements from unchanged files in cache
+  - Supports explicit file list or automatic stale detection
+  - Helper methods `_get_requirement_ids_for_files()` and `_is_assertion_id()`
+- 16 new tests in `tests/test_mcp/test_incremental_refresh.py`
 - **TrackedFile registry** in MCP context - Foundation for incremental graph updates
   - `TrackedFile` dataclass tracks which nodes originate from each spec file
   - `GraphState.tracked_files` maps file paths to TrackedFile with node_ids

@@ -173,7 +173,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 2.2 Implement Partial Graph Refresh
+### [x] 2.2 Implement Partial Graph Refresh
 
 - **Priority**: P3 - Performance optimization
 - **Description**: Re-parse only changed files, update affected subgraph.
@@ -188,9 +188,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Recompute affected metrics only
 - **Tests**: `tests/test_mcp/test_incremental_refresh.py`
 - **Acceptance criteria**:
-  - [ ] Only changed files re-parsed
-  - [ ] Graph structure correct after partial refresh
-  - [ ] Metrics updated correctly
+  - [x] Only changed files re-parsed
+  - [x] Graph structure correct after partial refresh
+  - [x] Metrics updated correctly
+- **Resolution**: Added `partial_refresh(changed_files)` method to `WorkspaceContext` that identifies stale files (modified, deleted, new), removes requirements from stale files, re-parses only affected files, merges with cached requirements, and rebuilds the graph. Added helper methods `_get_requirement_ids_for_files()` and `_is_assertion_id()` to support incremental updates. 16 new tests added covering all scenarios: no graph, no changes, modified/deleted/new files, explicit changed_files, tracked file updates, cross-file relationships, and metrics updates.
 
 ---
 
@@ -306,7 +307,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 ## Completion Checklist
 
 - [x] All Phase 1 items complete
-- [ ] All Phase 2 items complete
+- [x] All Phase 2 items complete
 - [ ] All Phase 3 items complete
 - [ ] All tests passing
 - [ ] Documentation updated in CLAUDE.md
