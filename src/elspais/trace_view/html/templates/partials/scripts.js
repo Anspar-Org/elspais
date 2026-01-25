@@ -1246,8 +1246,9 @@ const TraceView = (function() {
                     if (icon) {
                         // Reset all icons first
                         icon.classList.remove('collapsed');
-                        // Then collapse root items only
-                        if (icon.textContent && item.dataset.isRoot === 'true') {
+                        // Collapse ALL expandable items (any with children)
+                        // This ensures icon state matches visual state (children hidden)
+                        if (icon.textContent) {
                             state.collapsedInstances.add(item.dataset.instanceId);
                             icon.classList.add('collapsed');
                         }

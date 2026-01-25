@@ -18,14 +18,15 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ## Issue Queue (Prioritized)
 
 ### Priority 1: Fix HTML hierarchy toggle state in --view
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P1 - Bug fix (quick win, immediate UX improvement)
 - **Description**: Open/close markers in `--view` HTML hierarchy default to the wrong state. Users have to double-toggle them to get them to work.
 - **Files likely involved**: `src/elspais/trace_view/html/static/`, JavaScript
 - **Acceptance criteria**:
-  - [ ] Toggle markers work on first click
-  - [ ] Default state is consistent and expected
-  - [ ] Test toggle behavior
+  - [x] Toggle markers work on first click
+  - [x] Default state is consistent and expected
+  - [x] Test toggle behavior (all 713 tests pass)
+- **Resolution**: Fixed hierarchy view initialization to set ALL expandable items to collapsed state (not just roots), ensuring icon state matches visual state.
 
 ---
 
