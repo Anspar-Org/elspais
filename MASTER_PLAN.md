@@ -155,7 +155,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ## Phase 2: Incremental Refresh
 
-### [ ] 2.1 Add TrackedFile Registry
+### [x] 2.1 Add TrackedFile Registry
 
 - **Priority**: P2 - Performance optimization foundation
 - **Description**: Track which nodes come from which files for incremental updates.
@@ -167,8 +167,9 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Update `is_stale()` to identify specific stale files
 - **Tests**: `tests/test_mcp/test_tracked_files.py`
 - **Acceptance criteria**:
-  - [ ] TrackedFile records which nodes from each file
-  - [ ] is_stale() returns list of changed files
+  - [x] TrackedFile records which nodes from each file
+  - [x] is_stale() returns list of changed files
+- **Resolution**: Added `TrackedFile` dataclass with `path`, `mtime`, and `node_ids` fields. Updated `GraphState` to use `tracked_files: Dict[Path, TrackedFile]` with backward-compatible `file_mtimes` property. Added `_build_tracked_files()` to populate node_ids during graph build. Added helper methods: `get_tracked_files()`, `get_nodes_for_file()`, `get_stale_tracked_files()`. 18 new tests added.
 
 ---
 

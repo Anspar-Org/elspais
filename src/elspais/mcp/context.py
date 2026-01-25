@@ -22,18 +22,47 @@ from elspais.core.patterns import PatternConfig
 
 
 @dataclass
+class TrackedFile:
+    """
+    Tracks a spec file and the nodes it contains.
+
+    Used for incremental graph updates - when a file changes, only nodes
+    from that file need to be re-parsed and re-linked.
+
+    Attributes:
+        path: Absolute path to the file
+        mtime: File modification time at time of graph build
+        node_ids: List of node IDs that originate from this file
+    """
+
+    path: Path
+    mtime: float
+    node_ids: List[str] = field(default_factory=list)
+
+
+@dataclass
 class GraphState:
     """
     Cached state of the traceability graph.
 
-    Tracks the graph, validation result, file modification times,
+    Tracks the graph, validation result, tracked files (with their nodes),
     and build timestamp for staleness detection.
     """
 
     graph: TraceGraph
     validation: ValidationResult
-    file_mtimes: Dict[Path, float]
+    tracked_files: Dict[Path, TrackedFile]
     built_at: float
+
+    @property
+    def file_mtimes(self) -> Dict[Path, float]:
+        """
+        Get file modification times (backward compatibility).
+
+        Returns:
+            Dict mapping file paths to their mtime values
+        """
+        return {path: tf.mtime for path, tf in self.tracked_files.items()}
 
 
 @dataclass
@@ -193,16 +222,16 @@ class WorkspaceContext:
             return True
 
         # Check tracked files for modifications or deletions
-        for path, cached_mtime in self._graph_state.file_mtimes.items():
+        for path, tracked_file in self._graph_state.tracked_files.items():
             if not path.exists():
                 return True  # File deleted
-            if path.stat().st_mtime > cached_mtime:
+            if path.stat().st_mtime > tracked_file.mtime:
                 return True  # File modified
 
         # Check for new spec files
         current_mtimes = self._get_spec_file_mtimes()
         for path in current_mtimes:
-            if path not in self._graph_state.file_mtimes:
+            if path not in self._graph_state.tracked_files:
                 return True  # New file added
 
         return False
@@ -220,17 +249,40 @@ class WorkspaceContext:
         stale = []
 
         # Check tracked files for modifications or deletions
-        for path, cached_mtime in self._graph_state.file_mtimes.items():
+        for path, tracked_file in self._graph_state.tracked_files.items():
             if not path.exists():
                 stale.append(path)  # Deleted
-            elif path.stat().st_mtime > cached_mtime:
+            elif path.stat().st_mtime > tracked_file.mtime:
                 stale.append(path)  # Modified
 
         # Check for new spec files
         current_mtimes = self._get_spec_file_mtimes()
         for path in current_mtimes:
-            if path not in self._graph_state.file_mtimes:
+            if path not in self._graph_state.tracked_files:
                 stale.append(path)  # New file
+
+        return stale
+
+    def get_stale_tracked_files(self) -> List[TrackedFile]:
+        """
+        Get TrackedFile objects for files that have changed.
+
+        More detailed than get_stale_files() - includes node_ids for
+        each changed file, enabling targeted incremental updates.
+
+        Returns:
+            List of TrackedFile objects for stale files (excludes new files)
+        """
+        if self._graph_state is None:
+            return []
+
+        stale = []
+
+        for path, tracked_file in self._graph_state.tracked_files.items():
+            if not path.exists():
+                stale.append(tracked_file)  # Deleted (still has old node_ids)
+            elif path.stat().st_mtime > tracked_file.mtime:
+                stale.append(tracked_file)  # Modified
 
         return stale
 
@@ -251,9 +303,10 @@ class WorkspaceContext:
 
         Creates a TraceGraph with all requirements, assertions,
         and their relationships. Computes metrics for coverage.
+        Tracks which nodes come from which files for incremental updates.
 
         Returns:
-            GraphState containing graph, validation, and file mtimes
+            GraphState containing graph, validation, tracked files, and build time
         """
         # Get current file mtimes before parsing
         file_mtimes = self._get_spec_file_mtimes()
@@ -277,10 +330,13 @@ class WorkspaceContext:
         strict_mode = metrics_config.get("strict_mode", False)
         builder.compute_metrics(graph, exclude_status=exclude_status, strict_mode=strict_mode)
 
+        # Build tracked files with node_ids
+        tracked_files = self._build_tracked_files(graph, file_mtimes)
+
         return GraphState(
             graph=graph,
             validation=validation,
-            file_mtimes=file_mtimes,
+            tracked_files=tracked_files,
             built_at=time.time(),
         )
 
@@ -305,6 +361,67 @@ class WorkspaceContext:
                     mtimes[md_file.resolve()] = md_file.stat().st_mtime
 
         return mtimes
+
+    def _build_tracked_files(
+        self, graph: TraceGraph, file_mtimes: Dict[Path, float]
+    ) -> Dict[Path, TrackedFile]:
+        """
+        Build TrackedFile entries from graph nodes.
+
+        Groups nodes by their source file path, enabling incremental
+        graph updates when specific files change.
+
+        Args:
+            graph: The built traceability graph
+            file_mtimes: Dict of file paths to modification times
+
+        Returns:
+            Dict mapping file paths to TrackedFile entries with node_ids
+        """
+        # Initialize tracked files from known mtimes
+        tracked: Dict[Path, TrackedFile] = {
+            path: TrackedFile(path=path, mtime=mtime, node_ids=[])
+            for path, mtime in file_mtimes.items()
+        }
+
+        # Group nodes by source file
+        for node in graph.all_nodes():
+            if node.source and node.source.path:
+                # Convert repo-relative path to absolute
+                abs_path = (self.working_dir / node.source.path).resolve()
+                if abs_path in tracked:
+                    tracked[abs_path].node_ids.append(node.id)
+
+        return tracked
+
+    def get_tracked_files(self) -> Dict[Path, TrackedFile]:
+        """
+        Get all tracked files and their node mappings.
+
+        Returns:
+            Dict mapping file paths to TrackedFile entries,
+            or empty dict if no graph has been built
+        """
+        if self._graph_state is None:
+            return {}
+        return self._graph_state.tracked_files
+
+    def get_nodes_for_file(self, file_path: Path) -> List[str]:
+        """
+        Get node IDs that originate from a specific file.
+
+        Args:
+            file_path: Path to the spec file
+
+        Returns:
+            List of node IDs, or empty list if file not tracked
+        """
+        if self._graph_state is None:
+            return []
+
+        abs_path = file_path.resolve()
+        tracked_file = self._graph_state.tracked_files.get(abs_path)
+        return tracked_file.node_ids if tracked_file else []
 
     def _parse_requirements(self) -> Dict[str, Requirement]:
         """Parse requirements from spec directories."""

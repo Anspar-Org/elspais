@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **TrackedFile registry** in MCP context - Foundation for incremental graph updates
+  - `TrackedFile` dataclass tracks which nodes originate from each spec file
+  - `GraphState.tracked_files` maps file paths to TrackedFile with node_ids
+  - `get_tracked_files()`, `get_nodes_for_file()`, `get_stale_tracked_files()` helper methods
+  - Backward-compatible `file_mtimes` property on GraphState
+- 18 new tests in `tests/test_mcp/test_tracked_files.py`
 
 ## [0.16.0] - 2026-01-25
 ### Added
