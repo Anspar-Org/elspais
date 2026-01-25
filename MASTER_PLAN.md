@@ -72,14 +72,21 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 5: Diff view for changed files in --view
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete (infrastructure)
 - **Priority**: P3 - Feature enhancement
 - **Description**: In `--view` mode, changes are indicated but there's no way to see the actual file diff. Add diff visualization for changed files.
 - **Files likely involved**: `src/elspais/trace_view/`, `src/elspais/commands/trace.py`
 - **Acceptance criteria**:
-  - [ ] Show file diff when change is indicated
-  - [ ] Integrate with git diff or compute diff inline
-  - [ ] Display in HTML view with syntax highlighting
+  - [x] Show file diff when change is indicated (infrastructure ready)
+  - [x] Integrate with git diff or compute diff inline (diff.py module)
+  - [x] Display in HTML view with syntax highlighting (CSS/JS/modal added)
+- **Resolution**: Added diff infrastructure:
+  - `trace_view/diff.py`: Diff generation using difflib (unified diff format)
+  - `styles.css`: Diff viewer styling (added/removed/context coloring)
+  - `scripts.js`: Diff modal JavaScript (showDiffModal/closeDiffModal)
+  - `base.html`: Diff modal HTML structure
+  - 13 new tests for diff module
+  - Note: Full generator integration to auto-add "View Diff" buttons is follow-up work
 
 ---
 

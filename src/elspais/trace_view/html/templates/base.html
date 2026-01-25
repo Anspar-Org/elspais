@@ -288,6 +288,19 @@
 {% include 'components/code_viewer_modal.html' %}
 {% include 'components/legend_modal.html' %}
 {% endif %}
+
+{# Diff viewer modal - always available for modified requirements #}
+<div id="diffModal" class="diff-modal" onclick="if(event.target===this) closeDiffModal()">
+    <div class="diff-modal-content">
+        <div class="diff-modal-header">
+            <h3 id="diffModalTitle">Changes</h3>
+            <button class="diff-modal-close" onclick="closeDiffModal()">&times;</button>
+        </div>
+        <div class="diff-modal-body" id="diffModalBody">
+            <div class="diff-no-changes">Loading...</div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 </body>

@@ -1734,6 +1734,48 @@ function toggleFilesFilter() {
     applyFilters();
 }
 
+// ==========================================================================
+// Diff Viewer
+// ==========================================================================
+
+/**
+ * Show diff modal for a requirement
+ * @param {string} reqId - Requirement ID
+ * @param {string} diffHtml - Pre-rendered diff HTML from server
+ */
+function showDiffModal(reqId, diffHtml) {
+    const modal = document.getElementById('diffModal');
+    const title = document.getElementById('diffModalTitle');
+    const body = document.getElementById('diffModalBody');
+
+    if (!modal || !title || !body) return;
+
+    title.textContent = `Changes: ${reqId}`;
+    body.innerHTML = diffHtml || '<div class="diff-no-changes">No diff data available</div>';
+    modal.classList.add('active');
+
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Close the diff modal
+ */
+function closeDiffModal() {
+    const modal = document.getElementById('diffModal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeDiffModal();
+    }
+});
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
     TraceView.init();
