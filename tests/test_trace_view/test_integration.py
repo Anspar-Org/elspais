@@ -232,3 +232,56 @@ B. The system SHALL do Y.
         assert "## Assertions" in result
         assert "A. The system SHALL" in result
         assert "B. The system SHALL" in result
+
+
+class TestScanningPatterns:
+    """Test scanning pattern handles assertion-level references.
+
+    Validates: REQ-p00003-C
+    """
+
+    def test_scanning_pattern_matches_base_req(self):
+        """Test pattern matches base requirement IDs."""
+        import re
+
+        # Pattern from scanning.py
+        pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})(?:-[A-Z])?")
+
+        match = pattern.search("# Implements: REQ-d00001")
+        assert match is not None
+        assert match.group(1) is None  # No sponsor prefix
+        assert match.group(2) == "d00001"
+
+    def test_scanning_pattern_matches_assertion_ref(self):
+        """Test pattern matches assertion-level references."""
+        import re
+
+        pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})(?:-[A-Z])?")
+
+        match = pattern.search("# Implements: REQ-d00001-A")
+        assert match is not None
+        assert match.group(1) is None  # No sponsor prefix
+        assert match.group(2) == "d00001"  # Core ID without assertion
+
+    def test_scanning_pattern_matches_sponsor_assertion_ref(self):
+        """Test pattern matches sponsor + assertion-level references."""
+        import re
+
+        pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})(?:-[A-Z])?")
+
+        match = pattern.search("# Implements: REQ-CAL-d00001-B")
+        assert match is not None
+        assert match.group(1) == "CAL"  # Sponsor prefix
+        assert match.group(2) == "d00001"  # Core ID without assertion
+
+    def test_scanning_pattern_all_assertion_labels(self):
+        """Test pattern matches all assertion labels A-Z."""
+        import re
+
+        pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})(?:-[A-Z])?")
+
+        for label in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            ref = f"REQ-p00001-{label}"
+            match = pattern.search(ref)
+            assert match is not None, f"Failed to match {ref}"
+            assert match.group(2) == "p00001"

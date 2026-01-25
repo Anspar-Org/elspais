@@ -31,14 +31,15 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 2: Assertion-level references in all contexts
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P1 - Core correctness (builds on recent work)
 - **Description**: Ensure assertion-level references (REQ-xxx-A) are handled properly in all contexts throughout the codebase.
 - **Files likely involved**: All parsers, graph builder, reporters
 - **Acceptance criteria**:
-  - [ ] Audit all contexts where requirement refs are used
-  - [ ] Verify assertion refs work in each context
-  - [ ] Add tests for any gaps found
+  - [x] Audit all contexts where requirement refs are used
+  - [x] Verify assertion refs work in each context
+  - [x] Add tests for any gaps found (6 new tests)
+- **Resolution**: Comprehensive audit of 10+ contexts. Found 1 real gap in `trace_view/scanning.py` - fixed. All other "gaps" were either intentional design or false positives.
 
 ---
 

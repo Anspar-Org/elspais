@@ -167,6 +167,55 @@ function login() {
         assert parser.can_parse(Path("main.go"))
         assert parser.can_parse(Path("lib.rs"))
 
+    def test_parse_assertion_level_reference(self):
+        """Test parsing assertion-level reference (REQ-d00001-A).
+
+        Validates: REQ-p00003-C
+        """
+        from elspais.core.graph import NodeKind, SourceLocation
+        from elspais.core.graph_schema import NodeTypeSchema
+        from elspais.parsers.code import CodeParser
+
+        parser = CodeParser()
+        content = """
+def handle_assertion_coverage():
+    # Implements: REQ-d00001-A
+    pass
+"""
+        source = SourceLocation(path="src/handler.py", line=1)
+        schema = NodeTypeSchema(name="code")
+
+        nodes = parser.parse(content, source, schema)
+
+        assert len(nodes) == 1
+        assert nodes[0].kind == NodeKind.CODE
+        targets = nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001-A" in targets
+        assert nodes[0].code_ref.symbol == "handle_assertion_coverage"
+
+    def test_parse_multiple_assertion_refs(self):
+        """Test parsing multiple assertion-level references.
+
+        Validates: REQ-p00003-C
+        """
+        from elspais.core.graph import SourceLocation
+        from elspais.core.graph_schema import NodeTypeSchema
+        from elspais.parsers.code import CodeParser
+
+        parser = CodeParser()
+        content = """
+# Implements: REQ-d00001-A, REQ-d00001-B
+"""
+        source = SourceLocation(path="src/handler.py", line=1)
+        schema = NodeTypeSchema(name="code")
+
+        nodes = parser.parse(content, source, schema)
+
+        assert len(nodes) == 2
+        targets = [n.metrics.get("_validates_targets", [])[0] for n in nodes]
+        assert "REQ-d00001-A" in targets
+        assert "REQ-d00001-B" in targets
+
 
 class TestTestParser:
     """Tests for TestParser."""

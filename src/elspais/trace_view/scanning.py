@@ -35,7 +35,9 @@ def scan_implementation_files(
     """
     # Pattern to match requirement references in code comments
     # Matches: REQ-p00001, REQ-o00042, REQ-d00156, REQ-CAL-d00001
-    req_ref_pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})")
+    # Also matches assertion-level refs: REQ-d00001-A, REQ-CAL-d00001-B
+    # Assertion suffix is captured but stripped when linking to parent requirement
+    req_ref_pattern = re.compile(r"REQ-(?:([A-Z]+)-)?([pod]\d{5})(?:-[A-Z])?")
 
     total_files_scanned = 0
     total_refs_found = 0
