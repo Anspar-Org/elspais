@@ -64,7 +64,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 1.3 Add Hierarchy Navigation Tools
+### [x] 1.3 Add Hierarchy Navigation Tools
 
 - **Priority**: P1 - Core auditor review capability
 - **Description**: MCP tools for traversing requirement hierarchy.
@@ -79,9 +79,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
     - Returns tree structure: REQ → Assertions → Code → Tests → Results
 - **Tests**: `tests/test_mcp/test_hierarchy_tools.py`
 - **Acceptance criteria**:
-  - [ ] get_hierarchy returns correct ancestors
-  - [ ] get_hierarchy returns correct children
-  - [ ] get_traceability_path shows full path to tests
+  - [x] get_hierarchy returns correct ancestors
+  - [x] get_hierarchy returns correct children
+  - [x] get_traceability_path shows full path to tests
+- **Resolution**: Added `get_hierarchy()` returning ancestors, children (by kind), depth, and source location. Added `get_traceability_path()` returning recursive tree with children organized by kind, summary metrics, and max_depth limiting. 12 new tests added.
 
 ---
 

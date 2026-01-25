@@ -359,6 +359,142 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             "last_built": ctx.get_graph_built_at(),
         }
 
+    @mcp.tool()
+    def get_hierarchy(req_id: str) -> Dict[str, Any]:
+        """
+        Get hierarchy information for a requirement.
+
+        Returns the ancestors (parents up to root), children (direct
+        descendants), and depth in the graph for the specified requirement.
+
+        This is useful for understanding where a requirement sits in
+        the traceability hierarchy.
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001")
+
+        Returns:
+            Dict with ancestors, children, depth, and node info
+        """
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return {"error": f"Requirement {req_id} not found in graph"}
+
+        # Get ancestors (walk up through parents)
+        ancestors = [a.id for a in node.ancestors()]
+
+        # Get children (direct descendants, filtered by kind)
+        children_reqs = [c.id for c in node.children if c.kind == NodeKind.REQUIREMENT]
+        children_assertions = [c.id for c in node.children if c.kind == NodeKind.ASSERTION]
+
+        return {
+            "id": req_id,
+            "kind": node.kind.value,
+            "label": node.label,
+            "depth": node.depth,
+            "ancestors": ancestors,
+            "children": {
+                "requirements": children_reqs,
+                "assertions": children_assertions,
+            },
+            "source": {
+                "file": node.source.path if node.source else None,
+                "line": node.source.line if node.source else None,
+            },
+        }
+
+    @mcp.tool()
+    def get_traceability_path(req_id: str, max_depth: int = 10) -> Dict[str, Any]:
+        """
+        Get full traceability path from a requirement down to tests.
+
+        Returns a tree structure showing the requirement, its assertions,
+        implementing code, validating tests, and test results.
+
+        This is the primary tool for auditor review, showing the complete
+        traceability chain from requirement to evidence.
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001")
+            max_depth: Maximum depth to traverse (default 10)
+
+        Returns:
+            Tree structure with full traceability path
+        """
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return {"error": f"Requirement {req_id} not found in graph"}
+
+        def build_tree(n, depth=0):
+            """Recursively build tree structure."""
+            if depth > max_depth:
+                return {"id": n.id, "truncated": True}
+
+            result = {
+                "id": n.id,
+                "kind": n.kind.value,
+                "label": n.label,
+            }
+
+            # Add source location if available
+            if n.source:
+                result["source"] = {
+                    "file": n.source.path,
+                    "line": n.source.line,
+                }
+
+            # Add metrics if available
+            if n.metrics:
+                # Only include key metrics
+                coverage = n.metrics.get("coverage_pct")
+                if coverage is not None:
+                    result["coverage_pct"] = coverage
+
+            # Add test status if this is a test result
+            if n.kind == NodeKind.TEST_RESULT and n.test_result:
+                result["status"] = n.test_result.status.value if n.test_result.status else None
+
+            # Add children organized by kind
+            if n.children:
+                children_by_kind: Dict[str, list] = {}
+                for child in n.children:
+                    kind_key = child.kind.value
+                    if kind_key not in children_by_kind:
+                        children_by_kind[kind_key] = []
+                    children_by_kind[kind_key].append(build_tree(child, depth + 1))
+                if children_by_kind:
+                    result["children"] = children_by_kind
+
+            return result
+
+        tree = build_tree(node)
+
+        # Add summary metrics
+        total_assertions = len([c for c in node.children if c.kind == NodeKind.ASSERTION])
+        covered_assertions = node.metrics.get("covered_assertions", 0) if node.metrics else 0
+        total_tests = node.metrics.get("total_tests", 0) if node.metrics else 0
+        passed_tests = node.metrics.get("passed_tests", 0) if node.metrics else 0
+
+        return {
+            "tree": tree,
+            "summary": {
+                "total_assertions": total_assertions,
+                "covered_assertions": covered_assertions,
+                "coverage_pct": node.metrics.get("coverage_pct", 0.0) if node.metrics else 0.0,
+                "total_tests": total_tests,
+                "passed_tests": passed_tests,
+                "pass_rate_pct": node.metrics.get("pass_rate_pct", 0.0) if node.metrics else 0.0,
+            },
+        }
+
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze requirement hierarchy."""
