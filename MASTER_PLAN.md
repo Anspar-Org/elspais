@@ -86,7 +86,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 1.4 Add Coverage Query Tools
+### [x] 1.4 Add Coverage Query Tools
 
 - **Priority**: P2 - Key auditor review capability
 - **Description**: MCP tools for coverage analysis (auditor review use case).
@@ -102,9 +102,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add `list_by_criteria(level, status, coverage_below, has_gaps)` tool
 - **Tests**: `tests/test_mcp/test_coverage_tools.py`
 - **Acceptance criteria**:
-  - [ ] get_coverage_breakdown shows assertion-level detail
-  - [ ] Coverage sources correctly identified
-  - [ ] list_by_criteria filters correctly
+  - [x] get_coverage_breakdown shows assertion-level detail
+  - [x] Coverage sources correctly identified
+  - [x] list_by_criteria filters correctly
+- **Resolution**: Added `get_coverage_breakdown()` with per-assertion detail including coverage source type, implementing code, validating tests, and gap detection. Added `list_by_criteria()` with level, status, coverage_below, and has_gaps filters. 14 new tests added.
 
 ---
 

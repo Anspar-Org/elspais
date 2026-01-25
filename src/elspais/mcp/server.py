@@ -495,6 +495,195 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             },
         }
 
+    @mcp.tool()
+    def get_coverage_breakdown(req_id: str) -> Dict[str, Any]:
+        """
+        Get detailed coverage breakdown for a requirement.
+
+        Returns per-assertion coverage status, coverage sources
+        (direct/explicit/inferred), implementing code references,
+        validating tests with pass/fail status, and coverage gaps.
+
+        This is the primary tool for auditor review of coverage evidence.
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001")
+
+        Returns:
+            Detailed coverage breakdown with assertion-level detail
+        """
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return {"error": f"Requirement {req_id} not found in graph"}
+
+        # Get assertions
+        assertions = []
+        gaps = []
+
+        for child in node.children:
+            if child.kind == NodeKind.ASSERTION:
+                assertion_info = {
+                    "id": child.id,
+                    "label": child.label,
+                    "covered": False,
+                    "coverage_source": None,
+                    "implementing_code": [],
+                    "validating_tests": [],
+                }
+
+                # Check for coverage sources
+                contributions = child.metrics.get("_coverage_contributions", [])
+                if contributions:
+                    assertion_info["covered"] = True
+                    # Get the source type from the first contribution
+                    # CoverageContribution is a dataclass with source_type attribute
+                    first = contributions[0]
+                    if hasattr(first, "source_type"):
+                        assertion_info["coverage_source"] = first.source_type.value if hasattr(first.source_type, "value") else str(first.source_type)
+                    else:
+                        assertion_info["coverage_source"] = "unknown"
+
+                # Get implementing code (direct children of kind CODE)
+                for code_child in child.children:
+                    if code_child.kind == NodeKind.CODE:
+                        code_info = {
+                            "id": code_child.id,
+                            "label": code_child.label,
+                        }
+                        if code_child.source:
+                            code_info["file"] = code_child.source.path
+                            code_info["line"] = code_child.source.line
+                        assertion_info["implementing_code"].append(code_info)
+
+                # Get validating tests
+                for test_child in child.children:
+                    if test_child.kind == NodeKind.TEST:
+                        test_info = {
+                            "id": test_child.id,
+                            "label": test_child.label,
+                            "status": None,
+                        }
+                        if test_child.source:
+                            test_info["file"] = test_child.source.path
+                            test_info["line"] = test_child.source.line
+                        # Check for test results
+                        for result_child in test_child.children:
+                            if result_child.kind == NodeKind.TEST_RESULT and result_child.test_result:
+                                test_info["status"] = result_child.test_result.status.value if result_child.test_result.status else None
+                        assertion_info["validating_tests"].append(test_info)
+
+                assertions.append(assertion_info)
+
+                if not assertion_info["covered"]:
+                    gaps.append(child.id)
+
+        # Get rollup metrics
+        metrics = node.metrics or {}
+
+        return {
+            "id": req_id,
+            "label": node.label,
+            "assertions": assertions,
+            "gaps": gaps,
+            "summary": {
+                "total_assertions": len(assertions),
+                "covered_assertions": len([a for a in assertions if a["covered"]]),
+                "coverage_pct": metrics.get("coverage_pct", 0.0),
+                "direct_covered": metrics.get("direct_covered", 0),
+                "explicit_covered": metrics.get("explicit_covered", 0),
+                "inferred_covered": metrics.get("inferred_covered", 0),
+            },
+        }
+
+    @mcp.tool()
+    def list_by_criteria(
+        level: Optional[str] = None,
+        status: Optional[str] = None,
+        coverage_below: Optional[float] = None,
+        has_gaps: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """
+        List requirements matching specified criteria.
+
+        Useful for auditor review to find requirements by level,
+        status, or coverage thresholds.
+
+        Args:
+            level: Filter by level (PRD, OPS, DEV)
+            status: Filter by status (Active, Draft, Deprecated, etc.)
+            coverage_below: Filter requirements with coverage below this percentage
+            has_gaps: If True, only return requirements with uncovered assertions
+
+        Returns:
+            List of matching requirements with summary info
+        """
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        requirements = ctx.get_requirements()
+
+        results = []
+
+        for req in requirements.values():
+            # Apply filters
+            if level and req.level.upper() != level.upper():
+                continue
+            if status and req.status.lower() != status.lower():
+                continue
+
+            # Get graph node for metrics
+            node = graph.find_by_id(req.id)
+            metrics = node.metrics if node else {}
+
+            # Coverage filter
+            coverage_pct = metrics.get("coverage_pct", 0.0) if metrics else 0.0
+            if coverage_below is not None and coverage_pct >= coverage_below:
+                continue
+
+            # Gaps filter
+            if has_gaps is not None:
+                total = metrics.get("total_assertions", 0) if metrics else 0
+                covered = metrics.get("covered_assertions", 0) if metrics else 0
+                req_has_gaps = total > covered
+                if has_gaps and not req_has_gaps:
+                    continue
+                if not has_gaps and req_has_gaps:
+                    continue
+
+            # Build result entry
+            entry = {
+                "id": req.id,
+                "title": req.title,
+                "level": req.level,
+                "status": req.status,
+                "coverage_pct": coverage_pct,
+                "total_assertions": metrics.get("total_assertions", 0) if metrics else 0,
+                "covered_assertions": metrics.get("covered_assertions", 0) if metrics else 0,
+            }
+
+            if node and node.source:
+                entry["source"] = {
+                    "file": node.source.path,
+                    "line": node.source.line,
+                }
+
+            results.append(entry)
+
+        return {
+            "count": len(results),
+            "filters": {
+                "level": level,
+                "status": status,
+                "coverage_below": coverage_below,
+                "has_gaps": has_gaps,
+            },
+            "requirements": results,
+        }
+
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze requirement hierarchy."""
