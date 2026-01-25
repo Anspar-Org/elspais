@@ -109,7 +109,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 1.5 Add Requirement Context Tool
+### [x] 1.5 Add Requirement Context Tool
 
 - **Priority**: P2 - Auditor review UX
 - **Description**: Display requirement with full context for auditor review.
@@ -125,10 +125,11 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add serialization helpers for rich output
 - **Tests**: `tests/test_mcp/test_context_tools.py`
 - **Acceptance criteria**:
-  - [ ] Returns full requirement text
-  - [ ] Shows assertions when requested
-  - [ ] Shows implementers when requested
-  - [ ] Includes file path and line numbers
+  - [x] Returns full requirement text
+  - [x] Shows assertions when requested
+  - [x] Shows implementers when requested
+  - [x] Includes file path and line numbers
+- **Resolution**: Added `show_requirement_context()` with full requirement text, assertions (toggleable), source location, coverage metrics, and implementers (toggleable). 11 new tests added.
 
 ---
 

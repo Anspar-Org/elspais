@@ -684,6 +684,103 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             "requirements": results,
         }
 
+    @mcp.tool()
+    def show_requirement_context(
+        req_id: str,
+        include_assertions: bool = True,
+        include_implementers: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Display requirement with full context for auditor review.
+
+        Returns the complete requirement text, assertions, source location,
+        and optionally the implementing requirements (children).
+
+        This tool provides a comprehensive view of a single requirement
+        for detailed inspection during compliance review.
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001")
+            include_assertions: Include assertion labels and text (default True)
+            include_implementers: Include child requirements that implement this one
+
+        Returns:
+            Full requirement context including text, assertions, metrics
+        """
+        from elspais.core.graph import NodeKind
+
+        req = ctx.get_requirement(req_id)
+        if req is None:
+            return {"error": f"Requirement {req_id} not found"}
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        result: Dict[str, Any] = {
+            "id": req.id,
+            "title": req.title,
+            "level": req.level,
+            "status": req.status,
+            "body": req.body,
+            "rationale": req.rationale,
+            "hash": req.hash,
+            "implements": req.implements,
+        }
+
+        # Source location
+        if req.file_path:
+            result["source"] = {
+                "file": str(req.file_path),
+                "line": req.line_number,
+            }
+
+        # Assertions
+        if include_assertions and req.assertions:
+            result["assertions"] = [
+                {
+                    "label": a.label,
+                    "text": a.text,
+                    "is_placeholder": a.is_placeholder,
+                }
+                for a in req.assertions
+            ]
+
+        # Coverage metrics
+        if node and node.metrics:
+            metrics = node.metrics
+            result["metrics"] = {
+                "total_assertions": metrics.get("total_assertions", 0),
+                "covered_assertions": metrics.get("covered_assertions", 0),
+                "coverage_pct": metrics.get("coverage_pct", 0.0),
+                "direct_covered": metrics.get("direct_covered", 0),
+                "explicit_covered": metrics.get("explicit_covered", 0),
+                "inferred_covered": metrics.get("inferred_covered", 0),
+                "total_tests": metrics.get("total_tests", 0),
+                "passed_tests": metrics.get("passed_tests", 0),
+                "pass_rate_pct": metrics.get("pass_rate_pct", 0.0),
+            }
+
+        # Implementing requirements (children)
+        if include_implementers and node:
+            implementers = []
+            for child in node.children:
+                if child.kind == NodeKind.REQUIREMENT:
+                    implementer = {
+                        "id": child.id,
+                        "label": child.label,
+                    }
+                    if child.source:
+                        implementer["source"] = {
+                            "file": child.source.path,
+                            "line": child.source.line,
+                        }
+                    child_metrics = child.metrics or {}
+                    implementer["coverage_pct"] = child_metrics.get("coverage_pct", 0.0)
+                    implementers.append(implementer)
+            result["implementers"] = implementers
+
+        return result
+
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze requirement hierarchy."""
