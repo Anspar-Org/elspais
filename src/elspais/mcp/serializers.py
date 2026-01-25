@@ -27,6 +27,7 @@ def serialize_requirement(req: Requirement) -> Dict[str, Any]:
         "status": req.status,
         "body": req.body,
         "implements": req.implements,
+        "refines": req.refines,
         "assertions": [serialize_assertion(a) for a in req.assertions],
         "rationale": req.rationale,
         "hash": req.hash,
@@ -53,6 +54,7 @@ def serialize_requirement_summary(req: Requirement) -> Dict[str, Any]:
         "level": req.level,
         "status": req.status,
         "implements": req.implements,
+        "refines": req.refines,
         "assertion_count": len(req.assertions),
     }
 

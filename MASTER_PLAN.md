@@ -217,13 +217,14 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 3.2 Implement Reference Type Change
+### [x] 3.2 Implement Reference Type Change
 
 - **Priority**: P2 - Key UC2 capability
 - **Description**: Change Implements ↔ Refines in spec files.
 - **Files**:
   - `src/elspais/mcp/mutator.py`
   - `src/elspais/mcp/server.py`
+  - `src/elspais/mcp/serializers.py`
 - **Tasks**:
   - Implement `change_reference_type(source_id, target_id, new_type)` in mutator
   - Parse requirement header to find Implements:/Refines: line
@@ -231,10 +232,11 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add MCP tool `change_reference_type()`
 - **Tests**: `tests/test_mcp/test_reference_change.py`
 - **Acceptance criteria**:
-  - [ ] Can change Implements to Refines
-  - [ ] Can change Refines to Implements
-  - [ ] Preserves other references on same line
-  - [ ] Graph updates after change
+  - [x] Can change Implements to Refines
+  - [x] Can change Refines to Implements
+  - [x] Preserves other references on same line
+  - [x] Graph updates after change
+- **Resolution**: Added `ReferenceType` enum and `ReferenceChange` dataclass to mutator. Implemented `change_reference_type()` with helper methods `_find_metadata_line()`, `_parse_reference_list()`, `_find_reference_in_line()`, `_build_refs_string()`, and `_update_metadata_line()`. Added MCP tool `change_reference_type()` that invalidates cache after changes. Added `refines` field to serializers. 21 new tests added.
 
 ---
 

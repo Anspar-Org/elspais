@@ -8,10 +8,41 @@ location.
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from elspais.core.patterns import PatternConfig, PatternValidator
+
+
+class ReferenceType(Enum):
+    """Type of reference relationship between requirements."""
+
+    IMPLEMENTS = "implements"
+    REFINES = "refines"
+
+
+@dataclass
+class ReferenceChange:
+    """Result of a reference type change operation.
+
+    Attributes:
+        success: Whether the change was successful
+        source_id: The requirement ID that was modified
+        target_id: The referenced requirement ID
+        old_type: The original reference type
+        new_type: The new reference type
+        file_path: Path to the modified file
+        message: Description of the result or error
+    """
+
+    success: bool
+    source_id: str
+    target_id: str
+    old_type: Optional[ReferenceType]
+    new_type: ReferenceType
+    file_path: Optional[Path]
+    message: str
 
 
 @dataclass
@@ -270,3 +301,315 @@ class GraphMutator:
         result_lines = content.lines[:start_idx] + new_lines + content.lines[end_idx:]
 
         return "\n".join(result_lines)
+
+    # Regex patterns for reference parsing (matching core/parser.py)
+    IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<refs>[^|\n]+)")
+    REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refs>[^|\n]+)")
+    METADATA_LINE_PATTERN = re.compile(r"^\*\*Level\*\*:")
+
+    # No-reference marker values (from core/parser.py)
+    NO_REFERENCE_VALUES = frozenset(["-", "null", "none", "x", "X", "N/A", "n/a"])
+
+    def _find_metadata_line(
+        self,
+        req_text: str,
+    ) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Find the metadata line in a requirement block.
+
+        The metadata line contains **Level**, **Status**, and reference fields.
+
+        Args:
+            req_text: The requirement text block
+
+        Returns:
+            Tuple of (line_index, line_text) or (None, None) if not found.
+            Line index is 0-indexed relative to req_text.
+        """
+        lines = req_text.split("\n")
+        for i, line in enumerate(lines):
+            if self.METADATA_LINE_PATTERN.match(line):
+                return i, line
+        return None, None
+
+    def _parse_reference_list(self, refs_str: str) -> List[str]:
+        """
+        Parse a comma-separated reference string into a list.
+
+        Args:
+            refs_str: Comma-separated references (e.g., "REQ-p00001, REQ-p00002")
+
+        Returns:
+            List of individual reference IDs (excluding no-reference markers)
+        """
+        refs = []
+        for ref in refs_str.split(","):
+            ref = ref.strip()
+            if ref and ref not in self.NO_REFERENCE_VALUES:
+                refs.append(ref)
+        return refs
+
+    def _find_reference_in_line(
+        self,
+        line: str,
+        target_id: str,
+    ) -> Tuple[Optional[ReferenceType], List[str]]:
+        """
+        Find which reference field contains the target ID.
+
+        Args:
+            line: The metadata line
+            target_id: The reference ID to find
+
+        Returns:
+            Tuple of (reference_type, all_refs_in_field) or (None, []) if not found.
+            reference_type is IMPLEMENTS or REFINES, all_refs_in_field is the
+            list of all references in that field.
+        """
+        # Check Implements field
+        impl_match = self.IMPLEMENTS_PATTERN.search(line)
+        if impl_match:
+            refs = self._parse_reference_list(impl_match.group("refs"))
+            if target_id in refs:
+                return ReferenceType.IMPLEMENTS, refs
+
+        # Check Refines field
+        ref_match = self.REFINES_PATTERN.search(line)
+        if ref_match:
+            refs = self._parse_reference_list(ref_match.group("refs"))
+            if target_id in refs:
+                return ReferenceType.REFINES, refs
+
+        return None, []
+
+    def _build_refs_string(self, refs: List[str]) -> str:
+        """
+        Build a comma-separated reference string from a list.
+
+        Args:
+            refs: List of reference IDs
+
+        Returns:
+            Comma-separated string or "-" if empty
+        """
+        if not refs:
+            return "-"
+        return ", ".join(refs)
+
+    def _update_metadata_line(
+        self,
+        line: str,
+        target_id: str,
+        old_type: ReferenceType,
+        new_type: ReferenceType,
+    ) -> str:
+        """
+        Update the metadata line to change a reference from one type to another.
+
+        Args:
+            line: The original metadata line
+            target_id: The reference ID to move
+            old_type: Current type (IMPLEMENTS or REFINES)
+            new_type: New type to change to
+
+        Returns:
+            Updated metadata line
+        """
+        if old_type == new_type:
+            return line
+
+        # Parse current references
+        impl_match = self.IMPLEMENTS_PATTERN.search(line)
+        ref_match = self.REFINES_PATTERN.search(line)
+
+        impl_refs = (
+            self._parse_reference_list(impl_match.group("refs"))
+            if impl_match
+            else []
+        )
+        refines_refs = (
+            self._parse_reference_list(ref_match.group("refs"))
+            if ref_match
+            else []
+        )
+
+        # Move reference from old to new type
+        if old_type == ReferenceType.IMPLEMENTS:
+            impl_refs = [r for r in impl_refs if r != target_id]
+            refines_refs.append(target_id)
+        else:  # old_type == ReferenceType.REFINES
+            refines_refs = [r for r in refines_refs if r != target_id]
+            impl_refs.append(target_id)
+
+        # Rebuild the line
+        result = line
+
+        # Update or add Implements field
+        new_impl_str = self._build_refs_string(impl_refs)
+        if impl_match:
+            # Replace existing Implements field
+            old_impl = impl_match.group(0)
+            result = result.replace(old_impl, f"**Implements**: {new_impl_str}")
+        elif impl_refs:
+            # Need to add Implements field - insert before Status or at end
+            status_match = re.search(r"\s*\|\s*\*\*Status\*\*:", result)
+            if status_match:
+                result = (
+                    result[: status_match.start()]
+                    + f" | **Implements**: {new_impl_str}"
+                    + result[status_match.start() :]
+                )
+            else:
+                result = result.rstrip() + f" | **Implements**: {new_impl_str}"
+
+        # Update or add Refines field
+        new_refines_str = self._build_refs_string(refines_refs)
+        if ref_match:
+            # Replace existing Refines field
+            old_refines = ref_match.group(0)
+            result = result.replace(old_refines, f"**Refines**: {new_refines_str}")
+        elif refines_refs:
+            # Need to add Refines field - insert before Status or at end
+            # Re-search in updated result
+            status_match = re.search(r"\s*\|\s*\*\*Status\*\*:", result)
+            if status_match:
+                result = (
+                    result[: status_match.start()]
+                    + f" | **Refines**: {new_refines_str}"
+                    + result[status_match.start() :]
+                )
+            else:
+                result = result.rstrip() + f" | **Refines**: {new_refines_str}"
+
+        # Remove empty fields (containing only "-")
+        result = re.sub(r"\s*\|\s*\*\*Implements\*\*:\s*-\s*(?=\||$)", "", result)
+        result = re.sub(r"\s*\|\s*\*\*Refines\*\*:\s*-\s*(?=\||$)", "", result)
+
+        return result
+
+    def change_reference_type(
+        self,
+        source_id: str,
+        target_id: str,
+        new_type: ReferenceType,
+        file_path: Path,
+    ) -> ReferenceChange:
+        """
+        Change a reference from Implements to Refines or vice versa.
+
+        This method reads the spec file, finds the requirement, locates the
+        reference in the metadata line, and updates it to the new type.
+
+        Args:
+            source_id: The requirement ID that contains the reference
+            target_id: The referenced requirement ID to change
+            new_type: The new reference type (IMPLEMENTS or REFINES)
+            file_path: Path to the spec file containing the source requirement
+
+        Returns:
+            ReferenceChange with the result of the operation
+        """
+        try:
+            # Read the spec file
+            content = self._read_spec_file(file_path)
+
+            # Find the requirement location
+            location = self._find_requirement_lines(content, source_id)
+            if location is None:
+                return ReferenceChange(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    old_type=None,
+                    new_type=new_type,
+                    file_path=file_path,
+                    message=f"Requirement {source_id} not found in {file_path}",
+                )
+
+            # Extract requirement text
+            req_text = self.get_requirement_text(content, location)
+
+            # Find the metadata line
+            meta_idx, meta_line = self._find_metadata_line(req_text)
+            if meta_line is None:
+                return ReferenceChange(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    old_type=None,
+                    new_type=new_type,
+                    file_path=file_path,
+                    message=f"Metadata line not found in requirement {source_id}",
+                )
+
+            # Find the reference in the line
+            old_type, refs = self._find_reference_in_line(meta_line, target_id)
+            if old_type is None:
+                return ReferenceChange(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    old_type=None,
+                    new_type=new_type,
+                    file_path=file_path,
+                    message=f"Reference to {target_id} not found in {source_id}",
+                )
+
+            # Check if already the correct type
+            if old_type == new_type:
+                return ReferenceChange(
+                    success=True,
+                    source_id=source_id,
+                    target_id=target_id,
+                    old_type=old_type,
+                    new_type=new_type,
+                    file_path=file_path,
+                    message=f"Reference already has type {new_type.value}",
+                )
+
+            # Update the metadata line
+            new_meta_line = self._update_metadata_line(
+                meta_line, target_id, old_type, new_type
+            )
+
+            # Replace the line in requirement text
+            req_lines = req_text.split("\n")
+            req_lines[meta_idx] = new_meta_line
+            new_req_text = "\n".join(req_lines)
+
+            # Replace requirement in file content
+            new_content = self.replace_requirement_text(content, location, new_req_text)
+
+            # Write back to file
+            self._write_spec_file(file_path, new_content)
+
+            return ReferenceChange(
+                success=True,
+                source_id=source_id,
+                target_id=target_id,
+                old_type=old_type,
+                new_type=new_type,
+                file_path=file_path,
+                message=f"Changed reference from {old_type.value} to {new_type.value}",
+            )
+
+        except FileNotFoundError as e:
+            return ReferenceChange(
+                success=False,
+                source_id=source_id,
+                target_id=target_id,
+                old_type=None,
+                new_type=new_type,
+                file_path=file_path,
+                message=str(e),
+            )
+        except ValueError as e:
+            return ReferenceChange(
+                success=False,
+                source_id=source_id,
+                target_id=target_id,
+                old_type=None,
+                new_type=new_type,
+                file_path=file_path,
+                message=str(e),
+            )

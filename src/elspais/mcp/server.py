@@ -1132,6 +1132,88 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
 
         return result
 
+    @mcp.tool()
+    def change_reference_type(
+        source_id: str,
+        target_id: str,
+        new_type: str,
+    ) -> Dict[str, Any]:
+        """
+        Change a reference from Implements to Refines or vice versa.
+
+        This tool modifies the spec file to change the reference type
+        for a specific relationship. Use this when a child requirement
+        should refine (add detail) rather than implement (claim satisfaction)
+        its parent, or vice versa.
+
+        Args:
+            source_id: The requirement ID that contains the reference
+            target_id: The referenced requirement ID to change
+            new_type: The new reference type - "implements" or "refines"
+
+        Returns:
+            Result of the change operation including success status
+            and the file that was modified
+        """
+        from elspais.mcp.mutator import GraphMutator, ReferenceType
+
+        # Validate new_type
+        new_type_lower = new_type.lower()
+        if new_type_lower not in ("implements", "refines"):
+            return {
+                "success": False,
+                "error": f"Invalid reference type: {new_type}. Must be 'implements' or 'refines'",
+            }
+
+        ref_type = (
+            ReferenceType.IMPLEMENTS
+            if new_type_lower == "implements"
+            else ReferenceType.REFINES
+        )
+
+        # Get the source requirement to find its file path
+        req = ctx.get_requirement(source_id)
+        if req is None:
+            return {
+                "success": False,
+                "error": f"Source requirement {source_id} not found",
+            }
+
+        if not req.file_path:
+            return {
+                "success": False,
+                "error": f"Source requirement {source_id} has no file path",
+            }
+
+        # Create mutator and perform the change
+        mutator = GraphMutator(ctx.working_dir)
+        result = mutator.change_reference_type(
+            source_id=source_id,
+            target_id=target_id,
+            new_type=ref_type,
+            file_path=Path(req.file_path),
+        )
+
+        response: Dict[str, Any] = {
+            "success": result.success,
+            "source_id": result.source_id,
+            "target_id": result.target_id,
+            "new_type": result.new_type.value,
+            "message": result.message,
+        }
+
+        if result.old_type:
+            response["old_type"] = result.old_type.value
+        if result.file_path:
+            response["file_path"] = str(result.file_path)
+
+        # If successful, invalidate the requirements cache and graph
+        if result.success:
+            ctx._requirements_cache = None
+            ctx._graph_state = None
+
+        return response
+
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze requirement hierarchy."""
