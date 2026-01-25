@@ -1,12 +1,10 @@
 # elspais: expected-broken-links 9
-"""Tests for core/tree.py - Unified traceability tree data structures.
-
-Validates: REQ-p00003-A, REQ-p00003-B
-"""
+"""Tests for core/tree.py - Unified traceability tree data structures."""
 
 import pytest
 
 
+# Validates: REQ-p00003-B
 class TestSourceLocation:
     """Tests for SourceLocation dataclass."""
 
@@ -59,6 +57,7 @@ class TestSourceLocation:
         assert str(loc) == "CAL:spec/prd-auth.md:10"
 
 
+# Validates: REQ-p00003-B
 class TestNodeKind:
     """Tests for NodeKind enum."""
 
@@ -83,6 +82,7 @@ class TestNodeKind:
         assert NodeKind.USER_JOURNEY.value == "journey"
 
 
+# Validates: REQ-p00003-B
 class TestTraceNode:
     """Tests for TraceNode dataclass."""
 
@@ -142,7 +142,7 @@ class TestTraceNode:
         return root, child1, child2, grandchild
 
     def test_creation_minimal(self):
-        """Test creating TraceNode with minimal fields. Validates: REQ-p00003-B."""
+        """Test creating TraceNode with minimal fields."""
         from elspais.core.graph import NodeKind, TraceNode
 
         node = TraceNode(
@@ -305,6 +305,7 @@ class TestTraceNode:
         assert simple_node.metrics["test_count"] == 5
 
 
+# Validates: REQ-p00003-B
 class TestTraceGraph:
     """Tests for TraceGraph dataclass."""
 
@@ -451,6 +452,7 @@ class TestTraceGraph:
         assert abs(root.metrics["coverage"] - 2 / 3) < 0.01
 
 
+# Validates: REQ-p00003-B
 class TestSupportingDataclasses:
     """Tests for supporting dataclasses."""
 
@@ -521,6 +523,7 @@ class TestSupportingDataclasses:
         assert len(journey.steps) == 3
 
 
+# Validates: REQ-p00003-B
 class TestTreeIntegration:
     """Integration tests for tree module with fixtures."""
 

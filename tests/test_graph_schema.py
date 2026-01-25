@@ -1,6 +1,7 @@
 """Tests for core/tree_schema.py - Schema-driven tree configuration."""
 
 
+# Validates: REQ-p00003-B
 class TestNodeTypeSchema:
     """Tests for NodeTypeSchema dataclass."""
 
@@ -53,6 +54,7 @@ class TestNodeTypeSchema:
         assert schema.colors == {"active": "#27AE60"}
 
 
+# Validates: REQ-p00003-A
 class TestParserConfig:
     """Tests for ParserConfig dataclass."""
 
@@ -71,6 +73,7 @@ class TestParserConfig:
         assert config.source == "test_results"
 
 
+# Validates: REQ-p00003-B
 class TestRelationshipSchema:
     """Tests for RelationshipSchema dataclass."""
 
@@ -110,6 +113,7 @@ class TestRelationshipSchema:
         assert schema.required_for_non_root is True
 
 
+# Validates: REQ-p00002-B
 class TestValidationConfig:
     """Tests for ValidationConfig dataclass."""
 
@@ -141,6 +145,7 @@ class TestValidationConfig:
         assert config.broken_link_check is False
 
 
+# Validates: REQ-p00003-A, REQ-p00003-B
 class TestGraphSchema:
     """Tests for GraphSchema dataclass."""
 
@@ -368,6 +373,7 @@ class TestGraphSchema:
         assert "mitigates" in merged.relationships
 
 
+# Validates: REQ-p00003-A, REQ-p00003-B
 class TestGraphSchemaIntegration:
     """Integration tests for GraphSchema with real config files."""
 

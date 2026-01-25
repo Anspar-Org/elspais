@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 
+# Validates: REQ-p00003-B
 class TestTraceGraphBuilder:
     """Tests for TraceGraphBuilder class."""
 
@@ -188,6 +189,7 @@ class TestTraceGraphBuilder:
         assert len(tree.roots) > 0
 
 
+# Validates: REQ-p00002-B
 class TestValidationResult:
     """Tests for ValidationResult."""
 
@@ -202,6 +204,7 @@ class TestValidationResult:
         assert result.warnings == []
 
 
+# Validates: REQ-p00002-B
 class TestTreeValidation:
     """Tests for tree validation."""
 
@@ -271,6 +274,7 @@ class TestTreeValidation:
         assert any("Broken link" in w or "nonexistent" in w for w in result.warnings)
 
 
+# Validates: REQ-p00003-B
 class TestConvenienceFunctions:
     """Tests for convenience functions."""
 
@@ -299,6 +303,7 @@ class TestConvenienceFunctions:
         assert tree.roots[0].id == "REQ-p00001"
 
 
+# Validates: REQ-p00003-B
 class TestTreeBuilderIntegration:
     """Integration tests with fixtures."""
 
@@ -364,6 +369,7 @@ class TestTreeBuilderIntegration:
                 assert hierarchy_children == tree_children
 
 
+# Validates: REQ-p00002-B
 class TestRelationshipTypeValidation:
     """Tests for relationship type constraint validation.
 
@@ -855,6 +861,7 @@ class TestRelationshipTypeValidation:
         )
 
 
+# Validates: REQ-p00003-B
 class TestCoverageSourceTracking:
     """Tests for coverage source tracking (direct, explicit, inferred)."""
 
@@ -1085,6 +1092,7 @@ class TestCoverageSourceTracking:
         assert parent_node.metrics.get("inferred_covered") == 1
 
 
+# Validates: REQ-p00003-B
 class TestRefinesRelationship:
     """Tests for the refines relationship."""
 

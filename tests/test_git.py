@@ -1,4 +1,7 @@
-"""Tests for git change detection functionality."""
+"""Tests for git change detection functionality.
+
+Validates: REQ-p00004-B
+"""
 
 import os
 import subprocess
@@ -22,6 +25,7 @@ from elspais.core.git import (
 )
 
 
+# Validates: REQ-p00004-B
 class TestGitChangeInfo:
     """Tests for GitChangeInfo dataclass."""
 
@@ -51,6 +55,7 @@ class TestGitChangeInfo:
         assert info.uncommitted_files == {"a.md", "b.md"}
 
 
+# Validates: REQ-p00004-B
 class TestMovedRequirement:
     """Tests for MovedRequirement dataclass."""
 
@@ -66,6 +71,7 @@ class TestMovedRequirement:
         assert moved.new_path == "spec/dev-new.md"
 
 
+# Validates: REQ-p00004-B
 class TestDetectMovedRequirements:
     """Tests for detect_moved_requirements function."""
 
@@ -98,6 +104,7 @@ class TestDetectMovedRequirements:
         assert detect_moved_requirements(committed, current) == []
 
 
+# Validates: REQ-p00004-B
 class TestFilterSpecFiles:
     """Tests for filter_spec_files function."""
 
@@ -124,6 +131,7 @@ class TestFilterSpecFiles:
         assert filter_spec_files(set()) == set()
 
 
+# Validates: REQ-p00004-B
 class TestGetModifiedFiles:
     """Tests for get_modified_files function."""
 
@@ -159,6 +167,7 @@ class TestGetModifiedFiles:
         assert untracked == set()
 
 
+# Validates: REQ-p00004-B
 class TestGetChangedVsBranch:
     """Tests for get_changed_vs_branch function."""
 
@@ -187,6 +196,7 @@ class TestGetChangedVsBranch:
         assert changed == {"spec/dev.md"}
 
 
+# Validates: REQ-p00004-B
 class TestGetCurrentReqLocations:
     """Tests for get_current_req_locations function."""
 
@@ -236,6 +246,7 @@ class TestGetCurrentReqLocations:
             assert locations == {"d00001": "spec/dev.md"}
 
 
+# Validates: REQ-p00004-B
 class TestGetGitChanges:
     """Tests for get_git_changes function."""
 
@@ -270,6 +281,7 @@ class TestGetGitChanges:
         assert changes.untracked_files == set()
 
 
+# Validates: REQ-p00004-B
 class TestGetRepoRoot:
     """Tests for get_repo_root function."""
 

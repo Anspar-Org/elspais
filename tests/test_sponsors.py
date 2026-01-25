@@ -18,6 +18,7 @@ from elspais.sponsors import (
 )
 
 
+# Validates: REQ-p00005-A
 class TestParseYaml:
     """Tests for the simple YAML parser."""
 
@@ -71,6 +72,7 @@ class TestParseYaml:
         assert result.get("enabled") is True
 
 
+# Validates: REQ-p00005-A
 class TestParseSponsorsYaml:
     """Tests for sponsors-specific YAML parsing."""
 
@@ -132,6 +134,7 @@ class TestParseSponsorsYaml:
         assert result["sponsors"]["callisto"]["local_path"] == "../../../callisto"
 
 
+# Validates: REQ-p00005-A
 class TestSponsor:
     """Tests for Sponsor dataclass."""
 
@@ -165,6 +168,7 @@ class TestSponsor:
         assert sponsor.local_path == "/external/callisto"
 
 
+# Validates: REQ-p00005-A
 class TestLoadSponsorsConfig:
     """Tests for loading sponsor configuration."""
 
@@ -258,6 +262,7 @@ class TestLoadSponsorsConfig:
             assert result.sponsors[0].local_path == "../external/callisto"
 
 
+# Validates: REQ-p00005-A
 class TestResolveSponsorSpecDir:
     """Tests for resolving sponsor spec directories."""
 
@@ -349,6 +354,7 @@ class TestResolveSponsorSpecDir:
             assert result is None
 
 
+# Validates: REQ-p00005-A, REQ-p00005-B
 class TestGetSponsorSpecDirectories:
     """Tests for getting all sponsor spec directories."""
 

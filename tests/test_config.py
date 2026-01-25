@@ -6,6 +6,7 @@ import pytest
 from pathlib import Path
 
 
+# Validates: REQ-p00002-A
 class TestConfigLoader:
     """Tests for configuration loading."""
 
@@ -60,6 +61,7 @@ class TestConfigLoader:
         assert config_path.parent == hht_like_fixture
 
 
+# Validates: REQ-p00002-A
 class TestConfigMerge:
     """Tests for configuration merging."""
 
@@ -106,6 +108,7 @@ class TestConfigMerge:
         assert merged["patterns"]["id_format"]["digits"] == 5
 
 
+# Validates: REQ-p00002-A
 class TestDefaultConfig:
     """Tests for default configuration."""
 
@@ -141,6 +144,7 @@ class TestDefaultConfig:
         assert rules["format"]["require_hash"] is True
 
 
+# Validates: REQ-p00002-A
 class TestConfigValidation:
     """Tests for configuration validation."""
 
@@ -170,6 +174,7 @@ class TestConfigValidation:
         assert any("type" in e.lower() for e in errors)
 
 
+# Validates: REQ-p00002-A
 class TestEnvironmentOverrides:
     """Tests for environment variable configuration overrides."""
 
@@ -196,6 +201,7 @@ class TestEnvironmentOverrides:
         assert config["associated"]["prefix"] == "XYZ"
 
 
+# Validates: REQ-p00002-A
 class TestGetDirectories:
     """Tests for get_directories function."""
 
@@ -326,6 +332,7 @@ class TestGetDirectories:
         assert tmp_path / "spec" / "subdir" not in result
 
 
+# Validates: REQ-p00001-A
 class TestConfigCommand:
     """Tests for config command."""
 
@@ -669,6 +676,7 @@ class TestConfigCommand:
             os.chdir(original_cwd)
 
 
+# Validates: REQ-p00002-A
 class TestTomlSerializer:
     """Tests for TOML serialization."""
 

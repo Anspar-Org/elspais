@@ -13,6 +13,7 @@ from elspais.core.models import Requirement, Assertion
 from elspais.core.rules import RuleViolation, Severity
 
 
+# Validates: REQ-p00001-A
 class TestFormatRequirementsJson:
     """Tests for the JSON output formatter."""
 
@@ -89,6 +90,7 @@ class TestFormatRequirementsJson:
         assert assertions[0] == {"label": "A", "text": "The system SHALL do X.", "isPlaceholder": False}
         assert assertions[2]["isPlaceholder"] is True
 
+    # Validates: REQ-p00002-B
     def test_conflict_detection(self, tmp_path: Path):
         """Test that duplicate/conflict violations are reflected in JSON."""
         req = Requirement(
@@ -117,6 +119,7 @@ class TestFormatRequirementsJson:
         assert data["REQ-p00001"]["isConflict"] is True
         assert data["REQ-p00001"]["conflictWith"] == "Duplicate ID found"
 
+    # Validates: REQ-p00002-B
     def test_cycle_detection(self, tmp_path: Path):
         """Test that cycle violations are reflected in JSON."""
         req = Requirement(
@@ -242,6 +245,7 @@ class TestFormatRequirementsJson:
         assert data["REQ-p00003"]["subdir"] == "archive"
 
 
+# Validates: REQ-p00005-A, REQ-p00002-B
 class TestValidateLinksCorePath:
     """Tests for core.path config fallback in validate_links."""
 

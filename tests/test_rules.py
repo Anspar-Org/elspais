@@ -1,3 +1,4 @@
+# elspais: expected-broken-links 10
 """
 Tests for elspais.core.rules module.
 """
@@ -6,9 +7,11 @@ import pytest
 from pathlib import Path
 
 
+# Validates: REQ-p00002-A-B
 class TestRuleEngine:
-    """Tests for RuleEngine class."""
+    """Tests for RuleEngine class. Validates format and hierarchy rules."""
 
+    # Validates: REQ-p00002-B
     def test_hierarchy_rule_valid(self, sample_config_dict):
         """Test hierarchy rule passes for valid relationships."""
         from elspais.core.rules import RuleEngine, RulesConfig
@@ -35,6 +38,7 @@ class TestRuleEngine:
         hierarchy_violations = [v for v in violations if "hierarchy" in v.rule_name]
         assert len(hierarchy_violations) == 0
 
+    # Validates: REQ-p00002-B
     def test_hierarchy_rule_invalid(self, sample_config_dict):
         """Test hierarchy rule fails for invalid relationships."""
         from elspais.core.rules import RuleEngine, RulesConfig
@@ -62,6 +66,7 @@ class TestRuleEngine:
         hierarchy_violations = [v for v in violations if "hierarchy" in v.rule_name]
         assert len(hierarchy_violations) > 0
 
+    # Validates: REQ-p00002-B
     def test_circular_dependency_detection(self, sample_config_dict):
         """Test circular dependency detection."""
         from elspais.core.rules import RuleEngine, RulesConfig
@@ -96,6 +101,7 @@ class TestRuleEngine:
         circular_violations = [v for v in violations if "circular" in v.rule_name]
         assert len(circular_violations) > 0
 
+    # Validates: REQ-p00002-B
     def test_orphan_detection(self, sample_config_dict):
         """Test orphan requirement detection."""
         from elspais.core.rules import RuleEngine, RulesConfig, Severity
@@ -119,6 +125,7 @@ class TestRuleEngine:
         orphan_violations = [v for v in violations if "orphan" in v.rule_name.lower()]
         assert len(orphan_violations) > 0
 
+    # Validates: REQ-p00002-C
     def test_format_rule_missing_hash(self, sample_config_dict):
         """Test format rule detects missing hash."""
         from elspais.core.rules import RuleEngine, RulesConfig
@@ -142,6 +149,7 @@ class TestRuleEngine:
         hash_violations = [v for v in violations if "hash" in v.rule_name.lower()]
         assert len(hash_violations) > 0
 
+    # Validates: REQ-p00002-A
     def test_format_rule_missing_assertions(self, sample_config_dict):
         """Test format rule detects missing assertions."""
         from elspais.core.rules import RuleEngine, RulesConfig
@@ -167,8 +175,9 @@ class TestRuleEngine:
         assert len(assertion_violations) > 0
 
 
+# Validates: REQ-p00002-A
 class TestRulesConfig:
-    """Tests for RulesConfig dataclass."""
+    """Tests for RulesConfig dataclass. Validates configurable rules loading."""
 
     def test_from_dict(self, sample_config_dict):
         """Test creating RulesConfig from dictionary."""
@@ -182,6 +191,7 @@ class TestRulesConfig:
         assert config.format.require_assertions is True
         assert config.format.acceptance_criteria == "warn"
 
+    # Validates: REQ-p00002-B
     def test_parse_allowed_implements(self, sample_config_dict):
         """Test parsing allowed_implements rules."""
         from elspais.core.rules import RulesConfig

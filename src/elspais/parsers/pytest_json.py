@@ -99,7 +99,7 @@ class PytestJSONParser:
             # Normalize IDs to use hyphens consistently
             node.metrics["test_name"] = testname
             node.metrics["test_class"] = classname
-            node.metrics["_validates_targets"] = [r.upper().replace("_", "-") for r in req_ids]
+            node.metrics["_validates_targets"] = [r.replace("_", "-") for r in req_ids]
 
             nodes.append(node)
 

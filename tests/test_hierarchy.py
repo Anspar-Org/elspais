@@ -1,6 +1,8 @@
 # elspais: expected-broken-links 1
 """
 Tests for elspais.core.hierarchy module.
+
+Validates: REQ-p00002-B
 """
 
 import pytest
@@ -263,6 +265,7 @@ class TestBuildChildrenIndex:
         assert index == {}
 
 
+# Validates: REQ-p00002-B
 class TestDetectCycles:
     """Tests for detect_cycles() function."""
 
@@ -377,6 +380,7 @@ class TestFindRoots:
                 assert "p" in root_id.lower() or req.level == "PRD"
 
 
+# Validates: REQ-p00002-B
 class TestFindOrphans:
     """Tests for find_orphans() function."""
 

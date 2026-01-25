@@ -1,10 +1,13 @@
 """
 Tests for elspais.core.hasher module.
+
+Validates: REQ-p00004-A
 """
 
 import pytest
 
 
+# Validates: REQ-p00004-A
 class TestHashCalculation:
     """Tests for hash calculation functions."""
 
@@ -83,6 +86,7 @@ class TestHashCalculation:
         assert hash1 != hash2
 
 
+# Validates: REQ-p00004-A
 class TestHashVerification:
     """Tests for hash verification functions."""
 
@@ -116,6 +120,7 @@ class TestHashVerification:
         assert verify_hash(modified_content, original_hash) is False
 
 
+# Validates: REQ-p00004-A
 class TestContentCleaning:
     """Tests for content cleaning before hashing."""
 
@@ -184,6 +189,7 @@ class TestContentCleaning:
         assert hash1 != hash2
 
 
+# Validates: REQ-p00004-A
 class TestNormalizeWhitespaceOption:
     """Tests for the normalize_whitespace configuration option."""
 

@@ -123,7 +123,7 @@ class CodeParser:
                             code_ref=code_ref,
                         )
                         # Store the referenced requirement ID for linking
-                        node.metrics["_validates_targets"] = [req_id.upper()]
+                        node.metrics["_validates_targets"] = [req_id]
                         nodes.append(node)
 
         return nodes

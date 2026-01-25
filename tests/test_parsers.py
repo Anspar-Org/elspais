@@ -103,7 +103,7 @@ def authenticate_user():
 
         assert len(nodes) == 1
         assert nodes[0].kind == NodeKind.CODE
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
         assert nodes[0].code_ref is not None
         assert nodes[0].code_ref.symbol == "authenticate_user"
 
@@ -126,7 +126,7 @@ function login() {
         nodes = parser.parse(content, source, schema)
 
         assert len(nodes) == 1
-        assert "REQ-D00002" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00002" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_parse_multiple_refs(self):
         """Test parsing multiple requirement references."""
@@ -191,7 +191,7 @@ class TestAuthentication:
 
         assert len(nodes) == 1
         assert nodes[0].kind == NodeKind.TEST
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
         assert nodes[0].test_ref is not None
         assert nodes[0].test_ref.test_class == "TestAuthentication"
 
@@ -213,7 +213,7 @@ it('REQ-d00001 should login', () => {
         nodes = parser.parse(content, source, schema)
 
         assert len(nodes) == 1
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_can_parse_test_files(self):
         """Test can_parse identifies test files."""
@@ -257,7 +257,7 @@ class TestJUnitXMLParser:
         passed = [n for n in nodes if n.test_result.status == "passed"]
         assert len(passed) == 1
         assert passed[0].test_result.duration == 0.5
-        assert "REQ-D00001" in passed[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in passed[0].metrics.get("_validates_targets", [])
 
         # Second test failed
         failed = [n for n in nodes if n.test_result.status == "failed"]
@@ -346,7 +346,7 @@ class TestPytestJSONParser:
 
         passed = [n for n in nodes if n.test_result.status == "passed"]
         assert len(passed) == 1
-        assert "REQ-D00001" in passed[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in passed[0].metrics.get("_validates_targets", [])
 
         failed = [n for n in nodes if n.test_result.status == "failed"]
         assert len(failed) == 1
@@ -498,7 +498,7 @@ def test_login():
 
         assert len(nodes) == 1
         assert nodes[0].kind == NodeKind.TEST
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_validates_keyword_case_insensitive(self):
         """Test Validates keyword is case-insensitive."""
@@ -526,8 +526,8 @@ def test_logout():
         targets = []
         for node in nodes:
             targets.extend(node.metrics.get("_validates_targets", []))
-        assert "REQ-D00001" in targets
-        assert "REQ-P00001" in targets
+        assert "REQ-d00001" in targets
+        assert "REQ-p00001" in targets
 
     def test_implements_keyword_matches(self):
         """Test that 'IMPLEMENTS:' keyword is matched."""
@@ -548,7 +548,7 @@ def test_password_hash():
 
         assert len(nodes) == 1
         assert nodes[0].kind == NodeKind.TEST
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_test_function_name_matches(self):
         """Test that REQ in test function names is matched."""
@@ -569,7 +569,7 @@ def test_REQ_d00001_login():
         # Should match REQ from the function name
         assert len(nodes) == 1
         assert nodes[0].kind == NodeKind.TEST
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_bare_req_in_string_no_match(self):
         """Test that bare REQ-xxx in strings/data is NOT matched.
@@ -646,8 +646,8 @@ def test_combined():
         for node in nodes:
             all_targets.extend(node.metrics.get("_validates_targets", []))
 
-        assert "REQ-D00001" in all_targets
-        assert "REQ-D00002" in all_targets
+        assert "REQ-d00001" in all_targets
+        assert "REQ-d00002" in all_targets
 
     def test_assertion_reference(self):
         """Test assertion-level reference (REQ-d00001-A)."""
@@ -668,7 +668,7 @@ def test_specific_assertion():
 
         assert len(nodes) == 1
         targets = nodes[0].metrics.get("_validates_targets", [])
-        assert "REQ-D00001-A" in targets
+        assert "REQ-d00001-A" in targets
 
     def test_docstring_validates(self):
         """Test Validates: in docstrings."""
@@ -691,7 +691,7 @@ def test_with_docstring():
         nodes = parser.parse(content, source, schema)
 
         assert len(nodes) == 1
-        assert "REQ-D00001" in nodes[0].metrics.get("_validates_targets", [])
+        assert "REQ-d00001" in nodes[0].metrics.get("_validates_targets", [])
 
     def test_mixed_valid_and_invalid_refs(self):
         """Test that only valid contexts are matched in mixed content.
@@ -726,14 +726,14 @@ def test_mixed():
             all_targets.extend(node.metrics.get("_validates_targets", []))
 
         # Valid matches (with Validates: keyword)
-        assert "REQ-D00002" in all_targets
-        assert "REQ-D00004" in all_targets
+        assert "REQ-d00002" in all_targets
+        assert "REQ-d00004" in all_targets
 
         # Invalid matches (bare mentions) - should NOT be present
         # These assertions will FAIL until context-aware patterns are implemented
-        assert "REQ-D00001" not in all_targets
-        assert "REQ-D00003" not in all_targets
-        assert "REQ-D00005" not in all_targets
+        assert "REQ-d00001" not in all_targets
+        assert "REQ-d00003" not in all_targets
+        assert "REQ-d00005" not in all_targets
 
 
 class TestTestParserExpectedBrokenLinks:
@@ -864,9 +864,9 @@ def test_two():
         node_mock2 = None
         for node in nodes:
             targets = node.metrics.get("_validates_targets", [])
-            if "REQ-M00001" in targets:
+            if "REQ-m00001" in targets:
                 node_mock1 = node
-            elif "REQ-M00002" in targets:
+            elif "REQ-m00002" in targets:
                 node_mock2 = node
 
         # First ref (REQ-m00001) SHOULD be marked as expected broken

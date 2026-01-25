@@ -1,4 +1,4 @@
-# elspais: expected-broken-links 5
+# elspais: expected-broken-links 19
 """
 Tests for elspais.core.parser module.
 """
@@ -7,8 +7,10 @@ import pytest
 from pathlib import Path
 
 
+# Validates: REQ-p00001-A, REQ-p00002-A
 class TestRequirementParser:
-    """Tests for RequirementParser class."""
+    """Tests for RequirementParser class. Validates CLI validation of Markdown files
+    and requirement format validation against configurable patterns."""
 
     def test_parse_single_requirement(self, sample_requirement_text):
         """Test parsing a single requirement from text."""
@@ -124,8 +126,9 @@ class TestRequirementParser:
         assert req.line_number > 0
 
 
+# Validates: REQ-p00002-A
 class TestFDAStyleParsing:
-    """Tests for FDA-style requirement parsing."""
+    """Tests for FDA-style requirement parsing. Validates format pattern matching."""
 
     def test_parse_fda_style(self, fda_style_fixture):
         """Test parsing FDA-style IDs (PRD-00001)."""
@@ -144,8 +147,9 @@ class TestFDAStyleParsing:
         assert "PRD-00002" in requirements
 
 
+# Validates: REQ-p00002-A
 class TestJiraStyleParsing:
-    """Tests for Jira-style requirement parsing."""
+    """Tests for Jira-style requirement parsing. Validates format pattern matching."""
 
     def test_parse_jira_style(self, jira_style_fixture):
         """Test parsing Jira-style IDs (PROJ-123)."""
@@ -166,8 +170,9 @@ class TestJiraStyleParsing:
         assert "PROJ-123" in requirements
 
 
+# Validates: REQ-p00002-A
 class TestNamedStyleParsing:
-    """Tests for named requirement parsing."""
+    """Tests for named requirement parsing. Validates format pattern matching."""
 
     def test_parse_named_style(self, named_reqs_fixture):
         """Test parsing named IDs (REQ-UserAuth)."""
@@ -187,8 +192,9 @@ class TestNamedStyleParsing:
         assert "REQ-AuditLog" in requirements
 
 
+# Validates: REQ-p00002-A
 class TestAssociatedStyleParsing:
-    """Tests for associated-style requirement parsing."""
+    """Tests for associated-style requirement parsing. Validates format pattern matching."""
 
     def test_parse_associated_style(self, associated_repo_fixture):
         """Test parsing associated IDs (REQ-CAL-d00001)."""
@@ -208,8 +214,9 @@ class TestAssociatedStyleParsing:
         assert "REQ-CAL-d00001" in requirements
 
 
+# Validates: REQ-p00001-A
 class TestParserEdgeCases:
-    """Tests for parser edge cases."""
+    """Tests for parser edge cases. Validates CLI validation handles edge cases."""
 
     def test_parse_empty_file(self, tmp_path):
         """Test parsing empty file returns empty dict."""
@@ -286,8 +293,10 @@ Body text.
         assert "REQ-p00002" in requirements
 
 
+# Validates: REQ-p00001-A
 class TestMultipleSpecDirectories:
-    """Tests for parsing requirements from multiple spec directories."""
+    """Tests for parsing requirements from multiple spec directories.
+    Validates CLI validation of Markdown files across directories."""
 
     def test_parse_directories_with_string(self, tmp_path):
         """Test parse_directories accepts a string."""
@@ -529,8 +538,9 @@ Body text.
         assert "REQ-p00099" not in requirements
 
 
+# Validates: REQ-p00002-A
 class TestNoReferenceValues:
-    """Tests for no_reference_values feature."""
+    """Tests for no_reference_values feature. Validates format rule handling."""
 
     def test_dash_is_no_reference(self, tmp_path):
         """Test that '-' in Implements is treated as no reference."""
@@ -665,8 +675,9 @@ Body text.
         assert requirements["REQ-d00001"].implements == ["p00001"]
 
 
+# Validates: REQ-p00001-A
 class TestSubdirParsing:
-    """Tests for parsing requirements with subdir tracking."""
+    """Tests for parsing requirements with subdir tracking. Validates CLI validation."""
 
     def test_parse_file_with_subdir(self, tmp_path):
         """Test parsing a file with explicit subdir parameter."""
@@ -861,8 +872,9 @@ Body text.
         assert requirements["REQ-p00003"].subdir == "archive"
 
 
+# Validates: REQ-p00002-A-B
 class TestRefinesParsing:
-    """Tests for parsing the Refines relationship."""
+    """Tests for parsing the Refines relationship. Validates format and hierarchy."""
 
     def test_parse_refines_field(self, tmp_path):
         """Test parsing requirements with Refines field."""
@@ -972,8 +984,9 @@ A. The system SHALL do something.
         assert req.refines == ["REQ-p00001", "REQ-p00002"]
 
 
+# Validates: REQ-p00002-A
 class TestMultiAssertionSyntax:
-    """Tests for multi-assertion syntax expansion."""
+    """Tests for multi-assertion syntax expansion. Validates format pattern matching."""
 
     def test_expand_multi_assertion_implements(self, tmp_path):
         """Test parsing REQ-xxx-A-B-C expands to individual assertion refs."""
@@ -1110,8 +1123,9 @@ A. The system SHALL do something.
         assert req.implements == ["REQ-p00001"]
 
 
+# Validates: REQ-p00002-A
 class TestAssertionParsing:
-    """Tests for parsing assertion-based requirements."""
+    """Tests for parsing assertion-based requirements. Validates format rule handling."""
 
     def test_parse_assertions_section(self, tmp_path):
         """Test parsing requirements with ## Assertions section."""

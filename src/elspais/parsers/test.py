@@ -242,23 +242,22 @@ class TestParser:
     def _normalize_req_id(self, raw_id: str) -> str:
         """Normalize a raw requirement ID to standard format.
 
+        Preserves case to match requirement IDs in spec files.
+
         Args:
             raw_id: Raw ID extracted from pattern (e.g., "d00001", "p00001-A").
 
         Returns:
-            Normalized ID (e.g., "REQ-D00001", "REQ-P00001-A").
+            Normalized ID (e.g., "REQ-d00001", "REQ-p00001-A").
         """
-        # Uppercase the ID
-        upper_id = raw_id.upper()
-
         # Replace underscores with dashes
-        upper_id = upper_id.replace("_", "-")
+        normalized = raw_id.replace("_", "-")
 
-        # Add REQ- prefix if not present
-        if not upper_id.startswith("REQ-"):
-            upper_id = f"REQ-{upper_id}"
+        # Add REQ- prefix if not present (case-insensitive check)
+        if not normalized.upper().startswith("REQ-"):
+            normalized = f"REQ-{normalized}"
 
-        return upper_id
+        return normalized
 
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file.

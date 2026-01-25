@@ -1,4 +1,4 @@
-# elspais: expected-broken-links 2
+# elspais: expected-broken-links 4
 """
 Tests for elspais.core.patterns module.
 """
@@ -7,8 +7,10 @@ import pytest
 from pathlib import Path
 
 
+# Validates: REQ-p00002-A
 class TestPatternValidator:
-    """Tests for PatternValidator class."""
+    """Tests for PatternValidator class. Validates requirement format against
+    configurable patterns."""
 
     def test_hht_pattern_parse(self, sample_config_dict):
         """Test parsing HHT-style IDs (REQ-p00001)."""
@@ -161,8 +163,9 @@ class TestPatternValidator:
         assert validator.is_valid("REQ-x00001") is False
 
 
+# Validates: REQ-p00002-A
 class TestPatternConfig:
-    """Tests for PatternConfig dataclass."""
+    """Tests for PatternConfig dataclass. Validates configurable pattern rules."""
 
     def test_from_dict(self, sample_config_dict):
         """Test creating PatternConfig from dictionary."""
