@@ -408,7 +408,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 5.3 Validate Recursive Subdirectory Parsing
+### [x] 5.3 Validate Recursive Subdirectory Parsing
 
 - **Priority**: P2 - Spec organization flexibility
 - **Description**: Ensure spec file discovery and parsing works correctly for nested subdirectories (e.g., `spec/regulations/fda/`, `spec/sub/sub/`).
@@ -423,12 +423,13 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Test graph refresh with files in nested subdirectories
 - **Tests**: `tests/test_mcp/test_subdirectory_parsing.py`
 - **Acceptance criteria**:
-  - [ ] Files in `spec/sub/` discovered and parsed
-  - [ ] Files in `spec/sub/sub/` discovered and parsed
-  - [ ] File type patterns match at any depth
-  - [ ] `skip_dirs` excludes nested paths correctly
-  - [ ] Incremental refresh works for nested file changes
-  - [ ] Requirement IDs from nested files appear in graph
+  - [x] Files in `spec/sub/` discovered and parsed
+  - [x] Files in `spec/sub/sub/` discovered and parsed
+  - [x] File type patterns match at any depth
+  - [x] `skip_dirs` excludes nested paths correctly
+  - [x] Incremental refresh works for nested file changes
+  - [x] Requirement IDs from nested files appear in graph
+- **Resolution**: Validated that existing recursive parsing implementation using `rglob()` works correctly for nested subdirectories. The `RequirementParser.parse_directory()` method with `recursive=True` correctly handles files at any nesting depth, tracks subdirectory paths in the `subdir` attribute, and applies `skip_files` at all levels. The `WorkspaceContext.from_directory()` correctly loads config files and enables MCP graph operations on nested files. 17 new tests added validating: recursive discovery, file pattern matching at depth, skip_files at multiple depths, MCP context with nested files including graph refresh, tracked files, new file detection, and deleted file detection.
 
 ---
 

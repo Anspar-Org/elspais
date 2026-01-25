@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - MCP tools `prepare_file_deletion()` and `delete_spec_file()`
   - Refuses deletion when requirements exist (unless force=True)
   - 24 new tests in `test_file_deletion.py`
+- **Recursive Subdirectory Parsing Validation** - Comprehensive test coverage for nested specs
+  - Validates `RequirementParser.parse_directory(recursive=True)` works at any nesting depth
+  - Tests file pattern matching (`prd-*.md`, `ops-*.md`) at multiple depths
+  - Tests `skip_files` configuration at all nesting levels
+  - Tests MCP context with nested files: graph building, incremental refresh, tracked files
+  - Tests new file detection and deleted file detection in nested directories
+  - 17 new tests in `test_subdirectory_parsing.py`
 
 ## [0.19.0] - 2026-01-25
 ### Added
