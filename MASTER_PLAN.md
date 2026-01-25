@@ -319,7 +319,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - [x] MCP: Shared helpers for common operations
 - **Resolution**: Completed comprehensive interface consolidation:
   - **File I/O**: All 9 files creating `RequirementParser` directly now use `load_requirements_from_directories()` or `create_parser()` from `core/loader.py`. Updated: `trace.py`, `hash_cmd.py`, `analyze.py`, `index.py`, `reformat_cmd.py`, `trace_view/generators/base.py`, `reformat/hierarchy.py`, `mcp/server.py`
-  - **Config Loading**: Added `load_config_from_args()` helper to `config/loader.py`. Updated `validate.py` and `changed.py` to use it (eliminates duplicate `load_configuration()` functions)
+  - **Config Loading**: Added `get_config()` helper to `config/loader.py`. Updated `validate.py` and `changed.py` to use it (eliminates duplicate `load_configuration()` functions)
   - **Patterns**: `PatternConfig` creation is now centralized through `create_parser()` in `core/loader.py`
   - **Graph Building**: Already well consolidated via `TraceGraphBuilder` (no changes needed)
   - **CLI Parsing**: Already well consolidated in `cli.py` (no changes needed)
@@ -327,9 +327,39 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
+### [x] 4.2 Library Function and Class Naming Audit
+
+- **Priority**: P2 - Code quality and maintainability
+- **Description**: Rename classes/functions with misleading names to accurately reflect their functionality.
+- **Files**:
+  - `src/elspais/mcp/mutator.py` - Rename `GraphMutator` → `SpecFileMutator`
+  - `src/elspais/mcp/transforms.py` - Update import
+  - `src/elspais/parsers/requirement.py` - Rename `RequirementNodeParser` → `RequirementTextParser`
+  - `src/elspais/parsers/__init__.py` - Update registration
+  - `src/elspais/testing/mapper.py` - Rename `TestMapper` → `TestCoverageMapper`
+  - `src/elspais/commands/validate.py` - Update import
+  - `CLAUDE.md` - Update documentation
+- **Tasks**:
+  - Rename `GraphMutator` → `SpecFileMutator` (mutates spec files, not graphs)
+  - Rename `RequirementNodeParser` → `RequirementTextParser` (parses text, creates nodes)
+  - Rename `TestMapper` → `TestCoverageMapper` (maps test→requirement coverage)
+  - Update all imports and usages
+  - Document `parse_*` vs `load_*` distinction in CLAUDE.md
+  - Note that all parsers in `parsers/` module output `TraceNode` objects
+- **Tests**: All existing tests should pass after renames
+- **Acceptance criteria**:
+  - [x] GraphMutator renamed to SpecFileMutator
+  - [x] RequirementNodeParser renamed to RequirementTextParser
+  - [x] TestMapper renamed to TestCoverageMapper
+  - [x] All imports updated
+  - [x] CLAUDE.md documentation updated
+  - [x] All 974 tests pass
+
+---
+
 ## Phase 5: Extended Write Operations
 
-### [ ] 5.1 Implement Requirement Move
+### [x] 5.1 Implement Requirement Move
 
 - **Priority**: P3 - UC3 capability
 - **Description**: Move requirements between spec files.
@@ -344,10 +374,11 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add MCP tool `move_requirement()`
 - **Tests**: `tests/test_mcp/test_requirement_move.py`
 - **Acceptance criteria**:
-  - [ ] Requirement removed from source file
-  - [ ] Requirement added to target file
-  - [ ] Position options work (start/end/after)
-  - [ ] References remain valid
+  - [x] Requirement removed from source file
+  - [x] Requirement added to target file
+  - [x] Position options work (start/end/after)
+  - [x] References remain valid
+- **Resolution**: Added `RequirementMove` dataclass and `move_requirement()` method to SpecFileMutator with helper methods `_find_insertion_point()`, `_normalize_requirement_for_insertion()`, and `_remove_requirement_from_content()`. Added MCP tool `move_requirement()` that invalidates cache on success. Supports "start", "end", and "after" positions. Creates target file if it doesn't exist. 35 new tests added.
 
 ---
 
@@ -397,6 +428,37 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - [ ] `skip_dirs` excludes nested paths correctly
   - [ ] Incremental refresh works for nested file changes
   - [ ] Requirement IDs from nested files appear in graph
+
+---
+
+### [ ] 5.4 Implement Lossless Graph-to-File Reconstruction
+
+- **Priority**: P3 - Full round-trip fidelity
+- **Description**: Enable reconstructing the original spec files character-for-character from graph data alone. This requires the graph to preserve all content, including non-requirement sections (prose, comments, headers between requirements).
+- **Files**:
+  - `src/elspais/core/graph.py`
+  - `src/elspais/core/graph_builder.py`
+  - `src/elspais/core/loader.py`
+  - `src/elspais/mcp/reconstructor.py` (new)
+- **Tasks**:
+  - Design `FileNode` concept to represent spec files in the graph
+    - Careful: avoid circular deps (file → reqs, reqs → file for location)
+    - Consider: file as container node, reqs as children with ordering
+  - Design `UnparsedContent` node type for non-requirement content
+    - Preserves text between/around requirements
+    - Tracks position relative to adjacent requirements
+  - Extend parser to capture unparsed regions during file load
+  - Implement `reconstruct_file(file_path)` that reassembles content
+  - Add MCP tool `reconstruct_spec_file(path, dry_run)` for validation
+  - Add MCP tool `verify_reconstruction(path)` to diff original vs reconstructed
+- **Tests**: `tests/test_mcp/test_file_reconstruction.py`
+- **Acceptance criteria**:
+  - [ ] UnparsedContent nodes capture prose/headers between requirements
+  - [ ] FileNode or equivalent tracks content ordering
+  - [ ] `reconstruct_file()` produces character-identical output (whitespace may differ)
+  - [ ] Round-trip test: load → graph → reconstruct → compare passes
+  - [ ] No circular dependency issues in graph structure
+  - [ ] Incremental refresh preserves unparsed content correctly
 
 ---
 

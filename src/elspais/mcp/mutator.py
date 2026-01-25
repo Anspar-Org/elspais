@@ -1,7 +1,7 @@
 """
-elspais.mcp.mutator - Graph-to-filesystem sync operations.
+elspais.mcp.mutator - Spec file mutation operations.
 
-Provides the GraphMutator class for reading and writing spec files
+Provides the SpecFileMutator class for reading and writing spec files
 while preserving format and tracking line numbers for requirement
 location.
 """
@@ -20,6 +20,29 @@ class ReferenceType(Enum):
 
     IMPLEMENTS = "implements"
     REFINES = "refines"
+
+
+@dataclass
+class RequirementMove:
+    """Result of a requirement move operation.
+
+    Attributes:
+        success: Whether the move was successful
+        req_id: The requirement ID that was moved
+        source_file: Path to the file the requirement was moved from
+        target_file: Path to the file the requirement was moved to
+        position: Where the requirement was inserted ("start", "end", "after")
+        after_id: If position="after", the requirement ID it was placed after
+        message: Description of the result or error
+    """
+
+    success: bool
+    req_id: str
+    source_file: Optional[Path]
+    target_file: Optional[Path]
+    position: str
+    after_id: Optional[str]
+    message: str
 
 
 @dataclass
@@ -104,9 +127,9 @@ class FileContent:
     lines: list[str]
 
 
-class GraphMutator:
+class SpecFileMutator:
     """
-    Encapsulates graph-to-filesystem sync operations.
+    Encapsulates spec file mutation operations.
 
     Provides methods for reading and writing spec files while
     preserving format and tracking line numbers for requirement
@@ -878,5 +901,323 @@ class GraphMutator:
                 old_reference=target_id,
                 new_reference=new_reference,
                 file_path=file_path,
+                message=str(e),
+            )
+
+    def _find_insertion_point(
+        self,
+        content: FileContent,
+        position: str,
+        after_id: Optional[str] = None,
+    ) -> Tuple[int, str]:
+        """
+        Find the line index for inserting a requirement.
+
+        Args:
+            content: FileContent of target file
+            position: "start", "end", or "after"
+            after_id: Required if position="after", the requirement ID to insert after
+
+        Returns:
+            Tuple of (line_index_0based, prefix_text)
+            - line_index is where to insert (0-indexed)
+            - prefix_text is any whitespace/newlines to prepend
+
+        Raises:
+            ValueError: If position="after" but after_id not found
+        """
+        lines = content.lines
+
+        if not lines or (len(lines) == 1 and not lines[0].strip()):
+            # Empty file
+            return 0, ""
+
+        if position == "start":
+            # Find first requirement header, or start after preamble
+            for i, line in enumerate(lines):
+                if self.HEADER_PATTERN.match(line):
+                    # Insert before the first requirement
+                    return i, ""
+            # No requirements found, insert at end
+            return len(lines), "\n"
+
+        elif position == "end":
+            # Find last line of content, insert after it
+            # Strip trailing empty lines for calculation
+            last_content_idx = len(lines) - 1
+            while last_content_idx >= 0 and not lines[last_content_idx].strip():
+                last_content_idx -= 1
+
+            if last_content_idx < 0:
+                # All empty lines
+                return 0, ""
+
+            # Insert after the last content line
+            return last_content_idx + 1, "\n"
+
+        elif position == "after":
+            if not after_id:
+                raise ValueError("after_id is required when position is 'after'")
+
+            # Find the requirement to insert after
+            location = self._find_requirement_lines(content, after_id)
+            if location is None:
+                raise ValueError(f"Requirement {after_id} not found in target file")
+
+            # Insert after the requirement's end line (0-indexed is end_line)
+            return location.end_line, "\n"
+
+        else:
+            raise ValueError(f"Invalid position: {position}. Must be 'start', 'end', or 'after'")
+
+    def _normalize_requirement_for_insertion(self, req_text: str) -> str:
+        """
+        Normalize requirement text for insertion into a file.
+
+        Ensures:
+        - No leading whitespace
+        - Ends with newline
+        - Has --- separator at end
+
+        Returns:
+            Normalized requirement text ready for insertion
+        """
+        text = req_text.strip()
+
+        # Ensure separator at end
+        if not text.endswith("---"):
+            text = text + "\n\n---"
+
+        return text
+
+    def _remove_requirement_from_content(
+        self,
+        content: FileContent,
+        location: RequirementLocation,
+    ) -> str:
+        """
+        Remove a requirement from file content, cleaning up whitespace.
+
+        Args:
+            content: FileContent from _read_spec_file
+            location: RequirementLocation of requirement to remove
+
+        Returns:
+            New file content with requirement removed
+        """
+        lines = content.lines
+        start_idx = location.start_line - 1  # Convert to 0-indexed
+        end_idx = location.end_line  # end_line is inclusive, so this is correct for slicing
+
+        # Build new content without the requirement
+        before = lines[:start_idx]
+        after = lines[end_idx:]
+
+        # Clean up extra blank lines at junction
+        # Remove trailing blank lines from 'before'
+        while before and not before[-1].strip():
+            before.pop()
+
+        # Remove leading blank lines from 'after'
+        while after and not after[0].strip():
+            after.pop(0)
+
+        # Join with appropriate separation
+        if before and after:
+            # Add a blank line between remaining content
+            result = before + [""] + after
+        elif before:
+            result = before
+        elif after:
+            result = after
+        else:
+            result = []
+
+        return "\n".join(result)
+
+    def move_requirement(
+        self,
+        req_id: str,
+        source_file: Path,
+        target_file: Path,
+        position: str = "end",
+        after_id: Optional[str] = None,
+    ) -> RequirementMove:
+        """
+        Move a requirement from one file to another.
+
+        Args:
+            req_id: The requirement ID to move (e.g., "REQ-p00001")
+            source_file: Path to the file containing the requirement
+            target_file: Path to the destination file
+            position: Where to insert - "start", "end", or "after"
+            after_id: If position="after", the requirement ID to insert after
+
+        Returns:
+            RequirementMove with the result of the operation
+        """
+        # Validate inputs
+        if position == "after" and not after_id:
+            return RequirementMove(
+                success=False,
+                req_id=req_id,
+                source_file=source_file,
+                target_file=target_file,
+                position=position,
+                after_id=after_id,
+                message="after_id is required when position is 'after'",
+            )
+
+        if position not in ("start", "end", "after"):
+            return RequirementMove(
+                success=False,
+                req_id=req_id,
+                source_file=source_file,
+                target_file=target_file,
+                position=position,
+                after_id=after_id,
+                message=f"Invalid position: {position}. Must be 'start', 'end', or 'after'",
+            )
+
+        try:
+            # Resolve paths
+            src_resolved = (
+                source_file.resolve()
+                if source_file.is_absolute()
+                else (self.working_dir / source_file).resolve()
+            )
+            tgt_resolved = (
+                target_file.resolve()
+                if target_file.is_absolute()
+                else (self.working_dir / target_file).resolve()
+            )
+
+            # Check if source and target are the same file
+            if src_resolved == tgt_resolved:
+                return RequirementMove(
+                    success=False,
+                    req_id=req_id,
+                    source_file=source_file,
+                    target_file=target_file,
+                    position=position,
+                    after_id=after_id,
+                    message="Source and target files are the same. Use a different operation for reordering within a file.",
+                )
+
+            # Read source file
+            source_content = self._read_spec_file(source_file)
+
+            # Find requirement in source
+            location = self._find_requirement_lines(source_content, req_id)
+            if location is None:
+                return RequirementMove(
+                    success=False,
+                    req_id=req_id,
+                    source_file=source_file,
+                    target_file=target_file,
+                    position=position,
+                    after_id=after_id,
+                    message=f"Requirement {req_id} not found in {source_file}",
+                )
+
+            # Extract requirement text
+            req_text = self.get_requirement_text(source_content, location)
+
+            # Handle target file
+            try:
+                target_content = self._read_spec_file(target_file)
+            except FileNotFoundError:
+                # Create new file with empty content
+                target_content = FileContent(
+                    path=tgt_resolved,
+                    text="",
+                    lines=[],
+                )
+
+            # Find insertion point (validate after_id if needed)
+            try:
+                insert_idx, prefix = self._find_insertion_point(
+                    target_content, position, after_id
+                )
+            except ValueError as e:
+                return RequirementMove(
+                    success=False,
+                    req_id=req_id,
+                    source_file=source_file,
+                    target_file=target_file,
+                    position=position,
+                    after_id=after_id,
+                    message=str(e),
+                )
+
+            # Normalize requirement text for insertion
+            normalized_req = self._normalize_requirement_for_insertion(req_text)
+
+            # Build new target content
+            target_lines = target_content.lines.copy()
+            req_lines = normalized_req.split("\n")
+
+            # Insert requirement at the target location
+            if prefix:
+                # Add blank line before if prefix indicates we need separation
+                new_target_lines = (
+                    target_lines[:insert_idx] + [""] + req_lines + target_lines[insert_idx:]
+                )
+            else:
+                new_target_lines = (
+                    target_lines[:insert_idx] + req_lines + target_lines[insert_idx:]
+                )
+
+            # Clean up any double blank lines
+            cleaned_target_lines = []
+            prev_blank = False
+            for line in new_target_lines:
+                is_blank = not line.strip()
+                if is_blank and prev_blank:
+                    continue  # Skip consecutive blank lines
+                cleaned_target_lines.append(line)
+                prev_blank = is_blank
+
+            new_target_content = "\n".join(cleaned_target_lines)
+
+            # Build new source content (remove requirement)
+            new_source_content = self._remove_requirement_from_content(
+                source_content, location
+            )
+
+            # Write target file first (if this fails, source is unchanged)
+            self._write_spec_file(target_file, new_target_content)
+
+            # Write source file
+            self._write_spec_file(source_file, new_source_content)
+
+            return RequirementMove(
+                success=True,
+                req_id=req_id,
+                source_file=source_file,
+                target_file=target_file,
+                position=position,
+                after_id=after_id,
+                message=f"Moved {req_id} from {source_file.name} to {target_file.name}",
+            )
+
+        except FileNotFoundError as e:
+            return RequirementMove(
+                success=False,
+                req_id=req_id,
+                source_file=source_file,
+                target_file=target_file,
+                position=position,
+                after_id=after_id,
+                message=str(e),
+            )
+        except ValueError as e:
+            return RequirementMove(
+                success=False,
+                req_id=req_id,
+                source_file=source_file,
+                target_file=target_file,
+                position=position,
+                after_id=after_id,
                 message=str(e),
             )

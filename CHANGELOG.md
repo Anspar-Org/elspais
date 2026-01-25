@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- **Requirement Move** - Move requirements between spec files via MCP
+  - `move_requirement()` in mutator for moving requirements to different files
+  - Position control: `start`, `end`, or `after` a specific requirement
+  - Creates target file if it doesn't exist
+  - Properly handles whitespace and separators
+  - MCP tool `move_requirement()` with cache invalidation on success
+  - 35 new tests in `test_requirement_move.py`
 
 ## [0.19.0] - 2026-01-25
 ### Added
@@ -292,7 +300,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test mapping and coverage functionality (`elspais.testing` module)
   - `TestScanner`: Scans test files for requirement references
   - `ResultParser`: Parses JUnit XML and pytest JSON test results
-  - `TestMapper`: Orchestrates scanning and result mapping
+  - `TestCoverageMapper`: Orchestrates scanning and result mapping for test→requirement coverage
 - Parser resilience with `ParseResult` API and warning system
   - Parser now returns `ParseResult` containing both requirements and warnings
   - Non-fatal issues generate warnings instead of failing parsing

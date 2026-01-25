@@ -101,21 +101,21 @@ elspais init --type associated    # Initialize associated repository
   - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics` with coverage source tracking, `MetricsConfig` with `strict_mode`, `ReportSchema`, `CoverageSource` enum) - enables custom node types, relationships, and configurable reports via config
   - **graph_builder.py**: Graph construction (`TraceGraphBuilder`, `ValidationResult`, `build_graph_from_requirements`, `build_graph_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
 - **config/**: Configuration handling
-  - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides, `load_config_from_args()` for CLI commands
+  - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides, `get_config()` for CLI commands
   - **defaults.py**: Default configuration values
 - **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd, example_cmd)
 - **testing/**: Test mapping and coverage functionality
   - **config.py**: `TestingConfig` - configuration for test scanning with `reference_keyword` (default: "Validates")
   - **scanner.py**: `TestScanner` - scans test files for requirement references using configurable `Validates:` keyword; `build_validates_patterns()` generates patterns from PatternConfig; `create_test_nodes()` converts scan results to TraceNode objects for graph integration
   - **result_parser.py**: `ResultParser` - parses JUnit XML and pytest JSON test results
-  - **mapper.py**: `TestMapper` - orchestrates scanning and result mapping for coverage analysis
+  - **mapper.py**: `TestCoverageMapper` - orchestrates scanning and result mapping for test→requirement coverage
 - **sponsors/**: Sponsor/associated repository configuration loading
   - **\_\_init\_\_.py**: `Sponsor`, `SponsorsConfig` dataclasses, zero-dependency YAML parser, `load_sponsors_config()`, `resolve_sponsor_spec_dir()`, `get_sponsor_spec_directories()` for multi-repo spec scanning
 - **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
   - **server.py**: MCP server with resources and tools
   - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching, file-to-node tracking, and incremental refresh via `partial_refresh(changed_files)`
   - **serializers.py**: JSON serialization helpers including `serialize_node_full()` for AI transformations
-  - **mutator.py**: `GraphMutator` for graph-to-filesystem sync operations (`change_reference_type`, `specialize_reference`, requirement text extraction/replacement)
+  - **mutator.py**: `SpecFileMutator` for spec file mutation operations (`change_reference_type`, `specialize_reference`, `move_requirement`, requirement text extraction/replacement)
   - **transforms.py**: `AITransformer` for AI-assisted requirement transformations, `ClaudeInvoker` for subprocess calls to `claude -p`
   - **annotations.py**: `AnnotationStore` for session-scoped annotations and tags (in-memory, not persisted to files)
   - **git_safety.py**: `GitSafetyManager` for creating safety branches before risky operations, with restore capability
@@ -134,6 +134,7 @@ elspais init --type associated    # Initialize associated repository
     - `get_coverage_breakdown()`, `list_by_criteria()`, `show_requirement_context()`
     - `change_reference_type()` - switch Implements ↔ Refines in spec files
     - `specialize_reference()` - convert REQ→REQ to REQ→Assertion (e.g., `REQ-p00001-A-B-C`)
+    - `move_requirement()` - move requirement between spec files with position control (start/end/after)
     - `get_node_as_json()` - full node serialization for AI processing
     - `transform_with_ai()` - AI-assisted requirement transformation with git safety
     - `restore_from_safety_branch()`, `list_safety_branches()` - git branch management
@@ -163,9 +164,9 @@ elspais init --type associated    # Initialize associated repository
   - **prompts.py**: System prompts and JSON schema for Claude
   - **line_breaks.py**: `normalize_line_breaks`, `fix_requirement_line_breaks`
   - **hierarchy.py**: `RequirementNode`, `build_hierarchy`, `traverse_top_down`
-- **parsers/**: Parser plugin system for traceability tree
+- **parsers/**: Parser plugin system for traceability tree (all parsers output `TraceNode` objects)
   - **\_\_init\_\_.py**: `SpecParser` protocol, `ParserRegistry`, `get_parser()` for parser discovery
-  - **requirement.py**: Requirement parser wrapping core parser
+  - **requirement.py**: `RequirementTextParser` - parses Markdown requirement text, creates TraceNode objects
   - **journey.py**: User journey parser for JNY-xxx-NN format
   - **code.py**: Code reference parser for `# Implements:` comments
   - **test.py**: Test file parser for REQ-xxx patterns
@@ -222,9 +223,13 @@ elspais init --type associated    # Initialize associated repository
 
 15. **Centralized Interface Libraries**: All modules use shared libraries for common operations:
     - **Requirement Loading**: Use `load_requirements_from_directories()` or `create_parser()` from `core/loader.py`. Never create `RequirementParser` directly in command modules.
-    - **Configuration Loading**: Use `load_config_from_args()` from `config/loader.py` for CLI commands that need config with fallback to defaults.
+    - **Configuration Loading**: Use `get_config()` from `config/loader.py` for CLI commands that need config with fallback to defaults.
     - **Graph Building**: Use `TraceGraphBuilder` from `core/graph_builder.py`.
     - **Pattern Validation**: PatternConfig is created through `create_parser()`, not directly in commands.
+
+16. **parse_* vs load_* Naming Convention**: In `core/loader.py`:
+    - `parse_requirements_from_directories()` - Returns `ParseResult` with both requirements and warnings (use when you need parser warnings)
+    - `load_requirements_from_directories()` - Returns `Dict[str, Requirement]` only (use when you just need requirements)
 
 ### Requirement Format (Updated)
 
@@ -386,6 +391,7 @@ The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Fo
    - Explore relevant code files
    - Understand the current implementation
    - Create a detailed implementation plan
+   - reference .claude/refactor-workflow.md if this is a refactoring operation
 3. **Implement** - Write the code and tests
 4. **Verify** - Run `pytest` to ensure all tests pass
 5. **Mark complete** - Change `[ ]` to `[x]` in MASTER_PLAN.md

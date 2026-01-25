@@ -1160,7 +1160,7 @@ def _register_tools(
             Result of the change operation including success status
             and the file that was modified
         """
-        from elspais.mcp.mutator import GraphMutator, ReferenceType
+        from elspais.mcp.mutator import SpecFileMutator, ReferenceType
 
         # Validate new_type
         new_type_lower = new_type.lower()
@@ -1191,7 +1191,7 @@ def _register_tools(
             }
 
         # Create mutator and perform the change
-        mutator = GraphMutator(ctx.working_dir)
+        mutator = SpecFileMutator(ctx.working_dir)
         result = mutator.change_reference_type(
             source_id=source_id,
             target_id=target_id,
@@ -1246,7 +1246,7 @@ def _register_tools(
         Returns:
             Result of the specialization including old and new reference strings
         """
-        from elspais.mcp.mutator import GraphMutator
+        from elspais.mcp.mutator import SpecFileMutator
 
         # Get the source requirement to find its file path
         req = ctx.get_requirement(source_id)
@@ -1263,7 +1263,7 @@ def _register_tools(
             }
 
         # Create mutator and perform the specialization
-        mutator = GraphMutator(ctx.working_dir)
+        mutator = SpecFileMutator(ctx.working_dir)
         result = mutator.specialize_reference(
             source_id=source_id,
             target_id=target_id,
@@ -1285,6 +1285,93 @@ def _register_tools(
             response["new_reference"] = result.new_reference
         if result.file_path:
             response["file_path"] = str(result.file_path)
+
+        # If successful, invalidate the requirements cache and graph
+        if result.success:
+            ctx._requirements_cache = None
+            ctx._graph_state = None
+
+        return response
+
+    @mcp.tool()
+    def move_requirement(
+        req_id: str,
+        target_file: str,
+        position: str = "end",
+        after_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Move a requirement from its current file to a different file.
+
+        This tool extracts a requirement from its source file and inserts
+        it into the target file at the specified position. Use this for
+        reorganizing requirements across spec files.
+
+        Args:
+            req_id: The requirement ID to move (e.g., "REQ-p00001")
+            target_file: Path to the destination file (relative to workspace)
+            position: Where to insert - "start", "end", or "after"
+            after_id: If position="after", the requirement ID to insert after
+
+        Returns:
+            Result of the move operation including success status
+        """
+        from elspais.mcp.mutator import SpecFileMutator
+
+        # Validate position
+        if position not in ("start", "end", "after"):
+            return {
+                "success": False,
+                "error": f"Invalid position: {position}. Must be 'start', 'end', or 'after'",
+            }
+
+        # Validate after_id if position is "after"
+        if position == "after" and not after_id:
+            return {
+                "success": False,
+                "error": "after_id is required when position is 'after'",
+            }
+
+        # Get the source requirement to find its file path
+        req = ctx.get_requirement(req_id)
+        if req is None:
+            return {
+                "success": False,
+                "error": f"Requirement {req_id} not found",
+            }
+
+        if not req.file_path:
+            return {
+                "success": False,
+                "error": f"Requirement {req_id} has no file path",
+            }
+
+        source_file = Path(req.file_path)
+        target_path = Path(target_file)
+
+        # Create mutator and perform the move
+        mutator = SpecFileMutator(ctx.working_dir)
+        result = mutator.move_requirement(
+            req_id=req_id,
+            source_file=source_file,
+            target_file=target_path,
+            position=position,
+            after_id=after_id,
+        )
+
+        response: Dict[str, Any] = {
+            "success": result.success,
+            "req_id": result.req_id,
+            "position": result.position,
+            "message": result.message,
+        }
+
+        if result.source_file:
+            response["source_file"] = str(result.source_file)
+        if result.target_file:
+            response["target_file"] = str(result.target_file)
+        if result.after_id:
+            response["after_id"] = result.after_id
 
         # If successful, invalidate the requirements cache and graph
         if result.success:
