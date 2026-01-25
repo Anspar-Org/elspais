@@ -340,3 +340,23 @@ def test_three():
 - **ALWAYS** use a sub-agent to update the `docs/` files
 - **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit
 - **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation
+
+## Master Plan Workflow
+
+**IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
+
+The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Follow this workflow:
+
+1. **Read MASTER_PLAN.md** - Find the first issue with `[ ]` (incomplete) status
+2. **Refine the plan** - Use sub-agents to:
+   - Explore relevant code files
+   - Understand the current implementation
+   - Create a detailed implementation plan
+3. **Implement** - Write the code and tests
+4. **Verify** - Run `pytest` to ensure all tests pass
+5. **Mark complete** - Change `[ ]` to `[x]` in MASTER_PLAN.md
+6. **Commit** - Create a git commit with `[CUR-514]` prefix
+7. **Clear context** - Suggest `/clear` to the user to free context
+8. **Resume** - After clear, read MASTER_PLAN.md and continue with next issue
+
+This enables iterative implementation of multiple issues across context boundaries.
