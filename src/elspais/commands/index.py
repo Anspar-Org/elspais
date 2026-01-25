@@ -164,4 +164,4 @@ def generate_index(requirements: dict, config: dict) -> str:
         ]
     )
 
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"  # Ensure trailing newline for markdownlint MD047

@@ -104,13 +104,14 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 7: INDEX regeneration should pass markdownlint
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P4 - Polish
 - **Description**: Regenerating INDEX files should produce output that passes markdown lint validation.
 - **Files likely involved**: `src/elspais/commands/index.py`, output generation
 - **Acceptance criteria**:
-  - [ ] Generated INDEX files pass markdownlint
-  - [ ] Proper heading structure, spacing, and formatting
+  - [x] Generated INDEX files pass markdownlint
+  - [x] Proper heading structure, spacing, and formatting
+- **Resolution**: Added trailing newline to generated INDEX.md files (MD047 compliance). Code analysis confirmed headings, blank lines, and structure already compliant. Added 5 tests for markdownlint compliance.
 
 ---
 
