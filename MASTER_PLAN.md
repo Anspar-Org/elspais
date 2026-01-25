@@ -197,7 +197,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ## Phase 3: Write Operations
 
-### [ ] 3.1 Create GraphMutator Class
+### [x] 3.1 Create GraphMutator Class
 
 - **Priority**: P2 - Foundation for write operations
 - **Description**: Encapsulate graph-to-filesystem sync operations.
@@ -210,9 +210,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Implement `_find_requirement_lines(content, req_id)` to locate requirement in file
 - **Tests**: `tests/test_mcp/test_mutator_base.py`
 - **Acceptance criteria**:
-  - [ ] Can read spec file and track lines
-  - [ ] Can write spec file preserving format
-  - [ ] Can locate requirement by ID in file
+  - [x] Can read spec file and track lines
+  - [x] Can write spec file preserving format
+  - [x] Can locate requirement by ID in file
+- **Resolution**: Added `GraphMutator` class with `FileContent` and `RequirementLocation` dataclasses. Implemented `_read_spec_file()` with path security checks, `_write_spec_file()` with parent directory creation, `_find_requirement_lines()` with 1-indexed line tracking supporting both end-marker and next-header detection, plus helper methods `get_requirement_text()` and `replace_requirement_text()` for read-modify-write workflows. 25 new tests added.
 
 ---
 
