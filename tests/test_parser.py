@@ -861,6 +861,255 @@ Body text.
         assert requirements["REQ-p00003"].subdir == "archive"
 
 
+class TestRefinesParsing:
+    """Tests for parsing the Refines relationship."""
+
+    def test_parse_refines_field(self, tmp_path):
+        """Test parsing requirements with Refines field."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={
+                "prd": {"id": "p", "level": 1},
+                "dev": {"id": "d", "level": 3},
+            },
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active | **Refines**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        assert "REQ-d00001" in requirements
+        req = requirements["REQ-d00001"]
+        assert req.refines == ["REQ-p00001"]
+        assert req.implements == []
+
+    def test_parse_refines_and_implements(self, tmp_path):
+        """Test parsing requirements with both Refines and Implements."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={
+                "prd": {"id": "p", "level": 1},
+                "ops": {"id": "o", "level": 2},
+                "dev": {"id": "d", "level": 3},
+            },
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Implements**: REQ-o00001
+**Refines**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        assert "REQ-d00001" in requirements
+        req = requirements["REQ-d00001"]
+        assert req.implements == ["REQ-o00001"]
+        assert req.refines == ["REQ-p00001"]
+
+    def test_parse_refines_multiple(self, tmp_path):
+        """Test parsing Refines with multiple references."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Refines**: REQ-p00001, REQ-p00002
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+        assert req.refines == ["REQ-p00001", "REQ-p00002"]
+
+
+class TestMultiAssertionSyntax:
+    """Tests for multi-assertion syntax expansion."""
+
+    def test_expand_multi_assertion_implements(self, tmp_path):
+        """Test parsing REQ-xxx-A-B-C expands to individual assertion refs."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Implements**: REQ-p00001-A-B-C
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+        # Should expand REQ-p00001-A-B-C to individual assertion refs
+        assert "REQ-p00001-A" in req.implements
+        assert "REQ-p00001-B" in req.implements
+        assert "REQ-p00001-C" in req.implements
+
+    def test_expand_multi_assertion_refines(self, tmp_path):
+        """Test multi-assertion syntax works for Refines too."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Refines**: REQ-p00001-A-B
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+        assert "REQ-p00001-A" in req.refines
+        assert "REQ-p00001-B" in req.refines
+
+    def test_single_assertion_not_expanded(self, tmp_path):
+        """Test single assertion ref (REQ-xxx-A) is not incorrectly expanded."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Implements**: REQ-p00001-A
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+        # Single assertion should remain as-is
+        assert req.implements == ["REQ-p00001-A"]
+
+    def test_plain_req_not_expanded(self, tmp_path):
+        """Test plain requirement ref (REQ-xxx) is not incorrectly expanded."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}, "dev": {"id": "d", "level": 3}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        req_file = tmp_path / "req.md"
+        req_file.write_text("""
+# REQ-d00001: Dev Requirement
+
+**Level**: Dev | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Dev Requirement* | **Hash**: test1234
+---
+""")
+
+        requirements = parser.parse_file(req_file)
+        req = requirements["REQ-d00001"]
+        # Plain requirement should remain as-is
+        assert req.implements == ["REQ-p00001"]
+
+
 class TestAssertionParsing:
     """Tests for parsing assertion-based requirements."""
 

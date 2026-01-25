@@ -111,7 +111,12 @@ class TestComputeMetrics:
         assert req_node.metrics["coverage_pct"] == 100.0
 
     def test_compute_metrics_hierarchy_rollup(self) -> None:
-        """Metrics roll up through requirement hierarchy."""
+        """Metrics roll up through requirement hierarchy in strict mode.
+
+        Note: In default mode, REQ→REQ implements is treated like refines (no
+        assertion rollup). Use strict_mode=True to get the legacy behavior
+        where child assertions roll up to parents.
+        """
         from elspais.core.graph_builder import TraceGraphBuilder
 
         # PRD -> OPS -> DEV (each with assertions)
@@ -147,7 +152,8 @@ class TestComputeMetrics:
         })
         graph = builder.build()
 
-        builder.compute_metrics(graph)
+        # Use strict_mode=True to enable assertion rollup through hierarchy
+        builder.compute_metrics(graph, strict_mode=True)
 
         # DEV has 2 assertions
         dev_node = graph.find_by_id("REQ-d00001")
@@ -166,7 +172,11 @@ class TestMetricsExclusions:
     """Tests for status-based metric exclusions."""
 
     def test_deprecated_requirement_excluded(self) -> None:
-        """Deprecated requirements are excluded from parent metrics."""
+        """Deprecated requirements are excluded from parent metrics in strict mode.
+
+        Note: In default mode, REQ→REQ implements doesn't roll up assertions,
+        so status exclusion only affects strict mode behavior.
+        """
         from elspais.core.graph_builder import TraceGraphBuilder
 
         parent = MockRequirement(
@@ -203,8 +213,8 @@ class TestMetricsExclusions:
         })
         graph = builder.build()
 
-        # Exclude Deprecated status
-        builder.compute_metrics(graph, exclude_status=["Deprecated"])
+        # Exclude Deprecated status, use strict_mode=True for assertion rollup
+        builder.compute_metrics(graph, exclude_status=["Deprecated"], strict_mode=True)
 
         # Parent should only count assertions from active child
         parent_node = graph.find_by_id("REQ-p00001")

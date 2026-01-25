@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-01-25
+### Added
+- **Refines relationship** - New `Refines:` field for requirements that add detail without claiming coverage
+  - NO coverage rollup for refines relationships
+  - Safe for decomposition without strong satisfaction claims
+- **Coverage source tracking** in `RollupMetrics`
+  - `direct_covered`: Assertions with direct test coverage (Test → Assertion)
+  - `explicit_covered`: Assertions covered via explicit implements (REQ → Assertion)
+  - `inferred_covered`: Assertions covered via REQ → REQ implements (strict mode only)
+- **Multi-assertion syntax** - `Implements: REQ-p00001-A-B-C` expands to individual assertion refs
+- **CoverageSource enum** in `graph_schema.py` with values: `direct`, `explicit`, `inferred`
+- **Strict mode** for metrics calculation
+  - `MetricsConfig.strict_mode` (default: False)
+  - In strict mode, REQ→REQ implements rolls up coverage (flagged as inferred)
+  - Default mode treats REQ→REQ implements like refines (no assertion rollup)
+- New test classes: `TestRefinesParsing`, `TestMultiAssertionSyntax`, `TestCoverageSourceTracking`, `TestRefinesRelationship`
+
+### Changed
+- **Implements targets assertions** - `Implements: REQ-xxx-A` now creates valid explicit coverage links
+- `graph_schema.py` implements relationship now allows `to_kind=["requirement", "assertion"]`
+- `RollupMetrics` dataclass updated with `direct_covered`, `explicit_covered`, `inferred_covered` fields
+- Test metrics now properly roll up from assertions to parent requirements
+
 ## [0.13.0] - 2026-01-25
 ### Added
 - **Unified test parsing** via enhanced `parsers/test.py`

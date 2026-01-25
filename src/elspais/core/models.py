@@ -110,6 +110,7 @@ class Requirement:
     status: str
     body: str
     implements: List[str] = field(default_factory=list)
+    refines: List[str] = field(default_factory=list)  # Refines relationship (no coverage rollup)
     acceptance_criteria: List[str] = field(default_factory=list)
     assertions: List["Assertion"] = field(default_factory=list)
     rationale: Optional[str] = None

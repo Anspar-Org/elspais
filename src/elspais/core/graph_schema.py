@@ -15,8 +15,53 @@ The schema system enables:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from fnmatch import fnmatch
 from typing import Any
+
+
+class CoverageSource(Enum):
+    """Source type for coverage metrics.
+
+    Tracks where coverage originates for accuracy assessment:
+    - DIRECT: Test directly validates assertion (high confidence)
+    - EXPLICIT: Child implements specific assertion(s) (high confidence)
+    - INFERRED: Child implements parent REQ, claims all assertions (review)
+    """
+
+    DIRECT = "direct"  # Test → Assertion
+    EXPLICIT = "explicit"  # REQ implements REQ-xxx-A (assertion-level)
+    INFERRED = "inferred"  # REQ implements REQ (full REQ)
+
+
+@dataclass
+class CoverageContribution:
+    """A coverage contribution to an assertion from a child node.
+
+    Coverage is tracked at the assertion level. Each assertion accumulates
+    a list of contributions from tests and child requirements. The graph
+    consumer decides how to interpret/aggregate multiple contributions.
+
+    Attributes:
+        source_id: ID of contributing node (test ID or child REQ ID).
+        source_type: Type of contribution (direct/explicit/inferred).
+        coverage_value: For tests, 1.0. For REQs, the child's own coverage_pct/100.
+        relationship: The relationship type that created this link (validates/implements/refines).
+    """
+
+    source_id: str
+    source_type: CoverageSource
+    coverage_value: float  # 0.0 to 1.0
+    relationship: str = ""  # "validates", "implements", "refines"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "source_id": self.source_id,
+            "source_type": self.source_type.value,
+            "coverage_value": self.coverage_value,
+            "relationship": self.relationship,
+        }
 
 
 @dataclass
@@ -28,7 +73,10 @@ class RollupMetrics:
 
     Attributes:
         total_assertions: Count of assertion nodes in subtree.
-        covered_assertions: Assertions with at least one test reference.
+        covered_assertions: Total assertions with any coverage source.
+        direct_covered: Assertions with direct test coverage (Test → Assertion).
+        explicit_covered: Assertions covered via explicit implements (REQ→Assertion).
+        inferred_covered: Assertions covered via REQ→REQ implements (strict mode).
         total_tests: Count of test nodes in subtree.
         passed_tests: Tests with status "passed".
         failed_tests: Tests with status "failed".
@@ -40,6 +88,9 @@ class RollupMetrics:
 
     total_assertions: int = 0
     covered_assertions: int = 0
+    direct_covered: int = 0  # Test → Assertion
+    explicit_covered: int = 0  # REQ implements REQ-xxx-A
+    inferred_covered: int = 0  # REQ implements REQ (strict mode only)
     total_tests: int = 0
     passed_tests: int = 0
     failed_tests: int = 0
@@ -56,12 +107,16 @@ class MetricsConfig:
     Attributes:
         exclude_status: Statuses to exclude from roll-up calculations.
         count_placeholder_assertions: Whether to count placeholder assertions.
+        strict_mode: If True, REQ→REQ implements claims full satisfaction (coverage rollup).
+                    If False (default), REQ→REQ implements treated as refines (no rollup).
+                    Code→REQ and Test→REQ always use implements semantics regardless.
     """
 
     exclude_status: list[str] = field(
         default_factory=lambda: ["Deprecated", "Superseded", "Draft"]
     )
     count_placeholder_assertions: bool = False
+    strict_mode: bool = False  # Default: REQ→REQ implements treated as refines
 
 
 @dataclass
@@ -496,6 +551,7 @@ class GraphSchema:
             count_placeholder_assertions=metrics_dict.get(
                 "count_placeholder_assertions", False
             ),
+            strict_mode=metrics_dict.get("strict_mode", False),
         )
 
         return cls(
@@ -582,10 +638,18 @@ class GraphSchema:
                 "implements": RelationshipSchema(
                     name="implements",
                     from_kind=["requirement"],
-                    to_kind=["requirement"],
+                    to_kind=["requirement", "assertion"],
                     direction="up",
                     source_field="implements",
                     required_for_non_root=True,
+                ),
+                "refines": RelationshipSchema(
+                    name="refines",
+                    from_kind=["requirement"],
+                    to_kind=["requirement", "assertion"],
+                    direction="up",
+                    source_field="refines",
+                    required_for_non_root=False,  # refines doesn't require parent
                 ),
                 "addresses": RelationshipSchema(
                     name="addresses",

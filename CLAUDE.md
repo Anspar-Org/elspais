@@ -83,7 +83,7 @@ elspais init --type associated    # Initialize associated repository
 
 - **cli.py**: Entry point, argparse-based CLI dispatcher
 - **core/**: Core domain logic
-  - **models.py**: Dataclasses (`Requirement` with `is_conflict`/`conflict_with` fields, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
+  - **models.py**: Dataclasses (`Requirement` with `refines`/`implements`/`is_conflict`/`conflict_with` fields, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
   - **parser.py**: `RequirementParser` - parses Markdown requirement files using regex patterns, extracts `## Assertions` section, returns `ParseResult` with warnings
   - **patterns.py**: `PatternValidator`, `PatternConfig` - configurable ID pattern matching (supports HHT-style `REQ-p00001`, Jira-style `PROJ-123`, named `REQ-UserAuth`, assertion IDs `REQ-p00001-A`, etc.)
   - **rules.py**: `RuleEngine`, `RulesConfig`, `FormatConfig` - validation rules for hierarchy, format, assertions, and traceability
@@ -93,7 +93,7 @@ elspais init --type associated    # Initialize associated repository
   - **hierarchy.py**: Centralized hierarchy scanning utilities (`find_requirement`, `find_children`, `find_children_ids`, `build_children_index`, `detect_cycles`, `find_roots`, `find_orphans`, `CycleInfo` dataclass) - replaces duplicated logic across analyze, trace, and trace_view modules
   - **loader.py**: Centralized requirement loading (`load_requirements_from_repo`) - moved from validate.py to break circular dependencies
   - **graph.py**: Unified traceability graph (`SourceLocation`, `NodeKind`, `TraceNode`, `TraceGraph`, `CodeReference`, `TestReference`, `TestResult`, `UserJourney`) - represents full Requirements → Assertions → Code → Tests → Results DAG
-  - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics`, `MetricsConfig`, `ReportSchema`) - enables custom node types, relationships, and configurable reports via config
+  - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics` with coverage source tracking, `MetricsConfig` with `strict_mode`, `ReportSchema`, `CoverageSource` enum) - enables custom node types, relationships, and configurable reports via config
   - **graph_builder.py**: Graph construction (`TraceGraphBuilder`, `ValidationResult`, `build_graph_from_requirements`, `build_graph_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
 - **config/**: Configuration handling
   - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
@@ -162,7 +162,19 @@ elspais init --type associated    # Initialize associated repository
 
 8. **Conflict Entry Handling**: When duplicate requirement IDs are found (e.g., same ID in spec/ and spec/roadmap/), both are kept: the original with its ID, and the duplicate with a `__conflict` suffix. Conflict entries have `is_conflict=True`, `conflict_with` set to original ID, and `implements=[]` (orphaned).
 
-9. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
+9. **Refines vs Implements Relationships**: Two distinct relationship types with different coverage semantics:
+   - **`Refines:`** - Adds detail/additional requirements building on parent. NO coverage rollup.
+   - **`Implements:`** - In default mode, REQ→REQ implements is treated like refines (safe defaults for backward compatibility). In strict mode (`strict_mode=True`), claims full satisfaction with coverage rollup.
+   - Code→REQ and Test→REQ always use implements/validates semantics with coverage rollup.
+
+10. **Coverage Source Tracking**: `RollupMetrics` tracks where coverage originates via `direct_covered`, `explicit_covered`, `inferred_covered`:
+    - `direct`: Test directly validates assertion (high confidence)
+    - `explicit`: Child implements specific assertion(s) via `Implements: REQ-xxx-A` (high confidence)
+    - `inferred`: Child implements parent REQ, claims all assertions (strict mode only, review recommended)
+
+11. **Multi-Assertion Syntax**: `Implements: REQ-p00001-A-B-C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`.
+
+12. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
 
 10. **Optional Dependencies**: Advanced features are available via pip extras:
     - `elspais[trace-view]`: HTML generation with Jinja2
@@ -205,7 +217,9 @@ Key format rules:
 
 - **Assertions replace Acceptance Criteria** - labeled A-Z, each uses SHALL
 - **Assertion IDs** - tests can reference `REQ-d00001` or `REQ-d00001-A`
-- **One-way traceability** - children reference parents via `Implements:`, never reverse
+- **One-way traceability** - children reference parents via `Implements:` or `Refines:`, never reverse
+- **Refines vs Implements** - Use `Refines:` to add detail without claiming to satisfy parent. Use `Implements:` to claim satisfaction (explicit assertion links recommended: `Implements: REQ-p00001-A-B`)
+- **Multi-assertion syntax** - `Implements: REQ-p00001-A-B-C` expands to individual assertion refs
 - **Associated-scoped IDs** - format `TTN-REQ-p00001` for associated repositories
 - **Hash scope** - calculated from lines between header and footer
 - **Placeholder assertions** - removed assertions can use placeholder text ("Removed", "obsolete", etc.) to maintain sequential labels

@@ -28,6 +28,7 @@ class RequirementParser:
     )
     ALT_STATUS_PATTERN = re.compile(r"\*\*Status\*\*:\s*(?P<status>\w+)")
     IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
+    REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refines>[^|\n]+)")
     END_MARKER_PATTERN = re.compile(
         r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?", re.MULTILINE
     )
@@ -434,14 +435,35 @@ class RequirementParser:
             if impl_match:
                 implements_str = impl_match.group("implements")
 
-        # Parse implements list and validate references
+        # Parse refines field
+        refines_str = ""
+        refines_match = self.REFINES_PATTERN.search(text)
+        if refines_match:
+            refines_str = refines_match.group("refines")
+
+        # Parse implements list, validate references, and expand multi-assertion syntax
         implements = self._parse_implements(implements_str)
+        implements = self._expand_multi_assertion_refs(implements)
         for ref in implements:
-            if not self.validator.is_valid(ref):
+            if not self.validator.is_valid(ref, allow_assertion=True):
                 block_warnings.append(
                     ParseWarning(
                         requirement_id=req_id,
                         message=f"Invalid implements reference: {ref}",
+                        file_path=file_path,
+                        line_number=line_number,
+                    )
+                )
+
+        # Parse refines list, validate references, and expand multi-assertion syntax
+        refines = self._parse_implements(refines_str)
+        refines = self._expand_multi_assertion_refs(refines)
+        for ref in refines:
+            if not self.validator.is_valid(ref, allow_assertion=True):
+                block_warnings.append(
+                    ParseWarning(
+                        requirement_id=req_id,
+                        message=f"Invalid refines reference: {ref}",
                         file_path=file_path,
                         line_number=line_number,
                     )
@@ -493,6 +515,7 @@ class RequirementParser:
             status=status,
             body=body,
             implements=implements,
+            refines=refines,
             acceptance_criteria=acceptance_criteria,
             assertions=assertions,
             rationale=rationale,
@@ -537,6 +560,42 @@ class RequirementParser:
         parts = [p.strip() for p in implements_str.split(",")]
         # Filter out empty parts and no-reference values
         return [p for p in parts if p and p not in self.no_reference_values]
+
+    def _expand_multi_assertion_refs(self, refs: List[str]) -> List[str]:
+        """Expand multi-assertion syntax to individual assertion refs.
+
+        Handles formats like:
+        - "REQ-p00001-A-B-C" -> ["REQ-p00001-A", "REQ-p00001-B", "REQ-p00001-C"]
+        - "REQ-p00001-A" -> ["REQ-p00001-A"]
+        - "REQ-p00001" -> ["REQ-p00001"]
+
+        Args:
+            refs: List of potentially multi-assertion references.
+
+        Returns:
+            List with multi-assertion refs expanded.
+        """
+        result = []
+        # Pattern to detect multi-assertion: REQ-xxx-A-B-C or REQ-xxx-01-02-03
+        # Group 1: base requirement ID (e.g., REQ-p00001)
+        # Group 2: assertion labels (e.g., -A-B-C or -01-02-03)
+        multi_assertion_pattern = re.compile(
+            r"^([A-Z]+-[A-Za-z0-9-]+?)(-[A-Z](?:-[A-Z])+|-\d+(?:-\d+)+)$"
+        )
+
+        for ref in refs:
+            match = multi_assertion_pattern.match(ref)
+            if match:
+                base_id = match.group(1)
+                labels_str = match.group(2)
+                # Split labels (e.g., "-A-B-C" -> ["A", "B", "C"])
+                labels = [lbl for lbl in labels_str.split("-") if lbl]
+                for label in labels:
+                    result.append(f"{base_id}-{label}")
+            else:
+                result.append(ref)
+
+        return result
 
     def _extract_body(self, text: str) -> str:
         """Extract the main body text from requirement block.

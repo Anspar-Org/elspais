@@ -116,6 +116,11 @@ class TraceGraphBuilder:
             for impl_id in req.implements:
                 self._pending_links.append((req_id, impl_id, "implements"))
 
+            # Queue refines links for later resolution
+            refines = getattr(req, "refines", [])
+            for ref_id in refines:
+                self._pending_links.append((req_id, ref_id, "refines"))
+
             # Queue addresses links if present
             addresses = getattr(req, "addresses", [])
             for addr_id in addresses:
@@ -283,6 +288,8 @@ class TraceGraphBuilder:
 
     def _link_relationships(self) -> None:
         """Link all pending relationships."""
+        from elspais.core.graph import NodeKind
+
         for from_id, to_id, rel_name in self._pending_links:
             from_node = self._nodes.get(from_id)
             if not from_node:
@@ -306,6 +313,15 @@ class TraceGraphBuilder:
                     self._validation_warnings.append(
                         f"Invalid target: '{rel_name}' cannot target {to_node.kind.value}"
                     )
+
+            # Track relationship type for coverage rollup decisions
+            if "_relationship_to_parent" not in from_node.metrics:
+                from_node.metrics["_relationship_to_parent"] = {}
+            from_node.metrics["_relationship_to_parent"][to_node.id] = rel_name
+
+            # Track if this is an assertion-level implements (explicit coverage)
+            if rel_name == "implements" and to_node.kind == NodeKind.ASSERTION:
+                from_node.metrics["_implements_assertion"] = True
 
             if not rel_schema:
                 # Default to "up" direction (child declares parent)
@@ -506,44 +522,161 @@ class TraceGraphBuilder:
         self,
         graph: TraceGraph,
         exclude_status: list[str] | None = None,
+        strict_mode: bool | None = None,
     ) -> None:
         """Compute roll-up metrics for all nodes.
 
-        Uses post-order traversal to sum metrics from leaves to roots.
-        Nodes with status in exclude_status are excluded from parent roll-ups.
+        Coverage is tracked at the assertion level using contribution lists.
+        Each assertion accumulates a list of CoverageContribution objects
+        from tests and child requirements. The consumer decides how to
+        interpret/aggregate multiple contributions.
+
+        Coverage contribution rules:
+        - Tests → Assertion: Direct contribution (coverage_value=1.0)
+        - Child REQ → Assertion (explicit): Explicit contribution (child's coverage)
+        - Child REQ → Parent REQ: Inferred contribution to ALL parent assertions
+          (child's coverage distributed to all parent assertions)
+        - Explicit overrides inferred: If child targets specific assertion(s),
+          those get explicit, others get inferred (same child won't appear twice)
 
         Args:
             graph: The graph to compute metrics for.
             exclude_status: Statuses to exclude from roll-up (default from config).
+            strict_mode: Deprecated - coverage now always tracked via contributions.
+                        Kept for backward compatibility.
         """
         from elspais.core.graph import NodeKind
-        from elspais.core.graph_schema import RollupMetrics
+        from elspais.core.graph_schema import CoverageContribution, CoverageSource, RollupMetrics
 
         # Get exclusions from config if not provided
         if exclude_status is None:
             exclude_status = self.schema.metrics_config.exclude_status
+        if strict_mode is None:
+            strict_mode = self.schema.metrics_config.strict_mode
 
         # Initialize metrics for all nodes
         for node in graph.all_nodes():
             node.metrics["_rollup"] = RollupMetrics()
+            node.metrics["_coverage_contributions"] = []  # List[CoverageContribution]
 
-        # Process in post-order (children before parents)
+        # First pass: compute each node's own coverage (for REQs)
+        for node in graph.all_nodes():
+            if node.kind == NodeKind.REQUIREMENT:
+                own_assertions = [c for c in node.children if c.kind == NodeKind.ASSERTION]
+                own_covered = sum(
+                    1 for a in own_assertions
+                    if any(c.kind == NodeKind.TEST for c in a.children)
+                )
+                total = len(own_assertions)
+                node.metrics["_own_coverage"] = own_covered / total if total > 0 else 0.0
+
+        # Second pass: populate assertion coverage contributions
+        for node in graph.all_nodes():
+            if node.kind != NodeKind.ASSERTION:
+                continue
+
+            contributions: list[CoverageContribution] = []
+
+            # Direct coverage from tests
+            for child in node.children:
+                if child.kind == NodeKind.TEST:
+                    contributions.append(CoverageContribution(
+                        source_id=child.id,
+                        source_type=CoverageSource.DIRECT,
+                        coverage_value=1.0,
+                        relationship="validates",
+                    ))
+
+            # Explicit coverage from child REQs that target this assertion specifically
+            for child in node.children:
+                if child.kind == NodeKind.REQUIREMENT:
+                    rel_to_this = child.metrics.get("_relationship_to_parent", {}).get(node.id)
+                    if rel_to_this in ("implements", "refines"):
+                        child_coverage = child.metrics.get("_own_coverage", 0.0)
+                        contributions.append(CoverageContribution(
+                            source_id=child.id,
+                            source_type=CoverageSource.EXPLICIT,
+                            coverage_value=child_coverage,
+                            relationship=rel_to_this,
+                        ))
+
+            node.metrics["_coverage_contributions"] = contributions
+
+        # Third pass: inferred coverage from child REQs that target parent REQ
+        # Find children that target a REQ (not assertion) and add inferred to all assertions
+        for node in graph.all_nodes():
+            if node.kind != NodeKind.REQUIREMENT:
+                continue
+
+            # Get this REQ's assertions
+            own_assertions = [c for c in node.children if c.kind == NodeKind.ASSERTION]
+
+            # Find children that target this REQ directly (not specific assertions)
+            for child in node.children:
+                if child.kind != NodeKind.REQUIREMENT:
+                    continue
+                if self._should_exclude_child(child, exclude_status):
+                    continue
+
+                rel_to_this = child.metrics.get("_relationship_to_parent", {}).get(node.id)
+                if rel_to_this not in ("implements", "refines"):
+                    continue
+
+                child_coverage = child.metrics.get("_own_coverage", 0.0)
+
+                # Find which assertions this child explicitly targets
+                explicit_assertion_ids = set()
+                for target_id, rel in child.metrics.get("_relationship_to_parent", {}).items():
+                    target_node = graph.find_by_id(target_id)
+                    if target_node and target_node.kind == NodeKind.ASSERTION:
+                        # Check if this assertion belongs to this REQ
+                        if target_node in own_assertions:
+                            explicit_assertion_ids.add(target_id)
+
+                # Add inferred contribution to assertions NOT explicitly targeted
+                for assertion in own_assertions:
+                    if assertion.id in explicit_assertion_ids:
+                        continue  # Already has explicit from this child
+
+                    # Check if this child already contributed (avoid duplicates)
+                    existing = assertion.metrics.get("_coverage_contributions", [])
+                    if any(c.source_id == child.id for c in existing):
+                        continue
+
+                    existing.append(CoverageContribution(
+                        source_id=child.id,
+                        source_type=CoverageSource.INFERRED,
+                        coverage_value=child_coverage,
+                        relationship=rel_to_this,
+                    ))
+                    assertion.metrics["_coverage_contributions"] = existing
+
+        # Fourth pass: compute RollupMetrics from contributions (post-order)
         for node in graph.all_nodes(order="post"):
             metrics: RollupMetrics = node.metrics["_rollup"]
 
             if node.kind == NodeKind.ASSERTION:
                 metrics.total_assertions = 1
-                # Check if assertion is covered (has test children)
-                has_test_child = any(
-                    c.kind == NodeKind.TEST for c in node.children
-                )
-                metrics.covered_assertions = 1 if has_test_child else 0
+                contributions = node.metrics.get("_coverage_contributions", [])
+
+                # Count coverage by source type
+                has_direct = any(c.source_type == CoverageSource.DIRECT for c in contributions)
+                has_explicit = any(c.source_type == CoverageSource.EXPLICIT for c in contributions)
+                has_inferred = any(c.source_type == CoverageSource.INFERRED for c in contributions)
+
+                if has_direct:
+                    metrics.covered_assertions = 1
+                    metrics.direct_covered = 1
+                elif has_explicit:
+                    metrics.covered_assertions = 1
+                    metrics.explicit_covered = 1
+                elif has_inferred:
+                    metrics.covered_assertions = 1
+                    metrics.inferred_covered = 1
 
                 # Accumulate test metrics from children
                 for child in node.children:
-                    child_metrics: RollupMetrics = child.metrics.get(
-                        "_rollup", RollupMetrics()
-                    )
+                    child_metrics: RollupMetrics = child.metrics.get("_rollup", RollupMetrics())
                     metrics.total_tests += child_metrics.total_tests
                     metrics.passed_tests += child_metrics.passed_tests
                     metrics.failed_tests += child_metrics.failed_tests
@@ -552,7 +685,6 @@ class TraceGraphBuilder:
 
             elif node.kind == NodeKind.TEST:
                 metrics.total_tests = 1
-                # Get test status from metrics metadata
                 status = node.metrics.get("_test_status", "unknown")
                 if status == "passed":
                     metrics.passed_tests = 1
@@ -565,23 +697,40 @@ class TraceGraphBuilder:
                 metrics.total_code_refs = 1
 
             elif node.kind == NodeKind.REQUIREMENT:
-                # Accumulate from children
+                # Roll up from assertion children
                 for child in node.children:
-                    # Check if child should be excluded
                     if self._should_exclude_child(child, exclude_status):
                         continue
 
-                    child_metrics: RollupMetrics = child.metrics.get(
-                        "_rollup", RollupMetrics()
-                    )
+                    child_metrics: RollupMetrics = child.metrics.get("_rollup", RollupMetrics())
 
-                    metrics.total_assertions += child_metrics.total_assertions
-                    metrics.covered_assertions += child_metrics.covered_assertions
-                    metrics.total_tests += child_metrics.total_tests
-                    metrics.passed_tests += child_metrics.passed_tests
-                    metrics.failed_tests += child_metrics.failed_tests
-                    metrics.skipped_tests += child_metrics.skipped_tests
-                    metrics.total_code_refs += child_metrics.total_code_refs
+                    if child.kind == NodeKind.ASSERTION:
+                        metrics.total_assertions += child_metrics.total_assertions
+                        metrics.covered_assertions += child_metrics.covered_assertions
+                        metrics.direct_covered += child_metrics.direct_covered
+                        metrics.explicit_covered += child_metrics.explicit_covered
+                        metrics.inferred_covered += child_metrics.inferred_covered
+                        metrics.total_tests += child_metrics.total_tests
+                        metrics.passed_tests += child_metrics.passed_tests
+                        metrics.failed_tests += child_metrics.failed_tests
+                        metrics.skipped_tests += child_metrics.skipped_tests
+                        metrics.total_code_refs += child_metrics.total_code_refs
+
+                    elif child.kind == NodeKind.REQUIREMENT:
+                        # Roll up test/code metrics from child REQs
+                        metrics.total_tests += child_metrics.total_tests
+                        metrics.passed_tests += child_metrics.passed_tests
+                        metrics.failed_tests += child_metrics.failed_tests
+                        metrics.skipped_tests += child_metrics.skipped_tests
+                        metrics.total_code_refs += child_metrics.total_code_refs
+
+                        # In strict mode, also roll up assertion counts
+                        if strict_mode:
+                            metrics.total_assertions += child_metrics.total_assertions
+                            metrics.covered_assertions += child_metrics.covered_assertions
+                            metrics.direct_covered += child_metrics.direct_covered
+                            metrics.explicit_covered += child_metrics.explicit_covered
+                            metrics.inferred_covered += child_metrics.inferred_covered
 
                 # Calculate percentages
                 if metrics.total_assertions > 0:
@@ -594,15 +743,17 @@ class TraceGraphBuilder:
                         metrics.passed_tests / metrics.total_tests
                     ) * 100
 
-            # Store the computed metrics
             node.metrics["_rollup"] = metrics
 
-        # Copy rollup metrics to the public metrics attribute for convenience
+        # Copy rollup metrics to public metrics for convenience
         for node in graph.all_nodes():
             rollup = node.metrics.get("_rollup")
             if rollup:
                 node.metrics["total_assertions"] = rollup.total_assertions
                 node.metrics["covered_assertions"] = rollup.covered_assertions
+                node.metrics["direct_covered"] = rollup.direct_covered
+                node.metrics["explicit_covered"] = rollup.explicit_covered
+                node.metrics["inferred_covered"] = rollup.inferred_covered
                 node.metrics["total_tests"] = rollup.total_tests
                 node.metrics["passed_tests"] = rollup.passed_tests
                 node.metrics["failed_tests"] = rollup.failed_tests
@@ -610,6 +761,13 @@ class TraceGraphBuilder:
                 node.metrics["total_code_refs"] = rollup.total_code_refs
                 node.metrics["coverage_pct"] = rollup.coverage_pct
                 node.metrics["pass_rate_pct"] = rollup.pass_rate_pct
+
+            # Serialize coverage contributions for JSON output
+            contributions = node.metrics.get("_coverage_contributions", [])
+            if contributions:
+                node.metrics["coverage_contributions"] = [
+                    c.to_dict() for c in contributions
+                ]
 
     def _should_exclude_child(
         self, child: TraceNode, exclude_status: list[str]

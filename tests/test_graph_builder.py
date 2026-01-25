@@ -673,23 +673,24 @@ class TestRelationshipTypeValidation:
             f"Warnings: {result.warnings}"
         )
 
-    def test_invalid_implements_target_assertion(self, builder, prd_requirement):
-        """Test invalid implements: requirement cannot implement assertion.
+    def test_valid_implements_target_assertion(self, builder, prd_requirement):
+        """Test valid implements: requirement CAN implement specific assertions.
 
-        The implements relationship should only target other requirements,
-        not assertions. Attempting to implement an assertion should produce
-        a validation warning.
+        The implements relationship can now target assertions for explicit
+        coverage semantics. This is the mechanism for claiming that a child
+        requirement satisfies specific parent assertions (explicit coverage).
+        This should NOT produce a validation warning.
         """
         from elspais.core.models import Assertion, Requirement
 
-        # Create a requirement with an assertion
+        # Create a requirement that implements a specific assertion
         dev_req = Requirement(
             id="REQ-d00001",
             title="Dev Req",
             level="DEV",
             status="Active",
             body="",
-            implements=["REQ-p00001-A"],  # Invalid: trying to implement an assertion
+            implements=["REQ-p00001-A"],  # Valid: explicit assertion coverage
             assertions=[],
             acceptance_criteria=[],
         )
@@ -715,15 +716,22 @@ class TestRelationshipTypeValidation:
         builder.add_requirements(requirements)
         graph, result = builder.build_and_validate()
 
-        # Should have a warning about invalid target kind
+        # Should have NO type constraint warning (assertion is valid target)
         type_warnings = [
             w for w in result.warnings
             if "Invalid target" in w and "assertion" in w.lower()
         ]
-        assert len(type_warnings) > 0, (
-            f"Expected warning about implements targeting assertion. "
+        assert len(type_warnings) == 0, (
+            f"Unexpected warning about implements targeting assertion. "
             f"Warnings: {result.warnings}"
         )
+
+        # Verify the relationship was created
+        dev_node = graph.find_by_id("REQ-d00001")
+        assertion_node = graph.find_by_id("REQ-p00001-A")
+        assert dev_node is not None
+        assert assertion_node is not None
+        assert assertion_node in dev_node.parents
 
     def test_relationship_validation_in_build_and_validate(self, builder, prd_requirement):
         """Test that validation warnings appear in ValidationResult.
@@ -845,3 +853,317 @@ class TestRelationshipTypeValidation:
             f"Expected at least 2 type constraint warnings. "
             f"Got {len(type_warnings)}: {type_warnings}"
         )
+
+
+class TestCoverageSourceTracking:
+    """Tests for coverage source tracking (direct, explicit, inferred)."""
+
+    @pytest.fixture
+    def builder(self, tmp_path):
+        """Create a builder for testing."""
+        from elspais.core.graph_builder import TraceGraphBuilder
+
+        return TraceGraphBuilder(repo_root=tmp_path)
+
+    def test_direct_coverage_from_test(self, builder):
+        """Test direct coverage when test validates assertion."""
+        from elspais.core.graph import NodeKind, SourceLocation, TestReference, TraceNode
+        from elspais.core.graph_schema import CoverageSource
+        from elspais.core.models import Assertion, Requirement
+
+        # Create requirement with assertion
+        req = Requirement(
+            id="REQ-p00001",
+            title="Test Req",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="SHALL do X", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+        builder.add_requirements({"REQ-p00001": req})
+
+        # Create test that validates the assertion
+        test_node = TraceNode(
+            id="test_x",
+            kind=NodeKind.TEST,
+            label="test_x",
+            source=SourceLocation(path="tests/test.py", line=10),
+            test_ref=TestReference(
+                file_path="tests/test.py", line=10, test_name="test_x"
+            ),
+        )
+        test_node.metrics["_validates_targets"] = ["REQ-p00001-A"]
+        test_node.metrics["_test_status"] = "passed"
+
+        builder.add_test_coverage([test_node])
+        graph = builder.build()
+        builder.compute_metrics(graph)
+
+        # Check assertion has direct coverage contribution
+        assertion_node = graph.find_by_id("REQ-p00001-A")
+        assert assertion_node is not None
+        contributions = assertion_node.metrics.get("_coverage_contributions", [])
+        assert len(contributions) == 1
+        assert contributions[0].source_type == CoverageSource.DIRECT
+        assert contributions[0].source_id == "test_x"
+        assert assertion_node.metrics.get("direct_covered") == 1
+
+        # Check requirement rollup
+        req_node = graph.find_by_id("REQ-p00001")
+        assert req_node is not None
+        assert req_node.metrics.get("covered_assertions") == 1
+        assert req_node.metrics.get("direct_covered") == 1
+
+    def test_refines_adds_inferred_coverage_to_parent_assertions(self, builder):
+        """Test refines relationship adds inferred coverage to ALL parent assertions.
+
+        When a child refines a parent REQ, all of the parent's assertions get
+        inferred coverage contributions from the child. This allows tracking
+        that the parent requirements are being addressed by child work.
+        """
+        from elspais.core.graph_schema import CoverageSource
+        from elspais.core.models import Assertion, Requirement
+
+        # Parent requirement with assertions
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="SHALL do X", is_placeholder=False),
+                Assertion(label="B", text="SHALL do Y", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        # Child refines parent - provides inferred coverage to ALL parent assertions
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=[],
+            refines=["REQ-p00001"],  # Refines parent REQ
+            assertions=[
+                Assertion(label="A", text="SHALL do Z", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        builder.add_requirements({"REQ-p00001": parent, "REQ-d00001": child})
+        graph = builder.build()
+        builder.compute_metrics(graph)
+
+        # Parent's assertions should have inferred coverage from child
+        assertion_a = graph.find_by_id("REQ-p00001-A")
+        assertion_b = graph.find_by_id("REQ-p00001-B")
+
+        # Both assertions get inferred contributions
+        assert len(assertion_a.metrics.get("_coverage_contributions", [])) == 1
+        assert assertion_a.metrics["_coverage_contributions"][0].source_type == CoverageSource.INFERRED
+        assert assertion_a.metrics["_coverage_contributions"][0].source_id == "REQ-d00001"
+
+        assert len(assertion_b.metrics.get("_coverage_contributions", [])) == 1
+        assert assertion_b.metrics["_coverage_contributions"][0].source_type == CoverageSource.INFERRED
+
+        # Parent shows covered assertions (inferred)
+        parent_node = graph.find_by_id("REQ-p00001")
+        assert parent_node.metrics.get("total_assertions") == 2
+        assert parent_node.metrics.get("covered_assertions") == 2
+        assert parent_node.metrics.get("inferred_covered") == 2
+
+    def test_implements_req_adds_inferred_coverage(self, builder):
+        """Test REQ→REQ implements adds inferred coverage to parent assertions.
+
+        When a child implements a parent REQ (not specific assertions),
+        all parent assertions get inferred coverage contributions.
+        """
+        from elspais.core.graph_schema import CoverageSource
+        from elspais.core.models import Assertion, Requirement
+
+        # Parent requirement with assertion
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="SHALL do X", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        # Child implements parent REQ
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=["REQ-p00001"],  # Implements parent REQ
+            assertions=[
+                Assertion(label="A", text="SHALL do Y", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        builder.add_requirements({"REQ-p00001": parent, "REQ-d00001": child})
+        graph = builder.build()
+        builder.compute_metrics(graph)
+
+        # Parent's assertion gets inferred coverage from child
+        assertion_a = graph.find_by_id("REQ-p00001-A")
+        contributions = assertion_a.metrics.get("_coverage_contributions", [])
+        assert len(contributions) == 1
+        assert contributions[0].source_type == CoverageSource.INFERRED
+        assert contributions[0].source_id == "REQ-d00001"
+
+        parent_node = graph.find_by_id("REQ-p00001")
+        # Parent counts its own assertion with inferred coverage
+        assert parent_node.metrics.get("total_assertions") == 1
+        assert parent_node.metrics.get("covered_assertions") == 1
+        assert parent_node.metrics.get("inferred_covered") == 1
+
+    def test_strict_mode_rolls_up_assertion_counts(self, builder):
+        """Test strict mode rolls up assertion counts from child REQs.
+
+        In strict mode, parent REQ's total_assertions includes children's.
+        This is useful for seeing total coverage depth in the hierarchy.
+        """
+        from elspais.core.models import Assertion, Requirement
+
+        # Parent requirement with assertion
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="SHALL do X", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        # Child implements parent
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=["REQ-p00001"],
+            assertions=[
+                Assertion(label="A", text="SHALL do Y", is_placeholder=False),
+            ],
+            acceptance_criteria=[],
+        )
+
+        builder.add_requirements({"REQ-p00001": parent, "REQ-d00001": child})
+        graph = builder.build()
+
+        # Strict mode: assertion counts roll up from children
+        builder.compute_metrics(graph, strict_mode=True)
+
+        parent_node = graph.find_by_id("REQ-p00001")
+        # Parent should count own + child's assertions in strict mode
+        assert parent_node.metrics.get("total_assertions") == 2
+        # Only parent's assertion is covered (via inferred from child)
+        # Child's assertion has no coverage (no tests validate it)
+        assert parent_node.metrics.get("covered_assertions") == 1
+        assert parent_node.metrics.get("inferred_covered") == 1
+
+
+class TestRefinesRelationship:
+    """Tests for the refines relationship."""
+
+    @pytest.fixture
+    def builder(self, tmp_path):
+        """Create a builder for testing."""
+        from elspais.core.graph_builder import TraceGraphBuilder
+
+        return TraceGraphBuilder(repo_root=tmp_path)
+
+    def test_refines_creates_link(self, builder):
+        """Test refines relationship creates parent-child link."""
+        from elspais.core.models import Requirement
+
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[],
+            acceptance_criteria=[],
+        )
+
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=[],
+            refines=["REQ-p00001"],  # Uses refines
+            assertions=[],
+            acceptance_criteria=[],
+        )
+
+        builder.add_requirements({"REQ-p00001": parent, "REQ-d00001": child})
+        graph = builder.build()
+
+        # Verify link exists
+        child_node = graph.find_by_id("REQ-d00001")
+        parent_node = graph.find_by_id("REQ-p00001")
+        assert child_node is not None
+        assert parent_node is not None
+        assert parent_node in child_node.parents
+        assert child_node in parent_node.children
+
+    def test_refines_tracks_relationship_type(self, builder):
+        """Test refines relationship type is tracked in metrics."""
+        from elspais.core.models import Requirement
+
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[],
+            acceptance_criteria=[],
+        )
+
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=[],
+            refines=["REQ-p00001"],
+            assertions=[],
+            acceptance_criteria=[],
+        )
+
+        builder.add_requirements({"REQ-p00001": parent, "REQ-d00001": child})
+        graph = builder.build()
+
+        # Check relationship type is tracked
+        child_node = graph.find_by_id("REQ-d00001")
+        rel_to_parent = child_node.metrics.get("_relationship_to_parent", {})
+        assert rel_to_parent.get("REQ-p00001") == "refines"
