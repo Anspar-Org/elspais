@@ -78,9 +78,10 @@ def get_all_requirements(
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
     """
     from elspais.config.loader import find_config_file, get_spec_directories, load_config
-    from elspais.core.loader import load_requirements_from_repo
-    from elspais.core.parser import RequirementParser
-    from elspais.core.patterns import PatternConfig
+    from elspais.core.loader import (
+        load_requirements_from_directories,
+        load_requirements_from_repo,
+    )
 
     # Find and load config
     if config_path is None:
@@ -100,17 +101,13 @@ def get_all_requirements(
 
     # Load local requirements (unless core-only mode)
     if mode in ("combined", "local-only"):
-        # Create parser with pattern config
-        pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-        parser = RequirementParser(pattern_config)
-
         # Get spec directories
         spec_dirs = get_spec_directories(None, config, base_path or config_path.parent)
 
         if spec_dirs:
             try:
-                parse_result = parser.parse_directories(spec_dirs)
-                for req_id, req in parse_result.requirements.items():
+                core_reqs = load_requirements_from_directories(spec_dirs, config)
+                for req_id, req in core_reqs.items():
                     requirements[req_id] = RequirementNode.from_core(req)
             except Exception as e:
                 print(f"Warning: Failed to parse local requirements: {e}", file=sys.stderr)

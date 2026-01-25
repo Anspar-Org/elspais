@@ -13,8 +13,7 @@ from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.git import get_git_changes
 from elspais.core.hierarchy import detect_cycles
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+from elspais.core.loader import load_requirements_from_directories
 from elspais.trace_view.coverage import (
     calculate_coverage,
     generate_coverage_report,
@@ -214,13 +213,7 @@ class TraceViewGenerator:
             return
 
         # Parse requirements using elspais parser
-        pattern_config = PatternConfig.from_dict(self._config.get("patterns", {}))
-        spec_config = self._config.get("spec", {})
-        no_reference_values = spec_config.get("no_reference_values")
-        skip_files = spec_config.get("skip_files", [])
-
-        parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        parse_result = load_requirements_from_directories(spec_dirs, self._config)
 
         roadmap_count = 0
         conflict_count = 0

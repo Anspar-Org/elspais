@@ -13,9 +13,8 @@ from typing import Dict
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hierarchy import find_children_ids
+from elspais.core.loader import load_requirements_from_directories
 from elspais.core.models import Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -63,12 +62,7 @@ def run_graph_trace(args: argparse.Namespace) -> int:
         return 1
 
     # Parse requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    requirements = load_requirements_from_directories(spec_dirs, config)
 
     if not requirements:
         print("No requirements found.")
@@ -267,12 +261,7 @@ def run_basic_trace(args: argparse.Namespace) -> int:
         return 1
 
     # Parse requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    requirements = load_requirements_from_directories(spec_dirs, config)
 
     if not requirements:
         print("No requirements found.")

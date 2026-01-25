@@ -11,9 +11,8 @@ from pathlib import Path
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.hasher import calculate_hash, verify_hash
+from elspais.core.loader import load_requirements_from_directories
 from elspais.core.models import Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
 
 
 def run(args: argparse.Namespace) -> int:
@@ -131,14 +130,8 @@ def load_requirements(args: argparse.Namespace) -> tuple:
         print("Error: No spec directories found", file=sys.stderr)
         return config, {}
 
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-
     try:
-        requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+        requirements = load_requirements_from_directories(spec_dirs, config)
     except Exception as e:
         print(f"Error parsing requirements: {e}", file=sys.stderr)
         return config, {}

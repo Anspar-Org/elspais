@@ -7,8 +7,7 @@ from pathlib import Path
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+from elspais.core.loader import load_requirements_from_directories
 
 
 def run(args: argparse.Namespace) -> int:
@@ -47,11 +46,7 @@ def run_validate(args: argparse.Namespace) -> int:
         return 1
 
     # Parse all requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    requirements = load_requirements_from_directories(spec_dirs, config)
 
     # Parse INDEX.md to find listed requirements
     index_content = index_file.read_text(encoding="utf-8")
@@ -102,11 +97,7 @@ def run_regenerate(args: argparse.Namespace) -> int:
     index_file = spec_dirs[0] / spec_config.get("index_file", "INDEX.md")
 
     # Parse all requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    requirements = load_requirements_from_directories(spec_dirs, config)
 
     if not requirements:
         print("No requirements found")

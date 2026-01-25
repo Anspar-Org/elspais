@@ -570,11 +570,9 @@ def _register_tools(
             text: Markdown text containing one or more requirements
             file_path: Optional source file path for location info
         """
-        from elspais.core.parser import RequirementParser
-        from elspais.core.patterns import PatternConfig
+        from elspais.core.loader import create_parser
 
-        pattern_config = PatternConfig.from_dict(ctx.config.get("patterns", {}))
-        parser = RequirementParser(pattern_config)
+        parser = create_parser(ctx.config)
         path = Path(file_path) if file_path else None
         requirements = parser.parse_text(text, file_path=path)
 

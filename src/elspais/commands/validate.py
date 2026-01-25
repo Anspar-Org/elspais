@@ -155,21 +155,18 @@ def run(args: argparse.Namespace) -> int:
 
 
 def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
-    """Load configuration from file or use defaults."""
-    if args.config:
-        config_path = args.config
-    else:
-        config_path = find_config_file(Path.cwd())
+    """Load configuration from file or use defaults.
 
-    if config_path and config_path.exists():
-        try:
-            return load_config(config_path)
-        except Exception as e:
-            print(f"Error loading config: {e}", file=sys.stderr)
-            return None
-    else:
-        # Use defaults
-        return DEFAULT_CONFIG
+    Note: This is a wrapper for load_config_from_args() that returns Optional[Dict]
+    for backward compatibility. New code should use load_config_from_args() directly.
+    """
+    from elspais.config.loader import load_config_from_args
+
+    config = load_config_from_args(
+        config_arg=getattr(args, "config", None),
+        quiet=getattr(args, "quiet", False),
+    )
+    return config
 
 
 def should_scan_tests(args: argparse.Namespace, config: TestingConfig) -> bool:

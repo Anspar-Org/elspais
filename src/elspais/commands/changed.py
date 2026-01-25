@@ -25,21 +25,14 @@ from elspais.core.git import (
 
 
 def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
-    """Load configuration from file or use defaults."""
-    config_path = getattr(args, "config", None)
-    if config_path:
-        pass  # Use provided path
-    else:
-        config_path = find_config_file(Path.cwd())
+    """Load configuration from file or use defaults.
 
-    if config_path and config_path.exists():
-        try:
-            return load_config(config_path)
-        except Exception as e:
-            print(f"Error loading config: {e}", file=sys.stderr)
-            return None
-    else:
-        return DEFAULT_CONFIG
+    Note: This is a wrapper for load_config_from_args() that returns Optional[Dict]
+    for backward compatibility. New code should use load_config_from_args() directly.
+    """
+    from elspais.config.loader import load_config_from_args
+
+    return load_config_from_args(config_arg=getattr(args, "config", None))
 
 
 def run(args: argparse.Namespace) -> int:

@@ -295,7 +295,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ## Phase 4: Interface Consolidation
 
-### [ ] 4.1 Consolidate All Interface Libraries
+### [x] 4.1 Consolidate All Interface Libraries
 
 - **Priority**: P2 - Code quality and maintainability
 - **Description**: Audit all interfaces (file I/O, user input, API, command line, MCP) and ensure each uses a single shared library. No duplicating of logic across modules.
@@ -311,12 +311,19 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Document interface patterns in CLAUDE.md
 - **Tests**: Existing tests should continue to pass
 - **Acceptance criteria**:
-  - [ ] File I/O: Single library for reading/writing spec files
-  - [ ] Config: Single loader used everywhere
-  - [ ] Patterns: Single validator instance pattern
-  - [ ] Graph: Single builder pattern
-  - [ ] CLI: Consistent argument handling
-  - [ ] MCP: Shared helpers for common operations
+  - [x] File I/O: Single library for reading/writing spec files
+  - [x] Config: Single loader used everywhere
+  - [x] Patterns: Single validator instance pattern
+  - [x] Graph: Single builder pattern
+  - [x] CLI: Consistent argument handling
+  - [x] MCP: Shared helpers for common operations
+- **Resolution**: Completed comprehensive interface consolidation:
+  - **File I/O**: All 9 files creating `RequirementParser` directly now use `load_requirements_from_directories()` or `create_parser()` from `core/loader.py`. Updated: `trace.py`, `hash_cmd.py`, `analyze.py`, `index.py`, `reformat_cmd.py`, `trace_view/generators/base.py`, `reformat/hierarchy.py`, `mcp/server.py`
+  - **Config Loading**: Added `load_config_from_args()` helper to `config/loader.py`. Updated `validate.py` and `changed.py` to use it (eliminates duplicate `load_configuration()` functions)
+  - **Patterns**: `PatternConfig` creation is now centralized through `create_parser()` in `core/loader.py`
+  - **Graph Building**: Already well consolidated via `TraceGraphBuilder` (no changes needed)
+  - **CLI Parsing**: Already well consolidated in `cli.py` (no changes needed)
+  - **MCP Tools**: `WorkspaceContext` pattern is consistent (no changes needed). 974 tests pass
 
 ---
 
@@ -369,12 +376,36 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
+### [ ] 5.3 Validate Recursive Subdirectory Parsing
+
+- **Priority**: P2 - Spec organization flexibility
+- **Description**: Ensure spec file discovery and parsing works correctly for nested subdirectories (e.g., `spec/regulations/fda/`, `spec/sub/sub/`).
+- **Files**:
+  - `src/elspais/core/loader.py`
+  - `src/elspais/mcp/context.py`
+- **Tasks**:
+  - Audit spec file discovery to ensure recursive directory traversal
+  - Validate file pattern matching (`prd-*.md`, etc.) works at any nesting depth
+  - Ensure `skip_dirs` config works for nested paths (e.g., `regulations/fda/reference`)
+  - Verify TrackedFile registry handles subdirectory paths correctly
+  - Test graph refresh with files in nested subdirectories
+- **Tests**: `tests/test_mcp/test_subdirectory_parsing.py`
+- **Acceptance criteria**:
+  - [ ] Files in `spec/sub/` discovered and parsed
+  - [ ] Files in `spec/sub/sub/` discovered and parsed
+  - [ ] File type patterns match at any depth
+  - [ ] `skip_dirs` excludes nested paths correctly
+  - [ ] Incremental refresh works for nested file changes
+  - [ ] Requirement IDs from nested files appear in graph
+
+---
+
 ## Completion Checklist
 
 - [x] All Phase 1 items complete
 - [x] All Phase 2 items complete
 - [x] All Phase 3 items complete
-- [ ] All Phase 4 items complete
+- [x] All Phase 4 items complete
 - [ ] All Phase 5 items complete
 - [ ] All tests passing
 - [ ] Documentation updated in CLAUDE.md

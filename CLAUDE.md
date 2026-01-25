@@ -101,7 +101,7 @@ elspais init --type associated    # Initialize associated repository
   - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics` with coverage source tracking, `MetricsConfig` with `strict_mode`, `ReportSchema`, `CoverageSource` enum) - enables custom node types, relationships, and configurable reports via config
   - **graph_builder.py**: Graph construction (`TraceGraphBuilder`, `ValidationResult`, `build_graph_from_requirements`, `build_graph_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
 - **config/**: Configuration handling
-  - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
+  - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides, `load_config_from_args()` for CLI commands
   - **defaults.py**: Default configuration values
 - **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd, example_cmd)
 - **testing/**: Test mapping and coverage functionality
@@ -219,6 +219,12 @@ elspais init --type associated    # Initialize associated repository
 14. **Configurable Report Schema**: The `ReportSchema` dataclass defines report content and layout (fields, metrics, filters, sorting). Built-in presets (minimal, standard, full) are available, and custom reports can be defined in `[trace.reports.*]` TOML sections. `RollupMetrics` provides typed storage for accumulated metrics (assertions, coverage, test counts). `MetricsConfig` configures exclusions via `[rules.metrics]`.
 
 14. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
+
+15. **Centralized Interface Libraries**: All modules use shared libraries for common operations:
+    - **Requirement Loading**: Use `load_requirements_from_directories()` or `create_parser()` from `core/loader.py`. Never create `RequirementParser` directly in command modules.
+    - **Configuration Loading**: Use `load_config_from_args()` from `config/loader.py` for CLI commands that need config with fallback to defaults.
+    - **Graph Building**: Use `TraceGraphBuilder` from `core/graph_builder.py`.
+    - **Pattern Validation**: PatternConfig is created through `create_parser()`, not directly in commands.
 
 ### Requirement Format (Updated)
 

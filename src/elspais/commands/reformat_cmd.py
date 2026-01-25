@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Optional
 
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig, PatternValidator
+from elspais.core.loader import load_requirements_from_directories
+from elspais.core.patterns import PatternValidator
 from elspais.core.rules import RuleEngine, RulesConfig
 
 
@@ -409,15 +409,8 @@ def get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
         return set()
 
     # Parse local requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    skip_files = spec_config.get("skip_files", [])
-
     try:
-        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
-        requirements = dict(parse_result)
+        requirements = load_requirements_from_directories(spec_dirs, config)
     except Exception:
         return set()
 
