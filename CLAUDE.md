@@ -67,6 +67,7 @@ elspais reformat-with-claude --dry-run              # Preview reformatting
 elspais reformat-with-claude --backup               # Create backups before changes
 elspais reformat-with-claude --start-req X          # Start from requirement X
 elspais reformat-with-claude --mode combined        # Cross-repo hierarchy support
+elspais reformat-with-claude --mode core-only       # Only core requirements (exclude associated)
 elspais reformat-with-claude --mode local-only      # Only local requirements
 
 # Format examples (learn requirement format)
@@ -81,6 +82,17 @@ elspais example --full            # Display spec/requirements-spec.md
 elspais init                      # Create .elspais.toml configuration
 elspais init --template           # Create example requirement file
 elspais init --type associated    # Initialize associated repository
+
+# Additional commands
+elspais analyze hierarchy         # Show requirement hierarchy tree
+elspais analyze orphans           # Find orphaned requirements
+elspais analyze coverage          # Show coverage by level
+elspais config                    # Display current configuration
+elspais rules                     # Display active validation rules
+elspais index                     # Generate requirement index
+elspais edit REQ-ID               # Open requirement in editor
+elspais version                   # Show version information
+elspais mcp                       # Start MCP server (requires elspais[mcp])
 ```
 
 ## Architecture
@@ -120,6 +132,7 @@ elspais init --type associated    # Initialize associated repository
   - **transforms.py**: `AITransformer` for AI-assisted requirement transformations, `ClaudeInvoker` for subprocess calls to `claude -p`
   - **annotations.py**: `AnnotationStore` for session-scoped annotations and tags (in-memory, not persisted to files)
   - **git_safety.py**: `GitSafetyManager` for creating safety branches before risky operations, with restore capability
+  - **reconstructor.py**: `FileReconstructor` for lossless file reconstruction from graph FILE nodes, preserves non-requirement content (preambles, inter-requirement regions, postambles)
   - **Resources**: Read-only data access
     - `requirements://all`, `requirements://{req_id}`, `requirements://level/{level}`
     - `content-rules://list`, `content-rules://{filename}`
@@ -208,39 +221,39 @@ elspais init --type associated    # Initialize associated repository
 
 12. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
 
-10. **Optional Dependencies**: Advanced features are available via pip extras:
+13. **Optional Dependencies**: Advanced features are available via pip extras:
     - `elspais[trace-view]`: HTML generation with Jinja2
     - `elspais[trace-review]`: Flask-based review server
     - `elspais[all]`: All optional features
     Missing dependencies produce clear installation instructions.
 
-11. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
+14. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
 
-12. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
+15. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
 
-13. **Unified Traceability Graph**: The `core/graph.py` module provides a unified DAG structure representing the full traceability graph. `TraceNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking. Schema-driven via `graph_schema.py` for custom node types and relationships.
+16. **Unified Traceability Graph**: The `core/graph.py` module provides a unified DAG structure representing the full traceability graph. `TraceNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking. Schema-driven via `graph_schema.py` for custom node types and relationships.
 
-14. **Configurable Report Schema**: The `ReportSchema` dataclass defines report content and layout (fields, metrics, filters, sorting). Built-in presets (minimal, standard, full) are available, and custom reports can be defined in `[trace.reports.*]` TOML sections. `RollupMetrics` provides typed storage for accumulated metrics (assertions, coverage, test counts). `MetricsConfig` configures exclusions via `[rules.metrics]`.
+17. **Configurable Report Schema**: The `ReportSchema` dataclass defines report content and layout (fields, metrics, filters, sorting). Built-in presets (minimal, standard, full) are available, and custom reports can be defined in `[trace.reports.*]` TOML sections. `RollupMetrics` provides typed storage for accumulated metrics (assertions, coverage, test counts). `MetricsConfig` configures exclusions via `[rules.metrics]`.
 
-14. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
+18. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
-15. **Centralized Interface Libraries**: All modules use shared libraries for common operations:
+19. **Centralized Interface Libraries**: All modules use shared libraries for common operations:
     - **Requirement Loading**: Use `load_requirements_from_directories()` or `create_parser()` from `core/loader.py`. Never create `RequirementParser` directly in command modules.
     - **Configuration Loading**: Use `get_config()` from `config/loader.py` for CLI commands that need config with fallback to defaults.
     - **Graph Building**: Use `TraceGraphBuilder` from `core/graph_builder.py`.
     - **Pattern Validation**: PatternConfig is created through `create_parser()`, not directly in commands.
 
-16. **parse_* vs load_* Naming Convention**: In `core/loader.py`:
+20. **parse_* vs load_* Naming Convention**: In `core/loader.py`:
     - `parse_requirements_from_directories()` - Returns `ParseResult` with both requirements and warnings (use when you need parser warnings)
     - `load_requirements_from_directories()` - Returns `Dict[str, Requirement]` only (use when you just need requirements)
 
-17. **FILE Node Support for Lossless Reconstruction**: When `--graph-file` flag is used with `elspais trace --graph`, the graph includes FILE and FILE_REGION TraceNodes:
+21. **FILE Node Support for Lossless Reconstruction**: When `--graph-file` flag is used with `elspais trace --graph`, the graph includes FILE and FILE_REGION TraceNodes:
     - **FILE nodes**: Container for spec file metadata with `FileInfo.file_path` and `FileInfo.requirements` (direct TraceNode references)
     - **FILE_REGION nodes**: Unparsed content (preamble, inter-requirement, postamble) as children of FILE
     - **Bidirectional node-data references**: `TraceNode.source_file` links REQ→FILE (not edges, so coverage algorithms unaffected)
     - **Reconstruction**: `FileReconstructor` can rebuild original file from graph using FILE_REGION children and requirement order
 
-18. **Cookie-based View State Persistence**: The `--view` HTML output persists user filter/view preferences via browser cookies:
+22. **Cookie-based View State Persistence**: The `--view` HTML output persists user filter/view preferences via browser cookies:
     - State persisted: hidden levels (PRD/OPS/DEV), hidden repos, files filter, view mode (flat/hierarchy/uncommitted/branch)
     - Cookies use `elspais_tv_` prefix with 30-day expiration
     - State saved on filter toggle and view switch

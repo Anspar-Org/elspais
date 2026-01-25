@@ -13,6 +13,7 @@ The graph supports:
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -296,9 +297,9 @@ class TraceNode:
 
     def _walk_level(self) -> Iterator[TraceNode]:
         """Level-order (breadth-first) traversal."""
-        queue: list[TraceNode] = [self]
+        queue: deque[TraceNode] = deque([self])
         while queue:
-            node = queue.pop(0)
+            node = queue.popleft()  # O(1) instead of O(n) with list.pop(0)
             yield node
             queue.extend(node.children)
 
@@ -311,9 +312,9 @@ class TraceNode:
             Ancestor TraceNode instances.
         """
         visited: set[str] = set()
-        queue = list(self.parents)
+        queue: deque[TraceNode] = deque(self.parents)
         while queue:
-            node = queue.pop(0)
+            node = queue.popleft()  # O(1) instead of O(n) with list.pop(0)
             if node.id not in visited:
                 visited.add(node.id)
                 yield node
@@ -501,4 +502,5 @@ class TraceGraph:
 
 
 # Backwards compatibility alias (deprecated)
+# Use TraceGraph instead - warning issued at module level for visibility
 TraceTree = TraceGraph

@@ -116,3 +116,14 @@ title: AI Guidelines
         # All results should have "Product" in their title
         for req in results:
             assert "Product" in req.title or "product" in req.title.lower()
+
+    def test_search_requirements_invalid_regex(self, hht_like_fixture):
+        """Test that invalid regex patterns return empty results instead of raising."""
+        from elspais.mcp.context import WorkspaceContext
+
+        ctx = WorkspaceContext.from_directory(hht_like_fixture)
+        # Invalid regex pattern (unbalanced brackets)
+        results = ctx.search_requirements("[invalid(regex", regex=True)
+
+        # Should return empty list, not raise re.error
+        assert results == []

@@ -5,10 +5,12 @@ Provides dataclasses for representing requirements, parsed IDs,
 and requirement types.
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, ItemsView, KeysView, List, Optional, ValuesView
 
 
 @dataclass
@@ -300,19 +302,19 @@ class ParseResult:
         """Return the number of requirements."""
         return len(self.requirements)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         """Iterate over requirement IDs."""
         return iter(self.requirements)
 
-    def items(self):
+    def items(self) -> ItemsView[str, Requirement]:
         """Return items like a dict."""
         return self.requirements.items()
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         """Return keys like a dict."""
         return self.requirements.keys()
 
-    def values(self):
+    def values(self) -> ValuesView[Requirement]:
         """Return values like a dict."""
         return self.requirements.values()
 

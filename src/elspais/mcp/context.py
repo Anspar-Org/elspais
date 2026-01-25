@@ -162,10 +162,15 @@ class WorkspaceContext:
         requirements = self.get_requirements()
         results = []
 
-        if regex:
-            pattern = re.compile(query, re.IGNORECASE)
-        else:
-            pattern = re.compile(re.escape(query), re.IGNORECASE)
+        try:
+            if regex:
+                pattern = re.compile(query, re.IGNORECASE)
+            else:
+                pattern = re.compile(re.escape(query), re.IGNORECASE)
+        except re.error as e:
+            # Invalid regex pattern - return empty results
+            # Caller can check for empty results and provide feedback
+            return []
 
         for req in requirements.values():
             if self._matches(req, pattern, field):
