@@ -133,7 +133,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 1.6 Add Graph MCP Resources
+### [x] 1.6 Add Graph MCP Resources
 
 - **Priority**: P3 - Alternative access pattern
 - **Description**: Expose graph data via MCP resources.
@@ -147,8 +147,9 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add resource `hierarchy://{id}/ancestors` and `hierarchy://{id}/descendants`
 - **Tests**: `tests/test_mcp/test_graph_resources.py`
 - **Acceptance criteria**:
-  - [ ] All resources return valid data
-  - [ ] ID-based resources handle invalid IDs gracefully
+  - [x] All resources return valid data
+  - [x] ID-based resources handle invalid IDs gracefully
+- **Resolution**: Added 7 MCP resources for graph data access: `graph://status` (staleness and statistics), `graph://validation` (warnings/errors), `traceability://{req_id}` (full tree path), `coverage://{req_id}` (assertion-level coverage), `hierarchy://{req_id}/ancestors` (parent chain), and `hierarchy://{req_id}/descendants` (all descendants). 17 new tests added.
 
 ---
 
@@ -303,7 +304,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ## Completion Checklist
 
-- [ ] All Phase 1 items complete
+- [x] All Phase 1 items complete
 - [ ] All Phase 2 items complete
 - [ ] All Phase 3 items complete
 - [ ] All tests passing

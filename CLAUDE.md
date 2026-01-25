@@ -112,9 +112,22 @@ elspais init --type associated    # Initialize associated repository
 - **sponsors/**: Sponsor/associated repository configuration loading
   - **\_\_init\_\_.py**: `Sponsor`, `SponsorsConfig` dataclasses, zero-dependency YAML parser, `load_sponsors_config()`, `resolve_sponsor_spec_dir()`, `get_sponsor_spec_directories()` for multi-repo spec scanning
 - **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
-  - **server.py**: MCP server implementation
-  - **context.py**: Context management for MCP resources
-  - **serializers.py**: Serialization helpers for MCP responses
+  - **server.py**: MCP server with resources and tools
+  - **context.py**: `WorkspaceContext`, `GraphState` - context management with graph caching
+  - **serializers.py**: JSON serialization helpers for MCP responses
+  - **Resources**: Read-only data access
+    - `requirements://all`, `requirements://{req_id}`, `requirements://level/{level}`
+    - `content-rules://list`, `content-rules://{filename}`
+    - `config://current`
+    - `graph://status` - staleness and node counts
+    - `graph://validation` - warnings/errors from graph build
+    - `traceability://{req_id}` - full tree path to tests
+    - `coverage://{req_id}` - per-assertion coverage breakdown
+    - `hierarchy://{req_id}/ancestors`, `hierarchy://{req_id}/descendants`
+  - **Tools**: Callable operations
+    - `validate()`, `parse_requirement()`, `search()`, `get_requirement()`, `analyze()`
+    - `get_graph_status()`, `refresh_graph()`, `get_hierarchy()`, `get_traceability_path()`
+    - `get_coverage_breakdown()`, `list_by_criteria()`, `show_requirement_context()`
 - **trace_view/**: Enhanced traceability visualization (optional, requires `elspais[trace-view]`)
   - **models.py**: `TraceViewRequirement` adapter wrapping `core.models.Requirement`, `TestInfo`, `GitChangeInfo`
   - **coverage.py**: Coverage calculation (`calculate_coverage`, `count_by_level`, `find_orphaned_requirements`)

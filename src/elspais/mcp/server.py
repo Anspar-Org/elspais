@@ -163,6 +163,357 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
 
         return json.dumps(ctx.config, indent=2, default=str)
 
+    # Graph-related resources
+
+    @mcp.resource("graph://status")
+    def get_graph_status_resource() -> str:
+        """
+        Get traceability graph status and statistics.
+
+        Returns information about the graph cache state including
+        staleness, changed files, node counts by type, and build time.
+        """
+        import json
+
+        is_stale = ctx.is_graph_stale()
+        stale_files = ctx.get_stale_files()
+        built_at = ctx.get_graph_built_at()
+
+        node_counts: Dict[str, int] = {}
+        total_nodes = 0
+        if ctx._graph_state is not None:
+            graph = ctx._graph_state.graph
+            counts = graph.count_by_kind()
+            node_counts = {kind.value: count for kind, count in counts.items()}
+            total_nodes = graph.node_count()
+
+        return json.dumps(
+            {
+                "is_stale": is_stale,
+                "stale_files": [str(f) for f in stale_files],
+                "has_graph": ctx._graph_state is not None,
+                "node_counts": node_counts,
+                "total_nodes": total_nodes,
+                "last_built": built_at,
+            },
+            indent=2,
+        )
+
+    @mcp.resource("graph://validation")
+    def get_graph_validation_resource() -> str:
+        """
+        Get current graph validation warnings and errors.
+
+        Returns validation results from the last graph build including
+        broken links, cycles, and orphan nodes.
+        """
+        import json
+
+        if ctx._graph_state is None:
+            # Build graph if not available
+            _, validation = ctx.get_graph()
+        else:
+            validation = ctx._graph_state.validation
+
+        return json.dumps(
+            {
+                "is_valid": validation.is_valid,
+                "errors": [
+                    {
+                        "type": e.type if hasattr(e, "type") else "error",
+                        "message": str(e),
+                    }
+                    for e in validation.errors
+                ],
+                "warnings": [
+                    {
+                        "type": w.type if hasattr(w, "type") else "warning",
+                        "message": str(w),
+                    }
+                    for w in validation.warnings
+                ],
+                "summary": {
+                    "error_count": len(validation.errors),
+                    "warning_count": len(validation.warnings),
+                },
+            },
+            indent=2,
+        )
+
+    @mcp.resource("traceability://{req_id}")
+    def get_traceability_resource(req_id: str) -> str:
+        """
+        Get full traceability path from requirement down to tests.
+
+        Returns a tree structure showing the requirement, assertions,
+        implementing code, validating tests, and test results.
+        """
+        import json
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return json.dumps({"error": f"Requirement {req_id} not found in graph"})
+
+        def build_tree(n, depth=0, max_depth=10):
+            """Recursively build tree structure."""
+            if depth > max_depth:
+                return {"id": n.id, "truncated": True}
+
+            result = {
+                "id": n.id,
+                "kind": n.kind.value,
+                "label": n.label,
+            }
+
+            if n.source:
+                result["source"] = {
+                    "file": n.source.path,
+                    "line": n.source.line,
+                }
+
+            if n.metrics:
+                coverage = n.metrics.get("coverage_pct")
+                if coverage is not None:
+                    result["coverage_pct"] = coverage
+
+            if n.kind == NodeKind.TEST_RESULT and n.test_result:
+                result["status"] = (
+                    n.test_result.status.value if n.test_result.status else None
+                )
+
+            if n.children:
+                children_by_kind: Dict[str, list] = {}
+                for child in n.children:
+                    kind_key = child.kind.value
+                    if kind_key not in children_by_kind:
+                        children_by_kind[kind_key] = []
+                    children_by_kind[kind_key].append(build_tree(child, depth + 1))
+                if children_by_kind:
+                    result["children"] = children_by_kind
+
+            return result
+
+        tree = build_tree(node)
+
+        total_assertions = len([c for c in node.children if c.kind == NodeKind.ASSERTION])
+        covered_assertions = node.metrics.get("covered_assertions", 0) if node.metrics else 0
+        total_tests = node.metrics.get("total_tests", 0) if node.metrics else 0
+        passed_tests = node.metrics.get("passed_tests", 0) if node.metrics else 0
+
+        return json.dumps(
+            {
+                "tree": tree,
+                "summary": {
+                    "total_assertions": total_assertions,
+                    "covered_assertions": covered_assertions,
+                    "coverage_pct": node.metrics.get("coverage_pct", 0.0) if node.metrics else 0.0,
+                    "total_tests": total_tests,
+                    "passed_tests": passed_tests,
+                    "pass_rate_pct": node.metrics.get("pass_rate_pct", 0.0) if node.metrics else 0.0,
+                },
+            },
+            indent=2,
+        )
+
+    @mcp.resource("coverage://{req_id}")
+    def get_coverage_resource(req_id: str) -> str:
+        """
+        Get detailed coverage breakdown for a requirement.
+
+        Returns per-assertion coverage status, coverage sources,
+        implementing code, validating tests, and coverage gaps.
+        """
+        import json
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return json.dumps({"error": f"Requirement {req_id} not found in graph"})
+
+        assertions = []
+        gaps = []
+
+        for child in node.children:
+            if child.kind == NodeKind.ASSERTION:
+                assertion_info = {
+                    "id": child.id,
+                    "label": child.label,
+                    "covered": False,
+                    "coverage_source": None,
+                    "implementing_code": [],
+                    "validating_tests": [],
+                }
+
+                contributions = child.metrics.get("_coverage_contributions", [])
+                if contributions:
+                    assertion_info["covered"] = True
+                    first = contributions[0]
+                    if hasattr(first, "source_type"):
+                        assertion_info["coverage_source"] = (
+                            first.source_type.value
+                            if hasattr(first.source_type, "value")
+                            else str(first.source_type)
+                        )
+                    else:
+                        assertion_info["coverage_source"] = "unknown"
+
+                for code_child in child.children:
+                    if code_child.kind == NodeKind.CODE:
+                        code_info = {"id": code_child.id, "label": code_child.label}
+                        if code_child.source:
+                            code_info["file"] = code_child.source.path
+                            code_info["line"] = code_child.source.line
+                        assertion_info["implementing_code"].append(code_info)
+
+                for test_child in child.children:
+                    if test_child.kind == NodeKind.TEST:
+                        test_info = {
+                            "id": test_child.id,
+                            "label": test_child.label,
+                            "status": None,
+                        }
+                        if test_child.source:
+                            test_info["file"] = test_child.source.path
+                            test_info["line"] = test_child.source.line
+                        for result_child in test_child.children:
+                            if (
+                                result_child.kind == NodeKind.TEST_RESULT
+                                and result_child.test_result
+                            ):
+                                test_info["status"] = (
+                                    result_child.test_result.status.value
+                                    if result_child.test_result.status
+                                    else None
+                                )
+                        assertion_info["validating_tests"].append(test_info)
+
+                assertions.append(assertion_info)
+                if not assertion_info["covered"]:
+                    gaps.append(child.id)
+
+        metrics = node.metrics or {}
+
+        return json.dumps(
+            {
+                "id": req_id,
+                "label": node.label,
+                "assertions": assertions,
+                "gaps": gaps,
+                "summary": {
+                    "total_assertions": len(assertions),
+                    "covered_assertions": len([a for a in assertions if a["covered"]]),
+                    "coverage_pct": metrics.get("coverage_pct", 0.0),
+                    "direct_covered": metrics.get("direct_covered", 0),
+                    "explicit_covered": metrics.get("explicit_covered", 0),
+                    "inferred_covered": metrics.get("inferred_covered", 0),
+                },
+            },
+            indent=2,
+        )
+
+    @mcp.resource("hierarchy://{req_id}/ancestors")
+    def get_hierarchy_ancestors_resource(req_id: str) -> str:
+        """
+        Get ancestors (parents up to root) for a requirement.
+
+        Returns the chain of parent requirements from immediate
+        parent up to root-level requirements.
+        """
+        import json
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return json.dumps({"error": f"Requirement {req_id} not found in graph"})
+
+        ancestors = []
+        for ancestor in node.ancestors():
+            ancestor_info = {
+                "id": ancestor.id,
+                "kind": ancestor.kind.value,
+                "label": ancestor.label,
+                "depth": ancestor.depth,
+            }
+            if ancestor.source:
+                ancestor_info["source"] = {
+                    "file": ancestor.source.path,
+                    "line": ancestor.source.line,
+                }
+            ancestors.append(ancestor_info)
+
+        return json.dumps(
+            {
+                "id": req_id,
+                "depth": node.depth,
+                "ancestor_count": len(ancestors),
+                "ancestors": ancestors,
+            },
+            indent=2,
+        )
+
+    @mcp.resource("hierarchy://{req_id}/descendants")
+    def get_hierarchy_descendants_resource(req_id: str) -> str:
+        """
+        Get descendants (children down to leaves) for a requirement.
+
+        Returns all child nodes recursively including nested requirements,
+        assertions, code references, and tests.
+        """
+        import json
+        from elspais.core.graph import NodeKind
+
+        graph, _ = ctx.get_graph()
+        node = graph.find_by_id(req_id)
+
+        if node is None:
+            return json.dumps({"error": f"Requirement {req_id} not found in graph"})
+
+        def collect_descendants(n, depth=0, max_depth=10):
+            """Collect all descendants recursively."""
+            if depth > max_depth:
+                return []
+            descendants = []
+            for child in n.children:
+                child_info = {
+                    "id": child.id,
+                    "kind": child.kind.value,
+                    "label": child.label,
+                    "parent": n.id,
+                }
+                if child.source:
+                    child_info["source"] = {
+                        "file": child.source.path,
+                        "line": child.source.line,
+                    }
+                descendants.append(child_info)
+                descendants.extend(collect_descendants(child, depth + 1, max_depth))
+            return descendants
+
+        descendants = collect_descendants(node)
+
+        # Count by kind
+        counts_by_kind: Dict[str, int] = {}
+        for d in descendants:
+            kind = d["kind"]
+            counts_by_kind[kind] = counts_by_kind.get(kind, 0) + 1
+
+        return json.dumps(
+            {
+                "id": req_id,
+                "descendant_count": len(descendants),
+                "counts_by_kind": counts_by_kind,
+                "descendants": descendants,
+            },
+            indent=2,
+        )
+
 
 def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
     """Register MCP tools."""

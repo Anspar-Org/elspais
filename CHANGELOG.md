@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-01-25
+### Added
+- **MCP Graph Resources** - Alternative read-only access pattern for graph data
+  - `graph://status` - Staleness and node count statistics
+  - `graph://validation` - Current warnings/errors from graph build
+  - `traceability://{req_id}` - Full tree path from requirement to tests
+  - `coverage://{req_id}` - Per-assertion coverage breakdown with sources
+  - `hierarchy://{req_id}/ancestors` - Parent chain to root
+  - `hierarchy://{req_id}/descendants` - All child nodes recursively
+- 17 new tests in `tests/test_mcp/test_graph_resources.py`
+- **Phase 1 Complete** - All read-only graph MCP tools and resources are now available
+
 ## [0.15.0] - 2026-01-25
 ### Added
 - **`--depth` flag** for trace command - Control graph output depth
