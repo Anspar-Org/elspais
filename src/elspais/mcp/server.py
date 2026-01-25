@@ -1222,6 +1222,80 @@ def _register_tools(
         return response
 
     @mcp.tool()
+    def specialize_reference(
+        source_id: str,
+        target_id: str,
+        assertions: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Specialize a requirement reference to specific assertions.
+
+        Converts a REQ→REQ reference to REQ→Assertion using multi-assertion
+        syntax. For example:
+            Implements: REQ-p00001
+        becomes:
+            Implements: REQ-p00001-A-B-C
+
+        This allows more precise coverage tracking by linking child
+        requirements to specific parent assertions rather than the
+        entire parent requirement.
+
+        Args:
+            source_id: The requirement ID that contains the reference
+            target_id: The referenced requirement ID to specialize
+            assertions: List of assertion labels (e.g., ["A", "B", "C"])
+
+        Returns:
+            Result of the specialization including old and new reference strings
+        """
+        from elspais.mcp.mutator import GraphMutator
+
+        # Get the source requirement to find its file path
+        req = ctx.get_requirement(source_id)
+        if req is None:
+            return {
+                "success": False,
+                "error": f"Source requirement {source_id} not found",
+            }
+
+        if not req.file_path:
+            return {
+                "success": False,
+                "error": f"Source requirement {source_id} has no file path",
+            }
+
+        # Create mutator and perform the specialization
+        mutator = GraphMutator(ctx.working_dir)
+        result = mutator.specialize_reference(
+            source_id=source_id,
+            target_id=target_id,
+            assertions=assertions,
+            file_path=Path(req.file_path),
+        )
+
+        response: Dict[str, Any] = {
+            "success": result.success,
+            "source_id": result.source_id,
+            "target_id": result.target_id,
+            "assertions": result.assertions,
+            "message": result.message,
+        }
+
+        if result.old_reference:
+            response["old_reference"] = result.old_reference
+        if result.new_reference:
+            response["new_reference"] = result.new_reference
+        if result.file_path:
+            response["file_path"] = str(result.file_path)
+
+        # If successful, invalidate the requirements cache and graph
+        if result.success:
+            ctx._requirements_cache = None
+            ctx._graph_state = None
+
+        return response
+
+    @mcp.tool()
     def get_node_as_json(
         node_id: str,
         include_full_text: bool = True,

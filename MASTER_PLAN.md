@@ -272,7 +272,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 3.3 Implement Reference Specialization
+### [x] 3.3 Implement Reference Specialization
 
 - **Priority**: P2 - Key UC1 capability
 - **Description**: Convert REQ→REQ to REQ→Assertion references.
@@ -286,9 +286,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add MCP tool `specialize_reference()`
 - **Tests**: `tests/test_mcp/test_reference_specialize.py`
 - **Acceptance criteria**:
-  - [ ] Can specialize REQ ref to assertion ref
-  - [ ] Multi-assertion syntax works (A-B-C)
-  - [ ] Graph edges update correctly
+  - [x] Can specialize REQ ref to assertion ref
+  - [x] Multi-assertion syntax works (A-B-C)
+  - [x] Graph edges update correctly (cache invalidated after change)
+- **Resolution**: Added `ReferenceSpecialization` dataclass and `specialize_reference()` method to mutator with `_build_multi_assertion_ref()` and `_update_reference_in_line()` helpers. Added MCP tool `specialize_reference()` that invalidates cache on success. 16 new tests added.
 
 ---
 
@@ -339,11 +340,39 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
+## Phase 4: Interface Consolidation
+
+### [ ] 4.1 Consolidate All Interface Libraries
+
+- **Priority**: P2 - Code quality and maintainability
+- **Description**: Audit all interfaces (file I/O, user input, API, command line, MCP) and ensure each uses a single shared library. No duplicating of logic across modules.
+- **Files**: Various - determined by audit
+- **Tasks**:
+  - Audit file I/O operations across codebase - ensure single library for spec file loading (loader.py now consolidated)
+  - Audit configuration loading - ensure single config loader
+  - Audit pattern validation - ensure single PatternValidator usage
+  - Audit graph building - ensure single TraceGraphBuilder usage
+  - Audit CLI argument parsing - ensure consistent patterns
+  - Audit MCP tool implementations - ensure consistent patterns and shared helpers
+  - Create shared helper modules where duplication exists
+  - Document interface patterns in CLAUDE.md
+- **Tests**: Existing tests should continue to pass
+- **Acceptance criteria**:
+  - [ ] File I/O: Single library for reading/writing spec files
+  - [ ] Config: Single loader used everywhere
+  - [ ] Patterns: Single validator instance pattern
+  - [ ] Graph: Single builder pattern
+  - [ ] CLI: Consistent argument handling
+  - [ ] MCP: Shared helpers for common operations
+
+---
+
 ## Completion Checklist
 
 - [x] All Phase 1 items complete
 - [x] All Phase 2 items complete
 - [ ] All Phase 3 items complete
+- [ ] All Phase 4 items complete
 - [ ] All tests passing
 - [ ] Documentation updated in CLAUDE.md
 - [ ] Version bumped in pyproject.toml

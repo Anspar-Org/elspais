@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-01-25
+### Added
+- **Reference Specialization** - Convert REQ→REQ references to REQ→Assertion
+  - `specialize_reference()` in mutator for converting `Implements: REQ-p00001` to `Implements: REQ-p00001-A-B-C`
+  - Multi-assertion syntax support (combines assertion labels with hyphens)
+  - MCP tool `specialize_reference()` with cache invalidation on success
+  - 16 new tests in `test_reference_specialize.py`
+- **Recursive Parsing** - Fix for files in subdirectories not being parsed
+  - Added `recursive` parameter to `parse_directory()` and `parse_directories()`
+  - Files in `spec/regulations/fda/` now properly included in graph
+  - Context.py mtime tracking now matches actual parsing behavior
+### Changed
+- **Loader Consolidation** - Single source of truth for spec file loading
+  - `loader.py` now provides `create_parser()`, `parse_requirements_from_directories()`, `load_requirements_from_directories()`
+  - `context.py` and `validate.py` use shared loader instead of duplicating parsing logic
+  - Removed duplicate `load_requirements_from_repo()` from `validate.py`
+
 ## [0.18.0] - 2026-01-25
 ### Added
 - **Graph Manipulation Foundation** - Foundation for AI-assisted graph operations via MCP

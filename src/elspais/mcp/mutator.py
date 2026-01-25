@@ -23,6 +23,31 @@ class ReferenceType(Enum):
 
 
 @dataclass
+class ReferenceSpecialization:
+    """Result of a reference specialization operation.
+
+    Attributes:
+        success: Whether the specialization was successful
+        source_id: The requirement ID that was modified
+        target_id: The original requirement reference (e.g., REQ-p00001)
+        assertions: The assertions that were specialized to
+        old_reference: The original reference string
+        new_reference: The new specialized reference string
+        file_path: Path to the modified file
+        message: Description of the result or error
+    """
+
+    success: bool
+    source_id: str
+    target_id: str
+    assertions: List[str]
+    old_reference: str
+    new_reference: str
+    file_path: Optional[Path]
+    message: str
+
+
+@dataclass
 class ReferenceChange:
     """Result of a reference type change operation.
 
@@ -610,6 +635,248 @@ class GraphMutator:
                 target_id=target_id,
                 old_type=None,
                 new_type=new_type,
+                file_path=file_path,
+                message=str(e),
+            )
+
+    def _build_multi_assertion_ref(self, target_id: str, assertions: List[str]) -> str:
+        """
+        Build a multi-assertion reference string.
+
+        Combines the target ID with assertion labels using the multi-assertion
+        syntax: REQ-p00001-A-B-C
+
+        Args:
+            target_id: The base requirement ID (e.g., "REQ-p00001")
+            assertions: List of assertion labels (e.g., ["A", "B", "C"])
+
+        Returns:
+            Multi-assertion reference string (e.g., "REQ-p00001-A-B-C")
+        """
+        if not assertions:
+            return target_id
+        return f"{target_id}-{'-'.join(assertions)}"
+
+    def _update_reference_in_line(
+        self,
+        line: str,
+        target_id: str,
+        new_reference: str,
+        ref_type: ReferenceType,
+    ) -> str:
+        """
+        Update a specific reference in the metadata line.
+
+        Args:
+            line: The metadata line containing the reference
+            target_id: The reference to replace
+            new_reference: The new reference string
+            ref_type: The type of reference field (IMPLEMENTS or REFINES)
+
+        Returns:
+            Updated metadata line with the reference replaced
+        """
+        if ref_type == ReferenceType.IMPLEMENTS:
+            pattern = self.IMPLEMENTS_PATTERN
+            field_name = "Implements"
+        else:
+            pattern = self.REFINES_PATTERN
+            field_name = "Refines"
+
+        match = pattern.search(line)
+        if not match:
+            return line
+
+        refs_str = match.group("refs")
+        refs = self._parse_reference_list(refs_str)
+
+        # Replace the target_id with new_reference
+        new_refs = []
+        for ref in refs:
+            if ref == target_id:
+                new_refs.append(new_reference)
+            else:
+                new_refs.append(ref)
+
+        new_refs_str = self._build_refs_string(new_refs)
+        old_field = match.group(0)
+        new_field = f"**{field_name}**: {new_refs_str}"
+
+        return line.replace(old_field, new_field)
+
+    def specialize_reference(
+        self,
+        source_id: str,
+        target_id: str,
+        assertions: List[str],
+        file_path: Path,
+    ) -> ReferenceSpecialization:
+        """
+        Specialize a requirement reference to specific assertions.
+
+        Converts a reference from REQ→REQ form to REQ→Assertion form using
+        the multi-assertion syntax (e.g., REQ-p00001-A-B-C).
+
+        For example, converting:
+            Implements: REQ-p00001
+        to:
+            Implements: REQ-p00001-A-B-C
+
+        Args:
+            source_id: The requirement ID that contains the reference
+            target_id: The referenced requirement ID to specialize
+            assertions: List of assertion labels to specialize to (e.g., ["A", "B"])
+            file_path: Path to the spec file containing the source requirement
+
+        Returns:
+            ReferenceSpecialization with the result of the operation
+        """
+        # Validate assertions
+        if not assertions:
+            return ReferenceSpecialization(
+                success=False,
+                source_id=source_id,
+                target_id=target_id,
+                assertions=assertions,
+                old_reference=target_id,
+                new_reference="",
+                file_path=file_path,
+                message="No assertions specified for specialization",
+            )
+
+        # Validate assertion labels (should be single letters or numbers)
+        for label in assertions:
+            if not (
+                (len(label) == 1 and label.isupper() and label.isalpha())
+                or (len(label) <= 2 and label.isdigit())
+            ):
+                return ReferenceSpecialization(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    assertions=assertions,
+                    old_reference=target_id,
+                    new_reference="",
+                    file_path=file_path,
+                    message=f"Invalid assertion label: {label}. Must be a single uppercase letter (A-Z) or 1-2 digit number.",
+                )
+
+        new_reference = self._build_multi_assertion_ref(target_id, assertions)
+
+        try:
+            # Read the spec file
+            content = self._read_spec_file(file_path)
+
+            # Find the requirement location
+            location = self._find_requirement_lines(content, source_id)
+            if location is None:
+                return ReferenceSpecialization(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    assertions=assertions,
+                    old_reference=target_id,
+                    new_reference=new_reference,
+                    file_path=file_path,
+                    message=f"Requirement {source_id} not found in {file_path}",
+                )
+
+            # Extract requirement text
+            req_text = self.get_requirement_text(content, location)
+
+            # Find the metadata line
+            meta_idx, meta_line = self._find_metadata_line(req_text)
+            if meta_line is None:
+                return ReferenceSpecialization(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    assertions=assertions,
+                    old_reference=target_id,
+                    new_reference=new_reference,
+                    file_path=file_path,
+                    message=f"Metadata line not found in requirement {source_id}",
+                )
+
+            # Find the reference in the line
+            ref_type, refs = self._find_reference_in_line(meta_line, target_id)
+            if ref_type is None:
+                return ReferenceSpecialization(
+                    success=False,
+                    source_id=source_id,
+                    target_id=target_id,
+                    assertions=assertions,
+                    old_reference=target_id,
+                    new_reference=new_reference,
+                    file_path=file_path,
+                    message=f"Reference to {target_id} not found in {source_id}",
+                )
+
+            # Check if already specialized (contains assertion suffix)
+            # A specialized reference would be like REQ-p00001-A or REQ-p00001-A-B
+            if target_id.count("-") > 1:
+                # Check if last part looks like assertion
+                parts = target_id.rsplit("-", 1)
+                if len(parts) == 2:
+                    suffix = parts[1]
+                    if (len(suffix) == 1 and suffix.isupper()) or suffix.isdigit():
+                        return ReferenceSpecialization(
+                            success=False,
+                            source_id=source_id,
+                            target_id=target_id,
+                            assertions=assertions,
+                            old_reference=target_id,
+                            new_reference=new_reference,
+                            file_path=file_path,
+                            message=f"Reference {target_id} appears to already be specialized",
+                        )
+
+            # Update the metadata line
+            new_meta_line = self._update_reference_in_line(
+                meta_line, target_id, new_reference, ref_type
+            )
+
+            # Replace the line in requirement text
+            req_lines = req_text.split("\n")
+            req_lines[meta_idx] = new_meta_line
+            new_req_text = "\n".join(req_lines)
+
+            # Replace requirement in file content
+            new_content = self.replace_requirement_text(content, location, new_req_text)
+
+            # Write back to file
+            self._write_spec_file(file_path, new_content)
+
+            return ReferenceSpecialization(
+                success=True,
+                source_id=source_id,
+                target_id=target_id,
+                assertions=assertions,
+                old_reference=target_id,
+                new_reference=new_reference,
+                file_path=file_path,
+                message=f"Specialized reference from {target_id} to {new_reference}",
+            )
+
+        except FileNotFoundError as e:
+            return ReferenceSpecialization(
+                success=False,
+                source_id=source_id,
+                target_id=target_id,
+                assertions=assertions,
+                old_reference=target_id,
+                new_reference=new_reference,
+                file_path=file_path,
+                message=str(e),
+            )
+        except ValueError as e:
+            return ReferenceSpecialization(
+                success=False,
+                source_id=source_id,
+                target_id=target_id,
+                assertions=assertions,
+                old_reference=target_id,
+                new_reference=new_reference,
                 file_path=file_path,
                 message=str(e),
             )

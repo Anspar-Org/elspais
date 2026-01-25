@@ -115,7 +115,7 @@ elspais init --type associated    # Initialize associated repository
   - **server.py**: MCP server with resources and tools
   - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching, file-to-node tracking, and incremental refresh via `partial_refresh(changed_files)`
   - **serializers.py**: JSON serialization helpers including `serialize_node_full()` for AI transformations
-  - **mutator.py**: `GraphMutator` for graph-to-filesystem sync operations (`change_reference_type`, requirement text extraction/replacement)
+  - **mutator.py**: `GraphMutator` for graph-to-filesystem sync operations (`change_reference_type`, `specialize_reference`, requirement text extraction/replacement)
   - **transforms.py**: `AITransformer` for AI-assisted requirement transformations, `ClaudeInvoker` for subprocess calls to `claude -p`
   - **annotations.py**: `AnnotationStore` for session-scoped annotations and tags (in-memory, not persisted to files)
   - **git_safety.py**: `GitSafetyManager` for creating safety branches before risky operations, with restore capability
@@ -133,6 +133,7 @@ elspais init --type associated    # Initialize associated repository
     - `get_graph_status()`, `refresh_graph()`, `get_hierarchy()`, `get_traceability_path()`
     - `get_coverage_breakdown()`, `list_by_criteria()`, `show_requirement_context()`
     - `change_reference_type()` - switch Implements ↔ Refines in spec files
+    - `specialize_reference()` - convert REQ→REQ to REQ→Assertion (e.g., `REQ-p00001-A-B-C`)
     - `get_node_as_json()` - full node serialization for AI processing
     - `transform_with_ai()` - AI-assisted requirement transformation with git safety
     - `restore_from_safety_branch()`, `list_safety_branches()` - git branch management
