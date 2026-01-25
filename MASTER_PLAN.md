@@ -293,53 +293,6 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 3.4 Implement Requirement Move
-
-- **Priority**: P3 - UC3 capability
-- **Description**: Move requirements between spec files.
-- **Files**:
-  - `src/elspais/mcp/mutator.py`
-  - `src/elspais/mcp/server.py`
-- **Tasks**:
-  - Implement `move_requirement(req_id, target_file, position, after_id)` in mutator
-  - Extract requirement text from source file
-  - Insert at target file with proper positioning
-  - Remove from source file
-  - Add MCP tool `move_requirement()`
-- **Tests**: `tests/test_mcp/test_requirement_move.py`
-- **Acceptance criteria**:
-  - [ ] Requirement removed from source file
-  - [ ] Requirement added to target file
-  - [ ] Position options work (start/end/after)
-  - [ ] References remain valid
-
----
-
-### [ ] 3.5 Implement File Deletion Workflow
-
-- **Priority**: P3 - UC4 capability
-- **Description**: Prepare and execute spec file deletion.
-- **Files**:
-  - `src/elspais/mcp/mutator.py`
-  - `src/elspais/mcp/server.py`
-- **Tasks**:
-  - Implement `analyze_file_for_deletion(source_file)`:
-    - Find remaining REQ/JNY entries
-    - Extract non-requirement content
-    - Return deletion readiness status
-  - Implement `extract_and_delete(source_file, content_target)`:
-    - Extract content to target file
-    - Delete source file
-  - Add MCP tools `prepare_file_deletion()` and `extract_and_delete()`
-- **Tests**: `tests/test_mcp/test_file_deletion.py`
-- **Acceptance criteria**:
-  - [ ] Detects remaining requirements
-  - [ ] Extracts non-requirement content
-  - [ ] Refuses to delete file with remaining requirements
-  - [ ] Deletes empty file successfully
-
----
-
 ## Phase 4: Interface Consolidation
 
 ### [ ] 4.1 Consolidate All Interface Libraries
@@ -367,12 +320,62 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
+## Phase 5: Extended Write Operations
+
+### [ ] 5.1 Implement Requirement Move
+
+- **Priority**: P3 - UC3 capability
+- **Description**: Move requirements between spec files.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `move_requirement(req_id, target_file, position, after_id)` in mutator
+  - Extract requirement text from source file
+  - Insert at target file with proper positioning
+  - Remove from source file
+  - Add MCP tool `move_requirement()`
+- **Tests**: `tests/test_mcp/test_requirement_move.py`
+- **Acceptance criteria**:
+  - [ ] Requirement removed from source file
+  - [ ] Requirement added to target file
+  - [ ] Position options work (start/end/after)
+  - [ ] References remain valid
+
+---
+
+### [ ] 5.2 Implement File Deletion Workflow
+
+- **Priority**: P3 - UC4 capability
+- **Description**: Prepare and execute spec file deletion.
+- **Files**:
+  - `src/elspais/mcp/mutator.py`
+  - `src/elspais/mcp/server.py`
+- **Tasks**:
+  - Implement `analyze_file_for_deletion(source_file)`:
+    - Find remaining REQ/JNY entries
+    - Extract non-requirement content
+    - Return deletion readiness status
+  - Implement `extract_and_delete(source_file, content_target)`:
+    - Extract content to target file
+    - Delete source file
+  - Add MCP tools `prepare_file_deletion()` and `extract_and_delete()`
+- **Tests**: `tests/test_mcp/test_file_deletion.py`
+- **Acceptance criteria**:
+  - [ ] Detects remaining requirements
+  - [ ] Extracts non-requirement content
+  - [ ] Refuses to delete file with remaining requirements
+  - [ ] Deletes empty file successfully
+
+---
+
 ## Completion Checklist
 
 - [x] All Phase 1 items complete
 - [x] All Phase 2 items complete
-- [ ] All Phase 3 items complete
+- [x] All Phase 3 items complete
 - [ ] All Phase 4 items complete
+- [ ] All Phase 5 items complete
 - [ ] All tests passing
 - [ ] Documentation updated in CLAUDE.md
 - [ ] Version bumped in pyproject.toml
@@ -395,6 +398,8 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 - Each issue should result in a single commit or small commit series
 - Phase 2 depends on Phase 1 completion
 - Phase 3 depends on Phase 2 completion (except 3.1 which can start after 1.1)
+- Phase 4 can run in parallel with Phase 5
+- Phase 5 depends on Phase 3 completion
 - Run full test suite before marking complete
 - Update CHANGELOG.md for user-visible changes
 - Update CLAUDE.md if architecture changes significantly
