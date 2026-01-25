@@ -44,15 +44,16 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 3: Update coverage report with direct/explicit vs inferred breakdown
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P2 - Feature completion (completes coverage semantics work)
 - **Description**: Coverage report should treat direct and explicit coverage equally. Report both "Direct/Explicit" numbers and "Inferred (including direct/explicit)" numbers. Avoid double-counting.
 - **Files likely involved**: `src/elspais/core/graph_builder.py`, `src/elspais/core/graph_schema.py`, report generators
 - **Acceptance criteria**:
-  - [ ] Report shows "Direct/Explicit" coverage count
-  - [ ] Report shows "Inferred (total including direct/explicit)" count
-  - [ ] Inferred count >= Direct/Explicit count (no double-counting)
-  - [ ] Update any affected tests
+  - [x] Report shows "Direct/Explicit" coverage count
+  - [x] Report shows "Inferred (total including direct/explicit)" count
+  - [x] Inferred count >= Direct/Explicit count (no double-counting)
+  - [x] Update any affected tests (all 719 tests pass)
+- **Resolution**: Added direct_covered, explicit_covered, inferred_covered to standard/full report presets. Updated summary metrics table to show breakdown with "Direct/Explicit (high confidence)" combined count.
 
 ---
 

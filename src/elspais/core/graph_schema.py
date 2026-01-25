@@ -173,6 +173,9 @@ class ReportSchema:
                 metric_fields=[
                     "total_assertions",
                     "covered_assertions",
+                    "direct_covered",
+                    "explicit_covered",
+                    "inferred_covered",
                     "coverage_pct",
                 ],
                 include_children=True,
@@ -193,6 +196,9 @@ class ReportSchema:
                 metric_fields=[
                     "total_assertions",
                     "covered_assertions",
+                    "direct_covered",
+                    "explicit_covered",
+                    "inferred_covered",
                     "total_tests",
                     "passed_tests",
                     "failed_tests",

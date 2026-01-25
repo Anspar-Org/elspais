@@ -632,6 +632,16 @@ def generate_graph_markdown(tree, report_schema=None) -> str:
         covered_assertions = sum(
             r.metrics.get("covered_assertions", 0) for r in tree.roots
         )
+        # Coverage breakdown by source type
+        direct_covered = sum(
+            r.metrics.get("direct_covered", 0) for r in tree.roots
+        )
+        explicit_covered = sum(
+            r.metrics.get("explicit_covered", 0) for r in tree.roots
+        )
+        inferred_covered = sum(
+            r.metrics.get("inferred_covered", 0) for r in tree.roots
+        )
         total_tests = sum(r.metrics.get("total_tests", 0) for r in tree.roots)
         passed_tests = sum(r.metrics.get("passed_tests", 0) for r in tree.roots)
 
@@ -640,6 +650,9 @@ def generate_graph_markdown(tree, report_schema=None) -> str:
         )
         pass_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
 
+        # Direct + Explicit are high-confidence coverage
+        direct_explicit = direct_covered + explicit_covered
+
         lines.extend([
             "## Summary Metrics",
             "",
@@ -647,6 +660,10 @@ def generate_graph_markdown(tree, report_schema=None) -> str:
             f"|--------|-------|",
             f"| Total Assertions | {total_assertions} |",
             f"| Covered Assertions | {covered_assertions} |",
+            f"| — Direct (test→assertion) | {direct_covered} |",
+            f"| — Explicit (REQ→assertion) | {explicit_covered} |",
+            f"| — Inferred (REQ→REQ) | {inferred_covered} |",
+            f"| Direct/Explicit (high confidence) | {direct_explicit} |",
             f"| Coverage | {coverage_pct:.1f}% |",
             f"| Total Tests | {total_tests} |",
             f"| Passed Tests | {passed_tests} |",
