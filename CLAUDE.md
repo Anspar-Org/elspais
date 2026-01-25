@@ -55,6 +55,11 @@ elspais trace --graph-json                # Output full graph structure as JSON
 elspais trace --graph --report minimal    # Use minimal report (id, title, status only)
 elspais trace --graph --report standard   # Use standard report with coverage metrics
 elspais trace --graph --report full       # Use full report with all metrics
+elspais trace --graph --depth 2           # Limit depth to 2 levels (numeric)
+elspais trace --graph --depth requirements # Show requirements hierarchy only (depth=1)
+elspais trace --graph --depth assertions  # Include assertions (depth=2)
+elspais trace --graph --depth implementation # Include code/tests (depth=3)
+elspais trace --graph --depth full        # Show unlimited depth (default)
 
 # AI-assisted requirement reformatting
 elspais reformat-with-claude --dry-run              # Preview reformatting

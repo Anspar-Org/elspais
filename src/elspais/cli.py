@@ -225,6 +225,15 @@ Common rules to skip:
         metavar="NAME",
         help="Report preset to use (minimal, standard, full, or custom)",
     )
+    trace_parser.add_argument(
+        "--depth",
+        metavar="LEVEL",
+        help=(
+            "Maximum graph depth to display. Can be a number (0=roots, 1=children, ...) "
+            "or a named level: requirements (1), assertions (2), implementation (3), "
+            "full (unlimited)"
+        ),
+    )
 
     # hash command
     hash_parser = subparsers.add_parser(

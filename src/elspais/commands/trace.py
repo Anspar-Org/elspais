@@ -169,6 +169,30 @@ def run_graph_trace(args: argparse.Namespace) -> int:
         print(f"Warning: Unknown report '{report_name}', using 'standard'", file=sys.stderr)
         report_schema = report_presets["standard"]
 
+    # Apply --depth override if provided
+    depth_arg = getattr(args, "depth", None)
+    if depth_arg is not None:
+        # Named depth levels mapping
+        depth_map = {
+            "requirements": 1,
+            "reqs": 1,
+            "assertions": 2,
+            "implementation": 3,
+            "impl": 3,
+            "full": None,
+            "unlimited": None,
+        }
+        if depth_arg.lower() in depth_map:
+            report_schema.max_depth = depth_map[depth_arg.lower()]
+        else:
+            try:
+                report_schema.max_depth = int(depth_arg)
+            except ValueError:
+                print(
+                    f"Warning: Invalid depth '{depth_arg}', using report default",
+                    file=sys.stderr,
+                )
+
     # Handle JSON output
     if getattr(args, "graph_json", False):
         output = graph_to_json(graph)

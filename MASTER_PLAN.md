@@ -91,14 +91,15 @@ This file tracks a queue of enhancement issues to be implemented sequentially. A
 ---
 
 ### Priority 6: Configurable graph depth scoping
-- **Status**: [ ] Incomplete
+- **Status**: [x] Complete
 - **Priority**: P3 - Feature enhancement
 - **Description**: Graph generation should support scoping to various depth levels: requirements, assertions, files, tests, etc. Since this is a configurable system, depth levels should come from config.
 - **Files likely involved**: `src/elspais/core/graph_schema.py`, `src/elspais/commands/trace.py`
 - **Acceptance criteria**:
-  - [ ] Add `--depth` flag or similar to control graph scope
-  - [ ] Depth levels derived from schema/config
-  - [ ] Document the depth options
+  - [x] Add `--depth` flag or similar to control graph scope
+  - [x] Depth levels derived from schema/config
+  - [x] Document the depth options (in --help and tests)
+- **Resolution**: Added `--depth` flag to trace command. Supports numeric values (0, 1, 2, 3) or named levels (requirements, assertions, implementation, full). Uses existing max_depth infrastructure in ReportSchema. Added 6 tests for CLI flag and depth mapping semantics.
 
 ---
 

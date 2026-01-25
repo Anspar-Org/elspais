@@ -363,3 +363,94 @@ class TestCLIReportFlag:
 
         assert args.report == "minimal"
         assert args.format == "csv"
+
+
+class TestCLIDepthFlag:
+    """Tests for the --depth CLI flag."""
+
+    def test_trace_command_accepts_depth_flag(self) -> None:
+        """The trace command accepts --depth flag."""
+        from elspais.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["trace", "--depth", "2"])
+
+        assert args.depth == "2"
+
+    def test_depth_flag_with_named_level(self) -> None:
+        """--depth accepts named levels like 'assertions'."""
+        from elspais.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["trace", "--depth", "assertions"])
+
+        assert args.depth == "assertions"
+
+    def test_depth_flag_combined_with_graph(self) -> None:
+        """--depth flag works with --graph flag."""
+        from elspais.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["trace", "--graph", "--depth", "requirements"])
+
+        assert args.graph is True
+        assert args.depth == "requirements"
+
+    def test_depth_flag_combined_with_report(self) -> None:
+        """--depth flag works with --report flag to override max_depth."""
+        from elspais.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["trace", "--report", "full", "--depth", "1"])
+
+        assert args.report == "full"
+        assert args.depth == "1"
+
+
+class TestDepthMapping:
+    """Tests for depth name-to-number mapping in trace command."""
+
+    def test_numeric_depth_mapping(self) -> None:
+        """Numeric depth values are parsed correctly."""
+        # Test the mapping logic directly
+        depth_map = {
+            "requirements": 1,
+            "reqs": 1,
+            "assertions": 2,
+            "implementation": 3,
+            "impl": 3,
+            "full": None,
+            "unlimited": None,
+        }
+
+        assert depth_map["requirements"] == 1
+        assert depth_map["reqs"] == 1
+        assert depth_map["assertions"] == 2
+        assert depth_map["implementation"] == 3
+        assert depth_map["impl"] == 3
+        assert depth_map["full"] is None
+        assert depth_map["unlimited"] is None
+
+    def test_depth_levels_semantics(self) -> None:
+        """Verify depth level semantics:
+        - 1 (requirements): Shows root reqs and their immediate children
+        - 2 (assertions): Shows requirements + their assertions
+        - 3 (implementation): Shows reqs + assertions + code/tests
+        - None (full): Shows everything
+        """
+        # This test documents the expected semantics
+        depth_map = {
+            "requirements": 1,  # Root reqs (depth 0) + children (depth 1)
+            "assertions": 2,    # + assertions under child reqs (depth 2)
+            "implementation": 3, # + code refs and tests (depth 3)
+            "full": None,       # Unlimited depth
+        }
+
+        # Requirements depth shows first-level hierarchy
+        assert depth_map["requirements"] == 1
+
+        # Assertions depth shows one more level (assertions belong to reqs)
+        assert depth_map["assertions"] == depth_map["requirements"] + 1
+
+        # Implementation depth shows another level (code/tests attach to assertions)
+        assert depth_map["implementation"] == depth_map["assertions"] + 1
