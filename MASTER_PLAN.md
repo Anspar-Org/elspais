@@ -32,7 +32,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Implement `get_graph(force_refresh=False)` method
   - Implement `_build_graph()` using `TraceGraphBuilder`
   - Implement `is_stale()` checking file mtimes
-- **Tests**: `tests/mcp/test_context_graph.py`
+- **Tests**: `tests/test_mcp/test_context_graph.py`
 - **Acceptance criteria**:
   - [x] GraphState dataclass defined
   - [x] get_graph() returns cached graph on repeated calls
@@ -42,7 +42,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 1.2 Add Graph Status MCP Tool
+### [x] 1.2 Add Graph Status MCP Tool
 
 - **Priority**: P1 - Enables graph introspection
 - **Description**: Expose graph state information via MCP tool.
@@ -57,9 +57,10 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add `refresh_graph(full=False)` tool
 - **Tests**: `tests/test_mcp/test_graph_tools.py`
 - **Acceptance criteria**:
-  - [ ] get_graph_status returns correct staleness
-  - [ ] Node counts match actual graph
-  - [ ] refresh_graph triggers rebuild
+  - [x] get_graph_status returns correct staleness
+  - [x] Node counts match actual graph
+  - [x] refresh_graph triggers rebuild
+- **Resolution**: Added `get_graph_status()` and `refresh_graph()` MCP tools. Renamed `tests/mcp/` to `tests/test_mcp/` to avoid namespace collision with the `mcp` package. 8 new tests added.
 
 ---
 

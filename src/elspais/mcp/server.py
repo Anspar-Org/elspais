@@ -281,6 +281,84 @@ def _register_tools(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         else:
             return {"error": f"Unknown analysis type: {analysis_type}"}
 
+    @mcp.tool()
+    def get_graph_status() -> Dict[str, Any]:
+        """
+        Get current traceability graph status and statistics.
+
+        Returns information about the graph cache state, including
+        whether it's stale, which files have changed, node counts
+        by type, and when the graph was last built.
+
+        This is useful for checking if the graph needs refresh
+        and for understanding the graph structure.
+        """
+        from elspais.core.graph import NodeKind
+
+        is_stale = ctx.is_graph_stale()
+        stale_files = ctx.get_stale_files()
+        built_at = ctx.get_graph_built_at()
+
+        # Get node counts if graph exists
+        node_counts: Dict[str, int] = {}
+        total_nodes = 0
+        if ctx._graph_state is not None:
+            graph = ctx._graph_state.graph
+            counts = graph.count_by_kind()
+            node_counts = {kind.value: count for kind, count in counts.items()}
+            total_nodes = graph.node_count()
+
+        return {
+            "is_stale": is_stale,
+            "stale_files": [str(f) for f in stale_files],
+            "has_graph": ctx._graph_state is not None,
+            "node_counts": node_counts,
+            "total_nodes": total_nodes,
+            "last_built": built_at,
+        }
+
+    @mcp.tool()
+    def refresh_graph(full: bool = False) -> Dict[str, Any]:
+        """
+        Refresh the traceability graph.
+
+        Forces a rebuild of the graph from spec files. Use this
+        after making changes to requirements if you need immediate
+        access to updated graph data.
+
+        Args:
+            full: If True, force full rebuild even if not stale.
+                  If False, only rebuild if stale files detected.
+
+        Returns:
+            Graph status after refresh including node counts.
+        """
+        from elspais.core.graph import NodeKind
+
+        was_stale = ctx.is_graph_stale()
+        stale_before = ctx.get_stale_files()
+
+        # Trigger graph refresh
+        graph, validation = ctx.get_graph(force_refresh=full)
+
+        # Get updated stats
+        counts = graph.count_by_kind()
+        node_counts = {kind.value: count for kind, count in counts.items()}
+
+        return {
+            "refreshed": True,
+            "was_stale": was_stale,
+            "files_refreshed": [str(f) for f in stale_before] if was_stale else [],
+            "node_counts": node_counts,
+            "total_nodes": graph.node_count(),
+            "validation": {
+                "is_valid": validation.is_valid,
+                "error_count": len(validation.errors),
+                "warning_count": len(validation.warnings),
+            },
+            "last_built": ctx.get_graph_built_at(),
+        }
+
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze requirement hierarchy."""
