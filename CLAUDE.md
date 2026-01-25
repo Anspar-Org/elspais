@@ -115,7 +115,7 @@ elspais init --type associated    # Initialize associated repository
   - **server.py**: MCP server with resources and tools
   - **context.py**: `WorkspaceContext`, `GraphState`, `TrackedFile` - context management with graph caching, file-to-node tracking, and incremental refresh via `partial_refresh(changed_files)`
   - **serializers.py**: JSON serialization helpers including `serialize_node_full()` for AI transformations
-  - **mutator.py**: `SpecFileMutator` for spec file mutation operations (`change_reference_type`, `specialize_reference`, `move_requirement`, requirement text extraction/replacement)
+  - **mutator.py**: `SpecFileMutator` for spec file mutation operations (`change_reference_type`, `specialize_reference`, `move_requirement`, `analyze_file_for_deletion`, `delete_spec_file`, requirement text extraction/replacement)
   - **transforms.py**: `AITransformer` for AI-assisted requirement transformations, `ClaudeInvoker` for subprocess calls to `claude -p`
   - **annotations.py**: `AnnotationStore` for session-scoped annotations and tags (in-memory, not persisted to files)
   - **git_safety.py**: `GitSafetyManager` for creating safety branches before risky operations, with restore capability
@@ -135,6 +135,8 @@ elspais init --type associated    # Initialize associated repository
     - `change_reference_type()` - switch Implements ↔ Refines in spec files
     - `specialize_reference()` - convert REQ→REQ to REQ→Assertion (e.g., `REQ-p00001-A-B-C`)
     - `move_requirement()` - move requirement between spec files with position control (start/end/after)
+    - `prepare_file_deletion()` - analyze file for safe deletion (check remaining reqs, non-req content)
+    - `delete_spec_file()` - delete spec file with force flag and content extraction options
     - `get_node_as_json()` - full node serialization for AI processing
     - `transform_with_ai()` - AI-assisted requirement transformation with git safety
     - `restore_from_safety_branch()`, `list_safety_branches()` - git branch management

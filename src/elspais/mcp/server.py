@@ -1381,6 +1381,92 @@ def _register_tools(
         return response
 
     @mcp.tool()
+    def prepare_file_deletion(
+        file_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Analyze a spec file to determine if it can be safely deleted.
+
+        This tool checks for remaining requirements and non-requirement content
+        that might need to be preserved before deletion. Use this before
+        calling delete_spec_file to understand what will be affected.
+
+        Args:
+            file_path: Path to the spec file to analyze (relative to workspace)
+
+        Returns:
+            Analysis including:
+            - can_delete: Whether the file can be safely deleted
+            - remaining_requirements: List of requirement IDs still in file
+            - has_non_requirement_content: Whether there's content to preserve
+            - non_requirement_content: The content that would be lost
+        """
+        from elspais.mcp.mutator import SpecFileMutator
+
+        mutator = SpecFileMutator(ctx.working_dir)
+        result = mutator.analyze_file_for_deletion(Path(file_path))
+
+        return {
+            "can_delete": result.can_delete,
+            "file_path": str(result.file_path),
+            "remaining_requirements": result.remaining_requirements,
+            "has_non_requirement_content": result.has_non_requirement_content,
+            "non_requirement_content": result.non_requirement_content,
+            "message": result.message,
+        }
+
+    @mcp.tool()
+    def delete_spec_file(
+        file_path: str,
+        force: bool = False,
+        extract_content_to: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Delete a spec file, optionally extracting non-requirement content.
+
+        By default, refuses to delete files with remaining requirements.
+        Use force=True to delete anyway (requirements will be lost).
+
+        IMPORTANT: Use prepare_file_deletion first to understand what
+        will be affected. Move requirements to other files before deletion
+        using move_requirement.
+
+        Args:
+            file_path: Path to the spec file to delete (relative to workspace)
+            force: If True, delete even if requirements remain (data loss!)
+            extract_content_to: If provided, extract non-requirement content
+                               to this file before deletion
+
+        Returns:
+            Result including success status and what was done
+        """
+        from elspais.mcp.mutator import SpecFileMutator
+
+        mutator = SpecFileMutator(ctx.working_dir)
+        result = mutator.delete_spec_file(
+            file_path=Path(file_path),
+            force=force,
+            extract_content_to=Path(extract_content_to) if extract_content_to else None,
+        )
+
+        response: Dict[str, Any] = {
+            "success": result.success,
+            "file_path": str(result.file_path),
+            "content_extracted": result.content_extracted,
+            "message": result.message,
+        }
+
+        if result.content_target:
+            response["content_target"] = str(result.content_target)
+
+        # If successful, invalidate the requirements cache and graph
+        if result.success:
+            ctx._requirements_cache = None
+            ctx._graph_state = None
+
+        return response
+
+    @mcp.tool()
     def get_node_as_json(
         node_id: str,
         include_full_text: bool = True,

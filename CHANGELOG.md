@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Properly handles whitespace and separators
   - MCP tool `move_requirement()` with cache invalidation on success
   - 35 new tests in `test_requirement_move.py`
+- **File Deletion Workflow** - Safely delete spec files via MCP
+  - `analyze_file_for_deletion()` checks for remaining requirements and non-req content
+  - `delete_spec_file()` with force flag and content extraction options
+  - MCP tools `prepare_file_deletion()` and `delete_spec_file()`
+  - Refuses deletion when requirements exist (unless force=True)
+  - 24 new tests in `test_file_deletion.py`
 
 ## [0.19.0] - 2026-01-25
 ### Added

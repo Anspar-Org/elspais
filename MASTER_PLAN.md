@@ -382,7 +382,7 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 5.2 Implement File Deletion Workflow
+### [x] 5.2 Implement File Deletion Workflow
 
 - **Priority**: P3 - UC4 capability
 - **Description**: Prepare and execute spec file deletion.
@@ -400,10 +400,11 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add MCP tools `prepare_file_deletion()` and `extract_and_delete()`
 - **Tests**: `tests/test_mcp/test_file_deletion.py`
 - **Acceptance criteria**:
-  - [ ] Detects remaining requirements
-  - [ ] Extracts non-requirement content
-  - [ ] Refuses to delete file with remaining requirements
-  - [ ] Deletes empty file successfully
+  - [x] Detects remaining requirements
+  - [x] Extracts non-requirement content
+  - [x] Refuses to delete file with remaining requirements
+  - [x] Deletes empty file successfully
+- **Resolution**: Added `FileDeletionAnalysis` and `FileDeletionResult` dataclasses. Added `_find_all_requirements()` and `_extract_non_requirement_content()` helper methods. Implemented `analyze_file_for_deletion()` for pre-deletion analysis and `delete_spec_file()` with force flag and content extraction options. Added MCP tools `prepare_file_deletion()` and `delete_spec_file()` with cache invalidation. 24 new tests added.
 
 ---
 

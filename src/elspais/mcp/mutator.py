@@ -46,6 +46,46 @@ class RequirementMove:
 
 
 @dataclass
+class FileDeletionAnalysis:
+    """Result of analyzing a file for deletion.
+
+    Attributes:
+        can_delete: Whether the file can be safely deleted
+        file_path: Path to the analyzed file
+        remaining_requirements: List of requirement IDs still in the file
+        non_requirement_content: Content that is not part of requirements
+        has_non_requirement_content: Whether there is content to preserve
+        message: Description of the analysis result
+    """
+
+    can_delete: bool
+    file_path: Path
+    remaining_requirements: List[str]
+    non_requirement_content: str
+    has_non_requirement_content: bool
+    message: str
+
+
+@dataclass
+class FileDeletionResult:
+    """Result of a file deletion operation.
+
+    Attributes:
+        success: Whether the deletion was successful
+        file_path: Path to the deleted file
+        content_extracted: Whether content was extracted before deletion
+        content_target: Path where content was extracted (if any)
+        message: Description of the result or error
+    """
+
+    success: bool
+    file_path: Path
+    content_extracted: bool
+    content_target: Optional[Path]
+    message: str
+
+
+@dataclass
 class ReferenceSpecialization:
     """Result of a reference specialization operation.
 
@@ -1220,4 +1260,266 @@ class SpecFileMutator:
                 position=position,
                 after_id=after_id,
                 message=str(e),
+            )
+
+    def _find_all_requirements(
+        self,
+        content: FileContent,
+    ) -> List[RequirementLocation]:
+        """
+        Find all requirements in a file.
+
+        Args:
+            content: FileContent from _read_spec_file
+
+        Returns:
+            List of RequirementLocation for each requirement found
+        """
+        locations = []
+        lines = content.lines
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Look for requirement header
+            header_match = self.HEADER_PATTERN.match(line)
+            if header_match:
+                req_id = header_match.group("id")
+                start_line = i + 1  # 1-indexed
+                header_line = line
+                end_line = i + 1
+                has_end_marker = False
+                has_separator = False
+
+                # Find the end of this requirement
+                j = i + 1
+                while j < len(lines):
+                    current_line = lines[j]
+
+                    # Check for end marker
+                    if self.END_MARKER_PATTERN.match(current_line):
+                        end_line = j + 1  # 1-indexed
+                        has_end_marker = True
+                        # Check for separator line
+                        if j + 1 < len(lines) and lines[j + 1].strip() == "---":
+                            end_line = j + 2
+                            has_separator = True
+                        break
+
+                    # Check for next requirement header
+                    next_match = self.HEADER_PATTERN.match(current_line)
+                    if next_match:
+                        end_line = j  # Previous line (1-indexed)
+                        break
+
+                    end_line = j + 1
+                    j += 1
+
+                locations.append(RequirementLocation(
+                    start_line=start_line,
+                    end_line=end_line,
+                    header_line=header_line,
+                    has_end_marker=has_end_marker,
+                    has_separator=has_separator,
+                ))
+
+                # Continue from after this requirement
+                i = end_line - 1  # -1 because we'll increment at end of loop
+
+            i += 1
+
+        return locations
+
+    def _extract_non_requirement_content(
+        self,
+        content: FileContent,
+        locations: List[RequirementLocation],
+    ) -> str:
+        """
+        Extract content that is not part of any requirement.
+
+        Args:
+            content: FileContent from _read_spec_file
+            locations: List of RequirementLocation for all requirements
+
+        Returns:
+            Non-requirement content as a string
+        """
+        if not locations:
+            # No requirements, entire file is non-requirement content
+            return content.text
+
+        lines = content.lines
+        non_req_lines = []
+
+        # Sort locations by start_line
+        sorted_locations = sorted(locations, key=lambda loc: loc.start_line)
+
+        # Content before first requirement
+        first_start = sorted_locations[0].start_line - 1  # Convert to 0-indexed
+        if first_start > 0:
+            for line in lines[:first_start]:
+                if line.strip():  # Only include non-empty lines
+                    non_req_lines.append(line)
+
+        # Content after last requirement
+        last_end = sorted_locations[-1].end_line  # Already correct for slicing
+        if last_end < len(lines):
+            for line in lines[last_end:]:
+                if line.strip():  # Only include non-empty lines
+                    non_req_lines.append(line)
+
+        return "\n".join(non_req_lines)
+
+    def analyze_file_for_deletion(
+        self,
+        file_path: Path,
+    ) -> FileDeletionAnalysis:
+        """
+        Analyze a spec file to determine if it can be safely deleted.
+
+        Checks for remaining requirements and non-requirement content that
+        might need to be preserved before deletion.
+
+        Args:
+            file_path: Path to the spec file to analyze
+
+        Returns:
+            FileDeletionAnalysis with deletion readiness status
+        """
+        try:
+            content = self._read_spec_file(file_path)
+            locations = self._find_all_requirements(content)
+
+            # Extract requirement IDs
+            remaining_reqs = []
+            for loc in locations:
+                match = self.HEADER_PATTERN.match(loc.header_line)
+                if match:
+                    remaining_reqs.append(match.group("id"))
+
+            # Extract non-requirement content
+            non_req_content = self._extract_non_requirement_content(content, locations)
+            has_non_req = bool(non_req_content.strip())
+
+            can_delete = len(remaining_reqs) == 0
+
+            if remaining_reqs:
+                message = f"File contains {len(remaining_reqs)} requirement(s): {', '.join(remaining_reqs)}"
+            elif has_non_req:
+                message = "File has no requirements but contains non-requirement content that should be preserved"
+            else:
+                message = "File can be safely deleted (no requirements or content)"
+
+            return FileDeletionAnalysis(
+                can_delete=can_delete,
+                file_path=file_path,
+                remaining_requirements=remaining_reqs,
+                non_requirement_content=non_req_content,
+                has_non_requirement_content=has_non_req,
+                message=message,
+            )
+
+        except FileNotFoundError:
+            return FileDeletionAnalysis(
+                can_delete=False,
+                file_path=file_path,
+                remaining_requirements=[],
+                non_requirement_content="",
+                has_non_requirement_content=False,
+                message=f"File not found: {file_path}",
+            )
+        except ValueError as e:
+            return FileDeletionAnalysis(
+                can_delete=False,
+                file_path=file_path,
+                remaining_requirements=[],
+                non_requirement_content="",
+                has_non_requirement_content=False,
+                message=str(e),
+            )
+
+    def delete_spec_file(
+        self,
+        file_path: Path,
+        force: bool = False,
+        extract_content_to: Optional[Path] = None,
+    ) -> FileDeletionResult:
+        """
+        Delete a spec file, optionally extracting non-requirement content.
+
+        By default, refuses to delete files with remaining requirements.
+        Use force=True to delete anyway (requirements will be lost).
+
+        Args:
+            file_path: Path to the spec file to delete
+            force: If True, delete even if requirements remain
+            extract_content_to: If provided, extract non-requirement content
+                               to this file before deletion
+
+        Returns:
+            FileDeletionResult with the operation status
+        """
+        # First analyze the file
+        analysis = self.analyze_file_for_deletion(file_path)
+
+        if not analysis.can_delete and not force:
+            return FileDeletionResult(
+                success=False,
+                file_path=file_path,
+                content_extracted=False,
+                content_target=None,
+                message=f"Cannot delete: {analysis.message}. Use force=True to delete anyway.",
+            )
+
+        try:
+            # Resolve path
+            if not file_path.is_absolute():
+                file_path = self.working_dir / file_path
+            file_path = file_path.resolve()
+
+            # Security check
+            try:
+                file_path.relative_to(self.working_dir.resolve())
+            except ValueError:
+                return FileDeletionResult(
+                    success=False,
+                    file_path=file_path,
+                    content_extracted=False,
+                    content_target=None,
+                    message=f"Path {file_path} is outside workspace",
+                )
+
+            # Extract content if requested and there's content to extract
+            content_extracted = False
+            if extract_content_to and analysis.has_non_requirement_content:
+                self._write_spec_file(extract_content_to, analysis.non_requirement_content)
+                content_extracted = True
+
+            # Delete the file
+            if file_path.exists():
+                file_path.unlink()
+
+            message = f"Deleted {file_path.name}"
+            if content_extracted:
+                message += f" (content extracted to {extract_content_to})"
+            if force and analysis.remaining_requirements:
+                message += f" (forced, lost {len(analysis.remaining_requirements)} requirement(s))"
+
+            return FileDeletionResult(
+                success=True,
+                file_path=file_path,
+                content_extracted=content_extracted,
+                content_target=extract_content_to if content_extracted else None,
+                message=message,
+            )
+
+        except OSError as e:
+            return FileDeletionResult(
+                success=False,
+                file_path=file_path,
+                content_extracted=False,
+                content_target=None,
+                message=f"Failed to delete file: {e}",
             )
