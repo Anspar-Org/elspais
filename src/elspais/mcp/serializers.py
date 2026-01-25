@@ -230,6 +230,10 @@ def serialize_node_full(
     if req.is_conflict:
         result["conflict_with"] = req.conflict_with
 
+    # Source file reference (from graph node, serialized as path string)
+    if node and node.source_file and node.source_file.file_info:
+        result["source_file"] = node.source_file.file_info.file_path
+
     return result
 
 
@@ -251,9 +255,9 @@ def _get_requirement_full_text(
         return None
 
     try:
-        from elspais.mcp.mutator import GraphMutator
+        from elspais.mcp.mutator import SpecFileMutator
 
-        mutator = GraphMutator(context.working_dir)
+        mutator = SpecFileMutator(context.working_dir)
         content = mutator._read_spec_file(Path(req.file_path))
         location = mutator._find_requirement_lines(content, req.id)
 

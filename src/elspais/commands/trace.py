@@ -70,8 +70,28 @@ def run_graph_trace(args: argparse.Namespace) -> int:
 
     # Build graph
     repo_root = spec_dirs[0].parent if spec_dirs[0].name == "spec" else Path.cwd()
-    builder = TraceGraphBuilder(repo_root=repo_root)
+    include_file_nodes = getattr(args, "graph_file", False)
+    builder = TraceGraphBuilder(repo_root=repo_root, include_file_nodes=include_file_nodes)
     builder.add_requirements(requirements)
+
+    # If file nodes are enabled, parse with structure and add to builder
+    if include_file_nodes:
+        from elspais.core.loader import create_parser
+
+        parser = create_parser(config)
+        file_structures = []
+        for spec_dir in spec_dirs:
+            for md_file in spec_dir.rglob("*.md"):
+                try:
+                    result = parser.parse_file_with_structure(md_file, repo_root)
+                    file_structures.append(result)
+                except Exception:
+                    # Skip files that can't be parsed
+                    pass
+        if file_structures:
+            builder.add_file_structures(file_structures)
+            if not getattr(args, "quiet", False):
+                print(f"Captured structure from {len(file_structures)} spec files")
 
     # Add test coverage if testing is enabled
     testing_config = config.get("testing", {})

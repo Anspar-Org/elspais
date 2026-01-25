@@ -37,6 +37,135 @@ const TraceView = (function() {
     };
 
     // ==========================================================================
+    // Cookie-based State Persistence
+    // ==========================================================================
+
+    /**
+     * Cookie utility functions for persisting view state across sessions.
+     * Implements REQ-tv-d00005: State persistence via cookies
+     */
+    const cookies = {
+        /** Cookie name prefix for all elspais trace view cookies */
+        PREFIX: 'elspais_tv_',
+
+        /** Default cookie expiration in days */
+        EXPIRATION_DAYS: 30,
+
+        /**
+         * Set a cookie value
+         * @param {string} name - Cookie name (without prefix)
+         * @param {*} value - Value to store (will be JSON stringified)
+         * @param {number} days - Expiration in days (default: 30)
+         */
+        set: function(name, value, days = this.EXPIRATION_DAYS) {
+            try {
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                const jsonValue = JSON.stringify(value);
+                document.cookie = `${this.PREFIX}${name}=${encodeURIComponent(jsonValue)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+            } catch (e) {
+                console.warn('Failed to save cookie:', e);
+            }
+        },
+
+        /**
+         * Get a cookie value
+         * @param {string} name - Cookie name (without prefix)
+         * @param {*} defaultValue - Default if cookie not found
+         * @returns {*} Parsed value or default
+         */
+        get: function(name, defaultValue = null) {
+            try {
+                const fullName = `${this.PREFIX}${name}=`;
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    let c = cookies[i].trim();
+                    if (c.indexOf(fullName) === 0) {
+                        const value = decodeURIComponent(c.substring(fullName.length));
+                        return JSON.parse(value);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to read cookie:', e);
+            }
+            return defaultValue;
+        },
+
+        /**
+         * Delete a cookie
+         * @param {string} name - Cookie name (without prefix)
+         */
+        delete: function(name) {
+            document.cookie = `${this.PREFIX}${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+        },
+
+        /**
+         * Save current view state to cookies
+         */
+        saveState: function() {
+            // Save hidden levels
+            this.set('hiddenLevels', Array.from(TraceView.hiddenLevels || []));
+            // Save hidden repos
+            this.set('hiddenRepos', Array.from(TraceView.hiddenRepos || []));
+            // Save files filter
+            this.set('hideFiles', TraceView.hideFiles || false);
+            // Save current view mode
+            this.set('viewMode', state.currentView || 'hierarchy');
+        },
+
+        /**
+         * Restore view state from cookies
+         */
+        restoreState: function() {
+            // Restore hidden levels
+            const hiddenLevels = this.get('hiddenLevels', []);
+            if (Array.isArray(hiddenLevels)) {
+                TraceView.hiddenLevels = new Set(hiddenLevels);
+                // Update badge UI
+                hiddenLevels.forEach(function(level) {
+                    const badge = document.getElementById('badge' + level);
+                    if (badge) badge.classList.add('filter-hidden');
+                });
+            }
+
+            // Restore hidden repos
+            const hiddenRepos = this.get('hiddenRepos', []);
+            if (Array.isArray(hiddenRepos)) {
+                TraceView.hiddenRepos = new Set(hiddenRepos);
+                // Update badge UI
+                hiddenRepos.forEach(function(repo) {
+                    const badge = document.getElementById('badgeRepo' + repo);
+                    if (badge) badge.classList.add('filter-hidden');
+                });
+            }
+
+            // Restore files filter
+            const hideFiles = this.get('hideFiles', false);
+            if (hideFiles) {
+                TraceView.hideFiles = true;
+                const filesBadge = document.getElementById('badgeFiles');
+                if (filesBadge) filesBadge.classList.add('filter-hidden');
+            }
+
+            // Restore view mode
+            const viewMode = this.get('viewMode', 'hierarchy');
+            if (viewMode && ['flat', 'hierarchy', 'uncommitted', 'branch'].includes(viewMode)) {
+                state.currentView = viewMode;
+            }
+        },
+
+        /**
+         * Clear all saved state (reset to defaults)
+         */
+        clearState: function() {
+            this.delete('hiddenLevels');
+            this.delete('hiddenRepos');
+            this.delete('hideFiles');
+            this.delete('viewMode');
+        }
+    };
+
+    // ==========================================================================
     // Helper Functions
     // ==========================================================================
 
@@ -1285,6 +1414,8 @@ const TraceView = (function() {
             }
 
             applyFilters();
+            // Save view mode to cookie
+            cookies.saveState();
         }
     };
 
@@ -1509,6 +1640,31 @@ const TraceView = (function() {
         if (chkIncludeDeprecated) chkIncludeDeprecated.checked = false;
         if (chkIncludeRoadmap) chkIncludeRoadmap.checked = false;
 
+        // Clear cookie-persisted filter state
+        // Reset hidden levels
+        if (TraceView.hiddenLevels) {
+            TraceView.hiddenLevels.forEach(function(level) {
+                const badge = document.getElementById('badge' + level);
+                if (badge) badge.classList.remove('filter-hidden');
+            });
+            TraceView.hiddenLevels.clear();
+        }
+        // Reset hidden repos
+        if (TraceView.hiddenRepos) {
+            TraceView.hiddenRepos.forEach(function(repo) {
+                const badge = document.getElementById('badgeRepo' + repo);
+                if (badge) badge.classList.remove('filter-hidden');
+            });
+            TraceView.hiddenRepos.clear();
+        }
+        // Reset files filter
+        TraceView.hideFiles = false;
+        const filesBadge = document.getElementById('badgeFiles');
+        if (filesBadge) filesBadge.classList.remove('filter-hidden');
+
+        // Clear saved cookies
+        cookies.clearState();
+
         toggleIncludeDeprecated();
     }
 
@@ -1632,6 +1788,7 @@ const TraceView = (function() {
         legend: legend,
         navigation: navigation,
         state: state,
+        cookies: cookies,
 
         // Functions
         init: init,
@@ -1699,6 +1856,8 @@ function filterByLevel(level) {
         badge.classList.add('filter-hidden');
     }
     applyFilters();
+    // Save filter state to cookie
+    TraceView.cookies.saveState();
 }
 
 // Toggle repo filter (CORE, CAL, TTN, etc.) - independent on/off
@@ -1716,6 +1875,8 @@ function toggleRepoFilter(repoPrefix) {
         badge.classList.add('filter-hidden');
     }
     applyFilters();
+    // Save filter state to cookie
+    TraceView.cookies.saveState();
 }
 
 // Toggle files filter - show/hide implementation files
@@ -1732,6 +1893,8 @@ function toggleFilesFilter() {
         badge.classList.remove('filter-hidden');
     }
     applyFilters();
+    // Save filter state to cookie
+    TraceView.cookies.saveState();
 }
 
 // ==========================================================================
@@ -1779,6 +1942,9 @@ document.addEventListener('keydown', function(e) {
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
     TraceView.init();
-    // Start with hierarchical view - show tree structure with collapsible nodes
-    TraceView.navigation.switchView('hierarchy');
+    // Restore state from cookies (filters, view mode)
+    TraceView.cookies.restoreState();
+    // Switch to the saved view mode (or 'hierarchy' as default)
+    const savedViewMode = TraceView.state.currentView || 'hierarchy';
+    TraceView.navigation.switchView(savedViewMode);
 });

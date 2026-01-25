@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.core.models import Requirement
+    from elspais.core.models import Requirement, StructuredParseResult
     from elspais.core.graph import TraceNode, TraceGraph
     from elspais.core.graph_schema import GraphSchema
 
@@ -51,21 +51,26 @@ class TraceGraphBuilder:
         self,
         repo_root: Path,
         schema: GraphSchema | None = None,
+        include_file_nodes: bool = False,
     ) -> None:
         """Initialize the builder.
 
         Args:
             repo_root: Path to the repository root.
             schema: Graph schema (uses default if not provided).
+            include_file_nodes: If True, create FILE and FILE_REGION nodes for
+                lossless file reconstruction. Default False.
         """
         from elspais.core.graph_schema import GraphSchema
 
         self.repo_root = repo_root
         self.schema = schema or GraphSchema.default()
+        self.include_file_nodes = include_file_nodes
         self._nodes: dict[str, TraceNode] = {}
         self._requirements: dict[str, Requirement] = {}
         self._pending_links: list[tuple[str, str, str]] = []  # (from_id, to_id, rel_name)
         self._validation_warnings: list[str] = []  # Type constraint warnings
+        self._file_structures: dict[str, StructuredParseResult] = {}  # file_path -> StructuredParseResult
 
     def add_requirements(self, requirements: dict[str, Requirement]) -> TraceGraphBuilder:
         """Add requirements and their assertions as nodes.
@@ -126,6 +131,24 @@ class TraceGraphBuilder:
             for addr_id in addresses:
                 self._pending_links.append((req_id, addr_id, "addresses"))
 
+        return self
+
+    def add_file_structures(
+        self, file_results: list[StructuredParseResult]
+    ) -> TraceGraphBuilder:
+        """Add file structure data for lossless reconstruction.
+
+        This stores StructuredParseResult objects so that FILE and FILE_REGION
+        nodes can be created during build() when include_file_nodes=True.
+
+        Args:
+            file_results: List of StructuredParseResult from parse_file_with_structure()
+
+        Returns:
+            Self for method chaining.
+        """
+        for result in file_results:
+            self._file_structures[result.file_node.file_path] = result
         return self
 
     def add_user_journeys(self, journeys: dict[str, TraceNode]) -> TraceGraphBuilder:
@@ -210,7 +233,13 @@ class TraceGraphBuilder:
         # Link all pending relationships
         self._link_relationships()
 
-        # Find roots
+        # Create FILE and FILE_REGION nodes if enabled
+        # FILE nodes are added to _nodes index, and _find_roots() picks them up
+        # via is_root=True in their schema
+        if self.include_file_nodes and self._file_structures:
+            self._build_file_nodes()
+
+        # Find roots (includes FILE nodes via is_root=True schema)
         roots = self._find_roots()
 
         # Create graph
@@ -470,6 +499,12 @@ class TraceGraphBuilder:
             if node in graph.roots:
                 continue
             if node.kind == NodeKind.ASSERTION:
+                continue
+            # Skip FILE_REGION nodes (they have FILE parent via edge)
+            if node.kind == NodeKind.FILE_REGION:
+                continue
+            # Skip FILE nodes (they're roots for reconstruction, not requirement hierarchy)
+            if node.kind == NodeKind.FILE:
                 continue
 
             # Check if marked as root type
@@ -790,6 +825,75 @@ class TraceGraphBuilder:
             return True
 
         return False
+
+    def _build_file_nodes(self) -> list[TraceNode]:
+        """Build FILE and FILE_REGION nodes from stored file structures.
+
+        Creates FILE nodes with FILE_REGION children, and establishes
+        bidirectional node-data references between FILE and REQUIREMENT nodes.
+
+        Returns:
+            List of FILE TraceNode instances (to be added as roots).
+        """
+        from elspais.core.graph import (
+            FileInfo,
+            NodeKind,
+            SourceLocation,
+            TraceNode,
+        )
+
+        file_nodes: list[TraceNode] = []
+
+        for file_path, result in self._file_structures.items():
+            file_node_data = result.file_node
+
+            # Look up requirement nodes for this file
+            req_nodes: list[TraceNode] = []
+            for req_id in file_node_data.requirements:
+                req_node = self._nodes.get(req_id)
+                if req_node:
+                    req_nodes.append(req_node)
+
+            # Create FileInfo with direct node references
+            file_info = FileInfo(
+                file_path=file_path,
+                requirements=req_nodes,
+            )
+
+            # Create FILE node
+            file_node = TraceNode(
+                id=f"file:{file_path}",
+                kind=NodeKind.FILE,
+                label=file_path,
+                source=SourceLocation(path=file_path, line=1),
+                file_info=file_info,
+            )
+
+            # Create FILE_REGION nodes as children
+            for region in file_node_data.regions:
+                region_id = f"file:{file_path}:{region.region_type}:{region.start_line}"
+                region_node = TraceNode(
+                    id=region_id,
+                    kind=NodeKind.FILE_REGION,
+                    label=f"{region.region_type} ({region.start_line}-{region.end_line})",
+                    source=SourceLocation(path=file_path, line=region.start_line),
+                    file_region=region,
+                )
+                # Add as child of FILE node (edge data - for reconstruction traversal)
+                file_node.children.append(region_node)
+                region_node.parents.append(file_node)
+                # Add to index
+                self._nodes[region_id] = region_node
+
+            # Set bidirectional node-data references (NOT edges)
+            for req_node in req_nodes:
+                req_node.source_file = file_node
+
+            # Add FILE node to index
+            self._nodes[file_node.id] = file_node
+            file_nodes.append(file_node)
+
+        return file_nodes
 
     def _relative_path(self, path: Path | None) -> str:
         """Convert to repo-relative path string.

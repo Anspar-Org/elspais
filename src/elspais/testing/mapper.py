@@ -50,7 +50,7 @@ class TestMappingResult:
     errors: List[str] = field(default_factory=list)
 
 
-class TestMapper:
+class TestCoverageMapper:
     """
     Orchestrates test scanning and result mapping.
 

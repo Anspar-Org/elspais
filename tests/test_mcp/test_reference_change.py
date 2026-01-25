@@ -5,7 +5,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any, Dict
 
-from elspais.mcp.mutator import GraphMutator, ReferenceType, ReferenceChange
+from elspais.mcp.mutator import SpecFileMutator, ReferenceType, ReferenceChange
 
 # Import MCP server only if available
 try:
@@ -24,8 +24,8 @@ def temp_spec_dir(tmp_path):
 
 @pytest.fixture
 def mutator(tmp_path):
-    """Create a GraphMutator instance."""
-    return GraphMutator(working_dir=tmp_path)
+    """Create a SpecFileMutator instance."""
+    return SpecFileMutator(working_dir=tmp_path)
 
 
 class TestChangeReferenceTypeBasic:

@@ -1,19 +1,19 @@
 """
-Tests for elspais.mcp.mutator module - GraphMutator base functionality.
+Tests for elspais.mcp.mutator module - SpecFileMutator base functionality.
 """
 
 import pytest
 from pathlib import Path
 
-from elspais.mcp.mutator import GraphMutator, FileContent, RequirementLocation
+from elspais.mcp.mutator import SpecFileMutator, FileContent, RequirementLocation
 
 
-class TestGraphMutatorInit:
-    """Tests for GraphMutator initialization."""
+class TestSpecFileMutatorInit:
+    """Tests for SpecFileMutator initialization."""
 
     def test_init_with_working_dir(self, tmp_path):
         """Test creating mutator with working directory."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
 
         assert mutator.working_dir == tmp_path
         assert mutator.pattern_config is not None
@@ -24,7 +24,7 @@ class TestGraphMutatorInit:
         from elspais.core.patterns import PatternConfig
 
         config = PatternConfig.from_dict({"prefix": "TST"})
-        mutator = GraphMutator(tmp_path, pattern_config=config)
+        mutator = SpecFileMutator(tmp_path, pattern_config=config)
 
         assert mutator.pattern_config.prefix == "TST"
 
@@ -38,7 +38,7 @@ class TestReadSpecFile:
         spec_file.parent.mkdir(parents=True, exist_ok=True)
         spec_file.write_text("# REQ-p00001: Test\n\nBody content\n")
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         content = mutator._read_spec_file(spec_file)
 
         assert isinstance(content, FileContent)
@@ -52,14 +52,14 @@ class TestReadSpecFile:
         spec_file.parent.mkdir(parents=True, exist_ok=True)
         spec_file.write_text("# REQ-p00001: Test\n")
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         content = mutator._read_spec_file(Path("spec/test.md"))
 
         assert content.path == spec_file
 
     def test_read_nonexistent_file(self, tmp_path):
         """Test reading a non-existent file raises error."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
 
         with pytest.raises(FileNotFoundError):
             mutator._read_spec_file(tmp_path / "nonexistent.md")
@@ -71,7 +71,7 @@ class TestReadSpecFile:
         other_file = other_dir / "test.md"
         other_file.write_text("content")
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
 
         with pytest.raises(ValueError, match="outside workspace"):
             mutator._read_spec_file(other_file)
@@ -81,7 +81,7 @@ class TestReadSpecFile:
         spec_file = tmp_path / "test.md"
         spec_file.write_text("Line 1\n\nLine 3\n")
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         content = mutator._read_spec_file(spec_file)
 
         assert content.lines == ["Line 1", "", "Line 3", ""]
@@ -94,7 +94,7 @@ class TestWriteSpecFile:
         """Test writing a new spec file."""
         spec_file = tmp_path / "spec" / "new.md"
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         mutator._write_spec_file(spec_file, "# REQ-p00001: New Requirement\n")
 
         assert spec_file.exists()
@@ -104,7 +104,7 @@ class TestWriteSpecFile:
         """Test that writing creates parent directories."""
         spec_file = tmp_path / "spec" / "subdir" / "deep" / "test.md"
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         mutator._write_spec_file(spec_file, "content")
 
         assert spec_file.exists()
@@ -114,7 +114,7 @@ class TestWriteSpecFile:
         spec_file = tmp_path / "test.md"
         spec_file.write_text("old content")
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         mutator._write_spec_file(spec_file, "new content")
 
         assert spec_file.read_text() == "new content"
@@ -123,14 +123,14 @@ class TestWriteSpecFile:
         """Test writing file outside workspace raises error."""
         other_file = tmp_path.parent / "other.md"
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
 
         with pytest.raises(ValueError, match="outside workspace"):
             mutator._write_spec_file(other_file, "content")
 
     def test_write_relative_path(self, tmp_path):
         """Test writing with relative path."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         mutator._write_spec_file(Path("spec/test.md"), "content")
 
         assert (tmp_path / "spec" / "test.md").read_text() == "content"
@@ -140,7 +140,7 @@ class TestWriteSpecFile:
         spec_file = tmp_path / "test.md"
         content = "# REQ-p00001: Unicode Test 日本語\n"
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         mutator._write_spec_file(spec_file, content)
 
         assert spec_file.read_text(encoding="utf-8") == content
@@ -165,7 +165,7 @@ A. The system SHALL do something.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -191,7 +191,7 @@ Body text only.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -220,7 +220,7 @@ Body text only.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00002")
 
@@ -238,7 +238,7 @@ Body text only.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p99999")
 
@@ -254,7 +254,7 @@ Body content."""
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -284,7 +284,7 @@ Security best practices.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-d00001")
 
@@ -312,7 +312,7 @@ A. The system SHALL do something.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
         text = mutator.get_requirement_text(file_content, location)
@@ -349,7 +349,7 @@ A. The system SHALL do something.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(content)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00002")
         text = mutator.get_requirement_text(file_content, location)
@@ -376,7 +376,7 @@ Original body.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(original)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -420,7 +420,7 @@ Footer content.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(original)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -457,7 +457,7 @@ Footer content.
         spec_file = tmp_path / "test.md"
         spec_file.write_text(original)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         file_content = mutator._read_spec_file(spec_file)
         location = mutator._find_requirement_lines(file_content, "REQ-p00001")
 
@@ -504,7 +504,7 @@ A. The system SHALL do something.
         spec_file.parent.mkdir(parents=True, exist_ok=True)
         spec_file.write_text(original)
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
 
         # Read
         content = mutator._read_spec_file(spec_file)

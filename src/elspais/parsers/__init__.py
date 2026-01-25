@@ -170,13 +170,13 @@ def register_builtin_parsers() -> None:
     from elspais.parsers.journey import JourneyParser
     from elspais.parsers.junit_xml import JUnitXMLParser
     from elspais.parsers.pytest_json import PytestJSONParser
-    from elspais.parsers.requirement import RequirementParser
+    from elspais.parsers.requirement import RequirementTextParser
     from elspais.parsers.test import TestParser
 
     registry = get_registry()
 
     # Register parsers for each source type
-    registry.register("spec", RequirementParser())
+    registry.register("spec", RequirementTextParser())
     registry.register("journey", JourneyParser())
     registry.register("code", CodeParser())
     registry.register("test", TestParser())

@@ -36,6 +36,8 @@ class NodeKind(Enum):
     TEST = "test"  # Test file reference
     TEST_RESULT = "result"  # Test execution result
     USER_JOURNEY = "journey"  # Optional grouping
+    FILE = "file"  # Spec file container for reconstruction
+    FILE_REGION = "file_region"  # Unparsed content region within a file
 
 
 @dataclass
@@ -100,6 +102,85 @@ class TestResult:
 
 
 @dataclass
+class FileRegion:
+    """Unparsed content region within a spec file.
+
+    Used for lossless file reconstruction - captures prose, comments,
+    headers, and other non-requirement content between/around requirements.
+
+    Attributes:
+        region_type: Type of region - "preamble", "inter_requirement", "postamble"
+        start_line: Line number where region starts (1-indexed)
+        end_line: Line number where region ends (inclusive)
+        content: Full text of the region
+    """
+
+    region_type: str  # "preamble", "inter_requirement", "postamble"
+    start_line: int
+    end_line: int
+    content: str
+
+
+@dataclass
+class FileNode:
+    """Container node representing a spec file for reconstruction.
+
+    Tracks the original structure of a spec file including:
+    - Requirement IDs in their original order
+    - Unparsed content regions (preamble, prose between requirements, postamble)
+    - Original lines for reference
+
+    Used to enable lossless file reconstruction from graph data.
+
+    Attributes:
+        file_path: Path relative to repo root (e.g., "spec/prd-auth.md")
+        requirements: List of requirement IDs in original file order
+        regions: List of FileRegion objects for unparsed content
+        original_lines: Complete file lines for reference (optional for memory efficiency)
+    """
+
+    file_path: str
+    requirements: list[str] = field(default_factory=list)
+    regions: list[FileRegion] = field(default_factory=list)
+    original_lines: list[str] | None = None
+
+    def get_requirement_order(self) -> list[str]:
+        """Get requirement IDs in their original file order."""
+        return list(self.requirements)
+
+    def get_preamble(self) -> str | None:
+        """Get the preamble content (before first requirement)."""
+        for region in self.regions:
+            if region.region_type == "preamble":
+                return region.content
+        return None
+
+    def get_postamble(self) -> str | None:
+        """Get the postamble content (after last requirement)."""
+        for region in self.regions:
+            if region.region_type == "postamble":
+                return region.content
+        return None
+
+
+@dataclass
+class FileInfo:
+    """Content for FILE TraceNode.
+
+    Stores file metadata and references to requirement nodes in the file.
+    Unlike FileNode (which stores requirement IDs), FileInfo stores direct
+    references to TraceNode objects for O(1) lookup.
+
+    Attributes:
+        file_path: Path relative to repo root (e.g., "spec/prd-auth.md")
+        requirements: List of TraceNode references in original file order
+    """
+
+    file_path: str
+    requirements: list["TraceNode"] = field(default_factory=list)
+
+
+@dataclass
 class UserJourney:
     """User Journey - non-normative context provider.
 
@@ -157,12 +238,18 @@ class TraceNode:
     test_ref: TestReference | None = None
     test_result: TestResult | None = None
     journey: UserJourney | None = None
+    file_info: FileInfo | None = None  # For FILE nodes
+    file_region: FileRegion | None = None  # For FILE_REGION nodes
 
     # Mutable storage for computed metrics
     metrics: dict[str, Any] = field(default_factory=dict)
 
     # Parent references (DAG - multiple parents allowed)
     parents: list[TraceNode] = field(default_factory=list, repr=False)
+
+    # Source file reference (node data, NOT edge - not traversed by walk/coverage)
+    # Only populated when include_file_nodes=True in graph builder
+    source_file: TraceNode | None = field(default=None, repr=False)
 
     @property
     def depth(self) -> int:
@@ -264,6 +351,9 @@ class TraceGraph:
     TraceGraph is a container for the full traceability graph, providing
     indexed access to all nodes and methods for graph-wide operations.
 
+    Supports lossless file reconstruction via file_index which tracks
+    FileNode containers with original file structure.
+
     Attributes:
         roots: Top-level nodes (PRD reqs with no implements, user journeys).
         repo_root: Path to the repository root.
@@ -274,6 +364,9 @@ class TraceGraph:
 
     # Index for fast lookup (initialized in __post_init__)
     _index: dict[str, TraceNode] = field(default_factory=dict, repr=False)
+
+    # Index for file structure (for lossless reconstruction)
+    _file_index: dict[str, FileNode] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """Build index if not provided."""
@@ -372,6 +465,39 @@ class TraceGraph:
         for node in self._index.values():
             counts[node.kind] = counts.get(node.kind, 0) + 1
         return counts
+
+    # File index methods for lossless reconstruction
+
+    def register_file_node(self, file_node: FileNode) -> None:
+        """Register a FileNode for lossless reconstruction.
+
+        Args:
+            file_node: The FileNode to register.
+        """
+        self._file_index[file_node.file_path] = file_node
+
+    def get_file_node(self, file_path: str) -> FileNode | None:
+        """Get FileNode for a file path.
+
+        Args:
+            file_path: Path relative to repo root.
+
+        Returns:
+            FileNode if registered, None otherwise.
+        """
+        return self._file_index.get(file_path)
+
+    def all_file_nodes(self) -> Iterator[FileNode]:
+        """Iterate all registered FileNodes.
+
+        Yields:
+            FileNode instances.
+        """
+        yield from self._file_index.values()
+
+    def file_count(self) -> int:
+        """Return total number of registered files."""
+        return len(self._file_index)
 
 
 # Backwards compatibility alias (deprecated)

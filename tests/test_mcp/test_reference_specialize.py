@@ -8,7 +8,7 @@ to REQ→Assertion references using multi-assertion syntax.
 import pytest
 from pathlib import Path
 
-from elspais.mcp.mutator import GraphMutator, ReferenceSpecialization
+from elspais.mcp.mutator import SpecFileMutator, ReferenceSpecialization
 
 
 class TestBuildMultiAssertionRef:
@@ -16,25 +16,25 @@ class TestBuildMultiAssertionRef:
 
     def test_single_assertion(self, tmp_path):
         """Test building reference with single assertion."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator._build_multi_assertion_ref("REQ-p00001", ["A"])
         assert result == "REQ-p00001-A"
 
     def test_multiple_assertions(self, tmp_path):
         """Test building reference with multiple assertions."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator._build_multi_assertion_ref("REQ-p00001", ["A", "B", "C"])
         assert result == "REQ-p00001-A-B-C"
 
     def test_empty_assertions(self, tmp_path):
         """Test building reference with no assertions returns original."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator._build_multi_assertion_ref("REQ-p00001", [])
         assert result == "REQ-p00001"
 
     def test_numeric_assertions(self, tmp_path):
         """Test building reference with numeric assertions."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator._build_multi_assertion_ref("REQ-p00001", ["01", "02"])
         assert result == "REQ-p00001-01-02"
 
@@ -65,7 +65,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -99,7 +99,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -130,7 +130,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -161,7 +161,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -188,7 +188,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d99999",
             target_id="REQ-p00001",
@@ -212,7 +212,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p99999",  # Not in the file
@@ -236,7 +236,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -260,7 +260,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -273,7 +273,7 @@ A. The system SHALL do something.
 
     def test_specialize_file_not_found(self, tmp_path):
         """Test error when file doesn't exist."""
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",
@@ -301,7 +301,7 @@ A. The system SHALL do something.
 """,
         )
 
-        mutator = GraphMutator(tmp_path)
+        mutator = SpecFileMutator(tmp_path)
         result = mutator.specialize_reference(
             source_id="REQ-d00001",
             target_id="REQ-p00001",

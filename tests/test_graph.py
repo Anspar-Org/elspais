@@ -65,7 +65,10 @@ class TestNodeKind:
         """Test all expected node kinds are defined."""
         from elspais.core.graph import NodeKind
 
-        expected = {"requirement", "assertion", "code", "test", "result", "journey"}
+        expected = {
+            "requirement", "assertion", "code", "test", "result", "journey",
+            "file", "file_region",  # For lossless reconstruction
+        }
         actual = {kind.value for kind in NodeKind}
 
         assert actual == expected
@@ -80,6 +83,8 @@ class TestNodeKind:
         assert NodeKind.TEST.value == "test"
         assert NodeKind.TEST_RESULT.value == "result"
         assert NodeKind.USER_JOURNEY.value == "journey"
+        assert NodeKind.FILE.value == "file"
+        assert NodeKind.FILE_REGION.value == "file_region"
 
 
 # Validates: REQ-p00003-B

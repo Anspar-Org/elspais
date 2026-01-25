@@ -474,16 +474,16 @@ class TestJourneyParser:
         assert not parser.can_parse(Path("requirements.md"))
 
 
-class TestRequirementParser:
-    """Tests for RequirementParser."""
+class TestRequirementTextParser:
+    """Tests for RequirementTextParser."""
 
     def test_parse_requirement(self, hht_like_fixture):
         """Test parsing requirements from fixture."""
         from elspais.core.graph import NodeKind, SourceLocation
         from elspais.core.graph_schema import NodeTypeSchema
-        from elspais.parsers.requirement import RequirementParser
+        from elspais.parsers.requirement import RequirementTextParser
 
-        parser = RequirementParser()
+        parser = RequirementTextParser()
 
         # Read a spec file from fixture
         spec_file = hht_like_fixture / "spec" / "prd-core.md"
@@ -506,9 +506,9 @@ class TestRequirementParser:
 
     def test_can_parse(self):
         """Test can_parse identifies spec files."""
-        from elspais.parsers.requirement import RequirementParser
+        from elspais.parsers.requirement import RequirementTextParser
 
-        parser = RequirementParser()
+        parser = RequirementTextParser()
 
         assert parser.can_parse(Path("spec/requirements.md"))
         assert parser.can_parse(Path("requirements/prd.md"))

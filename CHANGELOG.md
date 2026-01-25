@@ -9,7 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.20.0] - 2026-01-25
 ### Added
+- **FILE Node Support** - Unified graph approach for lossless file reconstruction
+  - New `--graph-file` CLI flag for `elspais trace --graph`
+  - `NodeKind.FILE` and `NodeKind.FILE_REGION` in TraceGraph
+  - `FileInfo` dataclass with file_path and requirements (node-data refs)
+  - `TraceNode.source_file` for REQ→FILE bidirectional linking
+  - Graph-based reconstruction in FileReconstructor
+  - Node-data references (not edges) prevent coverage algorithm interference
+  - Schema entries for FILE (is_root=True) and FILE_REGION node types
+- **Cookie State Persistence** for `--view` mode
+  - Filter state persists across page refreshes (hiddenLevels, hiddenRepos, hideFiles, viewMode)
+  - SameSite=Lax cookies with 30-day expiration
+  - Graceful fallback when cookies disabled
+  - Clear Filters button resets all saved state
 - **Requirement Move** - Move requirements between spec files via MCP
   - `move_requirement()` in mutator for moving requirements to different files
   - Position control: `start`, `end`, or `after` a specific requirement

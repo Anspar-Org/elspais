@@ -1,7 +1,24 @@
 # Future Plan: MCP Graph Integration
 
-**Status:** Planned for Phase 2
+**Status:** Partially Implemented (see Implementation Status below)
 **Focus:** Interactive graph manipulation during Claude Code sessions
+
+---
+
+## Implementation Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **UC1: Reference Manipulation** | ✅ Done | `change_reference_type`, `specialize_reference` |
+| **UC2: Implements → Refines Conversion** | ✅ Done | Via `change_reference_type` tool |
+| **UC3: Moving Requirements Between Files** | ❌ Not Started | Planned for MASTER_PLAN.md Phase 5.1 |
+| **UC4: Spec File Deletion Workflow** | ❌ Not Started | Planned for MASTER_PLAN.md Phase 5 |
+| **UC5: Bidirectional Synchronization** | ✅ Done | File→Graph via mtime tracking; Graph→File via SpecFileMutator |
+| **UC6: Lazy Graph Recreation** | ✅ Done | `GraphState.is_stale()`, `partial_refresh()` |
+| **UC7: Auditor Review Session** | ✅ Done | All read tools implemented |
+| **Data Model (TrackedFile, GraphState)** | ✅ Done | In `mcp/context.py` |
+| **SpecFileMutator** | ✅ Done | In `mcp/mutator.py` |
+| **MCP Resources** | ✅ Done | All documented resources available |
 
 ---
 
@@ -171,9 +188,9 @@ User is working with an auditor reviewing a compliant software platform.
 
 ---
 
-## Data Model Enhancements
+## Data Model Enhancements ✅ IMPLEMENTED
 
-### Tracked Files Registry
+### Tracked Files Registry (in `mcp/context.py`)
 
 ```python
 @dataclass
@@ -189,13 +206,13 @@ class WorkspaceState:
     code_files: Dict[Path, TrackedFile]
 ```
 
-### Graph Modification Operations
+### Graph Modification Operations (in `mcp/mutator.py`)
 
 ```python
-class GraphMutator:
+class SpecFileMutator:
     """Apply modifications to graph and sync to filesystem."""
 
-    def change_reference_type(
+    def change_reference_type(  # ✅ IMPLEMENTED
         self,
         source_id: str,
         target_id: str,
@@ -203,14 +220,22 @@ class GraphMutator:
     ) -> None:
         """Change Implements: ↔ Refines: in spec file."""
 
-    def update_references(
+    def specialize_reference(  # ✅ IMPLEMENTED
+        self,
+        source_id: str,
+        target_id: str,
+        assertions: List[str]
+    ) -> None:
+        """Convert REQ→REQ to REQ→Assertion reference."""
+
+    def update_references(  # ❌ NOT IMPLEMENTED
         self,
         source_id: str,
         new_references: List[str]
     ) -> None:
         """Replace all Implements:/Refines: for a requirement."""
 
-    def move_requirement(
+    def move_requirement(  # ❌ NOT IMPLEMENTED (Phase 5.1)
         self,
         req_id: str,
         target_file: Path,
@@ -218,7 +243,7 @@ class GraphMutator:
     ) -> None:
         """Move requirement to different file."""
 
-    def extract_content(
+    def extract_content(  # ❌ NOT IMPLEMENTED
         self,
         source_file: Path,
         exclude_ids: Set[str]
@@ -230,7 +255,7 @@ class GraphMutator:
 
 ## MCP Tools (Write Operations)
 
-### Relationship Management
+### Relationship Management ✅ IMPLEMENTED
 
 ```python
 @mcp.tool()
@@ -271,7 +296,7 @@ def specialize_reference(
     """
 ```
 
-### File Operations
+### File Operations ❌ NOT IMPLEMENTED (Phase 5 in MASTER_PLAN.md)
 
 ```python
 @mcp.tool()
@@ -318,7 +343,7 @@ def extract_and_delete(
     """
 ```
 
-### Graph State
+### Graph State ✅ IMPLEMENTED
 
 ```python
 @mcp.tool()
@@ -349,7 +374,7 @@ def refresh_graph(full: bool = False) -> Dict[str, Any]:
 
 ---
 
-## MCP Tools (Read Operations for Auditor Review)
+## MCP Tools (Read Operations for Auditor Review) ✅ ALL IMPLEMENTED
 
 ### Hierarchy Navigation
 
@@ -418,58 +443,58 @@ def list_by_criteria(
 
 ---
 
-## MCP Resources
+## MCP Resources ✅ IMPLEMENTED
 
-| Resource URI | Description |
-|-------------|-------------|
-| `graph://status` | Graph staleness and statistics |
-| `graph://validation` | Current validation warnings/errors |
-| `traceability://{id}` | Full traceability path for requirement |
-| `coverage://{id}` | Coverage breakdown for requirement |
-| `hierarchy://{id}/ancestors` | Ancestor chain |
-| `hierarchy://{id}/descendants` | All descendants |
-| `spec://{file}` | Parsed content of spec file |
+| Resource URI | Description | Status |
+|-------------|-------------|--------|
+| `graph://status` | Graph staleness and statistics | ✅ |
+| `graph://validation` | Current validation warnings/errors | ✅ |
+| `traceability://{id}` | Full traceability path for requirement | ✅ |
+| `coverage://{id}` | Coverage breakdown for requirement | ✅ |
+| `hierarchy://{id}/ancestors` | Ancestor chain | ✅ |
+| `hierarchy://{id}/descendants` | All descendants | ✅ |
+| `spec://{file}` | Parsed content of spec file | ❌ Not implemented |
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Read-Only Graph with Lazy Refresh
+### Phase 1: Read-Only Graph with Lazy Refresh ✅ COMPLETE
 - Graph builds on first query
 - File mtime tracking for staleness detection
 - Full rebuild when stale
 - Auditor review tools
 
-### Phase 2: Incremental Refresh
+### Phase 2: Incremental Refresh ✅ COMPLETE
 - Track which nodes come from which files
 - Re-parse only changed files
 - Update affected subgraph only
 - Preserve unchanged portions
 
-### Phase 3: Write Operations
-- Reference manipulation tools
-- Filesystem sync from graph changes
-- Format-preserving edits
-- File move/delete operations
+### Phase 3: Write Operations ⚠️ PARTIALLY COMPLETE
+- ✅ Reference manipulation tools (`change_reference_type`, `specialize_reference`)
+- ✅ Filesystem sync from graph changes
+- ✅ Format-preserving edits
+- ❌ File move/delete operations (see MASTER_PLAN.md Phase 5)
 
 ---
 
-## Files to Modify
+## Files Modified ✅
 
-| File | Changes |
-|------|---------|
-| `src/elspais/mcp/context.py` | Add `GraphState`, staleness tracking, lazy refresh |
-| `src/elspais/mcp/server.py` | Add read/write tools, resources |
-| `src/elspais/mcp/mutator.py` | New file: `GraphMutator` for write operations |
-| `src/elspais/mcp/serializers.py` | Add traceability path serialization |
+| File | Changes | Status |
+|------|---------|--------|
+| `src/elspais/mcp/context.py` | Add `GraphState`, staleness tracking, lazy refresh | ✅ Done |
+| `src/elspais/mcp/server.py` | Add read/write tools, resources | ✅ Done |
+| `src/elspais/mcp/mutator.py` | New file: `SpecFileMutator` for write operations | ✅ Done |
+| `src/elspais/mcp/serializers.py` | Add traceability path serialization | ✅ Done |
 
 ---
 
-## Dependencies
+## Dependencies ✅ ALL SATISFIED
 
-- TraceGraph and GraphBuilder must be stable (complete)
-- Test scanner integration via parser registry
-- Requirement file editing utilities (format-preserving)
+- ✅ TraceGraph and GraphBuilder stable and complete
+- ✅ Test scanner integration via parser registry
+- ✅ Requirement file editing utilities (format-preserving) - `SpecFileMutator`
 
 ---
 

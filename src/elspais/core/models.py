@@ -8,7 +8,7 @@ and requirement types.
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -319,3 +319,31 @@ class ParseResult:
     def get(self, key: str, default=None) -> Optional["Requirement"]:
         """Get a requirement by ID with default."""
         return self.requirements.get(key, default)
+
+
+# Forward reference for FileNode from graph module
+# Allows referencing without creating circular import
+FileNode = Any  # Will be properly typed via TYPE_CHECKING
+
+
+@dataclass
+class StructuredParseResult:
+    """
+    Result of parsing a file with full structure preservation.
+
+    Used for lossless file reconstruction - captures requirements,
+    warnings, AND the file structure (regions, ordering).
+
+    Attributes:
+        requirements: Dictionary of requirement ID to Requirement
+        warnings: List of parser warnings
+        file_node: FileNode with file structure for reconstruction
+    """
+
+    requirements: Dict[str, "Requirement"]
+    warnings: List[ParseWarning]
+    file_node: Any  # FileNode - forward reference to avoid circular import
+
+    def __len__(self) -> int:
+        """Return the number of requirements."""
+        return len(self.requirements)

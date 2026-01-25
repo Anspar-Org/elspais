@@ -433,15 +433,39 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 
 ---
 
-### [ ] 5.4 Implement Lossless Graph-to-File Reconstruction
+### [x] 5.3.1 Fix Missing `Any` Import in models.py
+
+- **Priority**: P1 - Blocking CLI usage
+- **Description**: Fix `NameError: name 'Any' is not defined` in `core/models.py` line 326.
+- **Files**:
+  - `src/elspais/core/models.py`
+- **Tasks**:
+  - Add `Any` to the imports from `typing` module
+- **Error**:
+  ```
+  File "src/elspais/core/models.py", line 326, in <module>
+      FileNode = Any  # Will be properly typed via TYPE_CHECKING
+  NameError: name 'Any' is not defined
+  ```
+- **Acceptance criteria**:
+  - [x] `elspais` CLI runs without import error
+  - [x] All tests pass
+- **Resolution**: Added `Any` to typing imports in `core/models.py`.
+
+---
+
+### [x] 5.4 Implement Lossless Graph-to-File Reconstruction
 
 - **Priority**: P3 - Full round-trip fidelity
 - **Description**: Enable reconstructing the original spec files character-for-character from graph data alone. This requires the graph to preserve all content, including non-requirement sections (prose, comments, headers between requirements).
 - **Files**:
   - `src/elspais/core/graph.py`
   - `src/elspais/core/graph_builder.py`
-  - `src/elspais/core/loader.py`
-  - `src/elspais/mcp/reconstructor.py` (new)
+  - `src/elspais/core/graph_schema.py`
+  - `src/elspais/commands/trace.py`
+  - `src/elspais/cli.py`
+  - `src/elspais/mcp/serializers.py`
+  - `src/elspais/mcp/reconstructor.py`
 - **Tasks**:
   - Design `FileNode` concept to represent spec files in the graph
     - Careful: avoid circular deps (file → reqs, reqs → file for location)
@@ -455,12 +479,50 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
   - Add MCP tool `verify_reconstruction(path)` to diff original vs reconstructed
 - **Tests**: `tests/test_mcp/test_file_reconstruction.py`
 - **Acceptance criteria**:
-  - [ ] UnparsedContent nodes capture prose/headers between requirements
-  - [ ] FileNode or equivalent tracks content ordering
-  - [ ] `reconstruct_file()` produces character-identical output (whitespace may differ)
-  - [ ] Round-trip test: load → graph → reconstruct → compare passes
-  - [ ] No circular dependency issues in graph structure
-  - [ ] Incremental refresh preserves unparsed content correctly
+  - [x] UnparsedContent nodes capture prose/headers between requirements (via FILE_REGION nodes)
+  - [x] FileNode or equivalent tracks content ordering (FileInfo.requirements stores TraceNode refs)
+  - [x] `reconstruct_file()` produces character-identical output (whitespace may differ)
+  - [x] Round-trip test: load → graph → reconstruct → compare passes
+  - [x] No circular dependency issues in graph structure (node-data refs, not edges)
+  - [x] Incremental refresh preserves unparsed content correctly
+- **Resolution**: Implemented unified graph approach with FILE and FILE_REGION TraceNode kinds:
+  - Added `NodeKind.FILE` and `NodeKind.FILE_REGION` to graph.py
+  - Added `FileInfo` dataclass with `file_path` and `requirements` (direct TraceNode refs)
+  - Added `source_file` field to TraceNode for bidirectional REQ→FILE reference (node-data, not edge)
+  - Added `include_file_nodes` parameter to TraceGraphBuilder
+  - Added `--graph-file` CLI flag to trace command
+  - Updated reconstructor to support graph-based reconstruction with fallback to legacy _file_index
+  - FILE→FILE_REGION uses edge relationships; FILE↔REQ uses node-data references (avoids coverage algorithm interference)
+  - 35 tests in test_file_reconstruction.py (existing + new FILE node tests)
+
+---
+
+### [x] 5.5 Persist `--view` State via Cookies
+
+- **Priority**: P3 - UX improvement
+- **Description**: Save user's most recent `--view` selection(s) using cookies so the preferred view persists across sessions.
+- **Files**:
+  - `src/elspais/trace_view/html/templates/partials/scripts.js`
+- **Tasks**:
+  - Research cookie storage options for CLI-generated HTML views
+  - Design state schema (which views, per-workspace or global?)
+  - Implement cookie read/write for view preferences
+  - Apply saved view state on page load
+  - Add UI to clear/reset saved preferences
+  - Consider: multiple saved views? Named presets?
+- **Acceptance criteria**:
+  - [x] User's `--view` selection persists after browser close
+  - [x] Works across multiple trace view sessions
+  - [x] Graceful fallback if cookies disabled
+  - [x] Option to reset to defaults
+- **Resolution**: Added cookie-based state persistence to scripts.js:
+  - Added `cookies` utility object with `set()`, `get()`, `delete()`, `saveState()`, `restoreState()`, and `clearState()` methods
+  - Persisted state: hiddenLevels (Set), hiddenRepos (Set), hideFiles (boolean), viewMode (string)
+  - State saved automatically on filter toggle, view switch
+  - State restored on DOMContentLoaded before applying view mode
+  - "Clear" button now resets both DOM filters AND cookie state
+  - Cookies use `elspais_tv_` prefix, 30-day expiration, SameSite=Lax for security
+  - Graceful fallback: try/catch around all cookie operations with console warnings
 
 ---
 
@@ -470,11 +532,11 @@ This file tracks a queue of enhancement issues for MCP graph integration. After 
 - [x] All Phase 2 items complete
 - [x] All Phase 3 items complete
 - [x] All Phase 4 items complete
-- [ ] All Phase 5 items complete
-- [ ] All tests passing
-- [ ] Documentation updated in CLAUDE.md
-- [ ] Version bumped in pyproject.toml
-- [ ] CHANGELOG.md updated
+- [x] All Phase 5 items complete
+- [x] All tests passing (1085 tests)
+- [x] Documentation updated in CLAUDE.md
+- [x] Version bumped in pyproject.toml (0.19.0 → 0.20.0)
+- [x] CHANGELOG.md updated
 
 ---
 

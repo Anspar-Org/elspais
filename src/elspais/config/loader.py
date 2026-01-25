@@ -494,28 +494,27 @@ def get_content_rules(
     return [base_path / rel_path for rel_path in rule_paths]
 
 
-def load_config_from_args(
-    config_arg: Optional[Path] = None,
+def get_config(
+    config_path: Optional[Path] = None,
     start_path: Optional[Path] = None,
     quiet: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Load configuration from CLI args or discover config file.
+    """Get configuration with auto-discovery and fallback.
 
     This is the standard helper for command modules to load configuration.
     It handles:
-    - Explicit config path from CLI args
+    - Explicit config file path (if provided)
     - Config file discovery from start_path
     - Fallback to defaults if no config found
     - Error reporting (unless quiet=True)
 
     Args:
-        config_arg: Explicit config path from CLI args (e.g., args.config)
-        start_path: Directory to search for config file (defaults to cwd)
-        quiet: If True, suppress error messages
+        config_path: Explicit config file path (optional)
+        start_path: Directory to search for config (defaults to cwd)
+        quiet: Suppress error messages
 
     Returns:
-        Loaded configuration dictionary (never None)
+        Configuration dictionary (defaults if not found)
     """
     import sys
 
@@ -523,11 +522,11 @@ def load_config_from_args(
         start_path = Path.cwd()
 
     # Use explicit config path or discover
-    config_path = config_arg if config_arg else find_config_file(start_path)
+    resolved_path = config_path if config_path else find_config_file(start_path)
 
-    if config_path and config_path.exists():
+    if resolved_path and resolved_path.exists():
         try:
-            return load_config(config_path)
+            return load_config(resolved_path)
         except Exception as e:
             if not quiet:
                 print(f"Error loading config: {e}", file=sys.stderr)

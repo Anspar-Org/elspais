@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from elspais.mcp.git_safety import GitSafetyManager, SafetyBranchResult
-from elspais.mcp.mutator import GraphMutator
+from elspais.mcp.mutator import SpecFileMutator
 from elspais.mcp.serializers import serialize_node_full
 
 if TYPE_CHECKING:
@@ -175,7 +175,7 @@ Example response:
     def __init__(
         self,
         working_dir: Path,
-        mutator: Optional[GraphMutator] = None,
+        mutator: Optional[SpecFileMutator] = None,
         invoker: Optional[ClaudeInvoker] = None,
     ):
         """
@@ -183,11 +183,11 @@ Example response:
 
         Args:
             working_dir: Root directory of the workspace
-            mutator: GraphMutator for file operations (created if not provided)
+            mutator: SpecFileMutator for file operations (created if not provided)
             invoker: ClaudeInvoker for Claude calls (created if not provided)
         """
         self.working_dir = working_dir
-        self.mutator = mutator or GraphMutator(working_dir)
+        self.mutator = mutator or SpecFileMutator(working_dir)
         self.invoker = invoker or ClaudeInvoker()
         self.git_safety = GitSafetyManager(working_dir)
 

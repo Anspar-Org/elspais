@@ -105,11 +105,11 @@ def run(args: argparse.Namespace) -> int:
         test_data = None
         testing_config = TestingConfig.from_dict(config.get("testing", {}))
         if should_scan_tests(args, testing_config):
-            from elspais.testing.mapper import TestMapper
+            from elspais.testing.mapper import TestCoverageMapper
 
             base_path = find_project_root(spec_dirs)
             ignore_dirs = config.get("directories", {}).get("ignore", [])
-            mapper = TestMapper(testing_config)
+            mapper = TestCoverageMapper(testing_config)
             test_data = mapper.map_tests(
                 requirement_ids=set(requirements.keys()),
                 base_path=base_path,
@@ -157,13 +157,13 @@ def run(args: argparse.Namespace) -> int:
 def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
     """Load configuration from file or use defaults.
 
-    Note: This is a wrapper for load_config_from_args() that returns Optional[Dict]
-    for backward compatibility. New code should use load_config_from_args() directly.
+    Note: This is a wrapper for get_config() that returns Optional[Dict]
+    for backward compatibility. New code should use get_config() directly.
     """
-    from elspais.config.loader import load_config_from_args
+    from elspais.config.loader import get_config
 
-    config = load_config_from_args(
-        config_arg=getattr(args, "config", None),
+    config = get_config(
+        config_path=getattr(args, "config", None),
         quiet=getattr(args, "quiet", False),
     )
     return config

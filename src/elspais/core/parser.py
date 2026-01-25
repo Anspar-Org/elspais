@@ -8,7 +8,14 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union
 
-from elspais.core.models import Assertion, ParseResult, ParseWarning, Requirement
+from elspais.core.graph import FileNode, FileRegion
+from elspais.core.models import (
+    Assertion,
+    ParseResult,
+    ParseWarning,
+    Requirement,
+    StructuredParseResult,
+)
 from elspais.core.patterns import PatternConfig, PatternValidator
 
 
@@ -179,6 +186,161 @@ class RequirementParser:
         """
         text = file_path.read_text(encoding="utf-8")
         return self.parse_text(text, file_path, subdir)
+
+    def parse_file_with_structure(
+        self,
+        file_path: Path,
+        repo_root: Optional[Path] = None,
+        subdir: str = "",
+        preserve_lines: bool = False,
+    ) -> StructuredParseResult:
+        """
+        Parse requirements from a file AND preserve file structure.
+
+        Used for lossless file reconstruction. Captures requirements,
+        warnings, AND the file structure (regions, ordering) needed
+        to reconstruct the original file.
+
+        Args:
+            file_path: Path to the Markdown file
+            repo_root: Repository root for relative path calculation
+            subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
+            preserve_lines: If True, store original_lines in FileNode (uses more memory)
+
+        Returns:
+            StructuredParseResult with requirements, warnings, and FileNode
+        """
+        text = file_path.read_text(encoding="utf-8")
+        lines = text.split("\n")
+
+        requirements: Dict[str, Requirement] = {}
+        warnings: List[ParseWarning] = []
+        regions: List[FileRegion] = []
+        requirement_order: List[str] = []
+
+        # Calculate relative file path
+        if repo_root:
+            rel_path = str(file_path.relative_to(repo_root))
+        else:
+            rel_path = str(file_path)
+
+        # Track line boundaries
+        i = 0
+        last_req_end_line = 0  # Line after last requirement (0 means no reqs yet)
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Look for requirement header
+            header_match = self.HEADER_PATTERN.match(line)
+            if header_match:
+                req_id = header_match.group("id")
+
+                # Validate ID against configured pattern
+                if not self.validator.is_valid(req_id):
+                    i += 1
+                    continue
+
+                # Capture region before this requirement
+                if last_req_end_line == 0:
+                    # First requirement - capture preamble
+                    if i > 0:
+                        regions.append(FileRegion(
+                            region_type="preamble",
+                            start_line=1,
+                            end_line=i,
+                            content="\n".join(lines[:i]),
+                        ))
+                else:
+                    # Inter-requirement region
+                    if i > last_req_end_line:
+                        regions.append(FileRegion(
+                            region_type="inter_requirement",
+                            start_line=last_req_end_line + 1,
+                            end_line=i,
+                            content="\n".join(lines[last_req_end_line:i]),
+                        ))
+
+                title = header_match.group("title").strip()
+                start_line = i + 1  # 1-indexed
+
+                # Find the end of this requirement
+                req_lines = [line]
+                i += 1
+                while i < len(lines):
+                    req_lines.append(lines[i])
+                    # Check for end marker or next requirement
+                    if self.END_MARKER_PATTERN.match(lines[i]):
+                        last_req_end_line = i + 1
+                        i += 1
+                        # Skip separator line if present
+                        if i < len(lines) and lines[i].strip() == "---":
+                            req_lines.append(lines[i])
+                            last_req_end_line = i + 1
+                            i += 1
+                        break
+                    # Check for next valid requirement header
+                    next_match = self.HEADER_PATTERN.match(lines[i])
+                    if next_match and self.validator.is_valid(next_match.group("id")):
+                        # Hit next requirement without end marker
+                        last_req_end_line = i
+                        break
+                    i += 1
+                else:
+                    # Reached end of file without end marker
+                    last_req_end_line = len(lines)
+
+                # Parse the requirement block
+                req_text = "\n".join(req_lines)
+                req, block_warnings = self._parse_requirement_block(
+                    req_id, title, req_text, file_path, start_line, subdir
+                )
+                warnings.extend(block_warnings)
+                if req:
+                    # Check for duplicate ID
+                    if req_id in requirements:
+                        # Keep both: original stays, duplicate gets __conflict suffix
+                        conflict_key, conflict_req, warning = self._make_conflict_entry(
+                            req, req_id, requirements[req_id], file_path, start_line
+                        )
+                        requirements[conflict_key] = conflict_req
+                        warnings.append(warning)
+                    else:
+                        requirements[req_id] = req
+                    requirement_order.append(req_id)
+            else:
+                i += 1
+
+        # Capture postamble (content after last requirement)
+        if last_req_end_line > 0 and last_req_end_line < len(lines):
+            regions.append(FileRegion(
+                region_type="postamble",
+                start_line=last_req_end_line + 1,
+                end_line=len(lines),
+                content="\n".join(lines[last_req_end_line:]),
+            ))
+        elif last_req_end_line == 0 and lines:
+            # No requirements found - entire file is "preamble"
+            regions.append(FileRegion(
+                region_type="preamble",
+                start_line=1,
+                end_line=len(lines),
+                content="\n".join(lines),
+            ))
+
+        # Create FileNode
+        file_node = FileNode(
+            file_path=rel_path,
+            requirements=requirement_order,
+            regions=regions,
+            original_lines=lines if preserve_lines else None,
+        )
+
+        return StructuredParseResult(
+            requirements=requirements,
+            warnings=warnings,
+            file_node=file_node,
+        )
 
     def parse_directory(
         self,

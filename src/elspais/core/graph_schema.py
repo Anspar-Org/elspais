@@ -639,6 +639,22 @@ class GraphSchema:
                         "skipped": "#F39C12",
                     },
                 ),
+                "file": NodeTypeSchema(
+                    name="file",
+                    source="spec",
+                    fields=["file_path", "requirements"],
+                    is_root=True,  # FILE nodes are always roots (no parents)
+                    label_template="{file_path}",
+                    color="#95A5A6",  # Gray for files
+                ),
+                "file_region": NodeTypeSchema(
+                    name="file_region",
+                    source="spec",
+                    fields=["region_type", "start_line", "end_line", "content"],
+                    is_root=False,  # FILE_REGION has FILE parent
+                    label_template="{region_type} ({start_line}-{end_line})",
+                    color="#BDC3C7",  # Light gray for regions
+                ),
             },
             relationships={
                 "implements": RelationshipSchema(
@@ -677,6 +693,13 @@ class GraphSchema:
                     to_kind=["test_result"],
                     direction="down",
                     attach_during_parse=True,
+                ),
+                "contains": RelationshipSchema(
+                    name="contains",
+                    from_kind=["file"],
+                    to_kind=["file_region"],
+                    direction="down",
+                    required_for_non_root=False,
                 ),
             },
             parsers=[

@@ -60,6 +60,7 @@ elspais trace --graph --depth requirements # Show requirements hierarchy only (d
 elspais trace --graph --depth assertions  # Include assertions (depth=2)
 elspais trace --graph --depth implementation # Include code/tests (depth=3)
 elspais trace --graph --depth full        # Show unlimited depth (default)
+elspais trace --graph --graph-file        # Include FILE nodes for lossless reconstruction
 
 # AI-assisted requirement reformatting
 elspais reformat-with-claude --dry-run              # Preview reformatting
@@ -97,7 +98,7 @@ elspais init --type associated    # Initialize associated repository
   - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
   - **hierarchy.py**: Centralized hierarchy scanning utilities (`find_requirement`, `find_children`, `find_children_ids`, `build_children_index`, `detect_cycles`, `find_roots`, `find_orphans`, `CycleInfo` dataclass) - replaces duplicated logic across analyze, trace, and trace_view modules
   - **loader.py**: Centralized requirement loading - single source of truth for parsing spec files. Provides `create_parser()`, `parse_requirements_from_directories()` (returns ParseResult with warnings), `load_requirements_from_directories()` (returns Dict), `load_requirements_from_repo()`. Used by context.py, validate.py, and other modules.
-  - **graph.py**: Unified traceability graph (`SourceLocation`, `NodeKind`, `TraceNode`, `TraceGraph`, `CodeReference`, `TestReference`, `TestResult`, `UserJourney`) - represents full Requirements → Assertions → Code → Tests → Results DAG
+  - **graph.py**: Unified traceability graph (`SourceLocation`, `NodeKind`, `TraceNode`, `TraceGraph`, `CodeReference`, `TestReference`, `TestResult`, `UserJourney`, `FileInfo`, `FileNode`, `FileRegion`) - represents full Requirements → Assertions → Code → Tests → Results DAG. `NodeKind` includes FILE and FILE_REGION for lossless reconstruction when `--graph-file` flag is used.
   - **graph_schema.py**: Schema-driven graph configuration (`NodeTypeSchema`, `RelationshipSchema`, `ParserConfig`, `ValidationConfig`, `GraphSchema`, `RollupMetrics` with coverage source tracking, `MetricsConfig` with `strict_mode`, `ReportSchema`, `CoverageSource` enum) - enables custom node types, relationships, and configurable reports via config
   - **graph_builder.py**: Graph construction (`TraceGraphBuilder`, `ValidationResult`, `build_graph_from_requirements`, `build_graph_from_repo`) - builds DAG with cycle detection, orphan checking, and broken link validation
 - **config/**: Configuration handling
@@ -232,6 +233,19 @@ elspais init --type associated    # Initialize associated repository
 16. **parse_* vs load_* Naming Convention**: In `core/loader.py`:
     - `parse_requirements_from_directories()` - Returns `ParseResult` with both requirements and warnings (use when you need parser warnings)
     - `load_requirements_from_directories()` - Returns `Dict[str, Requirement]` only (use when you just need requirements)
+
+17. **FILE Node Support for Lossless Reconstruction**: When `--graph-file` flag is used with `elspais trace --graph`, the graph includes FILE and FILE_REGION TraceNodes:
+    - **FILE nodes**: Container for spec file metadata with `FileInfo.file_path` and `FileInfo.requirements` (direct TraceNode references)
+    - **FILE_REGION nodes**: Unparsed content (preamble, inter-requirement, postamble) as children of FILE
+    - **Bidirectional node-data references**: `TraceNode.source_file` links REQ→FILE (not edges, so coverage algorithms unaffected)
+    - **Reconstruction**: `FileReconstructor` can rebuild original file from graph using FILE_REGION children and requirement order
+
+18. **Cookie-based View State Persistence**: The `--view` HTML output persists user filter/view preferences via browser cookies:
+    - State persisted: hidden levels (PRD/OPS/DEV), hidden repos, files filter, view mode (flat/hierarchy/uncommitted/branch)
+    - Cookies use `elspais_tv_` prefix with 30-day expiration
+    - State saved on filter toggle and view switch
+    - State restored on page load (DOMContentLoaded)
+    - "Clear" button resets both DOM filters AND cookie state
 
 ### Requirement Format (Updated)
 

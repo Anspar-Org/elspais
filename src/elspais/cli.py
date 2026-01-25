@@ -234,6 +234,14 @@ Common rules to skip:
             "full (unlimited)"
         ),
     )
+    trace_parser.add_argument(
+        "--graph-file",
+        action="store_true",
+        help=(
+            "Include FILE and FILE_REGION nodes in graph for lossless reconstruction. "
+            "These nodes enable round-trip parsing and file regeneration."
+        ),
+    )
 
     # hash command
     hash_parser = subparsers.add_parser(

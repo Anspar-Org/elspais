@@ -15,10 +15,11 @@ if TYPE_CHECKING:
     from elspais.core.graph_schema import NodeTypeSchema
 
 
-class RequirementParser:
-    """Parser for requirement spec files.
+class RequirementTextParser:
+    """Parser plugin for requirement spec files.
 
-    Wraps the existing RequirementParser to produce TraceNode instances.
+    Wraps the core RequirementParser to produce TraceNode instances
+    for the traceability graph.
     """
 
     def __init__(self) -> None:
@@ -152,10 +153,10 @@ class RequirementParser:
         self._pattern_config = config
 
 
-def create_parser() -> RequirementParser:
-    """Factory function to create a RequirementParser.
+def create_parser() -> RequirementTextParser:
+    """Factory function to create a RequirementTextParser.
 
     Returns:
-        New RequirementParser instance.
+        New RequirementTextParser instance.
     """
-    return RequirementParser()
+    return RequirementTextParser()

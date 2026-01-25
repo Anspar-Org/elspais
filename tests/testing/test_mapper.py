@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from elspais.testing.config import TestingConfig
-from elspais.testing.mapper import RequirementTestData, TestMapper, TestMappingResult
+from elspais.testing.mapper import RequirementTestData, TestCoverageMapper, TestMappingResult
 
 
-class TestTestMapper:
-    """Tests for TestMapper class."""
+class TestTestCoverageMapper:
+    """Tests for TestCoverageMapper class."""
 
     @pytest.fixture
     def fixtures_dir(self):
@@ -29,7 +29,7 @@ class TestTestMapper:
 
     def test_map_tests_basic(self, testing_config, fixtures_dir):
         """Test basic test mapping functionality."""
-        mapper = TestMapper(testing_config)
+        mapper = TestCoverageMapper(testing_config)
 
         result = mapper.map_tests(
             requirement_ids={"REQ-p00001", "REQ-d00001"},
@@ -41,7 +41,7 @@ class TestTestMapper:
 
     def test_map_tests_includes_known_requirements(self, testing_config, fixtures_dir):
         """Test that all known requirements get entries."""
-        mapper = TestMapper(testing_config)
+        mapper = TestCoverageMapper(testing_config)
         known_reqs = {"REQ-p00001", "REQ-d00001", "REQ-x99999"}  # x99999 has no tests
 
         result = mapper.map_tests(
@@ -58,7 +58,7 @@ class TestTestMapper:
 
     def test_map_tests_counts_correctly(self, testing_config, fixtures_dir):
         """Test that test counts are calculated correctly."""
-        mapper = TestMapper(testing_config)
+        mapper = TestCoverageMapper(testing_config)
 
         result = mapper.map_tests(
             requirement_ids={"REQ-p00001"},
@@ -89,7 +89,7 @@ class TestTestMapper:
             result_files=["nonexistent/*.xml"],  # No matching files
             reference_patterns=[],
         )
-        mapper = TestMapper(config)
+        mapper = TestCoverageMapper(config)
 
         result = mapper.map_tests(
             requirement_ids={"REQ-p00001"},
@@ -105,7 +105,7 @@ class TestTestMapper:
 
     def test_scan_summary_populated(self, testing_config, fixtures_dir):
         """Test that scan summary is populated."""
-        mapper = TestMapper(testing_config)
+        mapper = TestCoverageMapper(testing_config)
 
         result = mapper.map_tests(
             requirement_ids=set(),
