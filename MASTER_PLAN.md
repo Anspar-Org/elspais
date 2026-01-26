@@ -115,7 +115,7 @@ tests/arch3/test_mdparser/
 └── test_remainder_parser.py
 ```
 
-### [ ] Phase 3: Node-Type Parsers
+### [x] Phase 3: Node-Type Parsers - COMPLETE
 
 **Files to Create:**
 1. `arch3/Graph/MDparser/requirement.py` - Adapt from core/parser.py
