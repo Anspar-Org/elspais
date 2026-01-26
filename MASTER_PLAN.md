@@ -280,14 +280,17 @@ tests/arch3/test_integration/
 - Updated all imports throughout codebase
 - arch3 is now the only implementation
 
-### [ ] Phase 16: Remaining Port Work
+### [~] Phase 16: Remaining Port Work (In Progress)
 
 **Stubbed features that need arch3 implementation:**
 
 1. **Trace-View HTML Generation** (`commands/trace.py`)
-   - `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server` flags
-   - Currently returns error "not yet implemented in arch3"
-   - Use `arch3/html/generator.py` as foundation
+   - [x] `--view` flag - Uses `HTMLGenerator` for interactive HTML output
+   - [x] `--embed-content` flag - Embeds JSON requirement data in HTML
+   - [ ] `--edit-mode` flag - Not yet implemented
+   - [ ] `--review-mode` flag - Not yet implemented
+   - [ ] `--server` flag - Not yet implemented (requires Flask)
+   - Basic trace-view now functional with `html/generator.py`
 
 2. **File Reconstruction** (`mcp/reconstructor.py`)
    - `FileReconstructor.reconstruct_file()` stubbed

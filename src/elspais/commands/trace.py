@@ -2,8 +2,8 @@
 """
 elspais.commands.trace - Generate traceability matrix command.
 
-STUB: This command needs arch3 implementation.
-Old implementation removed during arch3 migration.
+Generates traceability matrix in various formats using the TraceGraph.
+Supports interactive HTML view with --view flag.
 """
 
 import argparse
@@ -12,14 +12,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from elspais.arch3 import (
+from elspais.config import (
     DEFAULT_CONFIG,
     find_config_file,
     get_spec_directories,
     load_config,
-    load_requirements_from_directories,
 )
-from elspais.arch3.Graph.builder import GraphBuilder, TraceGraph
+from elspais.loader import load_requirements_from_directories
+from elspais.graph.builder import GraphBuilder, TraceGraph
 
 
 def run(args: argparse.Namespace) -> int:
@@ -27,25 +27,23 @@ def run(args: argparse.Namespace) -> int:
 
     Generates traceability output in various formats.
     """
-    # Check for features not yet implemented in arch3
-    use_trace_view = (
-        getattr(args, "view", False)
-        or getattr(args, "embed_content", False)
-        or getattr(args, "edit_mode", False)
+    # Check for advanced trace-view features (not yet implemented)
+    use_advanced_trace_view = (
+        getattr(args, "edit_mode", False)
         or getattr(args, "review_mode", False)
         or getattr(args, "server", False)
     )
 
-    if use_trace_view:
-        print("Error: trace-view features not yet implemented in arch3", file=sys.stderr)
-        print("Use: --format markdown|html|csv|json instead", file=sys.stderr)
+    if use_advanced_trace_view:
+        print("Error: Advanced trace-view features (--edit-mode, --review-mode, --server) not yet implemented", file=sys.stderr)
+        print("Use: --view for interactive HTML, --format markdown|html|csv|json for basic output", file=sys.stderr)
         return 1
 
     return run_graph_trace(args)
 
 
 def run_graph_trace(args: argparse.Namespace) -> int:
-    """Run trace using the arch3 traceability graph."""
+    """Run trace using the traceability graph."""
 
     # Load configuration
     config_path = getattr(args, "config", None) or find_config_file(Path.cwd())
@@ -76,7 +74,7 @@ def run_graph_trace(args: argparse.Namespace) -> int:
 
     # Convert requirements to graph nodes
     for req_id, req in requirements.items():
-        from elspais.arch3.Graph.MDparser import ParsedContent
+        from elspais.graph.parsers import ParsedContent
 
         # Create ParsedContent from requirement
         parsed_data = {
@@ -103,9 +101,29 @@ def run_graph_trace(args: argparse.Namespace) -> int:
 
     graph = builder.build()
 
-    # Output format
-    output_format = getattr(args, "format", "markdown") or "markdown"
+    # Check for --view flag (interactive HTML generation)
+    use_view = getattr(args, "view", False)
+    embed_content = getattr(args, "embed_content", False)
     output_path = getattr(args, "output", None)
+
+    if use_view:
+        # Use HTMLGenerator for interactive view
+        from elspais.html import HTMLGenerator
+
+        generator = HTMLGenerator(graph=graph, base_path="", version=1)
+        output = generator.generate(embed_content=embed_content)
+
+        # Default output path for view mode
+        if not output_path:
+            output_path = "traceability_view.html"
+
+        Path(output_path).write_text(output, encoding="utf-8")
+        if not getattr(args, "quiet", False):
+            print(f"Generated interactive view: {output_path}")
+        return 0
+
+    # Output format for non-view mode
+    output_format = getattr(args, "format", "markdown") or "markdown"
 
     if output_format == "json" or getattr(args, "graph_json", False):
         output = format_json(graph, requirements)

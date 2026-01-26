@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.24.0"
+version = "0.24.1"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -85,7 +85,7 @@ include = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --ignore=tests/_obsolete"
 
 [tool.black]
 line-length = 100
