@@ -11,16 +11,21 @@ REQ-int-d00008-B: The command SHALL support --dry-run, --backup, --start-req fla
 REQ-int-d00008-C: Line break normalization SHALL be included.
 """
 
+from __future__ import annotations
+
 import argparse
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.loader import load_requirements_from_directories
+from elspais.core.loader import load_requirements_from_directories, load_requirements_from_repo
 from elspais.core.patterns import PatternConfig, PatternValidator
 from elspais.core.rules import RuleEngine, RulesConfig
+
+if TYPE_CHECKING:
+    from elspais.core.graph import TraceGraph, TraceNode
 
 
 def run(args: argparse.Namespace) -> int:
@@ -29,13 +34,13 @@ def run(args: argparse.Namespace) -> int:
     This command reformats requirements from the old Acceptance Criteria format
     to the new Assertions format using Claude AI.
     """
+    from elspais.core.graph import NodeKind
+    from elspais.core.graph_builder import TraceGraphBuilder
     from elspais.core.patterns import normalize_req_id
     from elspais.reformat import (
         assemble_new_format,
-        get_all_requirements,
         normalize_line_breaks,
         reformat_requirement,
-        traverse_top_down,
         validate_reformatted_content,
     )
 
@@ -79,14 +84,17 @@ def run(args: argparse.Namespace) -> int:
     # Determine local base path for filtering (only modify local files)
     local_base_path = config_path.parent if config_path else Path.cwd()
 
-    # Get all requirements with hierarchy (including cross-repo if mode allows)
+    # Build requirement graph (including cross-repo if mode allows)
     print("Loading requirements and building hierarchy...", end=" ", flush=True)
-    requirements = get_all_requirements(mode=mode)
-    if not requirements:
+    graph = _build_requirement_graph(config_path, local_base_path, mode)
+    if graph is None:
         print("FAILED")
         print("Error: Could not load requirements. Run 'elspais validate' first.", file=sys.stderr)
         return 1
-    print(f"found {len(requirements)} requirements")
+
+    # Count requirement nodes
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    print(f"found {req_count} requirements")
 
     # Determine which requirements to process
     if start_req:
@@ -94,39 +102,43 @@ def run(args: argparse.Namespace) -> int:
         print(f"Normalizing {start_req}...", end=" ", flush=True)
         start_req = normalize_req_id(start_req, validator)
         print(f"-> {start_req}", flush=True)
-        if start_req not in requirements:
+        start_node = graph.find_by_id(start_req)
+        if start_node is None:
             print(f"Error: Requirement {start_req} not found", file=sys.stderr)
             return 1
 
         print(f"Traversing from {start_req}...", flush=True)
-        req_ids = traverse_top_down(requirements, start_req, max_depth)
+        req_nodes = _traverse_requirements(start_node, max_depth, NodeKind)
         print("Traversal complete", flush=True)
     else:
         # Process all PRD requirements first, then their descendants
-        prd_reqs = [req_id for req_id, node in requirements.items() if node.level.upper() == "PRD"]
-        prd_reqs.sort()
+        prd_nodes = [
+            n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+            if n.requirement and n.requirement.level.upper() == "PRD"
+        ]
+        prd_nodes.sort(key=lambda n: n.id)
 
-        print(f"Processing {len(prd_reqs)} PRD requirements and their descendants...")
-        req_ids = []
-        seen = set()
-        for prd_id in prd_reqs:
-            for req_id in traverse_top_down(requirements, prd_id, max_depth):
-                if req_id not in seen:
-                    req_ids.append(req_id)
-                    seen.add(req_id)
+        print(f"Processing {len(prd_nodes)} PRD requirements and their descendants...")
+        req_nodes: List[TraceNode] = []
+        seen: set[str] = set()
+        for prd_node in prd_nodes:
+            for node in _traverse_requirements(prd_node, max_depth, NodeKind):
+                if node.id not in seen:
+                    req_nodes.append(node)
+                    seen.add(node.id)
 
-    print(f"Found {len(req_ids)} requirements to process", flush=True)
+    print(f"Found {len(req_nodes)} requirements to process", flush=True)
 
     # Run validation to identify requirements with acceptance_criteria issues
     print("Running validation to identify old format...", end=" ", flush=True)
-    needs_reformat_ids = get_requirements_needing_reformat(config, local_base_path)
+    needs_reformat_ids = _get_requirements_needing_reformat(config, local_base_path)
     print(f"found {len(needs_reformat_ids)} with old format", flush=True)
     print(flush=True)
 
     # Filter to only requirements that need reformatting (unless --force)
     if not force:
-        req_ids = [r for r in req_ids if r in needs_reformat_ids]
-        print(f"Filtered to {len(req_ids)} requirements needing reformat")
+        req_nodes = [n for n in req_nodes if n.id in needs_reformat_ids]
+        print(f"Filtered to {len(req_nodes)} requirements needing reformat")
         print(flush=True)
 
     # Process each requirement
@@ -135,17 +147,22 @@ def run(args: argparse.Namespace) -> int:
     errors = 0
     line_break_fixes = 0
 
-    for i, req_id in enumerate(req_ids):
+    for i, node in enumerate(req_nodes):
         if i % 10 == 0 and i > 0:
-            print(f"Processing {i}/{len(req_ids)}...", flush=True)
-        node = requirements[req_id]
+            print(f"Processing {i}/{len(req_nodes)}...", flush=True)
+
+        req = node.requirement
+        if req is None:
+            continue
+
+        file_path_str = str(req.file_path) if req.file_path else ""
 
         # Skip non-local files (from core/associated repos)
-        if not is_local_file(node.file_path, local_base_path):
+        if not _is_local_file(file_path_str, local_base_path):
             skipped += 1
             continue
 
-        print(f"[PROC] {req_id}: {node.title[:50]}...")
+        print(f"[PROC] {node.id}: {node.label[:50]}...")
 
         # Call Claude to reformat
         result, success, error_msg = reformat_requirement(node, verbose=verbose)
@@ -172,11 +189,11 @@ def run(args: argparse.Namespace) -> int:
 
         # Assemble the new format
         new_content = assemble_new_format(
-            req_id=node.req_id,
-            title=node.title,
-            level=node.level,
-            status=node.status,
-            implements=node.implements,
+            req_id=node.id,
+            title=node.label,
+            level=req.level,
+            status=req.status,
+            implements=list(req.implements),
             rationale=rationale,
             assertions=assertions,
         )
@@ -187,13 +204,13 @@ def run(args: argparse.Namespace) -> int:
             line_break_fixes += 1
 
         if dry_run:
-            print(f"  Would write to: {node.file_path}")
+            print(f"  Would write to: {file_path_str}")
             print(f"  Assertions: {len(assertions)}")
             reformatted += 1
         else:
             # Write the reformatted content
             try:
-                file_path = Path(node.file_path)
+                file_path = Path(file_path_str)
 
                 if backup:
                     backup_path = file_path.with_suffix(file_path.suffix + ".bak")
@@ -206,8 +223,8 @@ def run(args: argparse.Namespace) -> int:
                 # Find and replace this requirement's content
                 # The requirement starts with its header and ends before the next
                 # requirement or end of file
-                updated_content = replace_requirement_content(
-                    content, node.req_id, node.title, new_content
+                updated_content = _replace_requirement_content(
+                    content, node.id, node.label, new_content
                 )
 
                 if updated_content:
@@ -235,7 +252,7 @@ def run(args: argparse.Namespace) -> int:
     return 0 if errors == 0 else 1
 
 
-def replace_requirement_content(
+def _replace_requirement_content(
     file_content: str, req_id: str, title: str, new_content: str
 ) -> Optional[str]:
     """
@@ -307,9 +324,9 @@ def replace_requirement_content(
 
 def run_line_breaks_only(args: argparse.Namespace) -> int:
     """Run line break normalization only."""
+    from elspais.core.graph import NodeKind
     from elspais.reformat import (
         detect_line_break_issues,
-        get_all_requirements,
         normalize_line_breaks,
     )
 
@@ -321,21 +338,27 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     print(f"  Backup:  {backup}")
     print()
 
-    # Get all requirements
+    # Build requirement graph
     print("Loading requirements...", end=" ", flush=True)
-    requirements = get_all_requirements()
-    if not requirements:
+    config_path = find_config_file(Path.cwd())
+    local_base_path = config_path.parent if config_path else Path.cwd()
+    graph = _build_requirement_graph(config_path, local_base_path, "combined")
+    if graph is None:
         print("FAILED")
         print("Error: Could not load requirements.", file=sys.stderr)
         return 1
-    print(f"found {len(requirements)} requirements")
+
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    print(f"found {req_count} requirements")
 
     # Group by file
-    files_to_process = {}
-    for req_id, node in requirements.items():
-        if node.file_path not in files_to_process:
-            files_to_process[node.file_path] = []
-        files_to_process[node.file_path].append(req_id)
+    files_to_process: Dict[str, List[str]] = {}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.requirement and node.requirement.file_path:
+            file_path_str = str(node.requirement.file_path)
+            if file_path_str not in files_to_process:
+                files_to_process[file_path_str] = []
+            files_to_process[file_path_str].append(node.id)
 
     print(f"Processing {len(files_to_process)} files...")
     print()
@@ -387,7 +410,7 @@ def run_line_breaks_only(args: argparse.Namespace) -> int:
     return 0 if errors == 0 else 1
 
 
-def get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
+def _get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
     """Run validation to identify requirements with old format.
 
     Args:
@@ -417,7 +440,7 @@ def get_requirements_needing_reformat(config: dict, base_path: Path) -> set:
     return {v.requirement_id for v in violations if v.rule_name == "format.acceptance_criteria"}
 
 
-def is_local_file(file_path: str, base_path: Path) -> bool:
+def _is_local_file(file_path: str, base_path: Path) -> bool:
     """Check if file is in the local repo (not core/associated).
 
     Args:
@@ -432,3 +455,116 @@ def is_local_file(file_path: str, base_path: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _build_requirement_graph(
+    config_path: Optional[Path],
+    base_path: Path,
+    mode: str = "combined",
+) -> Optional[TraceGraph]:
+    """Build requirement graph using TraceGraphBuilder.
+
+    Args:
+        config_path: Path to .elspais.toml config file
+        base_path: Base path for resolving relative directories
+        mode: Which repos to include:
+            - "combined" (default): Load local + core/associated repo requirements
+            - "core-only": Load only core/associated repo requirements
+            - "local-only": Load only local requirements
+
+    Returns:
+        TraceGraph with requirement hierarchy, or None on failure
+    """
+    from elspais.core.graph_builder import TraceGraphBuilder
+
+    if config_path is None:
+        config_path = find_config_file(base_path)
+
+    if config_path is None:
+        print("Warning: No .elspais.toml found", file=sys.stderr)
+        return None
+
+    try:
+        config = load_config(config_path)
+    except Exception as e:
+        print(f"Warning: Failed to load config: {e}", file=sys.stderr)
+        return None
+
+    all_requirements: Dict[str, any] = {}
+
+    # Load local requirements (unless core-only mode)
+    if mode in ("combined", "local-only"):
+        spec_dirs = get_spec_directories(None, config, base_path)
+        if spec_dirs:
+            try:
+                local_reqs = load_requirements_from_directories(spec_dirs, config)
+                all_requirements.update(local_reqs)
+            except Exception as e:
+                print(f"Warning: Failed to parse local requirements: {e}", file=sys.stderr)
+
+    # Load core/associated repo requirements (unless local-only mode)
+    if mode in ("combined", "core-only"):
+        core_path = config.get("core", {}).get("path")
+        if core_path:
+            repo_reqs = load_requirements_from_repo(Path(core_path), config)
+            for req_id, req in repo_reqs.items():
+                # Don't overwrite local requirements with same ID
+                if req_id not in all_requirements:
+                    all_requirements[req_id] = req
+
+    if not all_requirements:
+        print("Warning: No requirements found", file=sys.stderr)
+        return None
+
+    # Build graph
+    repo_root = config_path.parent if config_path else Path.cwd()
+    builder = TraceGraphBuilder(repo_root=repo_root)
+    builder.add_requirements(all_requirements)
+    return builder.build()
+
+
+def _traverse_requirements(
+    start_node: TraceNode,
+    max_depth: Optional[int],
+    NodeKind: type,
+) -> List[TraceNode]:
+    """Traverse hierarchy from start_node downward using BFS.
+
+    Args:
+        start_node: Starting TraceNode
+        max_depth: Maximum depth to traverse (None = unlimited)
+        NodeKind: NodeKind enum class (passed to avoid import in inner function)
+
+    Returns:
+        List of TraceNode objects in traversal order (requirements only)
+    """
+    from collections import deque
+
+    visited: List[TraceNode] = []
+    queue: deque[tuple[TraceNode, int]] = deque([(start_node, 0)])
+    seen: set[str] = set()
+
+    while queue:
+        node, depth = queue.popleft()
+
+        if node.id in seen:
+            continue
+
+        # Depth limit check (depth 0 is the start node)
+        if max_depth is not None and depth > max_depth:
+            continue
+
+        seen.add(node.id)
+
+        # Only include requirement nodes
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        visited.append(node)
+
+        # Add children to queue (only requirement children for traversal)
+        for child in node.children:
+            if child.id not in seen and child.kind == NodeKind.REQUIREMENT:
+                queue.append((child, depth + 1))
+
+    return visited

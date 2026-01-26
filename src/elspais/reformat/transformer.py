@@ -6,23 +6,27 @@ Invokes claude CLI to reformat requirements and assembles the output
 into the new format.
 """
 
+from __future__ import annotations
+
 import json
 import subprocess
 import sys
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from elspais.reformat.hierarchy import RequirementNode
 from elspais.reformat.prompts import JSON_SCHEMA_STR, REFORMAT_SYSTEM_PROMPT, build_user_prompt
+
+if TYPE_CHECKING:
+    from elspais.core.graph import TraceNode
 
 
 def reformat_requirement(
-    node: RequirementNode, model: str = "sonnet", verbose: bool = False
+    node: TraceNode, model: str = "sonnet", verbose: bool = False
 ) -> Tuple[Optional[dict], bool, str]:
     """
     Use Claude CLI to reformat a requirement.
 
     Args:
-        node: RequirementNode with current content
+        node: TraceNode with REQUIREMENT kind and populated requirement field
         model: Claude model to use (sonnet, opus, haiku)
         verbose: Print debug information
 
@@ -30,15 +34,19 @@ def reformat_requirement(
         Tuple of (parsed_result, success, error_message)
         parsed_result is a dict with 'rationale' and 'assertions' keys
     """
+    req = node.requirement
+    if req is None:
+        return None, False, "Node has no requirement data"
+
     # Build the prompt
     user_prompt = build_user_prompt(
-        req_id=node.req_id,
-        title=node.title,
-        level=node.level,
-        status=node.status,
-        implements=node.implements,
-        body=node.body,
-        rationale=node.rationale,
+        req_id=node.id,
+        title=node.label,
+        level=req.level,
+        status=req.status,
+        implements=list(req.implements),
+        body=req.body,
+        rationale=req.rationale or "",
     )
 
     # Build the claude command
@@ -223,13 +231,13 @@ def assemble_new_format(
 
 
 def validate_reformatted_content(
-    original: RequirementNode, rationale: str, assertions: List[str]
+    original: TraceNode, rationale: str, assertions: List[str]
 ) -> Tuple[bool, List[str]]:
     """
     Validate that reformatted content is well-formed.
 
     Args:
-        original: Original requirement node
+        original: Original TraceNode with REQUIREMENT kind
         rationale: New rationale text
         assertions: New assertions list
 
@@ -259,7 +267,9 @@ def validate_reformatted_content(
         return False, warnings
 
     # Warning if very few assertions from complex body
-    if len(assertions) < 2 and len(original.body) > 500:
+    req = original.requirement
+    body_len = len(req.body) if req else 0
+    if len(assertions) < 2 and body_len > 500:
         warnings.append("Few assertions from large body - may have missed obligations")
 
     is_valid = not any("missing SHALL" in w or "No assertions" in w for w in warnings)

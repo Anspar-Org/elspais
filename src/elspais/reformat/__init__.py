@@ -10,11 +10,6 @@ IMPLEMENTS REQUIREMENTS:
 """
 
 from elspais.reformat.detector import FormatAnalysis, detect_format, needs_reformatting
-from elspais.reformat.hierarchy import (
-    RequirementNode,
-    get_all_requirements,
-    traverse_top_down,
-)
 from elspais.reformat.line_breaks import (
     detect_line_break_issues,
     fix_requirement_line_breaks,
@@ -39,8 +34,4 @@ __all__ = [
     "normalize_line_breaks",
     "fix_requirement_line_breaks",
     "detect_line_break_issues",
-    # Hierarchy
-    "RequirementNode",
-    "get_all_requirements",
-    "traverse_top_down",
 ]

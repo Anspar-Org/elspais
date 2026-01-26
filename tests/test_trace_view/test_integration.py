@@ -108,11 +108,16 @@ class TestReformatImports:
 
         assert normalize_line_breaks is not None
 
-    def test_import_hierarchy(self):
-        """Test hierarchy functions can be imported."""
-        from elspais.reformat import RequirementNode
+    def test_import_graph_for_hierarchy(self):
+        """Test TraceGraph is used for hierarchy (replaces RequirementNode)."""
+        from elspais.core.graph import NodeKind, TraceGraph, TraceNode
+        from elspais.core.graph_builder import TraceGraphBuilder
 
-        assert RequirementNode is not None
+        # The new approach uses TraceGraph instead of RequirementNode
+        assert TraceGraph is not None
+        assert TraceNode is not None
+        assert TraceGraphBuilder is not None
+        assert NodeKind.REQUIREMENT is not None
 
 
 class TestTraceViewModels:

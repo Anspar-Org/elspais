@@ -186,7 +186,6 @@ elspais mcp                       # Start MCP server (requires elspais[mcp])
   - **transformer.py**: `reformat_requirement`, `assemble_new_format` - Claude CLI integration
   - **prompts.py**: System prompts and JSON schema for Claude
   - **line_breaks.py**: `normalize_line_breaks`, `fix_requirement_line_breaks`
-  - **hierarchy.py**: `RequirementNode`, `build_hierarchy`, `traverse_top_down`
 - **parsers/**: Parser plugin system for traceability tree (all parsers output `TraceNode` objects)
   - **\_\_init\_\_.py**: `SpecParser` protocol, `ParserRegistry`, `get_parser()` for parser discovery
   - **requirement.py**: `RequirementTextParser` - parses Markdown requirement text, creates TraceNode objects
