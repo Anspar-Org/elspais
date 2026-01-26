@@ -63,11 +63,63 @@ This file tracks remaining cleanup work for the unified graph architecture. Afte
 
 ---
 
-## Master Plan Complete
+## [ ] Phase 3: Real-World Testing Against fda-specs
 
-All phases have been completed. The unified graph architecture is now fully in place:
+**Goal**: Test all major elspais functions against the real fda-specs project to verify reasonableness and find bugs.
 
-1. **Phase 1**: Eliminated `reformat/hierarchy.py` - uses TraceGraph directly
-2. **Phase 2**: Verified `run_trace_view()` already uses unified graph architecture
+**Test Target**: `~/cure-hht/hht_diary-worktrees/fda-specs/`
 
-The codebase now uses `TraceGraph` as the single source of truth for all traceability operations.
+**IMPORTANT Rules**:
+- ❌ DO NOT modify any files in fda-specs
+- ✅ DO fix bugs found in elspais (this repo)
+- ✅ DO document issues found in fda-specs at `~/cure-hht/hht_diary-worktrees/fda-specs/ELSPAIS-found-bugs.md`
+
+**Functions to test**:
+
+### 1. Graph (`elspais trace --graph`)
+- [ ] Run `elspais trace --graph` and verify output
+- [ ] Run `elspais trace --graph --format html` and check HTML reasonableness
+- [ ] Run `elspais trace --graph-json` and validate JSON structure
+- [ ] Check for warnings/errors in validation output
+
+### 2. View (`elspais trace --view`)
+- [ ] Run `elspais trace --view` and verify HTML generation
+- [ ] Run `elspais trace --view --embed-content` and check embedded data
+- [ ] Verify hierarchy display and expand/collapse
+- [ ] Check git state annotations (uncommitted, modified, etc.)
+
+### 3. Edit (`elspais trace --view --edit-mode`)
+- [ ] Run with `--edit-mode` and verify edit UI appears
+- [ ] Check roadmap move buttons render correctly
+- [ ] Verify file picker modal works
+
+### 4. Review (`elspais trace --view --review-mode`)
+- [ ] Run with `--review-mode` and verify review UI appears
+- [ ] Check comment thread display
+- [ ] Verify status request display
+
+### 5. Validate (`elspais validate`)
+- [ ] Run `elspais validate` and check for errors
+- [ ] Review any hierarchy violations
+- [ ] Check for broken links or orphaned requirements
+
+### 6. Analyze (`elspais analyze`)
+- [ ] Run `elspais analyze hierarchy`
+- [ ] Run `elspais analyze orphans`
+- [ ] Run `elspais analyze coverage`
+
+**Execution approach**:
+- Use sub-agents (debugger, Explore) for each function test
+- Debug and fix any elspais bugs found
+- Document fda-specs issues in ELSPAIS-found-bugs.md
+
+**Output files**:
+- `~/cure-hht/hht_diary-worktrees/fda-specs/ELSPAIS-found-bugs.md` - Issues found in fda-specs
+- Commits to this repo for any elspais fixes
+
+---
+
+## Completed Phases
+
+1. **Phase 1**: Eliminated `reformat/hierarchy.py` - uses TraceGraph directly ✅
+2. **Phase 2**: Verified `run_trace_view()` already uses unified graph architecture ✅
