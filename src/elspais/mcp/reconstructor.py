@@ -1,10 +1,10 @@
 """
 elspais.mcp.reconstructor - Lossless file reconstruction from graph data.
 
-STUB: File reconstruction not yet implemented in arch3.
+STUB: File reconstruction not yet implemented.
 
 The original implementation used FileNode with file regions for lossless
-reconstruction. This needs to be re-implemented using arch3 graph structure.
+reconstruction. This needs to be re-implemented using the graph structure.
 
 Provides FileReconstructor class for reconstructing spec files from
 graph data, enabling round-trip verification.
@@ -14,11 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from elspais.arch3 import NodeKind, Requirement
-from elspais.arch3.Graph.builder import TraceGraph
+from elspais.graph import NodeKind
+from elspais.models import Requirement
+from elspais.graph.builder import TraceGraph
 
 if TYPE_CHECKING:
-    from elspais.arch3 import GraphNode
+    from elspais.graph import GraphNode
 
 
 @dataclass
@@ -43,11 +44,11 @@ class ReconstructionResult:
 class FileReconstructor:
     """Reconstructs spec files from graph data.
 
-    STUB: File reconstruction not yet implemented in arch3.
+    STUB: File reconstruction not yet implemented in the graph system.
 
     The original implementation used FileNode (with regions and requirement
     order) plus requirement data to reassemble the original file content.
-    This needs to be re-implemented using arch3's graph structure.
+    This needs to be re-implemented using the graph structure.
     """
 
     def __init__(self, graph: TraceGraph):
@@ -61,7 +62,7 @@ class FileReconstructor:
     def reconstruct_file(self, file_path: str) -> ReconstructionResult:
         """Reconstruct a file from graph data.
 
-        STUB: Not yet implemented in arch3.
+        STUB: Not yet implemented in the graph system.
 
         Args:
             file_path: Relative path to file
@@ -72,7 +73,7 @@ class FileReconstructor:
         return ReconstructionResult(
             success=False,
             content="",
-            message=f"File reconstruction not yet implemented in arch3: {file_path}",
+            message=f"File reconstruction not yet implemented in the graph system: {file_path}",
         )
 
     def _render_requirement(self, req: Requirement) -> str:
@@ -140,7 +141,7 @@ class FileReconstructor:
     ) -> ReconstructionResult:
         """Verify reconstruction by comparing to original.
 
-        STUB: Not yet implemented in arch3.
+        STUB: Not yet implemented in the graph system.
 
         Args:
             file_path: Relative path to file
@@ -152,7 +153,7 @@ class FileReconstructor:
         return ReconstructionResult(
             success=False,
             content="",
-            message=f"File reconstruction not yet implemented in arch3: {file_path}",
+            message=f"File reconstruction not yet implemented in the graph system: {file_path}",
         )
 
     def diff_reconstruction(
@@ -162,7 +163,7 @@ class FileReconstructor:
     ) -> str:
         """Generate diff between original and reconstructed.
 
-        STUB: Not yet implemented in arch3.
+        STUB: Not yet implemented in the graph system.
 
         Args:
             file_path: Relative path to file
@@ -171,4 +172,4 @@ class FileReconstructor:
         Returns:
             Error message indicating not implemented
         """
-        return f"File reconstruction not yet implemented in arch3: {file_path}"
+        return f"File reconstruction not yet implemented in the graph system: {file_path}"

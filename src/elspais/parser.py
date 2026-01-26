@@ -1,5 +1,5 @@
 """
-elspais.arch3.parser - Requirement file parsing.
+elspais.parser - Requirement file parsing.
 
 Parses Markdown files containing requirements in the standard format.
 """
@@ -8,13 +8,13 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union
 
-from elspais.arch3.models import (
+from elspais.models import (
     Assertion,
     ParseResult,
     ParseWarning,
     Requirement,
 )
-from elspais.arch3.utilities.patterns import PatternConfig, PatternValidator
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
 class RequirementParser:

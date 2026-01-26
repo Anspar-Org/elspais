@@ -1,5 +1,5 @@
 """
-elspais.arch3.rules - Validation rule engine.
+elspais.rules - Validation rule engine.
 
 Provides configurable validation rules for requirement hierarchies,
 format compliance, and traceability.
@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-from elspais.arch3.models import Requirement
-from elspais.arch3.utilities.patterns import PatternConfig, PatternValidator
+from elspais.models import Requirement
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
 class Severity(Enum):

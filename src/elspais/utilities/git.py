@@ -1,4 +1,4 @@
-"""Git state management for arch3.
+"""Git state management for elspais.
 
 Provides functions to query git status and detect changes to requirement files,
 enabling detection of:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser.results.pytest_json import PytestJSONParser
+from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 
 
 class TestPytestJSONParserBasic:

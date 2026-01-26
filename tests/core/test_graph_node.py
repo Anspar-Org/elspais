@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.Graph import GraphNode, NodeKind, SourceLocation
+from elspais.graph import GraphNode, NodeKind, SourceLocation
 
 
 class TestNodeKind:

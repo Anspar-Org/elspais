@@ -3,10 +3,10 @@
 import pytest
 from pathlib import Path
 
-from elspais.arch3.Graph.GraphNode import GraphNode, NodeKind, SourceLocation
-from elspais.arch3.Graph.builder import TraceGraph
-from elspais.arch3.Graph.relations import EdgeKind
-from elspais.arch3.Graph.serialize import (
+from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.builder import TraceGraph
+from elspais.graph.relations import EdgeKind
+from elspais.graph.serialize import (
     serialize_node,
     serialize_graph,
     to_markdown,

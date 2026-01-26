@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Protocol, runtime_checkable
 
-from elspais.arch3.Graph.MDparser import ParseContext, ParsedContent, ParserRegistry
+from elspais.graph.parsers import ParseContext, ParsedContent, ParserRegistry
 
 
 @dataclass

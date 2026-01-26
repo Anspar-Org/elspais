@@ -1,11 +1,11 @@
-"""Tests for arch3 Git Integration."""
+"""Tests for Git Integration."""
 
 import pytest
 import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from elspais.arch3.utilities.git import (
+from elspais.utilities.git import (
     GitChangeInfo,
     MovedRequirement,
     get_repo_root,
@@ -100,7 +100,7 @@ class TestGetModifiedFiles:
         assert isinstance(modified, set)
         assert isinstance(untracked, set)
 
-    @patch("elspais.arch3.utilities.git.subprocess.run")
+    @patch("elspais.utilities.git.subprocess.run")
     def test_parses_porcelain_output(self, mock_run):
         """Correctly parses git status porcelain output."""
         mock_run.return_value = MagicMock(
@@ -115,7 +115,7 @@ class TestGetModifiedFiles:
         assert "untracked.md" in untracked
         assert "untracked.md" not in modified
 
-    @patch("elspais.arch3.utilities.git.subprocess.run")
+    @patch("elspais.utilities.git.subprocess.run")
     def test_handles_renames(self, mock_run):
         """Handles rename format: 'old.md -> new.md'."""
         mock_run.return_value = MagicMock(
@@ -132,7 +132,7 @@ class TestGetModifiedFiles:
 class TestGetChangedVsBranch:
     """Tests for get_changed_vs_branch function."""
 
-    @patch("elspais.arch3.utilities.git.subprocess.run")
+    @patch("elspais.utilities.git.subprocess.run")
     def test_returns_changed_files(self, mock_run):
         """Returns set of files changed vs branch."""
         mock_run.return_value = MagicMock(
@@ -144,7 +144,7 @@ class TestGetChangedVsBranch:
 
         assert changed == {"spec/prd.md", "spec/ops.md"}
 
-    @patch("elspais.arch3.utilities.git.subprocess.run")
+    @patch("elspais.utilities.git.subprocess.run")
     def test_tries_origin_fallback(self, mock_run):
         """Falls back to origin/main if main doesn't exist."""
         # First call fails (local main doesn't exist)

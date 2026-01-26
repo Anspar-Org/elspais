@@ -1,10 +1,10 @@
-"""Tests for arch3 Config Layer."""
+"""Tests for Config Layer."""
 
 import pytest
 import tempfile
 from pathlib import Path
 
-from elspais.arch3.config import ConfigLoader, load_config, find_config_file
+from elspais.config import ConfigLoader, load_config, find_config_file
 
 
 class TestConfigLoader:

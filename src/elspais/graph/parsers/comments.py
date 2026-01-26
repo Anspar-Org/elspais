@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Iterator
 
-from elspais.arch3.Graph.MDparser import ParseContext, ParsedContent
+from elspais.graph.parsers import ParseContext, ParsedContent
 
 
 class CommentsParser:

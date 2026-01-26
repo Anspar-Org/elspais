@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any, Iterator
 
-from elspais.arch3.Graph.MDparser import ParseContext, ParsedContent
-from elspais.arch3.utilities.patterns import PatternConfig, PatternValidator
+from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
 class RequirementParser:

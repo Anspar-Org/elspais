@@ -1,5 +1,5 @@
 """
-elspais.arch3.models - Core data models for requirements.
+elspais.models - Core data models for requirements.
 
 Provides dataclasses for representing requirements, parsed IDs,
 and requirement types.

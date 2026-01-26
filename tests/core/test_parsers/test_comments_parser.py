@@ -2,8 +2,8 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import ParseContext
-from elspais.arch3.Graph.MDparser.comments import CommentsParser
+from elspais.graph.parsers import ParseContext
+from elspais.graph.parsers.comments import CommentsParser
 
 
 class TestCommentsParserPriority:

@@ -5,8 +5,8 @@ The graph provides the iterator (graph.all_nodes()), and the caller
 applies annotators to nodes as needed.
 
 Usage:
-    from elspais.arch3.Graph.annotators import annotate_git_state, annotate_display_info
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph.annotators import annotate_git_state, annotate_display_info
+    from elspais.graph import NodeKind
 
     for node in graph.all_nodes():
         if node.kind == NodeKind.REQUIREMENT:
@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph.GraphNode import GraphNode
-    from elspais.arch3.Graph.builder import TraceGraph
-    from elspais.arch3.utilities.git import GitChangeInfo
+    from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.builder import TraceGraph
+    from elspais.utilities.git import GitChangeInfo
 
 
 def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
@@ -43,7 +43,7 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
         node: The node to annotate.
         git_info: Git change information, or None if git unavailable.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     if node.kind != NodeKind.REQUIREMENT:
         return
@@ -115,7 +115,7 @@ def annotate_display_info(node: GraphNode) -> None:
     Args:
         node: The node to annotate.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     if node.kind != NodeKind.REQUIREMENT:
         return
@@ -163,7 +163,7 @@ def annotate_implementation_files(
         node: The node to annotate.
         implementation_files: List of (file_path, line_number) tuples.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     if node.kind != NodeKind.REQUIREMENT:
         return
@@ -191,7 +191,7 @@ def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
         Dict with 'active' (excludes Deprecated) and 'all' (includes Deprecated) counts
         by level (PRD, OPS, DEV).
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     counts: dict[str, dict[str, int]] = {
         "active": {"PRD": 0, "OPS": 0, "DEV": 0},
@@ -219,7 +219,7 @@ def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
         Dict mapping repo prefix to {'active': count, 'all': count}.
         CORE is used for core repo requirements (no prefix).
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     repo_counts: dict[str, dict[str, int]] = {}
 
@@ -249,7 +249,7 @@ def count_implementation_files(graph: TraceGraph) -> int:
     Returns:
         Total count of implementation file references.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     total = 0
     for node in graph._index.values():
@@ -269,7 +269,7 @@ def collect_topics(graph: TraceGraph) -> list[str]:
     Returns:
         Sorted list of unique topic names extracted from file stems.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
     for node in graph._index.values():

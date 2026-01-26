@@ -2,9 +2,9 @@
 
 import pytest
 
-from elspais.arch3.Graph import GraphNode, NodeKind, Edge, EdgeKind
-from elspais.arch3.Graph.builder import GraphBuilder, TraceGraph
-from elspais.arch3.Graph.MDparser import ParsedContent
+from elspais.graph import GraphNode, NodeKind, Edge, EdgeKind
+from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.parsers import ParsedContent
 
 
 @pytest.fixture

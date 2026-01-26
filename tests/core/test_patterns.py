@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.utilities.patterns import (
+from elspais.utilities.patterns import (
     PatternConfig,
     PatternValidator,
     normalize_req_id,

@@ -2,8 +2,8 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import ParseContext
-from elspais.arch3.Graph.MDparser.remainder import RemainderParser
+from elspais.graph.parsers import ParseContext
+from elspais.graph.parsers.remainder import RemainderParser
 
 
 class TestRemainderParserPriority:

@@ -9,12 +9,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from elspais.arch3 import (
-    find_config_file,
-    load_config,
-    load_content_rule,
-    load_content_rules,
-)
+from elspais.config import find_config_file, load_config
+from elspais.content_rules import load_content_rule, load_content_rules
 
 
 def run(args: argparse.Namespace) -> int:

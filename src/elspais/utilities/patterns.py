@@ -6,7 +6,7 @@ Supports multiple ID formats:
 - Jira style: PROJ-123
 - Named: REQ-UserAuth
 
-Direct port from core/patterns.py for arch3.
+Ported from core/patterns.py.
 """
 
 import re

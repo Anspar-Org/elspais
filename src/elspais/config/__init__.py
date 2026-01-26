@@ -281,6 +281,21 @@ def _parse_value(value: str) -> Any:
         items = [_parse_value(item.strip()) for item in inner.split(",")]
         return items
 
+    # Inline table: { key = value, key2 = value2 }
+    if value.startswith("{") and value.endswith("}"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return {}
+        result = {}
+        # Split on commas, but handle nested structures
+        pairs = inner.split(",")
+        for pair in pairs:
+            pair = pair.strip()
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                result[k.strip()] = _parse_value(v.strip())
+        return result
+
     return value
 
 

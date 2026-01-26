@@ -19,21 +19,14 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from elspais.arch3 import (
-    PatternConfig,
-    PatternValidator,
-    RuleEngine,
-    RulesConfig,
-    find_config_file,
-    get_spec_directories,
-    load_config,
-    load_requirements_from_directories,
-    load_requirements_from_repo,
-)
+from elspais.config import find_config_file, get_spec_directories, load_config
+from elspais.loader import load_requirements_from_directories, load_requirements_from_repo
+from elspais.rules import RuleEngine, RulesConfig
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph import GraphNode
-    from elspais.arch3.Graph.builder import TraceGraph
+    from elspais.graph import GraphNode
+    from elspais.graph.builder import TraceGraph
 
 
 def run(args: argparse.Namespace) -> int:
@@ -42,9 +35,9 @@ def run(args: argparse.Namespace) -> int:
     This command reformats requirements from the old Acceptance Criteria format
     to the new Assertions format using Claude AI.
     """
-    from elspais.arch3 import NodeKind
-    from elspais.arch3.Graph.builder import GraphBuilder as TraceGraphBuilder
-    from elspais.arch3.utilities.patterns import normalize_req_id
+    from elspais.graph import NodeKind
+    from elspais.graph.builder import GraphBuilder as TraceGraphBuilder
+    from elspais.utilities.patterns import normalize_req_id
     from elspais.reformat import (
         assemble_new_format,
         normalize_line_breaks,
@@ -332,7 +325,7 @@ def _replace_requirement_content(
 
 def run_line_breaks_only(args: argparse.Namespace) -> int:
     """Run line break normalization only."""
-    from elspais.arch3 import NodeKind
+    from elspais.graph import NodeKind
     from elspais.reformat import (
         detect_line_break_issues,
         normalize_line_breaks,
@@ -483,7 +476,7 @@ def _build_requirement_graph(
     Returns:
         TraceGraph with requirement hierarchy, or None on failure
     """
-    from elspais.arch3.Graph.builder import GraphBuilder as TraceGraphBuilder
+    from elspais.graph.builder import GraphBuilder as TraceGraphBuilder
 
     if config_path is None:
         config_path = find_config_file(base_path)

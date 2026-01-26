@@ -1,12 +1,12 @@
-"""Tests for arch3 Annotators."""
+"""Tests for Graph Annotators."""
 
 import pytest
 
-from elspais.arch3.Graph import NodeKind
-from elspais.arch3.Graph.GraphNode import GraphNode, SourceLocation
-from elspais.arch3.Graph.builder import TraceGraph
-from elspais.arch3.utilities.git import GitChangeInfo
-from elspais.arch3.Graph.annotators import (
+from elspais.graph import NodeKind
+from elspais.graph.GraphNode import GraphNode, SourceLocation
+from elspais.graph.builder import TraceGraph
+from elspais.utilities.git import GitChangeInfo
+from elspais.graph.annotators import (
     annotate_git_state,
     annotate_display_info,
     annotate_implementation_files,

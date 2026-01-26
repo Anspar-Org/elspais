@@ -1,5 +1,5 @@
 """
-elspais.arch3.content_rules - Content rule loading and parsing.
+elspais.content_rules - Content rule loading and parsing.
 
 Content rules are markdown files that provide semantic validation guidance
 for requirements authoring. They can include YAML frontmatter for metadata.
@@ -8,7 +8,7 @@ for requirements authoring. They can include YAML frontmatter for metadata.
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from elspais.arch3.models import ContentRule
+from elspais.models import ContentRule
 
 
 def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:

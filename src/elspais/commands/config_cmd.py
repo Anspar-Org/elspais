@@ -10,8 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from elspais.arch3 import DEFAULT_CONFIG, find_config_file, load_config
-from elspais.arch3.config import parse_toml
+from elspais.config import DEFAULT_CONFIG, find_config_file, load_config, parse_toml
 
 
 def run(args: argparse.Namespace) -> int:

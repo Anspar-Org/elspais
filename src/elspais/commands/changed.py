@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from elspais.arch3 import DEFAULT_CONFIG, find_config_file, load_config
-from elspais.arch3.utilities.git import (
+from elspais.config import DEFAULT_CONFIG, find_config_file, load_config
+from elspais.utilities.git import (
     detect_moved_requirements,
     filter_spec_files,
     get_current_req_locations,
@@ -29,7 +29,7 @@ def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
     Note: This is a wrapper for get_config() that returns Optional[Dict]
     for backward compatibility. New code should use get_config() directly.
     """
-    from elspais.arch3 import get_config
+    from elspais.config import get_config
 
     return get_config(config_path=getattr(args, "config", None))
 

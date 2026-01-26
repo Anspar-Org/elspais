@@ -3,21 +3,16 @@ elspais.mcp.serializers - JSON serialization for MCP responses.
 
 Provides functions to serialize elspais data models to JSON-compatible dicts.
 
-UPDATED: Now uses arch3 GraphNode instead of TraceNode.
+Uses GraphNode from the traceability graph module.
 """
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from elspais.arch3 import (
-    Assertion,
-    ContentRule,
-    NodeKind,
-    Requirement,
-    RuleViolation,
-    GraphNode,
-)
-from elspais.arch3.Graph.builder import TraceGraph
+from elspais.models import Assertion, ContentRule, Requirement
+from elspais.rules import RuleViolation
+from elspais.graph import GraphNode, NodeKind
+from elspais.graph.builder import TraceGraph
 
 if TYPE_CHECKING:
     from elspais.mcp.context import WorkspaceContext

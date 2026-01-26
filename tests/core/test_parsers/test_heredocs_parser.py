@@ -7,8 +7,8 @@ treating them as real requirements.
 
 import pytest
 
-from elspais.arch3.Graph.MDparser.heredocs import HeredocsParser
-from elspais.arch3.Graph.MDparser import ParseContext
+from elspais.graph.parsers.heredocs import HeredocsParser
+from elspais.graph.parsers import ParseContext
 
 
 class TestHeredocsParserBasic:

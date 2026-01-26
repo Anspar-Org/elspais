@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser.results.junit_xml import JUnitXMLParser
+from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 
 
 class TestJUnitXMLParserBasic:

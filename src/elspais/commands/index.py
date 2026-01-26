@@ -5,13 +5,13 @@ elspais.commands.index - INDEX.md management command.
 import argparse
 from pathlib import Path
 
-from elspais.arch3 import (
+from elspais.config import (
     DEFAULT_CONFIG,
     find_config_file,
     get_spec_directories,
     load_config,
-    load_requirements_from_directories,
 )
+from elspais.loader import load_requirements_from_directories
 
 
 def run(args: argparse.Namespace) -> int:

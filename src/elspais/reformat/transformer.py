@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from elspais.reformat.prompts import JSON_SCHEMA_STR, REFORMAT_SYSTEM_PROMPT, build_user_prompt
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph import GraphNode
+    from elspais.graph import GraphNode
 
 
 def reformat_requirement(

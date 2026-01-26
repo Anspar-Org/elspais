@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.utilities.hasher import (
+from elspais.utilities.hasher import (
     calculate_hash,
     clean_requirement_body,
     extract_hash_from_footer,

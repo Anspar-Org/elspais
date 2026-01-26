@@ -1,4 +1,4 @@
-"""Pytest fixtures for arch3 tests."""
+"""Pytest fixtures for core tests."""
 
 import pytest
 
@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture
 def sample_source_location():
     """Create a sample source location."""
-    from elspais.arch3.Graph import SourceLocation
+    from elspais.graph import SourceLocation
 
     return SourceLocation(path="spec/prd-auth.md", line=10, end_line=25)
 
@@ -14,7 +14,7 @@ def sample_source_location():
 @pytest.fixture
 def sample_node():
     """Create a sample graph node."""
-    from elspais.arch3.Graph import GraphNode, NodeKind, SourceLocation
+    from elspais.graph import GraphNode, NodeKind, SourceLocation
 
     return GraphNode(
         id="REQ-p00001",

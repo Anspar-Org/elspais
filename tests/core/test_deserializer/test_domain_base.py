@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.Graph.deserializer import (
+from elspais.graph.deserializer import (
     DomainContext,
     DomainDeserializer,
 )

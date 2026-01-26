@@ -9,10 +9,10 @@ context.py, validate.py, and other modules that need to parse requirements.
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from elspais.arch3.config import load_config
-from elspais.arch3.models import ParseResult, Requirement
-from elspais.arch3.parser import RequirementParser
-from elspais.arch3.utilities.patterns import PatternConfig
+from elspais.config import load_config
+from elspais.models import ParseResult, Requirement
+from elspais.parser import RequirementParser
+from elspais.utilities.patterns import PatternConfig
 
 
 def create_parser(config: Dict[str, Any]) -> RequirementParser:

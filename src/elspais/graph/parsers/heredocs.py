@@ -15,10 +15,10 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
-from elspais.arch3.Graph.MDparser import ParsedContent
+from elspais.graph.parsers import ParsedContent
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph.MDparser import ParseContext
+    from elspais.graph.parsers import ParseContext
 
 
 def _get_file_type(file_path: str) -> str:

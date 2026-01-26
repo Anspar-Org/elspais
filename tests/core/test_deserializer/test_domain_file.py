@@ -3,12 +3,12 @@
 import pytest
 from pathlib import Path
 
-from elspais.arch3.Graph.deserializer import DomainFile
-from elspais.arch3.Graph.MDparser import ParserRegistry
-from elspais.arch3.Graph.MDparser.comments import CommentsParser
-from elspais.arch3.Graph.MDparser.remainder import RemainderParser
-from elspais.arch3.Graph.MDparser.requirement import RequirementParser
-from elspais.arch3.utilities.patterns import PatternConfig
+from elspais.graph.deserializer import DomainFile
+from elspais.graph.parsers import ParserRegistry
+from elspais.graph.parsers.comments import CommentsParser
+from elspais.graph.parsers.remainder import RemainderParser
+from elspais.graph.parsers.requirement import RequirementParser
+from elspais.utilities.patterns import PatternConfig
 
 
 @pytest.fixture

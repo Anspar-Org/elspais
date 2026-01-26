@@ -2,8 +2,8 @@
 
 import pytest
 
-from elspais.arch3.Graph import GraphNode, NodeKind
-from elspais.arch3.Graph.relations import Edge, EdgeKind
+from elspais.graph import GraphNode, NodeKind
+from elspais.graph.relations import Edge, EdgeKind
 
 
 class TestEdgeKind:

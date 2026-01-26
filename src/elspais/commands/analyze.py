@@ -9,17 +9,16 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from elspais.arch3 import (
+from elspais.config import (
     DEFAULT_CONFIG,
-    NodeKind,
-    Requirement,
     find_config_file,
     get_spec_directories,
     load_config,
-    load_requirements_from_directories,
 )
-from elspais.arch3.Graph import GraphNode
-from elspais.arch3.Graph.builder import GraphBuilder, TraceGraph
+from elspais.loader import load_requirements_from_directories
+from elspais.models import Requirement
+from elspais.graph import GraphNode, NodeKind
+from elspais.graph.builder import GraphBuilder, TraceGraph
 
 
 def run(args: argparse.Namespace) -> int:

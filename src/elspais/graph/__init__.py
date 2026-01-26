@@ -9,12 +9,12 @@ Exports:
 - TraceGraph: Container for the complete graph
 """
 
-from elspais.arch3.Graph.GraphNode import (
+from elspais.graph.GraphNode import (
     GraphNode,
     NodeKind,
     SourceLocation,
 )
-from elspais.arch3.Graph.relations import Edge, EdgeKind
+from elspais.graph.relations import Edge, EdgeKind
 
 __all__ = [
     "NodeKind",

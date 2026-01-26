@@ -10,9 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
-from elspais.arch3.Graph.GraphNode import GraphNode, NodeKind, SourceLocation
-from elspais.arch3.Graph.relations import Edge, EdgeKind
-from elspais.arch3.Graph.MDparser import ParsedContent
+from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.relations import Edge, EdgeKind
+from elspais.graph.parsers import ParsedContent
 
 
 @dataclass

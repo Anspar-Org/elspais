@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from elspais.arch3.Graph.MDparser import ParseContext, ParsedContent
+from elspais.graph.parsers import ParseContext, ParsedContent
 
 
 class RemainderParser:

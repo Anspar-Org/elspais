@@ -12,7 +12,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph.GraphNode import GraphNode
+    from elspais.graph.GraphNode import GraphNode
 
 
 class EdgeKind(Enum):

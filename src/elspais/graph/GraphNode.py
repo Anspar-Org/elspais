@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph.relations import Edge, EdgeKind
+    from elspais.graph.relations import Edge, EdgeKind
 
 
 class NodeKind(Enum):
@@ -117,7 +117,7 @@ class GraphNode:
         Returns:
             The created Edge.
         """
-        from elspais.arch3.Graph.relations import Edge
+        from elspais.graph.relations import Edge
 
         # Create the edge
         edge = Edge(

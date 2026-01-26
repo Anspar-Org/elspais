@@ -1,10 +1,8 @@
 """
-elspais.arch3.associates - Associate repository configuration loading.
+elspais.associates - Associate repository configuration loading.
 
 Provides functions for loading associate configurations from YAML files
 and resolving associate spec directories.
-
-Note: This module was renamed from "sponsors" to "associates" in arch3.
 """
 
 import re

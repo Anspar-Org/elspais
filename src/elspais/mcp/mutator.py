@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from elspais.arch3 import PatternConfig, PatternValidator
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
 class ReferenceType(Enum):

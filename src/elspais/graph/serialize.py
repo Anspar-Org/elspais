@@ -11,8 +11,8 @@ import io
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph.GraphNode import GraphNode
-    from elspais.arch3.Graph.builder import TraceGraph
+    from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.builder import TraceGraph
 
 
 def serialize_node(node: GraphNode) -> dict[str, Any]:
@@ -24,7 +24,7 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
     Returns:
         Dict suitable for JSON serialization.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     result: dict[str, Any] = {
         "id": node.id,
@@ -77,7 +77,7 @@ def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
     Returns:
         Dict with nodes, roots, and metadata.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     # Serialize all nodes
     nodes = {}
@@ -111,7 +111,7 @@ def to_markdown(graph: TraceGraph) -> str:
     Returns:
         Markdown string with traceability matrix.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     lines = [
         "# Traceability Matrix",
@@ -135,7 +135,7 @@ def to_markdown(graph: TraceGraph) -> str:
         # Get implements from incoming edges (what this node implements)
         implements = []
         for edge in node.incoming_edges:
-            from elspais.arch3.Graph.relations import EdgeKind
+            from elspais.graph.relations import EdgeKind
             if edge.kind == EdgeKind.IMPLEMENTS:
                 implements.append(edge.source.id)
 
@@ -156,7 +156,7 @@ def to_csv(graph: TraceGraph) -> str:
     Returns:
         CSV string with requirement data.
     """
-    from elspais.arch3.Graph import NodeKind
+    from elspais.graph import NodeKind
 
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
@@ -184,7 +184,7 @@ def to_csv(graph: TraceGraph) -> str:
         # Get implements from incoming edges (what this node implements)
         implements = []
         for edge in node.incoming_edges:
-            from elspais.arch3.Graph.relations import EdgeKind
+            from elspais.graph.relations import EdgeKind
             if edge.kind == EdgeKind.IMPLEMENTS:
                 implements.append(edge.source.id)
 

@@ -2,14 +2,14 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import ParseContext
-from elspais.arch3.Graph.MDparser.requirement import RequirementParser
+from elspais.graph.parsers import ParseContext
+from elspais.graph.parsers.requirement import RequirementParser
 
 
 @pytest.fixture
 def parser():
     """Create a RequirementParser with default HHT-style config."""
-    from elspais.arch3.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import PatternConfig
 
     config = PatternConfig(
         id_template="{prefix}-{type}{id}",

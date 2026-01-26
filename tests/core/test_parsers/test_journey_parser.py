@@ -2,8 +2,8 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import ParseContext
-from elspais.arch3.Graph.MDparser.journey import JourneyParser
+from elspais.graph.parsers import ParseContext
+from elspais.graph.parsers.journey import JourneyParser
 
 
 class TestJourneyParserPriority:

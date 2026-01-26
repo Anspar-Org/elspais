@@ -2,8 +2,8 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import ParseContext
-from elspais.arch3.Graph.MDparser.code import CodeParser
+from elspais.graph.parsers import ParseContext
+from elspais.graph.parsers.code import CodeParser
 
 
 class TestCodeParserPriority:

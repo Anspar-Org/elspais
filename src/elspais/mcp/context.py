@@ -4,7 +4,7 @@ elspais.mcp.context - Workspace context for MCP server.
 Manages workspace state including configuration, requirements cache,
 traceability graph cache, and content rules.
 
-UPDATED: Now uses arch3 graph system.
+Uses the traceability graph system.
 """
 
 import re
@@ -13,20 +13,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from elspais.arch3 import (
-    ContentRule,
-    create_parser,
+from elspais.config import (
+    DEFAULT_CONFIG,
     find_config_file,
     get_spec_directories,
     load_config,
-    load_content_rules,
-    load_requirements_from_directories,
-    Requirement,
-    RequirementParser,
-    DEFAULT_CONFIG,
 )
-from elspais.arch3.Graph.builder import GraphBuilder, TraceGraph
-from elspais.arch3.Graph.MDparser import ParsedContent
+from elspais.models import ContentRule, Requirement
+from elspais.parser import RequirementParser
+from elspais.loader import create_parser, load_requirements_from_directories
+from elspais.content_rules import load_content_rules
+from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.parsers import ParsedContent
 
 
 @dataclass
@@ -305,7 +303,7 @@ class WorkspaceContext:
         file_mtimes = self._get_spec_file_mtimes()
         requirements = self.get_requirements()
 
-        # Build graph using arch3 GraphBuilder
+        # Build graph using GraphBuilder
         builder = GraphBuilder(repo_root=self.working_dir)
 
         # Convert requirements to ParsedContent and add to builder
@@ -334,7 +332,7 @@ class WorkspaceContext:
 
         graph = builder.build()
 
-        # Basic validation (arch3 doesn't have full validation yet)
+        # Basic validation
         validation = ValidationResult()
 
         # Check for orphans (requirements with no parent and no Implements)

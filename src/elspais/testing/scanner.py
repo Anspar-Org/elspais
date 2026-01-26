@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
-    from elspais.arch3.Graph import GraphNode
-    from elspais.arch3.utilities.patterns import PatternConfig
+    from elspais.graph import GraphNode
+    from elspais.utilities.patterns import PatternConfig
 
 
 @dataclass
@@ -426,8 +426,8 @@ def create_test_nodes(
     Returns:
         List of GraphNode objects with kind=TEST
     """
-    # NOTE: TestReference does not exist in arch3 yet - test_ref data stored in content dict
-    from elspais.arch3.Graph import NodeKind, SourceLocation, GraphNode
+    # NOTE: test_ref data is stored in content dict
+    from elspais.graph import NodeKind, SourceLocation, GraphNode
 
     # Group references by (file, test_name) to create one node per test
     tests_by_key: Dict[tuple, List[TestReference]] = {}
@@ -475,7 +475,7 @@ def create_test_nodes(
         # Create label
         label = test_name or file_path.name
 
-        # Store test_ref data in content dict (TestReference class not in arch3)
+        # Store test_ref data in content dict
         node = GraphNode(
             id=node_id,
             kind=NodeKind.TEST,

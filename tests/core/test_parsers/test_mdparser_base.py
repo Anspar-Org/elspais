@@ -2,7 +2,7 @@
 
 import pytest
 
-from elspais.arch3.Graph.MDparser import (
+from elspais.graph.parsers import (
     LineClaimingParser,
     ParseContext,
     ParsedContent,
