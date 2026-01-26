@@ -159,7 +159,7 @@ tests/arch3/test_deserializer/
 └── test_domain_cli.py
 ```
 
-### [ ] Phase 5: Graph Builder & Serialization
+### [x] Phase 5: Graph Builder & Serialization - COMPLETE
 
 **Files to Create:**
 1. `arch3/Graph/builder.py` - Graph building from nodes
