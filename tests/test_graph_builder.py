@@ -334,41 +334,6 @@ class TestTreeBuilderIntegration:
             if root.requirement:
                 assert root.requirement.level == "PRD" or not root.parents
 
-    def test_tree_matches_hierarchy_functions(self, hht_like_fixture):
-        """Test that tree matches hierarchy module functions."""
-        from elspais.config.loader import load_config
-        from elspais.core.hierarchy import find_children_ids, find_roots
-        from elspais.core.parser import RequirementParser
-        from elspais.core.patterns import PatternConfig
-        from elspais.core.graph import NodeKind
-        from elspais.core.graph_builder import TraceGraphBuilder
-
-        # Load requirements
-        config_dict = load_config(hht_like_fixture / ".elspais.toml")
-        pattern_config = PatternConfig.from_dict(config_dict.get("patterns", {}))
-        parser = RequirementParser(pattern_config)
-        requirements = parser.parse_directory(hht_like_fixture / "spec")
-
-        # Build tree
-        builder = TraceGraphBuilder(repo_root=hht_like_fixture)
-        builder.add_requirements(requirements)
-        tree = builder.build()
-
-        # Compare roots
-        hierarchy_roots = set(find_roots(requirements))
-        tree_root_ids = {r.id for r in tree.roots if r.kind == NodeKind.REQUIREMENT}
-
-        assert hierarchy_roots == tree_root_ids
-
-        # Compare children for each root
-        for root_id in hierarchy_roots:
-            hierarchy_children = set(find_children_ids(root_id, requirements))
-            tree_node = tree.find_by_id(root_id)
-            if tree_node:
-                tree_children = {c.id for c in tree_node.children if c.kind == NodeKind.REQUIREMENT}
-                assert hierarchy_children == tree_children
-
-
 # Validates: REQ-p00002-B
 class TestRelationshipTypeValidation:
     """Tests for relationship type constraint validation.

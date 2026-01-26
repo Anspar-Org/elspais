@@ -26,6 +26,113 @@ from elspais.mcp.serializers import (
 )
 
 
+def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str, Any]:
+    """
+    Build coverage breakdown for a requirement.
+
+    Shared implementation used by both get_coverage_resource() and
+    get_coverage_breakdown(). Returns per-assertion coverage status,
+    coverage sources, implementing code, validating tests, and gaps.
+
+    Args:
+        ctx: WorkspaceContext for graph access
+        req_id: The requirement ID (e.g., "REQ-p00001")
+
+    Returns:
+        Dict with coverage breakdown, or error dict if requirement not found
+    """
+    from elspais.core.graph import NodeKind
+
+    graph, _ = ctx.get_graph()
+    node = graph.find_by_id(req_id)
+
+    if node is None:
+        return {"error": f"Requirement {req_id} not found in graph"}
+
+    assertions = []
+    gaps = []
+
+    for child in node.children:
+        if child.kind == NodeKind.ASSERTION:
+            assertion_info = {
+                "id": child.id,
+                "label": child.label,
+                "covered": False,
+                "coverage_source": None,
+                "implementing_code": [],
+                "validating_tests": [],
+            }
+
+            # Check for coverage sources
+            contributions = child.metrics.get("_coverage_contributions", [])
+            if contributions:
+                assertion_info["covered"] = True
+                # Get the source type from the first contribution
+                first = contributions[0]
+                if hasattr(first, "source_type"):
+                    assertion_info["coverage_source"] = (
+                        first.source_type.value
+                        if hasattr(first.source_type, "value")
+                        else str(first.source_type)
+                    )
+                else:
+                    assertion_info["coverage_source"] = "unknown"
+
+            # Get implementing code (direct children of kind CODE)
+            for code_child in child.children:
+                if code_child.kind == NodeKind.CODE:
+                    code_info = {"id": code_child.id, "label": code_child.label}
+                    if code_child.source:
+                        code_info["file"] = code_child.source.path
+                        code_info["line"] = code_child.source.line
+                    assertion_info["implementing_code"].append(code_info)
+
+            # Get validating tests
+            for test_child in child.children:
+                if test_child.kind == NodeKind.TEST:
+                    test_info = {
+                        "id": test_child.id,
+                        "label": test_child.label,
+                        "status": None,
+                    }
+                    if test_child.source:
+                        test_info["file"] = test_child.source.path
+                        test_info["line"] = test_child.source.line
+                    # Check for test results
+                    for result_child in test_child.children:
+                        if (
+                            result_child.kind == NodeKind.TEST_RESULT
+                            and result_child.test_result
+                        ):
+                            test_info["status"] = (
+                                result_child.test_result.status.value
+                                if result_child.test_result.status
+                                else None
+                            )
+                    assertion_info["validating_tests"].append(test_info)
+
+            assertions.append(assertion_info)
+            if not assertion_info["covered"]:
+                gaps.append(child.id)
+
+    metrics = node.metrics or {}
+
+    return {
+        "id": req_id,
+        "label": node.label,
+        "assertions": assertions,
+        "gaps": gaps,
+        "summary": {
+            "total_assertions": len(assertions),
+            "covered_assertions": len([a for a in assertions if a["covered"]]),
+            "coverage_pct": metrics.get("coverage_pct", 0.0),
+            "direct_covered": metrics.get("direct_covered", 0),
+            "explicit_covered": metrics.get("explicit_covered", 0),
+            "inferred_covered": metrics.get("inferred_covered", 0),
+        },
+    }
+
+
 def _get_server_instructions() -> str:
     """Return server instructions for Tool Search discovery.
 
@@ -389,94 +496,8 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         implementing code, validating tests, and coverage gaps.
         """
         import json
-        from elspais.core.graph import NodeKind
 
-        graph, _ = ctx.get_graph()
-        node = graph.find_by_id(req_id)
-
-        if node is None:
-            return json.dumps({"error": f"Requirement {req_id} not found in graph"})
-
-        assertions = []
-        gaps = []
-
-        for child in node.children:
-            if child.kind == NodeKind.ASSERTION:
-                assertion_info = {
-                    "id": child.id,
-                    "label": child.label,
-                    "covered": False,
-                    "coverage_source": None,
-                    "implementing_code": [],
-                    "validating_tests": [],
-                }
-
-                contributions = child.metrics.get("_coverage_contributions", [])
-                if contributions:
-                    assertion_info["covered"] = True
-                    first = contributions[0]
-                    if hasattr(first, "source_type"):
-                        assertion_info["coverage_source"] = (
-                            first.source_type.value
-                            if hasattr(first.source_type, "value")
-                            else str(first.source_type)
-                        )
-                    else:
-                        assertion_info["coverage_source"] = "unknown"
-
-                for code_child in child.children:
-                    if code_child.kind == NodeKind.CODE:
-                        code_info = {"id": code_child.id, "label": code_child.label}
-                        if code_child.source:
-                            code_info["file"] = code_child.source.path
-                            code_info["line"] = code_child.source.line
-                        assertion_info["implementing_code"].append(code_info)
-
-                for test_child in child.children:
-                    if test_child.kind == NodeKind.TEST:
-                        test_info = {
-                            "id": test_child.id,
-                            "label": test_child.label,
-                            "status": None,
-                        }
-                        if test_child.source:
-                            test_info["file"] = test_child.source.path
-                            test_info["line"] = test_child.source.line
-                        for result_child in test_child.children:
-                            if (
-                                result_child.kind == NodeKind.TEST_RESULT
-                                and result_child.test_result
-                            ):
-                                test_info["status"] = (
-                                    result_child.test_result.status.value
-                                    if result_child.test_result.status
-                                    else None
-                                )
-                        assertion_info["validating_tests"].append(test_info)
-
-                assertions.append(assertion_info)
-                if not assertion_info["covered"]:
-                    gaps.append(child.id)
-
-        metrics = node.metrics or {}
-
-        return json.dumps(
-            {
-                "id": req_id,
-                "label": node.label,
-                "assertions": assertions,
-                "gaps": gaps,
-                "summary": {
-                    "total_assertions": len(assertions),
-                    "covered_assertions": len([a for a in assertions if a["covered"]]),
-                    "coverage_pct": metrics.get("coverage_pct", 0.0),
-                    "direct_covered": metrics.get("direct_covered", 0),
-                    "explicit_covered": metrics.get("explicit_covered", 0),
-                    "inferred_covered": metrics.get("inferred_covered", 0),
-                },
-            },
-            indent=2,
-        )
+        return json.dumps(_build_coverage_breakdown(ctx, req_id), indent=2)
 
     @mcp.resource("hierarchy://{req_id}/ancestors")
     def get_hierarchy_ancestors_resource(req_id: str) -> str:
@@ -925,92 +946,7 @@ def _register_tools(
         Returns:
             Detailed coverage breakdown with assertion-level detail
         """
-        from elspais.core.graph import NodeKind
-
-        graph, _ = ctx.get_graph()
-        node = graph.find_by_id(req_id)
-
-        if node is None:
-            return {"error": f"Requirement {req_id} not found in graph"}
-
-        # Get assertions
-        assertions = []
-        gaps = []
-
-        for child in node.children:
-            if child.kind == NodeKind.ASSERTION:
-                assertion_info = {
-                    "id": child.id,
-                    "label": child.label,
-                    "covered": False,
-                    "coverage_source": None,
-                    "implementing_code": [],
-                    "validating_tests": [],
-                }
-
-                # Check for coverage sources
-                contributions = child.metrics.get("_coverage_contributions", [])
-                if contributions:
-                    assertion_info["covered"] = True
-                    # Get the source type from the first contribution
-                    # CoverageContribution is a dataclass with source_type attribute
-                    first = contributions[0]
-                    if hasattr(first, "source_type"):
-                        assertion_info["coverage_source"] = first.source_type.value if hasattr(first.source_type, "value") else str(first.source_type)
-                    else:
-                        assertion_info["coverage_source"] = "unknown"
-
-                # Get implementing code (direct children of kind CODE)
-                for code_child in child.children:
-                    if code_child.kind == NodeKind.CODE:
-                        code_info = {
-                            "id": code_child.id,
-                            "label": code_child.label,
-                        }
-                        if code_child.source:
-                            code_info["file"] = code_child.source.path
-                            code_info["line"] = code_child.source.line
-                        assertion_info["implementing_code"].append(code_info)
-
-                # Get validating tests
-                for test_child in child.children:
-                    if test_child.kind == NodeKind.TEST:
-                        test_info = {
-                            "id": test_child.id,
-                            "label": test_child.label,
-                            "status": None,
-                        }
-                        if test_child.source:
-                            test_info["file"] = test_child.source.path
-                            test_info["line"] = test_child.source.line
-                        # Check for test results
-                        for result_child in test_child.children:
-                            if result_child.kind == NodeKind.TEST_RESULT and result_child.test_result:
-                                test_info["status"] = result_child.test_result.status.value if result_child.test_result.status else None
-                        assertion_info["validating_tests"].append(test_info)
-
-                assertions.append(assertion_info)
-
-                if not assertion_info["covered"]:
-                    gaps.append(child.id)
-
-        # Get rollup metrics
-        metrics = node.metrics or {}
-
-        return {
-            "id": req_id,
-            "label": node.label,
-            "assertions": assertions,
-            "gaps": gaps,
-            "summary": {
-                "total_assertions": len(assertions),
-                "covered_assertions": len([a for a in assertions if a["covered"]]),
-                "coverage_pct": metrics.get("coverage_pct", 0.0),
-                "direct_covered": metrics.get("direct_covered", 0),
-                "explicit_covered": metrics.get("explicit_covered", 0),
-                "inferred_covered": metrics.get("inferred_covered", 0),
-            },
-        }
+        return _build_coverage_breakdown(ctx, req_id)
 
     @mcp.tool()
     def list_by_criteria(

@@ -8,25 +8,20 @@ Supports both basic matrix generation and enhanced trace-view features.
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.hierarchy import find_children_ids
 from elspais.core.loader import load_requirements_from_directories
-from elspais.core.models import Requirement
 
 
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
     REQ-int-d00003-C: Existing elspais trace --format html behavior SHALL be preserved.
-    """
-    # Check if graph mode is requested
-    use_graph = getattr(args, "graph", False) or getattr(args, "graph_json", False)
-    if use_graph:
-        return run_graph_trace(args)
 
+    Default behavior uses TraceGraphBuilder for all output. Enhanced trace-view
+    features (--view, --embed-content, etc.) use the trace_view module.
+    """
     # Check if enhanced trace-view features are requested
     use_trace_view = (
         getattr(args, "view", False)
@@ -39,8 +34,8 @@ def run(args: argparse.Namespace) -> int:
     if use_trace_view:
         return run_trace_view(args)
 
-    # Original basic trace functionality
-    return run_basic_trace(args)
+    # Default: use graph-based trace (unified path)
+    return run_graph_trace(args)
 
 
 def run_graph_trace(args: argparse.Namespace) -> int:
@@ -228,7 +223,7 @@ def run_graph_trace(args: argparse.Namespace) -> int:
             else:
                 output_path = args.output.with_suffix(".md")
         else:
-            output_path = Path("traceability_graph.md")
+            output_path = Path("traceability.md")
         output_path.write_text(md_output)
         print(f"Generated: {output_path}")
 
@@ -240,13 +235,13 @@ def run_graph_trace(args: argparse.Namespace) -> int:
             else:
                 output_path = args.output.with_suffix(".html")
         else:
-            output_path = Path("traceability_graph.html")
+            output_path = Path("traceability.html")
         output_path.write_text(html_output)
         print(f"Generated: {output_path}")
 
     if output_format == "csv":
         csv_output = generate_graph_csv(graph, report_schema)
-        output_path = args.output or Path("traceability_graph.csv")
+        output_path = args.output or Path("traceability.csv")
         output_path.write_text(csv_output)
         print(f"Generated: {output_path}")
 
@@ -261,65 +256,6 @@ def run_graph_trace(args: argparse.Namespace) -> int:
             print(f"  - {warning}")
         if len(validation.warnings) > 5:
             print(f"  ... and {len(validation.warnings) - 5} more")
-
-    return 0
-
-
-def run_basic_trace(args: argparse.Namespace) -> int:
-    """Run basic trace matrix generation (original behavior)."""
-    # Load configuration
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
-    else:
-        config = DEFAULT_CONFIG
-
-    # Get spec directories
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found", file=sys.stderr)
-        return 1
-
-    # Parse requirements
-    requirements = load_requirements_from_directories(spec_dirs, config)
-
-    if not requirements:
-        print("No requirements found.")
-        return 1
-
-    # Determine output format
-    output_format = args.format
-
-    # Generate output
-    if output_format in ["markdown", "both"]:
-        md_output = generate_markdown_matrix(requirements)
-        if args.output:
-            if output_format == "markdown":
-                output_path = args.output
-            else:
-                output_path = args.output.with_suffix(".md")
-        else:
-            output_path = Path("traceability.md")
-        output_path.write_text(md_output)
-        print(f"Generated: {output_path}")
-
-    if output_format in ["html", "both"]:
-        html_output = generate_html_matrix(requirements)
-        if args.output:
-            if output_format == "html":
-                output_path = args.output
-            else:
-                output_path = args.output.with_suffix(".html")
-        else:
-            output_path = Path("traceability.html")
-        output_path.write_text(html_output)
-        print(f"Generated: {output_path}")
-
-    if output_format == "csv":
-        csv_output = generate_csv_matrix(requirements)
-        output_path = args.output or Path("traceability.csv")
-        output_path.write_text(csv_output)
-        print(f"Generated: {output_path}")
 
     return 0
 
@@ -456,122 +392,6 @@ Press Ctrl+C to stop
         print("\nServer stopped.")
 
     return 0
-
-
-def generate_markdown_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate Markdown traceability matrix."""
-    lines = ["# Traceability Matrix", "", "## Requirements Hierarchy", ""]
-
-    # Group by type
-    prd_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["PRD", "PRODUCT"]}
-    ops_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["OPS", "OPERATIONS"]}
-    dev_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["DEV", "DEVELOPMENT"]}
-
-    # PRD table
-    if prd_reqs:
-        lines.extend(["### Product Requirements", ""])
-        lines.append("| ID | Title | Status | Implemented By |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(prd_reqs.items()):
-            impl_by = find_children_ids(req_id, requirements)
-            impl_str = ", ".join(impl_by) if impl_by else "-"
-            lines.append(f"| {req_id} | {req.title} | {req.status} | {impl_str} |")
-        lines.append("")
-
-    # OPS table
-    if ops_reqs:
-        lines.extend(["### Operations Requirements", ""])
-        lines.append("| ID | Title | Implements | Status |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(ops_reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            lines.append(f"| {req_id} | {req.title} | {impl_str} | {req.status} |")
-        lines.append("")
-
-    # DEV table
-    if dev_reqs:
-        lines.extend(["### Development Requirements", ""])
-        lines.append("| ID | Title | Implements | Status |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(dev_reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            lines.append(f"| {req_id} | {req.title} | {impl_str} | {req.status} |")
-        lines.append("")
-
-    lines.extend(["---", "*Generated by elspais*"])
-    return "\n".join(lines)
-
-
-def generate_html_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate HTML traceability matrix."""
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Traceability Matrix</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-        th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
-        th { background: #f5f5f5; }
-        tr:hover { background: #f9f9f9; }
-        .status-active { color: green; }
-        .status-draft { color: orange; }
-        .status-deprecated { color: red; }
-    </style>
-</head>
-<body>
-    <h1>Traceability Matrix</h1>
-"""
-
-    # Group by type
-    prd_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["PRD", "PRODUCT"]}
-    ops_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["OPS", "OPERATIONS"]}
-    dev_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["DEV", "DEVELOPMENT"]}
-
-    for title, reqs in [
-        ("Product Requirements", prd_reqs),
-        ("Operations Requirements", ops_reqs),
-        ("Development Requirements", dev_reqs),
-    ]:
-        if not reqs:
-            continue
-
-        html += f"    <h2>{title}</h2>\n"
-        html += "    <table>\n"
-        html += "        <tr><th>ID</th><th>Title</th><th>Implements</th><th>Status</th></tr>\n"
-
-        for req_id, req in sorted(reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            status_class = f"status-{req.status.lower()}"
-            subdir_attr = f'data-subdir="{req.subdir}"'
-            html += (
-                f"        <tr {subdir_attr}><td>{req_id}</td><td>{req.title}</td>"
-                f'<td>{impl_str}</td><td class="{status_class}">{req.status}</td></tr>\n'
-            )
-
-        html += "    </table>\n"
-
-    html += """    <hr>
-    <p><em>Generated by elspais</em></p>
-</body>
-</html>"""
-    return html
-
-
-def generate_csv_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate CSV traceability matrix."""
-    lines = ["ID,Title,Level,Status,Implements,Subdir"]
-
-    for req_id, req in sorted(requirements.items()):
-        impl_str = ";".join(req.implements) if req.implements else ""
-        title = req.title.replace('"', '""')
-        lines.append(
-            f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}","{req.subdir}"'
-        )
-
-    return "\n".join(lines)
 
 
 # Graph-based output generators

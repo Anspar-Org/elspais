@@ -1,21 +1,20 @@
 """
 elspais.trace_view.generators.csv - CSV generation.
 
-Provides functions to generate CSV traceability matrices and planning exports.
+Provides functions to generate CSV traceability matrices from TraceGraph.
 """
 
 import csv
 from io import StringIO
-from typing import Callable, Dict
 
-from elspais.trace_view.models import TraceViewRequirement
+from elspais.core.graph import NodeKind, TraceGraph
 
 
-def generate_csv(requirements: Dict[str, TraceViewRequirement]) -> str:
-    """Generate CSV traceability matrix.
+def generate_csv(graph: TraceGraph) -> str:
+    """Generate CSV traceability matrix from TraceGraph.
 
     Args:
-        requirements: Dict mapping requirement ID to TraceViewRequirement
+        graph: The TraceGraph to render
 
     Returns:
         CSV string with columns: Requirement ID, Title, Level, Status,
@@ -39,30 +38,40 @@ def generate_csv(requirements: Dict[str, TraceViewRequirement]) -> str:
         ]
     )
 
-    # Sort requirements by ID
-    sorted_reqs = sorted(requirements.values(), key=lambda r: r.id)
+    # Collect requirement nodes
+    req_nodes = [n for n in graph.all_nodes() if n.kind == NodeKind.REQUIREMENT]
+    req_nodes.sort(key=lambda n: n.id)
 
-    for req in sorted_reqs:
-        # Compute children (traced by) dynamically
-        children = [r.id for r in requirements.values() if req.id in r.implements]
+    for node in req_nodes:
+        req = node.requirement
+        if not req:
+            continue
 
-        # Format implementation files as "file:line" strings
+        # Get children (traced by) from graph - only REQUIREMENT children
+        children_ids = [c.id for c in node.children if c.kind == NodeKind.REQUIREMENT]
+
+        # Get implementation files from metrics
+        impl_files = node.metrics.get("implementation_files", [])
         impl_files_str = (
-            ", ".join([f"{path}:{line}" for path, line in req.implementation_files])
-            if req.implementation_files
+            ", ".join([f"{path}:{line}" for path, line in impl_files])
+            if impl_files
             else "-"
         )
 
+        # Get display info from metrics
+        display_filename = node.metrics.get("display_filename", "")
+        line_number = node.source.line if node.source else 0
+
         writer.writerow(
             [
-                req.id,
+                node.id,
                 req.title,
                 req.level,
                 req.status,
                 ", ".join(req.implements) if req.implements else "-",
-                ", ".join(sorted(children)) if children else "-",
-                req.display_filename,
-                req.line_number,
+                ", ".join(sorted(children_ids)) if children_ids else "-",
+                display_filename,
+                line_number,
                 impl_files_str,
             ]
         )
@@ -70,17 +79,11 @@ def generate_csv(requirements: Dict[str, TraceViewRequirement]) -> str:
     return output.getvalue()
 
 
-def generate_planning_csv(
-    requirements: Dict[str, TraceViewRequirement],
-    get_implementation_status: Callable[[str], str],
-    calculate_coverage: Callable[[str], dict],
-) -> str:
-    """Generate CSV for sprint planning (actionable items only).
+def generate_planning_csv(graph: TraceGraph) -> str:
+    """Generate CSV for sprint planning (actionable items only) from TraceGraph.
 
     Args:
-        requirements: Dict mapping requirement ID to TraceViewRequirement
-        get_implementation_status: Function that takes req_id and returns status string
-        calculate_coverage: Function that takes req_id and returns coverage dict
+        graph: The TraceGraph to render
 
     Returns:
         CSV with columns: REQ ID, Title, Level, Status, Impl Status, Coverage, Code Refs
@@ -93,24 +96,47 @@ def generate_planning_csv(
     writer.writerow(["REQ ID", "Title", "Level", "Status", "Impl Status", "Coverage", "Code Refs"])
 
     # Filter to actionable requirements (Active or Draft status)
-    actionable_reqs = [req for req in requirements.values() if req.status in ["Active", "Draft"]]
+    req_nodes = [
+        n for n in graph.all_nodes()
+        if n.kind == NodeKind.REQUIREMENT
+        and n.requirement
+        and n.requirement.status in ["Active", "Draft"]
+    ]
 
     # Sort by ID
-    actionable_reqs.sort(key=lambda r: r.id)
+    req_nodes.sort(key=lambda n: n.id)
 
-    for req in actionable_reqs:
-        impl_status = get_implementation_status(req.id)
-        coverage = calculate_coverage(req.id)
-        code_refs = len(req.implementation_files)
+    for node in req_nodes:
+        req = node.requirement
+        if not req:
+            continue
+
+        # Get implementation status from coverage metrics
+        coverage_pct = node.metrics.get("coverage_pct", 0)
+        if coverage_pct >= 100:
+            impl_status = "Full"
+        elif coverage_pct > 0:
+            impl_status = "Partial"
+        else:
+            impl_status = "Unimplemented"
+
+        # Get coverage from metrics
+        total_assertions = node.metrics.get("total_assertions", 0)
+        covered_assertions = node.metrics.get("covered_assertions", 0)
+        coverage_str = f"{covered_assertions}/{total_assertions}"
+
+        # Get code refs from implementation files
+        impl_files = node.metrics.get("implementation_files", [])
+        code_refs = len(impl_files)
 
         writer.writerow(
             [
-                req.id,
+                node.id,
                 req.title,
                 req.level,
                 req.status,
                 impl_status,
-                f"{coverage['traced']}/{coverage['children']}",
+                coverage_str,
                 code_refs,
             ]
         )

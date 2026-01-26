@@ -349,20 +349,30 @@ class WorkspaceContext:
         """
         Get modification times for all spec files.
 
+        Respects skip_files and skip_dirs configuration to exclude
+        files that should not be parsed.
+
         Returns:
             Dict mapping file paths to their mtime values
         """
         mtimes: Dict[Path, float] = {}
         spec_dirs = get_spec_directories(None, self.config, self.working_dir)
         skip_files = self.config.get("spec", {}).get("skip_files", [])
+        skip_dirs = self.config.get("spec", {}).get("skip_dirs", [])
 
         for spec_dir in spec_dirs:
             if spec_dir.exists():
                 for md_file in spec_dir.rglob("*.md"):
-                    # Check skip patterns
-                    rel_path = md_file.name
-                    if any(rel_path == skip for skip in skip_files):
+                    # Check skip_files
+                    if md_file.name in skip_files:
                         continue
+
+                    # Check skip_dirs - exclude files in skipped directories
+                    if skip_dirs:
+                        rel_path = md_file.relative_to(spec_dir)
+                        if any(skip_dir in rel_path.parts for skip_dir in skip_dirs):
+                            continue
+
                     mtimes[md_file.resolve()] = md_file.stat().st_mtime
 
         return mtimes

@@ -537,6 +537,149 @@ Body text.
         assert "REQ-p00002" in requirements
         assert "REQ-p00099" not in requirements
 
+    def test_parse_directories_with_skip_dirs(self, tmp_path):
+        """Test parse_directories respects skip_dirs to exclude directories."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create spec directory with a requirement
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        req_file = spec_dir / "reqs.md"
+        req_file.write_text("""
+# REQ-p00001: Main Requirement
+
+**Level**: PRD | **Status**: Active
+
+Body text.
+
+*End* *Main Requirement* | **Hash**: test1234
+---
+""")
+
+        # Create roadmap subdirectory with requirement that should be skipped
+        roadmap_dir = spec_dir / "roadmap"
+        roadmap_dir.mkdir()
+        roadmap_file = roadmap_dir / "future.md"
+        roadmap_file.write_text("""
+# REQ-p00002: Roadmap Requirement
+
+**Level**: PRD | **Status**: Draft
+
+This should be skipped.
+
+*End* *Roadmap Requirement* | **Hash**: skip5678
+---
+""")
+
+        # Create archive subdirectory with requirement that should be skipped
+        archive_dir = spec_dir / "archive"
+        archive_dir.mkdir()
+        archive_file = archive_dir / "old.md"
+        archive_file.write_text("""
+# REQ-p00003: Archived Requirement
+
+**Level**: PRD | **Status**: Deprecated
+
+This should also be skipped.
+
+*End* *Archived Requirement* | **Hash**: skip9999
+---
+""")
+
+        # Parse with skip_dirs - should only get the main requirement
+        requirements = parser.parse_directory(
+            spec_dir,
+            skip_dirs=["roadmap", "archive"],
+            recursive=True
+        )
+        assert len(requirements.requirements) == 1
+        assert "REQ-p00001" in requirements.requirements
+        assert "REQ-p00002" not in requirements.requirements
+        assert "REQ-p00003" not in requirements.requirements
+
+    def test_parse_directories_skip_dirs_nested(self, tmp_path):
+        """Test skip_dirs works with nested directories."""
+        from elspais.core.parser import RequirementParser
+        from elspais.core.patterns import PatternConfig
+
+        config = PatternConfig(
+            id_template="{prefix}-{type}{id}",
+            prefix="REQ",
+            types={"prd": {"id": "p", "level": 1}},
+            id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+        )
+        parser = RequirementParser(config)
+
+        # Create nested directory structure:
+        # spec/
+        #   reqs.md (REQ-p00001)
+        #   subdir/
+        #     sub.md (REQ-p00002) <- should be skipped because of "archive" in path
+        #     archive/
+        #       old.md (REQ-p00003)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "reqs.md"
+        req_file.write_text("""
+# REQ-p00001: Main
+
+**Level**: PRD | **Status**: Active
+
+Body.
+
+*End* *Main* | **Hash**: test1234
+---
+""")
+
+        subdir = spec_dir / "subdir"
+        subdir.mkdir()
+        subdir_file = subdir / "sub.md"
+        subdir_file.write_text("""
+# REQ-p00002: Subdir
+
+**Level**: PRD | **Status**: Active
+
+Body.
+
+*End* *Subdir* | **Hash**: test5678
+---
+""")
+
+        archive_dir = subdir / "archive"
+        archive_dir.mkdir()
+        archive_file = archive_dir / "old.md"
+        archive_file.write_text("""
+# REQ-p00003: Archived
+
+**Level**: PRD | **Status**: Deprecated
+
+Body.
+
+*End* *Archived* | **Hash**: skip9999
+---
+""")
+
+        # Parse with skip_dirs=["archive"] - should skip the nested archive dir
+        requirements = parser.parse_directory(
+            spec_dir,
+            skip_dirs=["archive"],
+            recursive=True
+        )
+        assert len(requirements.requirements) == 2
+        assert "REQ-p00001" in requirements.requirements
+        assert "REQ-p00002" in requirements.requirements
+        assert "REQ-p00003" not in requirements.requirements  # Skipped because of "archive" in path
+
 
 # Validates: REQ-p00002-A
 class TestNoReferenceValues:

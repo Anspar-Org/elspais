@@ -347,6 +347,7 @@ class RequirementParser:
         directory: Path,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
+        skip_dirs: Optional[List[str]] = None,
         subdir: str = "",
         recursive: bool = False,
     ) -> ParseResult:
@@ -357,6 +358,7 @@ class RequirementParser:
             directory: Path to the spec directory
             patterns: Optional glob patterns to match files
             skip_files: Optional list of filenames to skip
+            skip_dirs: Optional list of directory names to skip (e.g., ["roadmap", "archive"])
             subdir: Subdirectory within spec/ (e.g., "roadmap", "archive", "")
                     Ignored when recursive=True (computed from file path).
             recursive: If True, recursively search subdirectories using rglob.
@@ -371,6 +373,9 @@ class RequirementParser:
         if skip_files is None:
             skip_files = []
 
+        if skip_dirs is None:
+            skip_dirs = []
+
         requirements: Dict[str, Requirement] = {}
         warnings: List[ParseWarning] = []
 
@@ -382,27 +387,37 @@ class RequirementParser:
                 file_iter = directory.glob(pattern)
 
             for file_path in file_iter:
-                if file_path.is_file() and file_path.name not in skip_files:
-                    # Compute subdir from relative path when recursive
-                    if recursive:
-                        rel_path = file_path.relative_to(directory)
-                        file_subdir = str(rel_path.parent) if rel_path.parent != Path(".") else ""
-                    else:
-                        file_subdir = subdir
+                if not file_path.is_file():
+                    continue
+                if file_path.name in skip_files:
+                    continue
 
-                    result = self.parse_file(file_path, file_subdir)
-                    # Merge requirements, checking for cross-file duplicates
-                    for req_id, req in result.requirements.items():
-                        if req_id in requirements:
-                            # Keep both: original stays, duplicate gets __conflict suffix
-                            conflict_key, conflict_req, warning = self._make_conflict_entry(
-                                req, req_id, requirements[req_id], file_path, req.line_number
-                            )
-                            requirements[conflict_key] = conflict_req
-                            warnings.append(warning)
-                        else:
-                            requirements[req_id] = req
-                    warnings.extend(result.warnings)
+                # Check skip_dirs - filter out files in skipped directories
+                if skip_dirs:
+                    rel_path = file_path.relative_to(directory)
+                    if any(skip_dir in rel_path.parts for skip_dir in skip_dirs):
+                        continue
+
+                # Compute subdir from relative path when recursive
+                if recursive:
+                    rel_path = file_path.relative_to(directory)
+                    file_subdir = str(rel_path.parent) if rel_path.parent != Path(".") else ""
+                else:
+                    file_subdir = subdir
+
+                result = self.parse_file(file_path, file_subdir)
+                # Merge requirements, checking for cross-file duplicates
+                for req_id, req in result.requirements.items():
+                    if req_id in requirements:
+                        # Keep both: original stays, duplicate gets __conflict suffix
+                        conflict_key, conflict_req, warning = self._make_conflict_entry(
+                            req, req_id, requirements[req_id], file_path, req.line_number
+                        )
+                        requirements[conflict_key] = conflict_req
+                        warnings.append(warning)
+                    else:
+                        requirements[req_id] = req
+                warnings.extend(result.warnings)
 
         return ParseResult(requirements=requirements, warnings=warnings)
 
@@ -412,6 +427,7 @@ class RequirementParser:
         base_path: Optional[Path] = None,
         patterns: Optional[List[str]] = None,
         skip_files: Optional[List[str]] = None,
+        skip_dirs: Optional[List[str]] = None,
         recursive: bool = False,
     ) -> ParseResult:
         """
@@ -422,6 +438,7 @@ class RequirementParser:
             base_path: Base path to resolve relative directories against
             patterns: Optional glob patterns to match files (default: ["*.md"])
             skip_files: Optional list of filenames to skip
+            skip_dirs: Optional list of directory names to skip (e.g., ["roadmap", "archive"])
             recursive: If True, search subdirectories recursively (default: False)
 
         Returns:
@@ -446,7 +463,11 @@ class RequirementParser:
                 dir_path = base_path / dir_entry
             if dir_path.exists() and dir_path.is_dir():
                 result = self.parse_directory(
-                    dir_path, patterns=patterns, skip_files=skip_files, recursive=recursive
+                    dir_path,
+                    patterns=patterns,
+                    skip_files=skip_files,
+                    skip_dirs=skip_dirs,
+                    recursive=recursive,
                 )
                 # Merge requirements, checking for cross-directory duplicates
                 for req_id, req in result.requirements.items():

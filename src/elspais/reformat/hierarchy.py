@@ -2,8 +2,7 @@
 """
 Hierarchy traversal logic for requirements.
 
-Uses elspais core modules directly to parse requirements and build
-a traversable hierarchy based on implements relationships.
+Uses TraceGraphBuilder from core modules to build the requirement hierarchy.
 """
 
 import sys
@@ -13,7 +12,6 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     from elspais.core.models import Requirement
-    from elspais.core.patterns import PatternValidator
 
 
 @dataclass
@@ -64,7 +62,7 @@ def get_all_requirements(
     mode: str = "combined",
 ) -> Dict[str, RequirementNode]:
     """
-    Get all requirements using core parser directly.
+    Get all requirements using core parser and build hierarchy using TraceGraphBuilder.
 
     Args:
         config_path: Optional path to .elspais.toml config file
@@ -76,8 +74,11 @@ def get_all_requirements(
 
     Returns:
         Dict mapping requirement ID (e.g., 'REQ-d00027') to RequirementNode
+        with children populated via TraceGraphBuilder
     """
     from elspais.config.loader import find_config_file, get_spec_directories, load_config
+    from elspais.core.graph import NodeKind
+    from elspais.core.graph_builder import TraceGraphBuilder
     from elspais.core.loader import (
         load_requirements_from_directories,
         load_requirements_from_repo,
@@ -97,18 +98,16 @@ def get_all_requirements(
         print(f"Warning: Failed to load config: {e}", file=sys.stderr)
         return {}
 
-    requirements = {}
+    core_requirements = {}
 
     # Load local requirements (unless core-only mode)
     if mode in ("combined", "local-only"):
-        # Get spec directories
         spec_dirs = get_spec_directories(None, config, base_path or config_path.parent)
 
         if spec_dirs:
             try:
-                core_reqs = load_requirements_from_directories(spec_dirs, config)
-                for req_id, req in core_reqs.items():
-                    requirements[req_id] = RequirementNode.from_core(req)
+                local_reqs = load_requirements_from_directories(spec_dirs, config)
+                core_requirements.update(local_reqs)
             except Exception as e:
                 print(f"Warning: Failed to parse local requirements: {e}", file=sys.stderr)
 
@@ -116,35 +115,40 @@ def get_all_requirements(
     if mode in ("combined", "core-only"):
         core_path = config.get("core", {}).get("path")
         if core_path:
-            core_reqs = load_requirements_from_repo(Path(core_path), config)
-            for req_id, req in core_reqs.items():
+            repo_reqs = load_requirements_from_repo(Path(core_path), config)
+            for req_id, req in repo_reqs.items():
                 # Don't overwrite local requirements with same ID
-                if req_id not in requirements:
-                    requirements[req_id] = RequirementNode.from_core(req)
+                if req_id not in core_requirements:
+                    core_requirements[req_id] = req
 
-    if not requirements:
+    if not core_requirements:
         print("Warning: No requirements found", file=sys.stderr)
+        return {}
 
-    return requirements
+    # Build graph to get hierarchy
+    repo_root = config_path.parent if config_path else Path.cwd()
+    builder = TraceGraphBuilder(repo_root=repo_root)
+    builder.add_requirements(core_requirements)
+    graph = builder.build()
 
+    # Convert to RequirementNode with children from graph
+    requirements: Dict[str, RequirementNode] = {}
+    for req_id, req in core_requirements.items():
+        requirements[req_id] = RequirementNode.from_core(req)
 
-def build_hierarchy(requirements: Dict[str, RequirementNode]) -> Dict[str, RequirementNode]:
-    """
-    Compute children for each requirement by inverting implements relationships.
+    # Populate children from graph
+    for node in graph.all_nodes():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+        if node.id not in requirements:
+            continue
 
-    This modifies the requirements dict in-place, populating each node's
-    children list.
-    """
-    for req_id, node in requirements.items():
-        for parent_id in node.implements:
-            # Normalize parent ID format
-            parent_key = parent_id if parent_id.startswith("REQ-") else f"REQ-{parent_id}"
-            if parent_key in requirements:
-                requirements[parent_key].children.append(req_id)
-
-    # Sort children for deterministic traversal
-    for node in requirements.values():
-        node.children.sort()
+        # Get children (requirements that implement this one)
+        child_ids = [
+            c.id for c in node.children
+            if c.kind == NodeKind.REQUIREMENT
+        ]
+        requirements[node.id].children = sorted(child_ids)
 
     return requirements
 
@@ -199,46 +203,3 @@ def traverse_top_down(
                 queue.append((child_id, depth + 1))
 
     return visited
-
-
-def normalize_req_id(req_id: str, validator: Optional["PatternValidator"] = None) -> str:
-    """
-    Normalize requirement ID to canonical format using PatternValidator.
-
-    Args:
-        req_id: Requirement ID (e.g., "d00027", "REQ-d00027", "REQ-CAL-p00001")
-        validator: PatternValidator instance (created from config if not provided)
-
-    Returns:
-        Normalized ID in canonical format from config
-    """
-    from elspais.config.loader import find_config_file, load_config
-    from elspais.core.patterns import PatternConfig, PatternValidator
-
-    # Create validator if not provided
-    if validator is None:
-        try:
-            config_path = find_config_file(Path.cwd())
-            config = load_config(config_path) if config_path else {}
-        except Exception:
-            config = {}
-        pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-        validator = PatternValidator(pattern_config)
-
-    # Try parsing the ID as-is
-    parsed = validator.parse(req_id)
-
-    # If that fails, try with prefix
-    if parsed is None and not req_id.upper().startswith(validator.config.prefix):
-        parsed = validator.parse(f"{validator.config.prefix}-{req_id}")
-
-    if parsed:
-        # Reconstruct canonical ID from parsed components
-        parts = [parsed.prefix]
-        if parsed.associated:
-            parts.append(parsed.associated)
-        parts.append(f"{parsed.type_code}{parsed.number}")
-        return "-".join(parts)
-
-    # Return as-is if unparseable
-    return req_id

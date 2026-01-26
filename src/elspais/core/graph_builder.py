@@ -826,6 +826,7 @@ class TraceGraphBuilder:
 
         return False
 
+
     def _build_file_nodes(self) -> list[TraceNode]:
         """Build FILE and FILE_REGION nodes from stored file structures.
 

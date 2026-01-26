@@ -7,6 +7,9 @@ version = "0.1.0"
 spec = ["spec"]
 code = ["src"]
 
+[spec]
+skip_dirs = ["roadmap"]
+
 [patterns]
 prefix = "REQ"
 id_template = "{prefix}-{type}{id}"

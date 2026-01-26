@@ -56,6 +56,7 @@ DEFAULT_CONFIG = {
         "readme_file": "README.md",
         "format_guide": "requirements-format.md",
         "skip_files": ["README.md", "requirements-format.md", "INDEX.md"],
+        "skip_dirs": [],  # Directories to skip (e.g., ["roadmap", "archive"])
         "file_patterns": {
             "prd-*.md": "prd",
             "ops-*.md": "ops",

@@ -384,3 +384,28 @@ class PatternValidator:
                 result.append(part)
 
         return result
+
+
+# -----------------------------------------------------------------------------
+# Utility functions
+# -----------------------------------------------------------------------------
+
+
+def normalize_req_id(req_id: str, prefix: str = "REQ") -> str:
+    """Normalize ID to canonical format.
+
+    Examples:
+        'd00027' -> 'REQ-d00027'
+        'REQ-d00027' -> 'REQ-d00027'
+        '001' with prefix='JIRA' -> 'JIRA-001'
+
+    Args:
+        req_id: The requirement ID to normalize
+        prefix: The prefix to use (default "REQ")
+
+    Returns:
+        Normalized ID with prefix
+    """
+    if req_id.startswith(f"{prefix}-"):
+        return req_id
+    return f"{prefix}-{req_id}"

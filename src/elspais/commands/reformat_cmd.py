@@ -19,7 +19,7 @@ from typing import Optional
 
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
 from elspais.core.loader import load_requirements_from_directories
-from elspais.core.patterns import PatternValidator
+from elspais.core.patterns import PatternConfig, PatternValidator
 from elspais.core.rules import RuleEngine, RulesConfig
 
 
@@ -29,12 +29,11 @@ def run(args: argparse.Namespace) -> int:
     This command reformats requirements from the old Acceptance Criteria format
     to the new Assertions format using Claude AI.
     """
+    from elspais.core.patterns import normalize_req_id
     from elspais.reformat import (
         assemble_new_format,
-        build_hierarchy,
         get_all_requirements,
         normalize_line_breaks,
-        normalize_req_id,
         reformat_requirement,
         traverse_top_down,
         validate_reformatted_content,
@@ -80,19 +79,14 @@ def run(args: argparse.Namespace) -> int:
     # Determine local base path for filtering (only modify local files)
     local_base_path = config_path.parent if config_path else Path.cwd()
 
-    # Get all requirements (including cross-repo if mode allows)
-    print("Loading requirements...", end=" ", flush=True)
+    # Get all requirements with hierarchy (including cross-repo if mode allows)
+    print("Loading requirements and building hierarchy...", end=" ", flush=True)
     requirements = get_all_requirements(mode=mode)
     if not requirements:
         print("FAILED")
         print("Error: Could not load requirements. Run 'elspais validate' first.", file=sys.stderr)
         return 1
     print(f"found {len(requirements)} requirements")
-
-    # Build hierarchy
-    print("Building hierarchy...", end=" ", flush=True)
-    build_hierarchy(requirements)
-    print("done", flush=True)
 
     # Determine which requirements to process
     if start_req:

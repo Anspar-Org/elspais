@@ -579,12 +579,22 @@ class TestTreeIntegration:
                 nodes[assertion_id] = assertion_node
 
         # Link hierarchy (implements relationships)
-        from elspais.core.hierarchy import find_requirement
+        def _find_requirement(impl_id, reqs):
+            """Find requirement by exact or short ID match."""
+            if impl_id in reqs:
+                return reqs[impl_id]
+            # Try short ID match
+            impl_short = impl_id.split("-")[-1] if "-" in impl_id else impl_id
+            for rid, r in reqs.items():
+                short_id = rid.split("-")[-1] if "-" in rid else rid
+                if short_id == impl_short:
+                    return r
+            return None
 
         for req_id, req in requirements.items():
             node = nodes[req_id]
             for impl_id in req.implements:
-                parent_req = find_requirement(impl_id, requirements)
+                parent_req = _find_requirement(impl_id, requirements)
                 if parent_req:
                     parent_node = nodes.get(parent_req.id)
                     if parent_node:
@@ -609,51 +619,3 @@ class TestTreeIntegration:
         assertion_count = sum(1 for _ in tree.nodes_by_kind(NodeKind.ASSERTION))
         assert assertion_count >= 0  # May be 0 if fixtures don't have assertions
 
-    def test_tree_traversal_matches_hierarchy(self, hht_like_fixture):
-        """Test that tree traversal is consistent with hierarchy module."""
-        from elspais.config.loader import load_config
-        from elspais.core.hierarchy import find_children_ids, find_roots
-        from elspais.core.parser import RequirementParser
-        from elspais.core.patterns import PatternConfig
-        from elspais.core.graph import NodeKind, TraceNode
-
-        # Load requirements
-        config_dict = load_config(hht_like_fixture / ".elspais.toml")
-        pattern_config = PatternConfig.from_dict(config_dict.get("patterns", {}))
-        parser = RequirementParser(pattern_config)
-        requirements = parser.parse_directory(hht_like_fixture / "spec")
-
-        # Build simple tree (requirements only)
-        nodes: dict[str, TraceNode] = {}
-        for req_id, req in requirements.items():
-            nodes[req_id] = TraceNode(
-                id=req_id,
-                kind=NodeKind.REQUIREMENT,
-                label=req.title,
-                requirement=req,
-            )
-
-        # Link using hierarchy module
-        from elspais.core.hierarchy import find_requirement
-
-        for req_id, req in requirements.items():
-            node = nodes[req_id]
-            for impl_id in req.implements:
-                parent_req = find_requirement(impl_id, requirements)
-                if parent_req and parent_req.id in nodes:
-                    parent_node = nodes[parent_req.id]
-                    parent_node.children.append(node)
-                    node.parents.append(parent_node)
-
-        # Compare roots
-        hierarchy_roots = set(find_roots(requirements))
-        tree_roots = {n.id for n in nodes.values() if not n.parents}
-
-        assert hierarchy_roots == tree_roots
-
-        # Compare children for each root
-        for root_id in hierarchy_roots:
-            hierarchy_children = set(find_children_ids(root_id, requirements))
-            tree_children = {c.id for c in nodes[root_id].children}
-
-            assert hierarchy_children == tree_children, f"Mismatch for {root_id}"

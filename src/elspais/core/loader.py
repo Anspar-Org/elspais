@@ -45,10 +45,23 @@ def get_skip_files(config: Dict[str, Any]) -> List[str]:
     return config.get("spec", {}).get("skip_files", [])
 
 
+def get_skip_dirs(config: Dict[str, Any]) -> List[str]:
+    """Get the skip_dirs list from configuration.
+
+    Args:
+        config: Configuration dict
+
+    Returns:
+        List of directory names to skip (e.g., ["roadmap", "archive"])
+    """
+    return config.get("spec", {}).get("skip_dirs", [])
+
+
 def parse_requirements_from_directories(
     spec_dirs: List[Path],
     config: Dict[str, Any],
     skip_files: Optional[List[str]] = None,
+    skip_dirs: Optional[List[str]] = None,
     recursive: bool = True,
 ) -> ParseResult:
     """Parse requirements from multiple directories, returning ParseResult.
@@ -61,6 +74,7 @@ def parse_requirements_from_directories(
         spec_dirs: List of spec directories to parse
         config: Configuration dict
         skip_files: Optional list of files to skip (overrides config if provided)
+        skip_dirs: Optional list of directories to skip (overrides config if provided)
         recursive: If True, search subdirectories recursively (default: True)
 
     Returns:
@@ -69,14 +83,19 @@ def parse_requirements_from_directories(
     parser = create_parser(config)
     if skip_files is None:
         skip_files = get_skip_files(config)
+    if skip_dirs is None:
+        skip_dirs = get_skip_dirs(config)
 
-    return parser.parse_directories(spec_dirs, skip_files=skip_files, recursive=recursive)
+    return parser.parse_directories(
+        spec_dirs, skip_files=skip_files, skip_dirs=skip_dirs, recursive=recursive
+    )
 
 
 def load_requirements_from_directories(
     spec_dirs: List[Path],
     config: Dict[str, Any],
     skip_files: Optional[List[str]] = None,
+    skip_dirs: Optional[List[str]] = None,
     recursive: bool = True,
 ) -> Dict[str, Requirement]:
     """Load requirements from multiple directories.
@@ -88,13 +107,14 @@ def load_requirements_from_directories(
         spec_dirs: List of spec directories to parse
         config: Configuration dict
         skip_files: Optional list of files to skip (overrides config if provided)
+        skip_dirs: Optional list of directories to skip (overrides config if provided)
         recursive: If True, search subdirectories recursively (default: True)
 
     Returns:
         Dict mapping requirement ID to Requirement object
     """
     result = parse_requirements_from_directories(
-        spec_dirs, config, skip_files=skip_files, recursive=recursive
+        spec_dirs, config, skip_files=skip_files, skip_dirs=skip_dirs, recursive=recursive
     )
     return result.requirements
 
@@ -103,6 +123,7 @@ def load_requirements_from_directory(
     spec_dir: Path,
     config: Dict[str, Any],
     skip_files: Optional[List[str]] = None,
+    skip_dirs: Optional[List[str]] = None,
     recursive: bool = True,
 ) -> Dict[str, Requirement]:
     """Load requirements from a single directory.
@@ -113,13 +134,14 @@ def load_requirements_from_directory(
         spec_dir: Spec directory to parse
         config: Configuration dict
         skip_files: Optional list of files to skip (overrides config if provided)
+        skip_dirs: Optional list of directories to skip (overrides config if provided)
         recursive: If True, search subdirectories recursively (default: True)
 
     Returns:
         Dict mapping requirement ID to Requirement object
     """
     return load_requirements_from_directories(
-        [spec_dir], config, skip_files=skip_files, recursive=recursive
+        [spec_dir], config, skip_files=skip_files, skip_dirs=skip_dirs, recursive=recursive
     )
 
 

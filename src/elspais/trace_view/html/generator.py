@@ -2,9 +2,8 @@
 HTML Generator for trace-view.
 
 This module contains all HTML, CSS, and JavaScript generation for the
-interactive traceability matrix report. It was extracted from the original
-generate_traceability.py as a monolithic module to support the trace_view
-package refactoring.
+interactive traceability matrix report. Uses TraceGraph as the single
+source of truth - no separate data structures.
 
 Contains:
 - HTMLGenerator class with all HTML rendering methods
@@ -22,23 +21,24 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from elspais.trace_view.coverage import (
-    calculate_coverage,
+from elspais.core.annotators import (
+    collect_topics,
     count_by_level,
-    find_orphaned_requirements,
+    count_by_repo,
+    count_implementation_files,
     get_implementation_status,
 )
-from elspais.trace_view.models import TraceViewRequirement as Requirement
+from elspais.core.graph import NodeKind, TraceGraph, TraceNode
 
 
 class HTMLGenerator:
-    """Generates interactive HTML traceability matrix.
+    """Generates interactive HTML traceability matrix from TraceGraph.
 
-    This class contains all the HTML, CSS, and JavaScript generation logic
-    for the trace-view interactive report.
+    This class consumes the unified TraceGraph directly - no separate
+    data structures or coverage calculations.
 
     Args:
-        requirements: Dict mapping requirement ID to Requirement object
+        graph: The TraceGraph containing all requirement data
         base_path: Relative path from output file to repo root (for links)
         mode: Report mode ('core', 'sponsor', 'combined')
         sponsor: Sponsor name if in sponsor mode
@@ -48,14 +48,14 @@ class HTMLGenerator:
 
     def __init__(
         self,
-        requirements: Dict[str, Requirement],
+        graph: TraceGraph,
         base_path: str = "",
         mode: str = "core",
         sponsor: Optional[str] = None,
-        version: int = 16,
+        version: int = 18,
         repo_root: Optional[Path] = None,
     ):
-        self.requirements = requirements
+        self.graph = graph
         self._base_path = base_path
         self.mode = mode
         self.sponsor = sponsor
@@ -63,7 +63,7 @@ class HTMLGenerator:
         self.repo_root = repo_root
         # Instance tracking for flat list building
         self._instance_counter = 0
-        self._visited_req_ids: Set[str] = set()
+        self._visited_node_ids: Set[str] = set()
 
         # Jinja2 template environment
         template_dir = Path(__file__).parent / "templates"
@@ -98,110 +98,45 @@ class HTMLGenerator:
         template = self.env.get_template("base.html")
         return template.render(**context)
 
-    def _count_by_level(self) -> Dict[str, Dict[str, int]]:
-        """Count requirements by level, with and without deprecated."""
-        return count_by_level(self.requirements)
-
-    def _count_by_repo(self) -> Dict[str, Dict[str, int]]:
-        """Count requirements by repo prefix (CORE, CAL, TTN, etc.).
-
-        Returns:
-            Dict mapping repo prefix to {'active': count, 'all': count}
-            CORE is used for core repo requirements (no prefix).
-        """
-        repo_counts: Dict[str, Dict[str, int]] = {}
-
-        for req in self.requirements.values():
-            prefix = req.repo_prefix or "CORE"  # Use CORE for core repo
-
-            if prefix not in repo_counts:
-                repo_counts[prefix] = {"active": 0, "all": 0}
-
-            repo_counts[prefix]["all"] += 1
-            if req.status != "Deprecated":
-                repo_counts[prefix]["active"] += 1
-
-        return repo_counts
-
-    def _count_impl_files(self) -> int:
-        """Count total implementation files across all requirements."""
-        return sum(len(req.implementation_files) for req in self.requirements.values())
-
-    def _find_orphaned_requirements(self) -> List[Requirement]:
-        """Find requirements with missing parents."""
-        return find_orphaned_requirements(self.requirements)
-
-    def _calculate_coverage(self, req_id: str) -> dict:
-        """Calculate coverage for a requirement."""
-        return calculate_coverage(self.requirements, req_id)
-
-    def _get_implementation_status(self, req_id: str) -> str:
-        """Get implementation status for a requirement."""
-        return get_implementation_status(self.requirements, req_id)
-
     def _load_css(self) -> str:
-        """Load CSS content from external stylesheet.
-
-        Loads styles from templates/partials/styles.css for embedding
-        in the HTML output.
-
-        Returns:
-            CSS content as string, or empty string if file not found.
-        """
+        """Load CSS content from external stylesheet."""
         css_path = Path(__file__).parent / "templates" / "partials" / "styles.css"
         if css_path.exists():
             return css_path.read_text()
         return ""
 
     def _load_js(self) -> str:
-        """Load JavaScript content from external script file.
-
-        Loads scripts from templates/partials/scripts.js for embedding
-        in the HTML output.
-
-        Returns:
-            JavaScript content as string, or empty string if file not found.
-        """
+        """Load JavaScript content from external script file."""
         js_path = Path(__file__).parent / "templates" / "partials" / "scripts.js"
         if js_path.exists():
             return js_path.read_text()
         return ""
 
     def _load_review_css(self) -> str:
-        """Load review system CSS.
-
-        Returns:
-            CSS content as string, or empty string if file not found.
-        """
+        """Load review system CSS."""
         css_path = Path(__file__).parent / "templates" / "partials" / "review-styles.css"
         if css_path.exists():
             return css_path.read_text()
         return ""
 
     def _load_review_js(self) -> str:
-        """Load review system JavaScript modules.
-
-        Concatenates all review JS modules in the correct dependency order.
-
-        Returns:
-            JavaScript content as string, or empty string if files not found.
-        """
+        """Load review system JavaScript modules."""
         review_dir = Path(__file__).parent / "templates" / "partials" / "review"
         if not review_dir.exists():
             return ""
 
-        # Load modules in dependency order (REQ-d00012)
+        # Load modules in dependency order
         module_order = [
-            "review-data.js",  # Data models and state (no deps)
-            "review-position.js",  # Position resolution (depends on data)
-            "review-line-numbers.js",  # Line numbers for click-to-comment (depends on data)
-            "review-comments.js",  # Comments UI (depends on position, line-numbers)
-            "review-status.js",  # Status UI (depends on data)
-            "review-packages.js",  # Package management (depends on data)
-            "review-sync.js",  # Sync operations (depends on data)
-            "review-help.js",  # Help system (depends on data)
-            "review-resize.js",  # Panel resize (depends on DOM)
-            "review-init.js",  # Init orchestration (must be last)
+            "review-data.js",
+            "review-position.js",
+            "review-line-numbers.js",
+            "review-comments.js",
+            "review-status.js",
+            "review-packages.js",
+            "review-sync.js",
+            "review-help.js",
+            "review-resize.js",
+            "review-init.js",
         ]
 
         js_parts = []
@@ -216,33 +151,13 @@ class HTMLGenerator:
     def _build_render_context(
         self, embed_content: bool = False, edit_mode: bool = False, review_mode: bool = False
     ) -> dict:
-        """Build the template render context.
+        """Build the template render context."""
+        # Use composable aggregate functions from annotators module
+        by_level = count_by_level(self.graph)
+        by_repo = count_by_repo(self.graph)
+        sorted_topics = collect_topics(self.graph)
 
-        Creates a dictionary with all data needed by Jinja2 templates.
-
-        Args:
-            embed_content: If True, embed full requirement content
-            edit_mode: If True, include edit mode UI
-            review_mode: If True, include review mode UI and scripts
-
-        Returns:
-            Dictionary containing template context variables
-        """
-        by_level = self._count_by_level()
-        by_repo = self._count_by_repo()
-
-        # Collect topics
-        all_topics = set()
-        for req in self.requirements.values():
-            topic = (
-                req.file_path.stem.split("-", 1)[1]
-                if "-" in req.file_path.stem
-                else req.file_path.stem
-            )
-            all_topics.add(topic)
-        sorted_topics = sorted(all_topics)
-
-        # Build requirements HTML using existing method
+        # Build requirements HTML
         requirements_html = self._generate_requirements_html(embed_content, edit_mode)
 
         # Build JSON data for embedded mode
@@ -261,18 +176,18 @@ class HTMLGenerator:
                 "prd": {"active": by_level["active"]["PRD"], "all": by_level["all"]["PRD"]},
                 "ops": {"active": by_level["active"]["OPS"], "all": by_level["all"]["OPS"]},
                 "dev": {"active": by_level["active"]["DEV"], "all": by_level["all"]["DEV"]},
-                "impl_files": self._count_impl_files(),
+                "impl_files": count_implementation_files(self.graph),
             },
-            # Repo prefix stats (for associated repos like CAL, TTN, etc.)
+            # Repo prefix stats
             "repo_stats": by_repo,
             # Requirements data
             "topics": sorted_topics,
             "requirements_html": requirements_html,
             "req_json_data": req_json_data,
-            # Asset content (CSS/JS loaded from external files)
+            # Asset content
             "css": self._load_css(),
             "js": self._load_js(),
-            # Review mode assets (loaded conditionally)
+            # Review mode assets
             "review_css": self._load_review_css() if review_mode else "",
             "review_js": self._load_review_js() if review_mode else "",
             "review_json_data": self._generate_review_json_data() if review_mode else "",
@@ -284,20 +199,7 @@ class HTMLGenerator:
     def _generate_requirements_html(
         self, embed_content: bool = False, edit_mode: bool = False
     ) -> str:
-        """Generate the HTML for all requirements.
-
-        This extracts the requirement tree generation logic to be used
-        by both the legacy _generate_html() method and the template-based
-        rendering.
-
-        Args:
-            embed_content: If True, embed full requirement content
-            edit_mode: If True, include edit mode UI
-
-        Returns:
-            HTML string with all requirement rows
-        """
-        # Build flat list for rendering
+        """Generate the HTML for all requirements."""
         flat_list = self._build_flat_requirement_list()
 
         html_parts = []
@@ -358,46 +260,55 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
     def _generate_req_json_data(self) -> str:
         """Generate JSON data containing all requirement content for embedded mode"""
         req_data = {}
-        for req_id, req in self.requirements.items():
-            # Use correct spec path for external vs core repo requirements
-            if req.external_spec_path:
-                # External repo: use file:// URL
-                file_path_url = f"file://{req.external_spec_path}"
+        for node in self.graph.all_nodes():
+            if node.kind != NodeKind.REQUIREMENT:
+                continue
+            req = node.requirement
+            if not req:
+                continue
+
+            req_id = node.id
+            is_roadmap = node.metrics.get("is_roadmap", False)
+            external_spec_path = node.metrics.get("external_spec_path")
+            is_conflict = node.metrics.get("is_conflict", False)
+            conflict_with = node.metrics.get("conflict_with")
+            is_cycle = node.metrics.get("is_cycle", False)
+            cycle_path = node.metrics.get("cycle_path")
+            repo_prefix = node.metrics.get("repo_prefix")
+            display_filename = node.metrics.get("display_filename", "")
+
+            # Determine file path URL
+            if external_spec_path:
+                file_path_url = f"file://{external_spec_path}"
             else:
-                # Core repo: use relative path
-                spec_subpath = "spec/roadmap" if req.is_roadmap else "spec"
-                file_path_url = f"{self._base_path}{spec_subpath}/{req.file_path.name}"
+                spec_subpath = "spec/roadmap" if is_roadmap else "spec"
+                file_name = node.metrics.get("file_name", f"{display_filename}.md")
+                file_path_url = f"{self._base_path}{spec_subpath}/{file_name}"
 
             req_data[req_id] = {
                 "title": req.title,
                 "status": req.status,
                 "level": req.level,
                 "body": req.body.strip(),
-                "rationale": req.rationale.strip(),
-                "file": req.display_filename,  # Shows CAL/filename.md for external repos
+                "rationale": req.rationale.strip() if req.rationale else "",
+                "file": display_filename,
                 "filePath": file_path_url,
-                "line": req.line_number,
+                "line": node.source.line if node.source else 0,
                 "implements": list(req.implements) if req.implements else [],
-                "isRoadmap": req.is_roadmap,
-                "isConflict": req.is_conflict,
-                "conflictWith": req.conflict_with if req.is_conflict else None,
-                "isCycle": req.is_cycle,
-                "cyclePath": req.cycle_path if req.is_cycle else None,
-                "isExternal": req.external_spec_path is not None,
-                "repoPrefix": req.repo_prefix,  # e.g., 'CAL' for associated repos
+                "isRoadmap": is_roadmap,
+                "isConflict": is_conflict,
+                "conflictWith": conflict_with,
+                "isCycle": is_cycle,
+                "cyclePath": cycle_path,
+                "isExternal": external_spec_path is not None,
+                "repoPrefix": repo_prefix,
             }
         json_str = json.dumps(req_data, indent=2)
-        # Escape </script> to prevent premature closing of the script tag
-        # This is safe because JSON strings already escape the backslash
         json_str = json_str.replace("</script>", "<\\/script>")
         return json_str
 
     def _generate_review_json_data(self) -> str:
-        """Generate JSON data for review mode initialization.
-
-        Loads existing review data from .reviews/ directory and embeds it
-        in the HTML for immediate display. The API is still used for updates.
-        """
+        """Generate JSON data for review mode initialization."""
         review_data = {
             "threads": {},
             "flags": {},
@@ -461,32 +372,31 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
         return json_str
 
     def _build_flat_requirement_list(self) -> List[dict]:
-        """Build a flat list of requirements with hierarchy information"""
+        """Build a flat list of requirements with hierarchy information.
+
+        Uses graph.roots and node.children for traversal - no re-computation.
+        """
         flat_list = []
-        self._instance_counter = 0  # Track unique instance IDs
-        self._visited_req_ids = set()  # Track visited requirements to avoid cycles and duplicates
+        self._instance_counter = 0
+        self._visited_node_ids = set()
 
-        # Start with all root requirements (those with no implements/parent)
-        # Root requirements can be PRD, OPS, or DEV - any req that doesn't implement another
-        root_reqs = [req for req in self.requirements.values() if not req.implements]
-        root_reqs.sort(key=lambda r: r.id)
+        # Start with root nodes from graph
+        for root in self.graph.roots:
+            if root.kind == NodeKind.REQUIREMENT:
+                self._add_node_and_children(
+                    root, flat_list, indent=0, parent_instance_id="", ancestor_path=[]
+                )
 
-        for root_req in root_reqs:
-            self._add_requirement_and_children(
-                root_req, flat_list, indent=0, parent_instance_id="", ancestor_path=[]
-            )
-
-        # Add any orphaned requirements that weren't included in the tree
-        # (requirements that have implements pointing to non-existent parents)
-        all_req_ids = set(self.requirements.keys())
-        included_req_ids = self._visited_req_ids
-        orphaned_ids = all_req_ids - included_req_ids
+        # Add any orphaned requirements not reachable from roots
+        all_req_nodes = {n.id for n in self.graph.all_nodes() if n.kind == NodeKind.REQUIREMENT}
+        orphaned_ids = all_req_nodes - self._visited_node_ids
 
         if orphaned_ids:
-            orphaned_reqs = [self.requirements[rid] for rid in orphaned_ids]
-            orphaned_reqs.sort(key=lambda r: r.id)
-            for orphan in orphaned_reqs:
-                self._add_requirement_and_children(
+            orphaned_nodes = [self.graph.find_by_id(nid) for nid in orphaned_ids]
+            orphaned_nodes = [n for n in orphaned_nodes if n]  # Filter None
+            orphaned_nodes.sort(key=lambda n: n.id)
+            for orphan in orphaned_nodes:
+                self._add_node_and_children(
                     orphan,
                     flat_list,
                     indent=0,
@@ -497,59 +407,91 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
 
         return flat_list
 
-    def _find_children_with_assertion_info(
-        self, req: Requirement
-    ) -> List[Tuple[Requirement, List[str]]]:
-        """Find child requirements that implement this requirement or its assertions.
+    def _get_children_with_assertion_info(
+        self, node: TraceNode
+    ) -> List[Tuple[TraceNode, List[str]]]:
+        """Get child requirement nodes with their assertion labels.
 
-        Returns list of (child_req, assertion_labels) tuples.
-        - If child implements the parent REQ directly, assertion_labels is empty
-        - If child implements specific assertions (e.g., REQ-p00001-A-B), assertion_labels = ["A", "B"]
-
-        Args:
-            req: The parent requirement to find children for
+        Finds requirements that are children of this node in two ways:
+        1. Direct REQUIREMENT children (implements the requirement directly)
+        2. REQUIREMENT children of ASSERTION children (implements specific assertions)
 
         Returns:
-            List of (Requirement, List[str]) tuples sorted by requirement ID
+            List of (child_node, assertion_labels) tuples.
         """
         import re
 
-        children_with_assertions: List[Tuple[Requirement, List[str]]] = []
-        parent_id = req.full_id  # Get full ID with REQ- prefix
+        # Track children we've seen to avoid duplicates
+        seen_children: Dict[str, List[str]] = {}
+        parent_id = node.id
 
-        for r in self.requirements.values():
+        # 1. Get direct REQUIREMENT children
+        for child in node.children:
+            if child.kind != NodeKind.REQUIREMENT:
+                continue
+
+            child_req = child.requirement
+            if not child_req:
+                continue
+
             assertion_labels: List[str] = []
-            is_child = False
 
-            for impl_ref in r.implements:
+            for impl_ref in child_req.implements:
                 if impl_ref == parent_id:
-                    # Direct implementation of the requirement
-                    is_child = True
-                    # Don't break - keep checking for assertion refs too
+                    # Direct implementation of parent
+                    pass  # No assertion labels
                 elif impl_ref.startswith(parent_id + "-"):
-                    # Implements an assertion of this requirement
-                    # Extract assertion labels from reference like "REQ-p00001-A-B-C"
-                    suffix = impl_ref[len(parent_id) + 1 :]  # Get "A-B-C"
-                    # Split by dash to get individual labels
+                    # Implements specific assertion(s) via multi-assertion syntax
+                    suffix = impl_ref[len(parent_id) + 1:]
                     labels = suffix.split("-")
-                    # Filter to only uppercase letters (assertion labels)
                     labels = [lbl for lbl in labels if re.match(r"^[A-Z]$", lbl)]
                     if labels:
                         assertion_labels.extend(labels)
-                        is_child = True
 
-            if is_child:
-                # Remove duplicates and sort assertion labels
-                unique_labels = sorted(set(assertion_labels))
-                children_with_assertions.append((r, unique_labels))
+            if child.id not in seen_children:
+                seen_children[child.id] = []
+            seen_children[child.id].extend(assertion_labels)
 
-        # Sort by requirement ID
+        # 2. Get REQUIREMENT children via ASSERTION children
+        # When a child implements REQ-p00001-A, it's linked to the assertion node
+        for child in node.children:
+            if child.kind != NodeKind.ASSERTION:
+                continue
+
+            # Extract assertion label from assertion node ID
+            assertion_label = child.id.split("-")[-1] if "-" in child.id else ""
+
+            # Find REQUIREMENT children of this assertion
+            for assertion_child in child.children:
+                if assertion_child.kind != NodeKind.REQUIREMENT:
+                    continue
+
+                child_req = assertion_child.requirement
+                if not child_req:
+                    continue
+
+                if assertion_child.id not in seen_children:
+                    seen_children[assertion_child.id] = []
+
+                # Add the assertion label this child implements
+                if assertion_label and re.match(r"^[A-Z]$", assertion_label):
+                    seen_children[assertion_child.id].append(assertion_label)
+
+        # Build result list
+        children_with_assertions: List[Tuple[TraceNode, List[str]]] = []
+        for child_id, labels in seen_children.items():
+            child_node = self.graph.find_by_id(child_id)
+            if child_node:
+                unique_labels = sorted(set(labels))
+                children_with_assertions.append((child_node, unique_labels))
+
+        # Sort by node ID
         children_with_assertions.sort(key=lambda x: x[0].id)
         return children_with_assertions
 
-    def _add_requirement_and_children(
+    def _add_node_and_children(
         self,
-        req: Requirement,
+        node: TraceNode,
         flat_list: List[dict],
         indent: int,
         parent_instance_id: str,
@@ -557,55 +499,51 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
         is_orphan: bool = False,
         assertion_labels: List[str] = None,
     ):
-        """Recursively add requirement and its children to flat list
+        """Recursively add node and its children to flat list.
 
-        Args:
-            req: The requirement to add
-            flat_list: List to append items to
-            indent: Current indentation level
-            parent_instance_id: Instance ID of parent item
-            ancestor_path: List of requirement IDs in current traversal path (for cycle detection)
-            is_orphan: Whether this requirement is an orphan (has missing parent)
-            assertion_labels: List of assertion labels this req implements from parent (e.g., ["A", "B"])
+        Uses node.children from graph - no re-computation of hierarchy.
         """
         if assertion_labels is None:
             assertion_labels = []
 
-        # Cycle detection: check if this requirement is already in our traversal path
-        if req.id in ancestor_path:
-            cycle_path = ancestor_path + [req.id]
-            cycle_str = " -> ".join([f"REQ-{rid}" for rid in cycle_path])
+        # Cycle detection
+        if node.id in ancestor_path:
+            cycle_path = ancestor_path + [node.id]
+            cycle_str = " -> ".join(cycle_path)
             print(f"⚠️  CYCLE DETECTED in flat list build: {cycle_str}", file=sys.stderr)
-            return  # Don't add cyclic requirement again
+            return
 
-        # Track that we've visited this requirement
-        self._visited_req_ids.add(req.id)
+        # Track visited
+        self._visited_node_ids.add(node.id)
 
-        # Generate unique instance ID for this occurrence
+        # Generate unique instance ID
         instance_id = f"inst_{self._instance_counter}"
         self._instance_counter += 1
 
-        # Find child requirements (including those implementing assertions)
-        children_with_assertions = self._find_children_with_assertion_info(req)
+        # Get children from graph
+        children_with_assertions = self._get_children_with_assertion_info(node)
 
-        # Check if this requirement has children (either child reqs or implementation files)
-        has_children = len(children_with_assertions) > 0 or len(req.implementation_files) > 0
+        # Get implementation files from metrics
+        impl_files = node.metrics.get("implementation_files", [])
 
-        # Add this requirement
+        # Check if has children
+        has_children = len(children_with_assertions) > 0 or len(impl_files) > 0
+
+        # Add this node
         flat_list.append(
             {
-                "req": req,
+                "node": node,
                 "indent": indent,
                 "instance_id": instance_id,
                 "parent_instance_id": parent_instance_id,
                 "has_children": has_children,
                 "item_type": "requirement",
-                "assertion_labels": assertion_labels,  # Labels this req implements from parent
+                "assertion_labels": assertion_labels,
             }
         )
 
         # Add implementation files as child items
-        for file_path, line_num in req.implementation_files:
+        for file_path, line_num in impl_files:
             impl_instance_id = f"inst_{self._instance_counter}"
             self._instance_counter += 1
             flat_list.append(
@@ -620,10 +558,10 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
                 }
             )
 
-        # Recursively add child requirements (with updated ancestor path for cycle detection)
-        current_path = ancestor_path + [req.id]
+        # Recursively add child requirements
+        current_path = ancestor_path + [node.id]
         for child, child_assertion_labels in children_with_assertions:
-            self._add_requirement_and_children(
+            self._add_node_and_children(
                 child,
                 flat_list,
                 indent + 1,
@@ -635,13 +573,7 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
     def _format_item_flat_html(
         self, item_data: dict, embed_content: bool = False, edit_mode: bool = False
     ) -> str:
-        """Format a single item (requirement or implementation file) as flat HTML row
-
-        Args:
-            item_data: Dictionary containing item data
-            embed_content: If True, use onclick handlers instead of href links for portability
-            edit_mode: If True, include edit mode UI elements
-        """
+        """Format a single item as flat HTML row."""
         item_type = item_data.get("item_type", "requirement")
 
         if item_type == "implementation":
@@ -670,17 +602,15 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
             link = f"{self._base_path}{file_path}#L{line_num}"
             file_link = f'<a href="{link}" style="color: #0066cc;">{file_path}:{line_num}</a>'
 
-        # Add VS Code link for opening in editor (always uses vscode:// protocol)
-        # Note: VS Code links only work on the machine where this file was generated
-        abs_file_path = self.repo_root / file_path
-        vscode_url = f"vscode://file/{abs_file_path}:{line_num}"
-        vscode_link = f'<a href="{vscode_url}" title="Open in VS Code" class="vscode-link">🔧</a>'
-        file_link = f"{file_link}{vscode_link}"
+        # Add VS Code link
+        if self.repo_root:
+            abs_file_path = self.repo_root / file_path
+            vscode_url = f"vscode://file/{abs_file_path}:{line_num}"
+            vscode_link = f'<a href="{vscode_url}" title="Open in VS Code" class="vscode-link">🔧</a>'
+            file_link = f"{file_link}{vscode_link}"
 
-        # Edit mode destination column (only if edit mode enabled)
         edit_column = '<div class="req-destination edit-mode-column"></div>' if edit_mode else ""
 
-        # Build HTML for implementation file row
         html = f"""
         <div class="req-item impl-file" data-instance-id="{instance_id}" \
 data-indent="{indent}" data-parent-instance-id="{parent_instance_id}">
@@ -705,174 +635,163 @@ monospace; font-size: 12px;">{file_link}</div>
     def _format_req_html(
         self, req_data: dict, embed_content: bool = False, edit_mode: bool = False
     ) -> str:
-        """Format a single requirement as flat HTML row
-
-        Args:
-            req_data: Dictionary containing requirement data
-            embed_content: If True, use onclick handlers instead of href links for portability
-            edit_mode: If True, include edit mode UI elements
-        """
-        req = req_data["req"]
+        """Format a single requirement node as flat HTML row."""
+        node = req_data["node"]
+        req = node.requirement
         indent = req_data["indent"]
         instance_id = req_data["instance_id"]
         parent_instance_id = req_data["parent_instance_id"]
         has_children = req_data["has_children"]
         assertion_labels = req_data.get("assertion_labels", [])
 
+        if not req:
+            return ""
+
         status_class = req.status.lower()
         level_class = req.level.lower()
 
-        # Only show collapse icon if there are children
-        # Show triangle for expandable nodes, circle for leaf nodes
+        # Collapse icon
         collapse_icon = "▼" if has_children else "●"
 
-        # Build assertion indicator if this req implements specific assertions from parent
-        # Format: "(A)" or "(A,B,C)" shown before the collapse icon
+        # Assertion indicator
         assertion_indicator = ""
         if assertion_labels:
             labels_str = ",".join(assertion_labels)
             assertion_indicator = f'<span class="assertion-indicator" title="Implements assertion(s) {labels_str}">({labels_str})</span>'
 
-        # Determine implementation coverage status
-        impl_status = self._get_implementation_status(req.id)
+        # Implementation coverage status from graph metrics
+        impl_status = get_implementation_status(node)
         if impl_status == "Full":
-            coverage_icon = "●"  # Filled circle
+            coverage_icon = "●"
             coverage_title = "Full implementation coverage"
         elif impl_status == "Partial":
-            coverage_icon = "◐"  # Half-filled circle
+            coverage_icon = "◐"
             coverage_title = "Partial implementation coverage"
-        else:  # Unimplemented
-            coverage_icon = "○"  # Empty circle
+        else:
+            coverage_icon = "○"
             coverage_title = "Unimplemented"
 
-        # Determine test status
+        # Test status from metrics
         test_badge = ""
-        if req.test_info:
-            test_status = req.test_info.test_status
-            test_count = req.test_info.test_count + req.test_info.manual_test_count
+        total_tests = node.metrics.get("total_tests", 0)
+        passed_tests = node.metrics.get("passed_tests", 0)
+        failed_tests = node.metrics.get("failed_tests", 0)
 
-            if test_status == "passed":
-                test_badge = (
-                    f'<span class="test-badge test-passed" '
-                    f'title="{test_count} tests passed">✅ {test_count}</span>'
-                )
-            elif test_status == "failed":
+        if total_tests > 0:
+            if failed_tests > 0:
                 test_badge = (
                     f'<span class="test-badge test-failed" '
-                    f'title="{test_count} tests, some failed">❌ {test_count}</span>'
+                    f'title="{total_tests} tests, some failed">❌ {total_tests}</span>'
                 )
-            elif test_status == "not_tested":
+            else:
                 test_badge = (
-                    '<span class="test-badge test-not-tested" '
-                    'title="No tests implemented">⚡</span>'
+                    f'<span class="test-badge test-passed" '
+                    f'title="{passed_tests} tests passed">✅ {total_tests}</span>'
                 )
         else:
             test_badge = (
-                '<span class="test-badge test-not-tested" ' 'title="No tests implemented">⚡</span>'
+                '<span class="test-badge test-not-tested" '
+                'title="No tests implemented">⚡</span>'
             )
 
         # Extract topic from filename
-        topic = (
-            req.file_path.stem.split("-", 1)[1] if "-" in req.file_path.stem else req.file_path.stem
-        )
+        topic = ""
+        if req.file_path:
+            topic = (
+                req.file_path.stem.split("-", 1)[1]
+                if "-" in req.file_path.stem
+                else req.file_path.stem
+            )
 
-        # Create link to source file with REQ anchor
-        # In embedded mode, use onclick to open side panel instead of navigating away
-        # event.stopPropagation() prevents the parent toggle handler from firing
-        # Display ID without "REQ-" prefix for cleaner tree view
-        # Determine the correct spec path (spec/ or spec/roadmap/, or file:// for external)
-        if req.external_spec_path:
-            # External repo: use file:// URL
-            spec_url = f"file://{req.external_spec_path}"
+        # Get display info from node metrics
+        display_filename = node.metrics.get("display_filename", "")
+        is_roadmap = node.metrics.get("is_roadmap", False)
+        external_spec_path = node.metrics.get("external_spec_path")
+        repo_prefix = node.metrics.get("repo_prefix", "CORE")
+        file_name = node.metrics.get("file_name", f"{display_filename}.md")
+        line_number = node.source.line if node.source else 0
+
+        # Create spec URL
+        if external_spec_path:
+            spec_url = f"file://{external_spec_path}"
         else:
-            # Core repo: use relative path
-            spec_subpath = "spec/roadmap" if req.is_roadmap else "spec"
-            spec_url = f"{self._base_path}{spec_subpath}/{req.file_path.name}"
+            spec_subpath = "spec/roadmap" if is_roadmap else "spec"
+            spec_url = f"{self._base_path}{spec_subpath}/{file_name}"
 
-        # Display filename without .md extension but with repo prefix (e.g., CAL/dev-edc-schema)
-        file_stem = req.file_path.stem  # removes .md extension
-        display_filename = f"{req.repo_prefix}/{file_stem}" if req.repo_prefix else file_stem
+        # Display filename with repo prefix
+        file_stem = req.file_path.stem if req.file_path else display_filename
+        display_filename_full = f"{repo_prefix}/{file_stem}" if repo_prefix and repo_prefix != "CORE" else file_stem
 
-        # Display ID: strip __conflict suffix (warning icon shows conflict status separately)
-        display_id = req.id
-        if "__conflict" in req.id:
-            display_id = req.id.replace("__conflict", "")
+        # Display ID (strip __conflict suffix)
+        display_id = node.id
+        if "__conflict" in node.id:
+            display_id = node.id.replace("__conflict", "")
 
         if embed_content:
             req_link = (
                 f'<a href="#" onclick="event.stopPropagation(); '
-                f"openReqPanel('{req.id}'); return false;\" "
+                f"openReqPanel('{node.id}'); return false;\" "
                 f'style="color: inherit; text-decoration: none; cursor: pointer;">'
                 f"{display_id}</a>"
             )
-            file_line_link = f'<span style="color: inherit;">{display_filename}</span>'
+            file_line_link = f'<span style="color: inherit;">{display_filename_full}</span>'
         else:
             req_link = (
-                f'<a href="{spec_url}#REQ-{req.id}" '
+                f'<a href="{spec_url}#{node.id}" '
                 f'style="color: inherit; text-decoration: none;">{display_id}</a>'
             )
             file_line_link = (
-                f'<a href="{spec_url}#L{req.line_number}" '
-                f'style="color: inherit; text-decoration: none;">{display_filename}</a>'
+                f'<a href="{spec_url}#L{line_number}" '
+                f'style="color: inherit; text-decoration: none;">{display_filename_full}</a>'
             )
 
-        # Determine status indicators using distinctive Unicode symbols
-        # ★ (star) = NEW, ◆ (diamond) = MODIFIED, ↝ (wave arrow) = MOVED
+        # Git status indicators from metrics
+        is_moved = node.metrics.get("is_moved", False)
+        is_new = node.metrics.get("is_new", False)
+        is_modified = node.metrics.get("is_modified", False)
+        is_uncommitted = node.metrics.get("is_uncommitted", False)
+        is_branch_changed = node.metrics.get("is_branch_changed", False)
+
         status_suffix = ""
         status_suffix_class = ""
         status_title = ""
 
-        is_moved = req.is_moved
-        is_new_not_moved = req.is_new and not is_moved
-        is_modified = req.is_modified
+        is_new_not_moved = is_new and not is_moved
 
         if is_moved and is_modified:
-            # Moved AND modified - show both indicators
             status_suffix = "↝◆"
             status_suffix_class = "status-moved-modified"
             status_title = "MOVED and MODIFIED"
         elif is_moved:
-            # Just moved (might be in new file)
             status_suffix = "↝"
             status_suffix_class = "status-moved"
             status_title = "MOVED from another file"
         elif is_new_not_moved:
-            # Truly new (in new file, not moved)
             status_suffix = "★"
             status_suffix_class = "status-new"
             status_title = "NEW requirement"
         elif is_modified:
-            # Modified in place
             status_suffix = "◆"
             status_suffix_class = "status-modified"
             status_title = "MODIFIED content"
 
-        # Check if this is a root requirement (no parents)
-        is_root = not req.implements or len(req.implements) == 0
+        # Data attributes
+        is_root = len(node.parents) == 0
         is_root_attr = 'data-is-root="true"' if is_root else 'data-is-root="false"'
-        # Two separate modified attributes: uncommitted (since last commit) and branch (vs main)
-        uncommitted_attr = (
-            'data-uncommitted="true"' if req.is_uncommitted else 'data-uncommitted="false"'
-        )
-        branch_attr = (
-            'data-branch-changed="true"' if req.is_branch_changed else 'data-branch-changed="false"'
-        )
+        uncommitted_attr = 'data-uncommitted="true"' if is_uncommitted else 'data-uncommitted="false"'
+        branch_attr = 'data-branch-changed="true"' if is_branch_changed else 'data-branch-changed="false"'
+        has_children_attr = 'data-has-children="true"' if has_children else 'data-has-children="false"'
 
-        # Data attribute for has-children (for leaf-only filtering)
-        has_children_attr = (
-            'data-has-children="true"' if has_children else 'data-has-children="false"'
-        )
-
-        # Data attribute for test status (for test filter)
+        # Test status attribute
         test_status_value = "not-tested"
-        if req.test_info:
-            if req.test_info.test_status == "passed":
-                test_status_value = "tested"
-            elif req.test_info.test_status == "failed":
+        if total_tests > 0:
+            if failed_tests > 0:
                 test_status_value = "failed"
+            else:
+                test_status_value = "tested"
         test_status_attr = f'data-test-status="{test_status_value}"'
 
-        # Data attribute for coverage (for coverage filter)
+        # Coverage attribute
         coverage_value = "none"
         if impl_status == "Full":
             coverage_value = "full"
@@ -880,22 +799,23 @@ monospace; font-size: 12px;">{file_link}</div>
             coverage_value = "partial"
         coverage_attr = f'data-coverage="{coverage_value}"'
 
-        # Data attribute for roadmap (for roadmap filtering)
-        roadmap_attr = 'data-roadmap="true"' if req.is_roadmap else 'data-roadmap="false"'
+        # Roadmap attribute
+        roadmap_attr = 'data-roadmap="true"' if is_roadmap else 'data-roadmap="false"'
 
-        # Edit mode buttons - only generated if edit_mode is enabled
-        if edit_mode:
-            req_id = req.id
-            file_name = req.file_path.name
-            if req.is_roadmap:
+        # Edit mode buttons
+        edit_buttons = ""
+        if edit_mode and req.file_path:
+            req_id = node.id
+            file_name_edit = req.file_path.name
+            if is_roadmap:
                 from_roadmap_btn = (
                     f'<button class="edit-btn from-roadmap" '
-                    f"onclick=\"addPendingMove('{req_id}', '{file_name}', 'from-roadmap')\" "
+                    f"onclick=\"addPendingMove('{req_id}', '{file_name_edit}', 'from-roadmap')\" "
                     f'title="Move out of roadmap">↩ From Roadmap</button>'
                 )
                 move_file_btn = (
                     f'<button class="edit-btn move-file" '
-                    f"onclick=\"showMoveToFile('{req_id}', '{file_name}')\" "
+                    f"onclick=\"showMoveToFile('{req_id}', '{file_name_edit}')\" "
                     f'title="Move to different file">📁 Move</button>'
                 )
                 edit_buttons = (
@@ -905,84 +825,78 @@ monospace; font-size: 12px;">{file_link}</div>
             else:
                 to_roadmap_btn = (
                     f'<button class="edit-btn to-roadmap" '
-                    f"onclick=\"addPendingMove('{req_id}', '{file_name}', 'to-roadmap')\" "
+                    f"onclick=\"addPendingMove('{req_id}', '{file_name_edit}', 'to-roadmap')\" "
                     f'title="Move to roadmap">🗺️ To Roadmap</button>'
                 )
                 move_file_btn = (
                     f'<button class="edit-btn move-file" '
-                    f"onclick=\"showMoveToFile('{req_id}', '{file_name}')\" "
+                    f"onclick=\"showMoveToFile('{req_id}', '{file_name_edit}')\" "
                     f'title="Move to different file">📁 Move</button>'
                 )
                 edit_buttons = (
                     f'<span class="edit-actions" onclick="event.stopPropagation();">'
                     f"{to_roadmap_btn}{move_file_btn}</span>"
                 )
-        else:
-            edit_buttons = ""
 
-        # Roadmap indicator icon (shown after REQ ID)
-        roadmap_icon = (
-            '<span class="roadmap-icon" title="In roadmap">🛤️</span>' if req.is_roadmap else ""
-        )
+        # Roadmap/conflict/cycle icons
+        roadmap_icon = '<span class="roadmap-icon" title="In roadmap">🛤️</span>' if is_roadmap else ""
 
-        # Conflict indicator icon (shown for roadmap REQs that conflict with existing REQs)
+        is_conflict = node.metrics.get("is_conflict", False)
+        conflict_with = node.metrics.get("conflict_with")
         conflict_icon = (
-            f'<span class="conflict-icon" title="Conflicts with REQ-{req.conflict_with}">⚠️</span>'
-            if req.is_conflict
+            f'<span class="conflict-icon" title="Conflicts with {conflict_with}">⚠️</span>'
+            if is_conflict
             else ""
         )
         conflict_attr = (
-            f'data-conflict="true" data-conflict-with="{req.conflict_with}"'
-            if req.is_conflict
+            f'data-conflict="true" data-conflict-with="{conflict_with}"'
+            if is_conflict
             else 'data-conflict="false"'
         )
 
-        # Cycle indicator icon (shown for REQs involved in dependency cycles)
+        is_cycle = node.metrics.get("is_cycle", False)
+        cycle_path = node.metrics.get("cycle_path", "")
         cycle_icon = (
-            f'<span class="cycle-icon" title="Cycle: {req.cycle_path}">🔄</span>'
-            if req.is_cycle
+            f'<span class="cycle-icon" title="Cycle: {cycle_path}">🔄</span>'
+            if is_cycle
             else ""
         )
         cycle_attr = (
-            f'data-cycle="true" data-cycle-path="{req.cycle_path}"'
-            if req.is_cycle
+            f'data-cycle="true" data-cycle-path="{cycle_path}"'
+            if is_cycle
             else 'data-cycle="false"'
         )
 
-        # Determine item class based on status
-        item_class = "conflict-item" if req.is_conflict else ("cycle-item" if req.is_cycle else "")
+        item_class = "conflict-item" if is_conflict else ("cycle-item" if is_cycle else "")
 
-        # Repo prefix for filtering (CORE for core repo, CAL/TTN/etc. for associated repos)
-        repo_prefix = req.repo_prefix or "CORE"
-
-        # Build data attributes for the div
+        # Build data attributes
         deprecated_class = status_class if req.status == "Deprecated" else ""
         data_attrs = (
-            f'data-req-id="{req.id}" data-instance-id="{instance_id}" '
+            f'data-req-id="{node.id}" data-instance-id="{instance_id}" '
             f'data-level="{req.level}" data-indent="{indent}" '
             f'data-parent-instance-id="{parent_instance_id}" data-topic="{topic}" '
             f'data-status="{req.status}" data-title="{req.title.lower()}" '
-            f'data-file="{req.file_path.name}" data-repo="{repo_prefix}" '
+            f'data-file="{file_name}" data-repo="{repo_prefix}" '
             f"{is_root_attr} {uncommitted_attr} {branch_attr} {has_children_attr} "
             f"{test_status_attr} {coverage_attr} {roadmap_attr} {conflict_attr} {cycle_attr}"
         )
 
-        # Build status badges HTML
+        # Status badges HTML
         status_badges_html = (
             f'<span class="status-badge status-{status_class}">{req.status}</span>'
             f'<span class="status-suffix {status_suffix_class}" '
             f'title="{status_title}">{status_suffix}</span>'
         )
 
-        # Build edit mode column if enabled
+        # Edit mode column
         edit_column_html = ""
         if edit_mode:
             edit_column_html = (
-                f'<div class="req-destination edit-mode-column" data-req-id="{req.id}">'
+                f'<div class="req-destination edit-mode-column" data-req-id="{node.id}">'
                 f'{edit_buttons}<span class="dest-text"></span></div>'
             )
 
-        # Build HTML for single flat row with unique instance ID
+        # Build HTML
         html = f"""
         <div class="req-item {level_class} {deprecated_class} {item_class}" {data_attrs}>
             <div class="req-header-container" onclick="toggleRequirement(this)">
@@ -1002,208 +916,4 @@ monospace; font-size: 12px;">{file_link}</div>
             </div>
         </div>
 """
-        return html
-
-    def _format_req_tree_html(
-        self, req: Requirement, ancestor_path: list[str] | None = None
-    ) -> str:
-        """Format requirement and children as HTML tree (legacy non-collapsible).
-
-        Args:
-            req: The requirement to format
-            ancestor_path: List of requirement IDs in the current traversal path
-                (for cycle detection)
-
-        Returns:
-            Formatted HTML string
-        """
-        if ancestor_path is None:
-            ancestor_path = []
-
-        # Cycle detection: check if this requirement is already in our traversal path
-        if req.id in ancestor_path:
-            cycle_path = ancestor_path + [req.id]
-            cycle_str = " -> ".join([f"REQ-{rid}" for rid in cycle_path])
-            print(f"⚠️  CYCLE DETECTED: {cycle_str}", file=sys.stderr)
-            return (
-                f'        <div class="req-item cycle-detected">'
-                f"<strong>⚠️ CYCLE DETECTED:</strong> REQ-{req.id} "
-                f"(path: {cycle_str})</div>\n"
-            )
-
-        # Safety depth limit
-        MAX_DEPTH = 50
-        if len(ancestor_path) > MAX_DEPTH:
-            print(f"⚠️  MAX DEPTH ({MAX_DEPTH}) exceeded at REQ-{req.id}", file=sys.stderr)
-            return (
-                f'        <div class="req-item depth-exceeded">'
-                f"<strong>⚠️ MAX DEPTH EXCEEDED:</strong> REQ-{req.id}</div>\n"
-            )
-
-        status_class = req.status.lower()
-        level_class = req.level.lower()
-
-        html = f"""
-        <div class="req-item {level_class} {status_class if req.status == 'Deprecated' else ''}">
-            <div class="req-header">
-                {req.id}: {req.title}
-            </div>
-            <div class="req-meta">
-                <span class="status-badge status-{status_class}">{req.status}</span>
-                Level: {req.level} |
-                File: {req.display_filename}:{req.line_number}
-            </div>
-"""
-
-        # Find children
-        children = [r for r in self.requirements.values() if req.id in r.implements]
-        children.sort(key=lambda r: r.id)
-
-        if children:
-            # Add current req to path before recursing into children
-            current_path = ancestor_path + [req.id]
-            html += '            <div class="child-reqs">\n'
-            for child in children:
-                html += self._format_req_tree_html(child, current_path)
-            html += "            </div>\n"
-
-        html += "        </div>\n"
-        return html
-
-    def _format_req_tree_html_collapsible(
-        self, req: Requirement, ancestor_path: list[str] | None = None
-    ) -> str:
-        """Format requirement and children as collapsible HTML tree.
-
-        Args:
-            req: The requirement to format
-            ancestor_path: List of requirement IDs in the current traversal path
-                (for cycle detection)
-
-        Returns:
-            Formatted HTML string
-        """
-        if ancestor_path is None:
-            ancestor_path = []
-
-        # Cycle detection: check if this requirement is already in our traversal path
-        if req.id in ancestor_path:
-            cycle_path = ancestor_path + [req.id]
-            cycle_str = " -> ".join([f"REQ-{rid}" for rid in cycle_path])
-            print(f"⚠️  CYCLE DETECTED: {cycle_str}", file=sys.stderr)
-            return f"""
-        <div class="req-item cycle-detected" data-req-id="{req.id}">
-            <div class="req-header-container">
-                <span class="collapse-icon"></span>
-                <div class="req-content">
-                    <div class="req-id">⚠️ CYCLE</div>
-                    <div class="req-header">Circular dependency detected at REQ-{req.id}</div>
-                    <div class="req-level">ERROR</div>
-                    <div class="req-badges">
-                        <span class="status-badge status-deprecated">Cycle</span>
-                    </div>
-                    <div class="req-location">Path: {cycle_str}</div>
-                </div>
-            </div>
-        </div>
-"""
-
-        # Safety depth limit
-        MAX_DEPTH = 50
-        if len(ancestor_path) > MAX_DEPTH:
-            print(f"⚠️  MAX DEPTH ({MAX_DEPTH}) exceeded at REQ-{req.id}", file=sys.stderr)
-            return f"""
-        <div class="req-item depth-exceeded" data-req-id="{req.id}">
-            <div class="req-header-container">
-                <span class="collapse-icon"></span>
-                <div class="req-content">
-                    <div class="req-id">⚠️ DEPTH</div>
-                    <div class="req-header">Maximum depth exceeded at REQ-{req.id}</div>
-                    <div class="req-level">ERROR</div>
-                    <div class="req-badges">
-                        <span class="status-badge status-deprecated">Overflow</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-"""
-
-        status_class = req.status.lower()
-        level_class = req.level.lower()
-
-        # Find children
-        children = [r for r in self.requirements.values() if req.id in r.implements]
-        children.sort(key=lambda r: r.id)
-
-        # Only show collapse icon if there are children
-        collapse_icon = "▼" if children else ""
-
-        # Determine test status
-        test_badge = ""
-        if req.test_info:
-            test_status = req.test_info.test_status
-            test_count = req.test_info.test_count + req.test_info.manual_test_count
-
-            if test_status == "passed":
-                test_badge = (
-                    f'<span class="test-badge test-passed" '
-                    f'title="{test_count} tests passed">✅ {test_count}</span>'
-                )
-            elif test_status == "failed":
-                test_badge = (
-                    f'<span class="test-badge test-failed" '
-                    f'title="{test_count} tests, some failed">❌ {test_count}</span>'
-                )
-            elif test_status == "not_tested":
-                test_badge = (
-                    '<span class="test-badge test-not-tested" '
-                    'title="No tests implemented">⚡</span>'
-                )
-        else:
-            test_badge = (
-                '<span class="test-badge test-not-tested" ' 'title="No tests implemented">⚡</span>'
-            )
-
-        # Extract topic from filename (e.g., prd-security.md -> security)
-        topic = (
-            req.file_path.stem.split("-", 1)[1] if "-" in req.file_path.stem else req.file_path.stem
-        )
-
-        # Repo prefix for filtering (CORE for core repo, CAL/TTN/etc. for associated repos)
-        repo_prefix = req.repo_prefix or "CORE"
-
-        # Build data attributes
-        deprecated_class = status_class if req.status == "Deprecated" else ""
-        data_attrs = (
-            f'data-req-id="{req.id}" data-level="{req.level}" data-topic="{topic}" '
-            f'data-status="{req.status}" data-title="{req.title.lower()}" '
-            f'data-repo="{repo_prefix}"'
-        )
-
-        html = f"""
-        <div class="req-item {level_class} {deprecated_class}" {data_attrs}>
-            <div class="req-header-container" onclick="toggleRequirement(this)">
-                <span class="collapse-icon">{collapse_icon}</span>
-                <div class="req-content">
-                    <div class="req-id">REQ-{req.id}</div>
-                    <div class="req-header">{req.title}</div>
-                    <div class="req-level">{req.level}</div>
-                    <div class="req-badges">
-                        <span class="status-badge status-{status_class}">{req.status}</span>
-                    </div>
-                    <div class="req-status">{test_badge}</div>
-                    <div class="req-location">{req.display_filename}:{req.line_number}</div>
-                </div>
-            </div>
-"""
-
-        if children:
-            # Add current req to path before recursing into children
-            current_path = ancestor_path + [req.id]
-            html += '            <div class="child-reqs">\n'
-            for child in children:
-                html += self._format_req_tree_html_collapsible(child, current_path)
-            html += "            </div>\n"
-
-        html += "        </div>\n"
         return html

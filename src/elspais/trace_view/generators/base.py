@@ -3,7 +3,9 @@
 elspais.trace_view.generators.base - Base generator for trace-view.
 
 Provides the main TraceViewGenerator class that orchestrates
-requirement parsing, implementation scanning, and output generation.
+requirement parsing, graph building, and output generation.
+
+All outputs consume the unified TraceGraph - no separate data structures.
 """
 
 from pathlib import Path
@@ -11,26 +13,19 @@ from typing import Dict, List, Optional
 
 from elspais.config.defaults import DEFAULT_CONFIG
 from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.git import get_git_changes
-from elspais.core.hierarchy import detect_cycles
+from elspais.core.git import GitChangeInfo, get_git_changes
+from elspais.core.graph import NodeKind, TraceGraph, TraceNode
+from elspais.core.graph_builder import TraceGraphBuilder
 from elspais.core.loader import load_requirements_from_directories
-from elspais.trace_view.coverage import (
-    calculate_coverage,
-    generate_coverage_report,
-    get_implementation_status,
-)
 from elspais.trace_view.generators.csv import generate_csv, generate_planning_csv
-from elspais.trace_view.generators.markdown import generate_markdown
-from elspais.trace_view.models import GitChangeInfo as TVGitChangeInfo
-from elspais.trace_view.models import TraceViewRequirement
-from elspais.trace_view.scanning import scan_implementation_files
+from elspais.trace_view.generators.markdown import generate_markdown_from_graph
 
 
 class TraceViewGenerator:
-    """Generates traceability matrices.
+    """Generates traceability matrices using the unified TraceGraph.
 
     This is the main entry point for generating traceability reports.
-    Supports multiple output formats: markdown, html, csv.
+    All outputs consume the TraceGraph directly - no separate data structures.
 
     Args:
         spec_dir: Path to the spec directory containing requirement files
@@ -43,7 +38,7 @@ class TraceViewGenerator:
     """
 
     # Version number - increment with each change
-    VERSION = 17
+    VERSION = 18
 
     def __init__(
         self,
@@ -56,7 +51,6 @@ class TraceViewGenerator:
         config: Optional[dict] = None,
     ):
         self.spec_dir = spec_dir
-        self.requirements: Dict[str, TraceViewRequirement] = {}
         self.impl_dirs = impl_dirs or []
         self.sponsor = sponsor
         self.mode = mode
@@ -64,7 +58,9 @@ class TraceViewGenerator:
         self.associated_repos = associated_repos or []
         self._base_path = ""
         self._config = config
-        self._git_info: Optional[TVGitChangeInfo] = None
+        self._git_info: Optional[GitChangeInfo] = None
+        self._graph: Optional[TraceGraph] = None
+        self._builder: Optional[TraceGraphBuilder] = None
 
     def generate(
         self,
@@ -91,34 +87,25 @@ class TraceViewGenerator:
         # Initialize git state
         self._init_git_state(quiet)
 
-        # Parse requirements
+        # Build the graph (ONE data structure for everything)
         if not quiet:
-            print("Scanning for requirements...")
-        self._parse_requirements(quiet)
+            print("Building traceability graph...")
+        self._build_graph(quiet)
 
-        if not self.requirements:
+        if not self._graph:
             if not quiet:
                 print("Warning: No requirements found")
             return ""
 
+        req_count = sum(1 for n in self._graph.all_nodes() if n.kind == NodeKind.REQUIREMENT)
         if not quiet:
-            print(f"Found {len(self.requirements)} requirements")
+            print(f"Found {req_count} requirements")
 
-        # Pre-detect cycles and mark affected requirements
-        self._detect_and_mark_cycles(quiet)
-
-        # Scan implementation files
+        # Scan implementation files and add to graph
         if self.impl_dirs:
             if not quiet:
                 print("Scanning implementation files...")
-            scan_implementation_files(
-                self.requirements,
-                self.impl_dirs,
-                self.repo_root,
-                self.mode,
-                self.sponsor,
-                quiet=quiet,
-            )
+            self._scan_implementations(quiet)
 
         if not quiet:
             print(f"Generating {format.upper()} traceability matrix...")
@@ -142,7 +129,7 @@ class TraceViewGenerator:
             from elspais.trace_view.html import HTMLGenerator
 
             html_gen = HTMLGenerator(
-                requirements=self.requirements,
+                graph=self._graph,
                 base_path=self._base_path,
                 mode=self.mode,
                 sponsor=self.sponsor,
@@ -153,9 +140,9 @@ class TraceViewGenerator:
                 embed_content=embed_content, edit_mode=edit_mode, review_mode=review_mode
             )
         elif format == "csv":
-            content = generate_csv(self.requirements)
+            content = generate_csv(self._graph)
         else:
-            content = generate_markdown(self.requirements, self._base_path)
+            content = generate_markdown_from_graph(self._graph, self._base_path)
 
         # Write output file
         output_file.write_text(content)
@@ -167,27 +154,19 @@ class TraceViewGenerator:
     def _init_git_state(self, quiet: bool = False):
         """Initialize git state for requirement status detection."""
         try:
-            git_changes = get_git_changes(self.repo_root)
-
-            # Convert to trace_view GitChangeInfo
-            self._git_info = TVGitChangeInfo(
-                uncommitted_files=git_changes.uncommitted_files,
-                untracked_files=git_changes.untracked_files,
-                branch_changed_files=git_changes.branch_changed_files,
-                committed_req_locations=git_changes.committed_req_locations,
-            )
+            self._git_info = get_git_changes(self.repo_root)
 
             # Report uncommitted changes
-            if not quiet and git_changes.uncommitted_files:
+            if not quiet and self._git_info.uncommitted_files:
                 spec_uncommitted = [
-                    f for f in git_changes.uncommitted_files if f.startswith("spec/")
+                    f for f in self._git_info.uncommitted_files if f.startswith("spec/")
                 ]
                 if spec_uncommitted:
                     print(f"Uncommitted spec files: {len(spec_uncommitted)}")
 
             # Report branch changes vs main
-            if not quiet and git_changes.branch_changed_files:
-                spec_branch = [f for f in git_changes.branch_changed_files if f.startswith("spec/")]
+            if not quiet and self._git_info.branch_changed_files:
+                spec_branch = [f for f in self._git_info.branch_changed_files if f.startswith("spec/")]
                 if spec_branch:
                     print(f"Spec files changed vs main: {len(spec_branch)}")
 
@@ -197,8 +176,11 @@ class TraceViewGenerator:
                 print(f"Warning: Could not get git state: {e}")
             self._git_info = None
 
-    def _parse_requirements(self, quiet: bool = False):
-        """Parse all requirements using elspais parser directly."""
+    def _build_graph(self, quiet: bool = False):
+        """Build the unified TraceGraph from requirements.
+
+        The graph is THE data structure - all outputs consume it.
+        """
         # Load config if not provided
         if self._config is None:
             config_path = find_config_file(self.repo_root)
@@ -213,60 +195,84 @@ class TraceViewGenerator:
             return
 
         # Parse requirements using elspais parser
-        parse_result = load_requirements_from_directories(spec_dirs, self._config)
+        requirements = load_requirements_from_directories(spec_dirs, self._config)
 
+        if not requirements:
+            return
+
+        # Report conflicts and roadmap
         roadmap_count = 0
         conflict_count = 0
-        cycle_count = 0
-
-        for req_id, core_req in parse_result.items():
-            # Wrap in TraceViewRequirement
-            tv_req = TraceViewRequirement.from_core(core_req, git_info=self._git_info)
-
-            if tv_req.is_roadmap:
+        for req_id, req in requirements.items():
+            if getattr(req, "is_roadmap", False) or "roadmap" in str(req.file_path).lower():
                 roadmap_count += 1
-            if tv_req.is_conflict:
+            if getattr(req, "is_conflict", False):
                 conflict_count += 1
                 if not quiet:
-                    print(f"   Warning: Conflict: {req_id} conflicts with {tv_req.conflict_with}")
-
-            # Store by short ID (without REQ- prefix)
-            self.requirements[tv_req.id] = tv_req
+                    conflict_with = getattr(req, "conflict_with", "unknown")
+                    print(f"   Warning: Conflict: {req_id} conflicts with {conflict_with}")
 
         if not quiet:
             if roadmap_count > 0:
                 print(f"   Found {roadmap_count} roadmap requirements")
             if conflict_count > 0:
                 print(f"   Found {conflict_count} conflicts")
-            if cycle_count > 0:
-                print(f"   Found {cycle_count} requirements in dependency cycles")
 
-    def _detect_and_mark_cycles(self, quiet: bool = False):
-        """Detect and mark requirements that are part of dependency cycles.
+        # Build graph
+        self._builder = TraceGraphBuilder(repo_root=self.repo_root)
+        self._builder.add_requirements(requirements)
+        self._graph, validation = self._builder.build_and_validate()
 
-        Uses centralized detect_cycles() from core.hierarchy for cycle detection,
-        then marks affected requirements locally.
-        """
-        # Build dict of core requirements for cycle detection
-        core_requirements = {req_id: req.core for req_id, req in self.requirements.items()}
+        # Handle cycles - annotate them rather than mutating requirements
+        cycle_members = set()
+        for error in validation.errors:
+            if error.startswith("Cycle detected:"):
+                path_str = error.replace("Cycle detected:", "").strip()
+                parts = [p.strip() for p in path_str.split("->")]
+                cycle_members.update(parts)
 
-        # Use centralized cycle detection (pure function - no mutation)
-        cycle_info = detect_cycles(core_requirements)
-
-        # Clear implements for cycle members so they appear as orphaned
         cycle_count = 0
-        for req_id in cycle_info.cycle_members:
-            if req_id in self.requirements:
-                req = self.requirements[req_id]
-                if req.implements:
-                    # Modify the underlying core requirement
-                    req.core.implements = []
-                    cycle_count += 1
+        for req_id in cycle_members:
+            node = self._graph.find_by_id(req_id)
+            if node:
+                node.metrics["is_cycle"] = True
+                node.metrics["cycle_path"] = " -> ".join(cycle_members)
+                cycle_count += 1
 
         if not quiet and cycle_count > 0:
-            print(
-                f"   Warning: {cycle_count} requirements marked as cyclic (shown as orphaned items)"
-            )
+            print(f"   Warning: {cycle_count} requirements in dependency cycles")
+
+        # Annotate nodes using composable annotator functions
+        self._annotate_graph_nodes()
+
+        # Compute coverage metrics
+        self._builder.compute_metrics(self._graph)
+
+    def _annotate_graph_nodes(self):
+        """Apply annotator functions to graph nodes.
+
+        Uses the iterator pattern: graph provides nodes, we apply annotators.
+        """
+        from elspais.core.annotators import annotate_display_info, annotate_git_state
+        from elspais.core.graph import NodeKind
+
+        for node in self._graph.all_nodes():
+            if node.kind == NodeKind.REQUIREMENT:
+                annotate_git_state(node, self._git_info)
+                annotate_display_info(node)
+
+    def _scan_implementations(self, quiet: bool = False):
+        """Scan implementation files and annotate findings to graph nodes."""
+        from elspais.trace_view.scanning import scan_implementations_to_graph
+
+        scan_implementations_to_graph(
+            self._graph,
+            self.impl_dirs,
+            self.repo_root,
+            self.mode,
+            self.sponsor,
+            quiet=quiet,
+        )
 
     def _calculate_base_path(self, output_file: Path):
         """Calculate relative path from output file location to repo root."""
@@ -288,15 +294,72 @@ class TraceViewGenerator:
 
     def generate_planning_csv(self) -> str:
         """Generate planning CSV with actionable requirements."""
-
-        def get_status(req_id):
-            return get_implementation_status(self.requirements, req_id)
-
-        def calc_coverage(req_id):
-            return calculate_coverage(self.requirements, req_id)
-
-        return generate_planning_csv(self.requirements, get_status, calc_coverage)
+        if not self._graph:
+            return ""
+        return generate_planning_csv(self._graph)
 
     def generate_coverage_report(self) -> str:
         """Generate coverage report showing implementation status."""
-        return generate_coverage_report(self.requirements)
+        if not self._graph:
+            return ""
+        return _generate_coverage_report_from_graph(self._graph)
+
+
+def _generate_coverage_report_from_graph(graph: TraceGraph) -> str:
+    """Generate text-based coverage report from graph metrics.
+
+    Args:
+        graph: The TraceGraph with computed metrics
+
+    Returns:
+        Formatted text report
+    """
+    lines = []
+    lines.append("=== Coverage Report ===")
+
+    # Count requirements
+    req_nodes = [n for n in graph.all_nodes() if n.kind == NodeKind.REQUIREMENT]
+    lines.append(f"Total Requirements: {len(req_nodes)}")
+    lines.append("")
+
+    # Count by level
+    by_level: Dict[str, int] = {"PRD": 0, "OPS": 0, "DEV": 0}
+    implemented_by_level: Dict[str, int] = {"PRD": 0, "OPS": 0, "DEV": 0}
+
+    for node in req_nodes:
+        req = node.requirement
+        if not req:
+            continue
+        level = req.level
+        by_level[level] = by_level.get(level, 0) + 1
+
+        coverage_pct = node.metrics.get("coverage_pct", 0)
+        if coverage_pct > 0:
+            implemented_by_level[level] = implemented_by_level.get(level, 0) + 1
+
+    lines.append("By Level:")
+    for level in ["PRD", "OPS", "DEV"]:
+        total = by_level[level]
+        implemented = implemented_by_level[level]
+        percentage = (implemented / total * 100) if total > 0 else 0
+        lines.append(f"  {level}: {total} ({percentage:.0f}% implemented)")
+
+    lines.append("")
+
+    # Count by implementation status
+    status_counts = {"Full": 0, "Partial": 0, "Unimplemented": 0}
+    for node in req_nodes:
+        coverage_pct = node.metrics.get("coverage_pct", 0)
+        if coverage_pct >= 100:
+            status_counts["Full"] += 1
+        elif coverage_pct > 0:
+            status_counts["Partial"] += 1
+        else:
+            status_counts["Unimplemented"] += 1
+
+    lines.append("By Status:")
+    lines.append(f"  Full: {status_counts['Full']}")
+    lines.append(f"  Partial: {status_counts['Partial']}")
+    lines.append(f"  Unimplemented: {status_counts['Unimplemented']}")
+
+    return "\n".join(lines)

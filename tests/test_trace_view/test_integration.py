@@ -28,13 +28,17 @@ class TestTraceViewImports:
 
         assert TraceViewGenerator is not None
 
-    def test_import_coverage(self):
-        """Test coverage module can be imported."""
-        from elspais.trace_view.coverage import (
-            calculate_coverage,
+    def test_import_annotators(self):
+        """Test annotators module can be imported (replaces coverage module)."""
+        from elspais.core.annotators import (
+            count_by_level,
+            count_by_repo,
+            get_implementation_status,
         )
 
-        assert calculate_coverage is not None
+        assert count_by_level is not None
+        assert count_by_repo is not None
+        assert get_implementation_status is not None
 
     def test_import_scanning(self):
         """Test scanning module can be imported."""
@@ -293,158 +297,170 @@ class TestAssertionIndicatorInView:
     When a child requirement implements specific assertions (e.g., REQ-p00001-A),
     the trace view should show an assertion indicator like "(A)" before the
     expand/collapse icon.
+
+    These tests use TraceGraph, the single source of truth for requirement
+    hierarchy and relationships.
     """
+
+    def _build_test_graph(self, requirements):
+        """Build a TraceGraph from a list of core requirements."""
+        from elspais.core.graph_builder import TraceGraphBuilder
+
+        builder = TraceGraphBuilder(repo_root=Path("."))
+
+        # Add all requirements to the builder (as a dict by ID)
+        reqs_dict = {req.id: req for req in requirements}
+        builder.add_requirements(reqs_dict)
+
+        return builder.build()
 
     def test_find_children_with_assertion_info_direct_impl(self):
         """Test finding children that implement parent directly."""
         pytest.importorskip("jinja2")
         from elspais.core.models import Requirement
         from elspais.trace_view.html import HTMLGenerator
-        from elspais.trace_view.models import TraceViewRequirement
 
-        parent = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-p00001",
-                title="Parent",
-                level="PRD",
-                status="Active",
-                body="",
-                implements=[],
-            )
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
         )
-        child = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-d00001",
-                title="Child",
-                level="Dev",
-                status="Active",
-                body="",
-                implements=["REQ-p00001"],  # Direct implementation
-            )
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=["REQ-p00001"],  # Direct implementation
         )
 
-        requirements = {parent.full_id: parent, child.full_id: child}
-        generator = HTMLGenerator(requirements, {}, "spec")
+        graph = self._build_test_graph([parent, child])
+        generator = HTMLGenerator(graph)
 
-        children = generator._find_children_with_assertion_info(parent)
+        parent_node = graph.find_by_id("REQ-p00001")
+        children = generator._get_children_with_assertion_info(parent_node)
 
         assert len(children) == 1
-        assert children[0][0].full_id == "REQ-d00001"
+        assert children[0][0].id == "REQ-d00001"
         assert children[0][1] == []  # No assertion labels for direct impl
 
     def test_find_children_with_assertion_info_single_assertion(self):
         """Test finding children that implement a single assertion."""
         pytest.importorskip("jinja2")
-        from elspais.core.models import Requirement
+        from elspais.core.models import Assertion, Requirement
         from elspais.trace_view.html import HTMLGenerator
-        from elspais.trace_view.models import TraceViewRequirement
 
-        parent = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-p00001",
-                title="Parent",
-                level="PRD",
-                status="Active",
-                body="",
-                implements=[],
-            )
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="The system SHALL do something."),
+                Assertion(label="B", text="The system SHALL do another thing."),
+            ],
         )
-        child = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-d00001",
-                title="Child implementing assertion A",
-                level="Dev",
-                status="Active",
-                body="",
-                implements=["REQ-p00001-A"],  # Implements assertion A
-            )
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child implementing assertion A",
+            level="DEV",
+            status="Active",
+            body="",
+            implements=["REQ-p00001-A"],  # Implements assertion A
         )
 
-        requirements = {parent.full_id: parent, child.full_id: child}
-        generator = HTMLGenerator(requirements, {}, "spec")
+        graph = self._build_test_graph([parent, child])
+        generator = HTMLGenerator(graph)
 
-        children = generator._find_children_with_assertion_info(parent)
+        parent_node = graph.find_by_id("REQ-p00001")
+        children = generator._get_children_with_assertion_info(parent_node)
 
         assert len(children) == 1
-        assert children[0][0].full_id == "REQ-d00001"
+        assert children[0][0].id == "REQ-d00001"
         assert children[0][1] == ["A"]  # Single assertion label
 
     def test_find_children_with_assertion_info_multiple_assertions(self):
         """Test finding children that implement multiple assertions."""
         pytest.importorskip("jinja2")
-        from elspais.core.models import Requirement
+        from elspais.core.models import Assertion, Requirement
         from elspais.trace_view.html import HTMLGenerator
-        from elspais.trace_view.models import TraceViewRequirement
 
-        parent = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-p00001",
-                title="Parent",
-                level="PRD",
-                status="Active",
-                body="",
-                implements=[],
-            )
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            assertions=[
+                Assertion(label="A", text="The system SHALL do something."),
+                Assertion(label="B", text="The system SHALL do another thing."),
+            ],
         )
-        child = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-d00001",
-                title="Child implementing assertions A and B",
-                level="Dev",
-                status="Active",
-                body="",
-                implements=["REQ-p00001-A-B"],  # Multi-assertion syntax
-            )
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child implementing assertions A and B",
+            level="DEV",
+            status="Active",
+            body="",
+            # Multi-assertion syntax (REQ-p00001-A-B) gets expanded by parser
+            implements=["REQ-p00001-A", "REQ-p00001-B"],
         )
 
-        requirements = {parent.full_id: parent, child.full_id: child}
-        generator = HTMLGenerator(requirements, {}, "spec")
+        graph = self._build_test_graph([parent, child])
+        generator = HTMLGenerator(graph)
 
-        children = generator._find_children_with_assertion_info(parent)
+        parent_node = graph.find_by_id("REQ-p00001")
+        children = generator._get_children_with_assertion_info(parent_node)
 
         assert len(children) == 1
-        assert children[0][0].full_id == "REQ-d00001"
+        assert children[0][0].id == "REQ-d00001"
         assert sorted(children[0][1]) == ["A", "B"]  # Both assertion labels
 
     def test_assertion_indicator_html_generation(self):
         """Test that assertion indicator HTML is generated correctly."""
         pytest.importorskip("jinja2")
-        from elspais.core.models import Requirement
+        from elspais.core.models import Assertion, Requirement
         from elspais.trace_view.html import HTMLGenerator
-        from elspais.trace_view.models import TraceViewRequirement
 
-        parent = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-p00001",
-                title="Parent",
-                level="PRD",
-                status="Active",
-                body="",
-                implements=[],
-                file_path=Path("spec/test.md"),
-            )
+        parent = Requirement(
+            id="REQ-p00001",
+            title="Parent",
+            level="PRD",
+            status="Active",
+            body="",
+            implements=[],
+            file_path=Path("spec/test.md"),
+            assertions=[
+                Assertion(label="A", text="The system SHALL do something."),
+                Assertion(label="B", text="The system SHALL do another thing."),
+            ],
         )
-        child = TraceViewRequirement.from_core(
-            Requirement(
-                id="REQ-d00001",
-                title="Child",
-                level="Dev",
-                status="Active",
-                body="",
-                implements=["REQ-p00001-A-B"],
-                file_path=Path("spec/test.md"),
-            )
+        child = Requirement(
+            id="REQ-d00001",
+            title="Child",
+            level="DEV",
+            status="Active",
+            body="",
+            # Multi-assertion syntax (REQ-p00001-A-B) gets expanded by parser
+            implements=["REQ-p00001-A", "REQ-p00001-B"],
+            file_path=Path("spec/test.md"),
         )
 
-        requirements = {parent.full_id: parent, child.full_id: child}
-        generator = HTMLGenerator(requirements, {}, "spec")
+        graph = self._build_test_graph([parent, child])
+        generator = HTMLGenerator(graph)
 
         # Build flat list which triggers assertion detection
         flat_list = generator._build_flat_requirement_list()
 
         # Find child entry in flat list
         child_entry = next(
-            (e for e in flat_list if e.get("req") and e["req"].full_id == "REQ-d00001"),
+            (e for e in flat_list if e.get("node") and e["node"].id == "REQ-d00001"),
             None,
         )
 
