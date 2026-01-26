@@ -26,6 +26,62 @@ from elspais.mcp.serializers import (
 )
 
 
+def _get_server_instructions() -> str:
+    """Return server instructions for Tool Search discovery.
+
+    These instructions help AI agents understand when and how to use
+    elspais tools for requirements management tasks.
+    """
+    return """# elspais Requirements Traceability Server
+
+Use these tools when working with requirements, specifications, or traceability.
+
+## When to use elspais:
+- Validating requirement format and hierarchy rules
+- Analyzing test coverage for requirements
+- Searching or navigating requirement hierarchies
+- Modifying requirement relationships (Implements/Refines)
+- Moving requirements between spec files
+- AI-assisted requirement transformation
+
+## Tool Categories:
+
+### Read-Only (safe, no file changes):
+- validate() - Check format and hierarchy rules
+- search() - Find requirements by pattern
+- get_requirement() - Get details for single requirement
+- get_hierarchy() - Navigate parent/child relationships
+- get_traceability_path() - Full tree from requirement to tests
+- get_coverage_breakdown() - Per-assertion coverage details
+
+### Mutation (modifies spec files):
+- change_reference_type() - Switch Implements ↔ Refines
+- specialize_reference() - REQ→REQ to REQ→Assertion
+- move_requirement() - Move between files
+- transform_with_ai() - AI-assisted rewrite
+
+## Key Workflows:
+
+1. **Understand a requirement**:
+   get_requirement() → get_hierarchy() → get_traceability_path()
+
+2. **Find coverage gaps**:
+   list_by_criteria(has_gaps=True) → get_coverage_breakdown()
+
+3. **Safely modify**:
+   get_requirement() → [mutation tool] → refresh_graph() → validate()
+
+4. **AI transformation** (always use git safety):
+   get_node_as_json() → transform_with_ai(save_branch=True)
+
+## Safety Notes:
+- Always use prepare_file_deletion() before delete_spec_file()
+- Use transform_with_ai() with save_branch=True for AI changes
+- Call refresh_graph() after mutation tools
+- restore_from_safety_branch() to undo if needed
+"""
+
+
 def create_server(working_dir: Optional[Path] = None) -> "FastMCP":
     """
     Create and configure the MCP server.
@@ -54,9 +110,10 @@ def create_server(working_dir: Optional[Path] = None) -> "FastMCP":
     # Initialize session-scoped annotation store
     annotation_store = AnnotationStore()
 
-    # Create FastMCP server
+    # Create FastMCP server with instructions for Tool Search discovery
     mcp = FastMCP(
         name="elspais",
+        instructions=_get_server_instructions(),
     )
 
     # Register resources

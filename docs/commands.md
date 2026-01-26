@@ -604,6 +604,13 @@ MCP (Model Context Protocol) server commands.
 elspais mcp serve [OPTIONS]
 ```
 
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--transport {stdio,sse}` | Transport type (default: stdio) |
+| `--cwd PATH` | Working directory for finding .elspais.toml |
+
 ### Requirements
 
 ```bash
@@ -626,7 +633,35 @@ Add to Claude Desktop config (`~/.config/Claude/claude_desktop_config.json`):
 }
 ```
 
-See main README for MCP resources and tools.
+For Claude Code, add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "elspais": {
+      "command": "elspais",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Tool Categories
+
+The MCP server exposes ~40 tools organized into categories:
+
+- **Read-Only**: `validate()`, `search()`, `get_requirement()`, `analyze()`
+- **Graph**: `get_graph_status()`, `get_hierarchy()`, `get_traceability_path()`, `get_coverage_breakdown()`
+- **Mutation**: `change_reference_type()`, `specialize_reference()`, `move_requirement()`
+- **File Ops**: `prepare_file_deletion()`, `delete_spec_file()`
+- **AI Tools**: `get_node_as_json()`, `transform_with_ai()`
+- **Annotations**: `add_annotation()`, `add_tag()`, `list_tagged()`
+
+See [MCP Server Guide](mcp.md) for comprehensive documentation including:
+- Complete tool reference
+- Resource URI patterns
+- Common workflows
+- Safety patterns
 
 ## version
 
@@ -674,3 +709,4 @@ All commands follow these conventions:
 - [Multi-Repository Support](multi-repo.md)
 - [Trace-View Features](trace-view.md)
 - [Pattern Configuration](patterns.md)
+- [MCP Server Guide](mcp.md)

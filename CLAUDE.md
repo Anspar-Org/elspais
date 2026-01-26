@@ -155,6 +155,12 @@ elspais mcp                       # Start MCP server (requires elspais[mcp])
     - `transform_with_ai()` - AI-assisted requirement transformation with git safety
     - `restore_from_safety_branch()`, `list_safety_branches()` - git branch management
     - `add_annotation()`, `get_annotations()`, `add_tag()`, `remove_tag()`, `list_tagged()`, `list_all_tags()`, `nodes_with_annotation()`, `clear_annotations()`, `annotation_stats()` - session-scoped annotation system
+  - **MCP Workflow Patterns**: See `docs/mcp.md` for comprehensive guide. Key patterns:
+    - **Requirement Investigation**: `search()` → `get_requirement()` → `get_hierarchy()` → `get_coverage_breakdown()`
+    - **Safe Modification**: `get_requirement()` → mutation tool → `refresh_graph()` → `validate()`
+    - **AI Transformation**: `get_node_as_json()` → `transform_with_ai(save_branch=True)` → verify → or `restore_from_safety_branch()`
+    - **Coverage Gap Analysis**: `list_by_criteria(has_gaps=True)` → `get_coverage_breakdown()` → `get_traceability_path()`
+    - **File Deletion Safety**: `prepare_file_deletion()` → move requirements → `delete_spec_file()`
 - **trace_view/**: Enhanced traceability visualization (optional, requires `elspais[trace-view]`)
   - **models.py**: `TraceViewRequirement` adapter wrapping `core.models.Requirement`, `TestInfo`, `GitChangeInfo`
   - **coverage.py**: Coverage calculation (`calculate_coverage`, `count_by_level`, `find_orphaned_requirements`)

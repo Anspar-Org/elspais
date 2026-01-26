@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-01-25
+### Added
+- **MCP Server Documentation** - Comprehensive guide for MCP server
+  - New `docs/mcp.md` with complete tool reference, resource URIs, and workflows
+  - Tool categories: Read-Only, Graph, Mutation, File Ops, AI, Annotations
+  - Common workflow patterns for auditor review, refactoring, coverage analysis
+  - Safety patterns for file deletion and AI transformations
+- **MCP Server Instructions** - Tool Search discovery support
+  - Server instructions returned via FastMCP `instructions` parameter
+  - Helps AI agents understand when and how to use elspais tools
+  - Workflow guidance and safety notes for mutation operations
+### Changed
+- Updated `docs/commands.md` with expanded MCP section and tool category summary
+- Added MCP workflow patterns to CLAUDE.md architecture section
+
 ## [0.21.0] - 2026-01-25
 ### Fixed
 - **Performance**: O(n^2) → O(n) BFS traversal in `TraceNode._walk_level()` and `ancestors()` using `deque`
