@@ -284,9 +284,138 @@ def _parse_value(value: str) -> Any:
     return value
 
 
+def get_config(
+    config_path: Path | None = None,
+    start_path: Path | None = None,
+    quiet: bool = False,
+) -> dict[str, Any]:
+    """Get configuration with auto-discovery and fallback.
+
+    This is the standard helper for command modules to load configuration.
+    It handles:
+    - Explicit config file path (if provided)
+    - Config file discovery from start_path
+    - Fallback to defaults if no config found
+    - Error reporting (unless quiet=True)
+
+    Args:
+        config_path: Explicit config file path (optional)
+        start_path: Directory to search for config (defaults to cwd)
+        quiet: Suppress error messages
+
+    Returns:
+        Configuration dictionary (defaults if not found)
+    """
+    import sys
+
+    if start_path is None:
+        start_path = Path.cwd()
+
+    # Use explicit config path or discover
+    resolved_path = config_path if config_path else find_config_file(start_path)
+
+    if resolved_path and resolved_path.exists():
+        try:
+            return load_config(resolved_path).get_raw()
+        except Exception as e:
+            if not quiet:
+                print(f"Warning: Error loading config from {resolved_path}: {e}", file=sys.stderr)
+
+    # Return defaults
+    return dict(DEFAULT_CONFIG)
+
+
+def get_spec_directories(
+    spec_dir_override: Path | None,
+    config: dict[str, Any],
+    base_path: Path | None = None,
+) -> list[Path]:
+    """Get the spec directories from override or config.
+
+    Args:
+        spec_dir_override: Explicit spec directory (e.g., from CLI --spec-dir)
+        config: Configuration dictionary
+        base_path: Base path to resolve relative directories (defaults to cwd)
+
+    Returns:
+        List of existing spec directory paths
+    """
+    if spec_dir_override:
+        return [spec_dir_override]
+
+    if base_path is None:
+        base_path = Path.cwd()
+
+    # Get directories from config - check both "directories" and "spec" sections
+    dir_config = config.get("directories", {}).get("spec")
+    if dir_config is None:
+        dir_config = config.get("spec", {}).get("directories", ["spec"])
+
+    # Handle both string and list
+    if isinstance(dir_config, str):
+        dir_list = [dir_config]
+    else:
+        dir_list = list(dir_config)
+
+    # Resolve paths and filter to existing
+    result = []
+    for d in dir_list:
+        path = Path(d)
+        if not path.is_absolute():
+            path = base_path / path
+        if path.exists() and path.is_dir():
+            result.append(path)
+
+    return result
+
+
+def get_code_directories(
+    config: dict[str, Any],
+    base_path: Path | None = None,
+) -> list[Path]:
+    """Get code directories from configuration.
+
+    Args:
+        config: Configuration dictionary
+        base_path: Base path to resolve relative directories (defaults to cwd)
+
+    Returns:
+        List of existing code directory paths
+    """
+    if base_path is None:
+        base_path = Path.cwd()
+
+    dir_config = config.get("directories", {}).get("code", ["src"])
+
+    # Handle both string and list
+    if isinstance(dir_config, str):
+        dir_list = [dir_config]
+    else:
+        dir_list = list(dir_config)
+
+    # Resolve paths and filter to existing
+    result = []
+    for d in dir_list:
+        path = Path(d)
+        if not path.is_absolute():
+            path = base_path / path
+        if path.exists() and path.is_dir():
+            result.append(path)
+
+    return result
+
+
+# Re-export parse_toml for use by config_cmd
+parse_toml = _parse_toml
+
+
 __all__ = [
     "ConfigLoader",
     "load_config",
     "find_config_file",
+    "get_config",
+    "get_spec_directories",
+    "get_code_directories",
     "DEFAULT_CONFIG",
+    "parse_toml",
 ]

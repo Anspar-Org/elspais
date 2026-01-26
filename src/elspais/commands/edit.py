@@ -18,8 +18,7 @@ from typing import Any, Dict, List, Optional
 
 def run(args: argparse.Namespace) -> int:
     """Run the edit command."""
-    from elspais.config.defaults import DEFAULT_CONFIG
-    from elspais.config.loader import find_config_file, get_spec_directories, load_config
+    from elspais.arch3 import DEFAULT_CONFIG, find_config_file, get_spec_directories, load_config
 
     # Load configuration
     config_path = args.config if hasattr(args, "config") else None

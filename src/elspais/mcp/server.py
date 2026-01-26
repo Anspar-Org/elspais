@@ -41,7 +41,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
     Returns:
         Dict with coverage breakdown, or error dict if requirement not found
     """
-    from elspais.core.graph import NodeKind
+    from elspais.arch3 import NodeKind
 
     graph, _ = ctx.get_graph()
     node = graph.find_by_id(req_id)
@@ -418,7 +418,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         implementing code, validating tests, and test results.
         """
         import json
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         node = graph.find_by_id(req_id)
@@ -508,7 +508,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         parent up to root-level requirements.
         """
         import json
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         node = graph.find_by_id(req_id)
@@ -550,7 +550,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         assertions, code references, and tests.
         """
         import json
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         node = graph.find_by_id(req_id)
@@ -614,7 +614,7 @@ def _register_tools(
         Args:
             skip_rules: Optional list of rule names to skip
         """
-        from elspais.core.rules import RuleEngine, RulesConfig, Severity
+        from elspais.arch3 import RuleEngine, RulesConfig, Severity
 
         requirements = ctx.get_requirements(force_refresh=True)
         rules_config = RulesConfig.from_dict(ctx.config.get("rules", {}))
@@ -648,7 +648,7 @@ def _register_tools(
             text: Markdown text containing one or more requirements
             file_path: Optional source file path for location info
         """
-        from elspais.core.loader import create_parser
+        from elspais.arch3 import create_parser
 
         parser = create_parser(ctx.config)
         path = Path(file_path) if file_path else None
@@ -727,7 +727,7 @@ def _register_tools(
         This is useful for checking if the graph needs refresh
         and for understanding the graph structure.
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         is_stale = ctx.is_graph_stale()
         stale_files = ctx.get_stale_files()
@@ -767,7 +767,7 @@ def _register_tools(
         Returns:
             Graph status after refresh including node counts.
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         was_stale = ctx.is_graph_stale()
         stale_before = ctx.get_stale_files()
@@ -810,7 +810,7 @@ def _register_tools(
         Returns:
             Dict with ancestors, children, depth, and node info
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         node = graph.find_by_id(req_id)
@@ -859,7 +859,7 @@ def _register_tools(
         Returns:
             Tree structure with full traceability path
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         node = graph.find_by_id(req_id)
@@ -970,7 +970,7 @@ def _register_tools(
         Returns:
             List of matching requirements with summary info
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         graph, _ = ctx.get_graph()
         requirements = ctx.get_requirements()
@@ -1056,7 +1056,7 @@ def _register_tools(
         Returns:
             Full requirement context including text, assertions, metrics
         """
-        from elspais.core.graph import NodeKind
+        from elspais.arch3 import NodeKind
 
         req = ctx.get_requirement(req_id)
         if req is None:

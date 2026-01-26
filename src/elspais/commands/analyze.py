@@ -9,12 +9,17 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.graph import NodeKind, TraceGraph, TraceNode
-from elspais.core.graph_builder import TraceGraphBuilder
-from elspais.core.loader import load_requirements_from_directories
-from elspais.core.models import Requirement
+from elspais.arch3 import (
+    DEFAULT_CONFIG,
+    NodeKind,
+    Requirement,
+    find_config_file,
+    get_spec_directories,
+    load_config,
+    load_requirements_from_directories,
+)
+from elspais.arch3.Graph import GraphNode
+from elspais.arch3.Graph.builder import GraphBuilder, TraceGraph
 
 
 def run(args: argparse.Namespace) -> int:
@@ -55,7 +60,7 @@ def run_hierarchy(args: argparse.Namespace) -> int:
 
     printed = set()
 
-    def print_tree(node: TraceNode, indent: int = 0) -> None:
+    def print_tree(node: GraphNode, indent: int = 0) -> None:
         if node.id in printed:
             return
         printed.add(node.id)
@@ -210,7 +215,7 @@ def load_requirements_with_graph(
 
         # Build graph
         repo_root = spec_dirs[0].parent if spec_dirs[0].name == "spec" else Path.cwd()
-        builder = TraceGraphBuilder(repo_root=repo_root)
+        builder = GraphBuilder(repo_root=repo_root)
         builder.add_requirements(requirements)
         graph = builder.build()
 

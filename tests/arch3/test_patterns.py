@@ -190,4 +190,4 @@ class TestNormalizeReqId:
         assert normalize_req_id("REQ-d00027") == "REQ-d00027"
 
     def test_custom_prefix(self):
-        assert normalize_req_id("123", prefix="JIRA") == "JIRA-123"
+        assert normalize_req_id("123", prefix_or_validator="JIRA") == "JIRA-123"

@@ -8,11 +8,16 @@ import argparse
 import sys
 from pathlib import Path
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.hasher import calculate_hash, verify_hash
-from elspais.core.loader import load_requirements_from_directories
-from elspais.core.models import Requirement
+from elspais.arch3 import (
+    DEFAULT_CONFIG,
+    Requirement,
+    calculate_hash,
+    find_config_file,
+    get_spec_directories,
+    load_config,
+    load_requirements_from_directories,
+    verify_hash,
+)
 
 
 def run(args: argparse.Namespace) -> int:

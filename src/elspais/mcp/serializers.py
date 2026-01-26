@@ -2,14 +2,22 @@
 elspais.mcp.serializers - JSON serialization for MCP responses.
 
 Provides functions to serialize elspais data models to JSON-compatible dicts.
+
+UPDATED: Now uses arch3 GraphNode instead of TraceNode.
 """
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from elspais.core.graph import NodeKind, TraceGraph, TraceNode
-from elspais.core.models import Assertion, ContentRule, Requirement
-from elspais.core.rules import RuleViolation
+from elspais.arch3 import (
+    Assertion,
+    ContentRule,
+    NodeKind,
+    Requirement,
+    RuleViolation,
+    GraphNode,
+)
+from elspais.arch3.Graph.builder import TraceGraph
 
 if TYPE_CHECKING:
     from elspais.mcp.context import WorkspaceContext
@@ -176,7 +184,6 @@ def serialize_node_full(
             "path": node.source.path,
             "line": node.source.line,
             "end_line": node.source.end_line,
-            "repo": node.source.repo,
         }
 
     # Assertions with coverage info
@@ -191,8 +198,6 @@ def serialize_node_full(
     if node:
         implemented_by = _get_implementing_children(node)
         result["implemented_by"] = implemented_by
-
-        # Refined_by - would need similar logic if we track that
         result["refined_by"] = []  # Not currently tracked in reverse
 
     # Metrics from graph node
@@ -229,10 +234,6 @@ def serialize_node_full(
     result["is_conflict"] = req.is_conflict
     if req.is_conflict:
         result["conflict_with"] = req.conflict_with
-
-    # Source file reference (from graph node, serialized as path string)
-    if node and node.source_file and node.source_file.file_info:
-        result["source_file"] = node.source_file.file_info.file_path
 
     return result
 
@@ -271,14 +272,14 @@ def _get_requirement_full_text(
 
 def _serialize_assertions_with_coverage(
     req: Requirement,
-    node: Optional[TraceNode],
+    node: Optional[GraphNode],
 ) -> List[Dict[str, Any]]:
     """
     Serialize assertions with coverage information from graph.
 
     Args:
         req: Requirement containing assertions
-        node: TraceNode for the requirement (may be None)
+        node: GraphNode for the requirement (may be None)
 
     Returns:
         List of assertion dicts with coverage info
@@ -327,12 +328,12 @@ def _serialize_assertions_with_coverage(
     return assertions_info
 
 
-def _get_implementing_children(node: TraceNode) -> List[str]:
+def _get_implementing_children(node: GraphNode) -> List[str]:
     """
     Get IDs of requirement children that implement this node.
 
     Args:
-        node: TraceNode to find implementers for
+        node: GraphNode to find implementers for
 
     Returns:
         List of requirement IDs that implement this node

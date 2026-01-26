@@ -112,13 +112,13 @@ class GraphBuilder:
         data = content.parsed_data
         req_id = data["id"]
 
+        # Get source path from context if available
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else ""
+
         # Create requirement node
         source = SourceLocation(
-            path=getattr(content, "source_context", {}).get("source_id", ""),
-            line=content.start_line,
-            end_line=content.end_line,
-        ) if hasattr(content, "source_context") else SourceLocation(
-            path="",
+            path=source_path,
             line=content.start_line,
             end_line=content.end_line,
         )
@@ -176,7 +176,8 @@ class GraphBuilder:
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes."""
         data = content.parsed_data
-        source_id = getattr(content, "source_context", {}).get("source_id", "code")
+        source_ctx = getattr(content, "source_context", None)
+        source_id = source_ctx.source_id if source_ctx else "code"
 
         for impl_ref in data.get("implements", []):
             code_id = f"code:{source_id}:{content.start_line}"
@@ -193,7 +194,8 @@ class GraphBuilder:
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes."""
         data = content.parsed_data
-        source_id = getattr(content, "source_context", {}).get("source_id", "test")
+        source_ctx = getattr(content, "source_context", None)
+        source_id = source_ctx.source_id if source_ctx else "test"
 
         for val_ref in data.get("validates", []):
             test_id = f"test:{source_id}:{content.start_line}"

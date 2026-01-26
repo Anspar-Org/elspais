@@ -10,13 +10,23 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.hasher import calculate_hash, verify_hash
-from elspais.core.loader import load_requirements_from_repo, parse_requirements_from_directories
-from elspais.core.models import ParseWarning, Requirement
-from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
-from elspais.sponsors import get_sponsor_spec_directories
+from elspais.arch3 import (
+    DEFAULT_CONFIG,
+    find_config_file,
+    load_config,
+    get_spec_directories,
+    calculate_hash,
+    verify_hash,
+    load_requirements_from_repo,
+    parse_requirements_from_directories,
+    ParseWarning,
+    Requirement,
+    RuleEngine,
+    RulesConfig,
+    RuleViolation,
+    Severity,
+    get_sponsor_spec_directories,
+)
 from elspais.testing.config import TestingConfig
 
 
@@ -160,7 +170,7 @@ def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
     Note: This is a wrapper for get_config() that returns Optional[Dict]
     for backward compatibility. New code should use get_config() directly.
     """
-    from elspais.config.loader import get_config
+    from elspais.arch3 import get_config
 
     config = get_config(
         config_path=getattr(args, "config", None),

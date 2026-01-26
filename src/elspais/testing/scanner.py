@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
-    from elspais.core.graph import TraceNode
-    from elspais.core.patterns import PatternConfig
+    from elspais.arch3.Graph import GraphNode
+    from elspais.arch3.utilities.patterns import PatternConfig
 
 
 @dataclass
@@ -410,11 +410,11 @@ class TestScanner:
 def create_test_nodes(
     scan_result: TestScanResult,
     repo_root: Path,
-) -> List["TraceNode"]:
+) -> List["GraphNode"]:
     """
-    Convert TestScanResult to TraceNode objects for graph building.
+    Convert TestScanResult to GraphNode objects for graph building.
 
-    Creates a TraceNode for each unique test function that references requirements.
+    Creates a GraphNode for each unique test function that references requirements.
     The _validates_targets metric contains the list of requirement/assertion IDs
     that the test validates. The _expected_broken_targets metric contains targets
     that were marked as expected to be broken via the expected-broken-links marker.
@@ -424,9 +424,10 @@ def create_test_nodes(
         repo_root: Repository root for relative path calculation
 
     Returns:
-        List of TraceNode objects with kind=TEST
+        List of GraphNode objects with kind=TEST
     """
-    from elspais.core.graph import NodeKind, SourceLocation, TestReference as GraphTestRef, TraceNode
+    # NOTE: TestReference does not exist in arch3 yet - test_ref data stored in content dict
+    from elspais.arch3.Graph import NodeKind, SourceLocation, GraphNode
 
     # Group references by (file, test_name) to create one node per test
     tests_by_key: Dict[tuple, List[TestReference]] = {}
@@ -438,7 +439,7 @@ def create_test_nodes(
                 tests_by_key[key] = []
             tests_by_key[key].append(ref)
 
-    nodes: List[TraceNode] = []
+    nodes: List[GraphNode] = []
 
     for (file_path_str, test_name), refs in tests_by_key.items():
         file_path = Path(file_path_str)
@@ -474,7 +475,8 @@ def create_test_nodes(
         # Create label
         label = test_name or file_path.name
 
-        node = TraceNode(
+        # Store test_ref data in content dict (TestReference class not in arch3)
+        node = GraphNode(
             id=node_id,
             kind=NodeKind.TEST,
             label=label,
@@ -482,11 +484,13 @@ def create_test_nodes(
                 path=rel_path,
                 line=line_num,
             ),
-            test_ref=GraphTestRef(
-                file_path=rel_path,
-                line=line_num,
-                test_name=test_name or "unknown",
-            ),
+            content={
+                "test_ref": {
+                    "file_path": rel_path,
+                    "line": line_num,
+                    "test_name": test_name or "unknown",
+                },
+            },
             metrics={
                 "_validates_targets": validates_targets,
                 "_expected_broken_targets": expected_broken_targets,

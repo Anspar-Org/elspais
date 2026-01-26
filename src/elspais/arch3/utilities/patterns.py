@@ -376,7 +376,10 @@ class PatternValidator:
         return result
 
 
-def normalize_req_id(req_id: str, prefix: str = "REQ") -> str:
+def normalize_req_id(
+    req_id: str,
+    prefix_or_validator: str | PatternValidator = "REQ",
+) -> str:
     """Normalize ID to canonical format.
 
     Examples:
@@ -385,11 +388,16 @@ def normalize_req_id(req_id: str, prefix: str = "REQ") -> str:
 
     Args:
         req_id: The requirement ID to normalize
-        prefix: The prefix to use (default "REQ")
+        prefix_or_validator: Either a prefix string or a PatternValidator instance
 
     Returns:
         Normalized ID with prefix
     """
+    if isinstance(prefix_or_validator, PatternValidator):
+        prefix = prefix_or_validator.config.prefix
+    else:
+        prefix = prefix_or_validator
+
     if req_id.startswith(f"{prefix}-"):
         return req_id
     return f"{prefix}-{req_id}"

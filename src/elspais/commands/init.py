@@ -80,7 +80,7 @@ def run(args: argparse.Namespace) -> int:
 
 def create_template_requirement(args: argparse.Namespace) -> int:
     """Create an example requirement file in the spec directory."""
-    from elspais.config.loader import load_config
+    from elspais.arch3 import load_config
 
     # Try to load config to find spec directory
     try:

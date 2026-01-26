@@ -247,7 +247,7 @@ def show_assertion_rules(args: argparse.Namespace) -> int:
 
 def show_id_patterns(args: argparse.Namespace) -> int:
     """Show ID patterns from current configuration."""
-    from elspais.config.loader import load_config
+    from elspais.arch3 import load_config
 
     try:
         config = load_config(args.config if hasattr(args, "config") else None)
@@ -290,7 +290,7 @@ def show_id_patterns(args: argparse.Namespace) -> int:
 
 def show_full_spec(args: argparse.Namespace) -> int:
     """Display the full requirements-spec.md if it exists."""
-    from elspais.config.loader import load_config
+    from elspais.arch3 import load_config
 
     try:
         config = load_config(args.config if hasattr(args, "config") else None)

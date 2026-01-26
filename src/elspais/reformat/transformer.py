@@ -16,17 +16,17 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from elspais.reformat.prompts import JSON_SCHEMA_STR, REFORMAT_SYSTEM_PROMPT, build_user_prompt
 
 if TYPE_CHECKING:
-    from elspais.core.graph import TraceNode
+    from elspais.arch3.Graph import GraphNode
 
 
 def reformat_requirement(
-    node: TraceNode, model: str = "sonnet", verbose: bool = False
+    node: GraphNode, model: str = "sonnet", verbose: bool = False
 ) -> Tuple[Optional[dict], bool, str]:
     """
     Use Claude CLI to reformat a requirement.
 
     Args:
-        node: TraceNode with REQUIREMENT kind and populated requirement field
+        node: GraphNode with REQUIREMENT kind and populated content['requirement']
         model: Claude model to use (sonnet, opus, haiku)
         verbose: Print debug information
 
@@ -34,7 +34,7 @@ def reformat_requirement(
         Tuple of (parsed_result, success, error_message)
         parsed_result is a dict with 'rationale' and 'assertions' keys
     """
-    req = node.requirement
+    req = node.content.get("requirement")
     if req is None:
         return None, False, "Node has no requirement data"
 
@@ -231,13 +231,13 @@ def assemble_new_format(
 
 
 def validate_reformatted_content(
-    original: TraceNode, rationale: str, assertions: List[str]
+    original: GraphNode, rationale: str, assertions: List[str]
 ) -> Tuple[bool, List[str]]:
     """
     Validate that reformatted content is well-formed.
 
     Args:
-        original: Original TraceNode with REQUIREMENT kind
+        original: Original GraphNode with REQUIREMENT kind
         rationale: New rationale text
         assertions: New assertions list
 
@@ -267,7 +267,7 @@ def validate_reformatted_content(
         return False, warnings
 
     # Warning if very few assertions from complex body
-    req = original.requirement
+    req = original.content.get("requirement")
     body_len = len(req.body) if req else 0
     if len(assertions) < 2 and body_len > 500:
         warnings.append("Few assertions from large body - may have missed obligations")

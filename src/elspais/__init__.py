@@ -19,9 +19,9 @@ except PackageNotFoundError:
 __author__ = "Anspar"
 __license__ = "MIT"
 
-from elspais.core.models import Assertion, ContentRule, ParsedRequirement, Requirement
-from elspais.core.patterns import PatternValidator
-from elspais.core.rules import RuleEngine, RuleViolation, Severity
+from elspais.arch3.models import Assertion, ContentRule, ParsedRequirement, Requirement
+from elspais.arch3.utilities.patterns import PatternValidator
+from elspais.arch3.rules import RuleEngine, RuleViolation, Severity
 
 __all__ = [
     "__version__",

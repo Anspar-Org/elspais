@@ -19,13 +19,21 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.loader import load_requirements_from_directories, load_requirements_from_repo
-from elspais.core.patterns import PatternConfig, PatternValidator
-from elspais.core.rules import RuleEngine, RulesConfig
+from elspais.arch3 import (
+    PatternConfig,
+    PatternValidator,
+    RuleEngine,
+    RulesConfig,
+    find_config_file,
+    get_spec_directories,
+    load_config,
+    load_requirements_from_directories,
+    load_requirements_from_repo,
+)
 
 if TYPE_CHECKING:
-    from elspais.core.graph import TraceGraph, TraceNode
+    from elspais.arch3.Graph import GraphNode
+    from elspais.arch3.Graph.builder import TraceGraph
 
 
 def run(args: argparse.Namespace) -> int:
@@ -34,9 +42,9 @@ def run(args: argparse.Namespace) -> int:
     This command reformats requirements from the old Acceptance Criteria format
     to the new Assertions format using Claude AI.
     """
-    from elspais.core.graph import NodeKind
-    from elspais.core.graph_builder import TraceGraphBuilder
-    from elspais.core.patterns import normalize_req_id
+    from elspais.arch3 import NodeKind
+    from elspais.arch3.Graph.builder import GraphBuilder as TraceGraphBuilder
+    from elspais.arch3.utilities.patterns import normalize_req_id
     from elspais.reformat import (
         assemble_new_format,
         normalize_line_breaks,
@@ -119,7 +127,7 @@ def run(args: argparse.Namespace) -> int:
         prd_nodes.sort(key=lambda n: n.id)
 
         print(f"Processing {len(prd_nodes)} PRD requirements and their descendants...")
-        req_nodes: List[TraceNode] = []
+        req_nodes: List[GraphNode] = []
         seen: set[str] = set()
         for prd_node in prd_nodes:
             for node in _traverse_requirements(prd_node, max_depth, NodeKind):
@@ -324,7 +332,7 @@ def _replace_requirement_content(
 
 def run_line_breaks_only(args: argparse.Namespace) -> int:
     """Run line break normalization only."""
-    from elspais.core.graph import NodeKind
+    from elspais.arch3 import NodeKind
     from elspais.reformat import (
         detect_line_break_issues,
         normalize_line_breaks,
@@ -475,7 +483,7 @@ def _build_requirement_graph(
     Returns:
         TraceGraph with requirement hierarchy, or None on failure
     """
-    from elspais.core.graph_builder import TraceGraphBuilder
+    from elspais.arch3.Graph.builder import GraphBuilder as TraceGraphBuilder
 
     if config_path is None:
         config_path = find_config_file(base_path)
@@ -524,24 +532,24 @@ def _build_requirement_graph(
 
 
 def _traverse_requirements(
-    start_node: TraceNode,
+    start_node: GraphNode,
     max_depth: Optional[int],
     NodeKind: type,
-) -> List[TraceNode]:
+) -> List[GraphNode]:
     """Traverse hierarchy from start_node downward using BFS.
 
     Args:
-        start_node: Starting TraceNode
+        start_node: Starting GraphNode
         max_depth: Maximum depth to traverse (None = unlimited)
         NodeKind: NodeKind enum class (passed to avoid import in inner function)
 
     Returns:
-        List of TraceNode objects in traversal order (requirements only)
+        List of GraphNode objects in traversal order (requirements only)
     """
     from collections import deque
 
-    visited: List[TraceNode] = []
-    queue: deque[tuple[TraceNode, int]] = deque([(start_node, 0)])
+    visited: List[GraphNode] = []
+    queue: deque[tuple[GraphNode, int]] = deque([(start_node, 0)])
     seen: set[str] = set()
 
     while queue:
