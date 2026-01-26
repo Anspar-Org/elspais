@@ -13,7 +13,7 @@ Validates requirements format, links, and hashes. Checks consistency and can aut
 
 ### `elspais trace`
 Generates traceability matrix and reports from requirements. Supports multiple output formats.
-- Options: `--format (markdown|html|csv|both)`, `--output`, `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server`, `--port`, `--mode (core|sponsor|combined)`, `--sponsor`, `--graph`, `--graph-json`, `--report`, `--depth`, `--graph-file`
+- Options: `--format (markdown|html|csv|both)`, `--output`, `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server`, `--port`, `--mode (core|sponsor|combined)`, `--sponsor`, `--graph`, `--graph-json`, `--report`, `--depth`
 
 ### `elspais hash`
 Manages requirement hashes for change tracking.
@@ -118,7 +118,7 @@ Starts MCP server for Claude Code integration.
 
 **Severity**: `ERROR`, `WARNING`, `INFO`
 
-**NodeKind**: `REQUIREMENT`, `ASSERTION`, `CODE`, `TEST`, `TEST_RESULT`, `USER_JOURNEY`, `FILE`, `FILE_REGION`
+**NodeKind**: `REQUIREMENT`, `ASSERTION`, `CODE`, `TEST`, `TEST_RESULT`, `USER_JOURNEY`, `TODO`
 
 **EdgeKind**: `IMPLEMENTS`, `REFINES`, `VALIDATES`, `ADDRESSES`, `CONTAINS`
 

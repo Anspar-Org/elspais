@@ -9,8 +9,6 @@ Uses GraphNode from the traceability graph module.
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from elspais.models import Assertion, ContentRule, Requirement
-from elspais.rules import RuleViolation
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 

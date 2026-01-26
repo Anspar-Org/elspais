@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from elspais.graph import NodeKind
-from elspais.models import Requirement
 from elspais.graph.builder import TraceGraph
 
 if TYPE_CHECKING:

@@ -42,23 +42,11 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - `elspais[all]`: All optional features
     Missing dependencies produce clear installation instructions.
 
-14. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
+14. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
 
-15. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
+15. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
 
-16. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `TraceNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking. Schema-driven via `graph_schema.py` for custom node types and relationships.
-
-17. **Configurable Report Schema**: The `ReportSchema` dataclass defines report content and layout (fields, metrics, filters, sorting). Built-in presets (minimal, standard, full) are available, and custom reports can be defined in `[trace.reports.*]` TOML sections. `RollupMetrics` provides typed storage for accumulated metrics (assertions, coverage, test counts). `MetricsConfig` configures exclusions via `[rules.metrics]`.
-
-18. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
-
-19. **Centralized Interface Libraries**: All modules use shared libraries for common operations:
-    - **Requirement Loading**: 
-    - **Configuration Loading**: 
-    - **Graph Building**: 
-    - **Pattern Validation**: .
-
-21. ** Support for Lossless Reconstruction**
+16. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
 
 **Multi-Language Comment Support:**
@@ -90,7 +78,6 @@ The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Fo
    - Explore relevant code files
    - Understand the current implementation
    - Create a detailed implementation plan
-   - reference .claude/refactor-workflow.md if this is a refactoring operation
 3. **Implement** - Write the code and tests
 4. **Verify** - Run `pytest` to ensure all tests pass
 5. **Mark complete** - Change `[ ]` to `[x]` in MASTER_PLAN.md

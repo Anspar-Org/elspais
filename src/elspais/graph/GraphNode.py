@@ -27,8 +27,7 @@ class NodeKind(Enum):
     TEST = "test"
     TEST_RESULT = "result"
     USER_JOURNEY = "journey"
-    FILE = "file"
-    FILE_REGION = "file_region"
+    TODO = "todo"
 
 
 @dataclass

@@ -8,8 +8,6 @@ for requirements authoring. They can include YAML frontmatter for metadata.
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from elspais.models import ContentRule
-
 
 def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
     """

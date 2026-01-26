@@ -180,7 +180,6 @@ class SpecFileMutator:
         pattern_config: Configuration for requirement ID patterns
     """
 
-    # Regex patterns matching those in core/parser.py
     HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
     END_MARKER_PATTERN = re.compile(
         r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?",

@@ -40,7 +40,7 @@ A. The system SHALL use TraceGraphBuilder to construct all TraceGraph instances.
 B. No module SHALL directly instantiate TraceGraph except TraceGraphBuilder.
 C. TraceGraphBuilder SHALL handle all relationship linking (implements, refines, addresses).
 D. TraceGraphBuilder SHALL create assertion nodes as children of requirement nodes.
-E. TraceGraphBuilder SHALL support optional FILE node creation for lossless reconstruction.
+E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reconstruction.
 
 ## Rationale
 

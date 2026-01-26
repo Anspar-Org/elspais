@@ -26,11 +26,8 @@ class TestNodeKind:
     def test_journey_kind_exists(self):
         assert NodeKind.USER_JOURNEY.value == "journey"
 
-    def test_file_kind_exists(self):
-        assert NodeKind.FILE.value == "file"
-
-    def test_file_region_kind_exists(self):
-        assert NodeKind.FILE_REGION.value == "file_region"
+    def test_todo_kind_exists(self):
+        assert NodeKind.TODO.value == "todo"
 
 
 class TestSourceLocation:
