@@ -1,125 +1,275 @@
-# Master Plan: Graph Architecture Cleanup
+# Architecture 3.0 Re-implementation Plan
 
-This file tracks remaining cleanup work for the unified graph architecture. After each `/clear`, Claude should read this file and continue with the next incomplete issue.
+## Overview
 
-**Branch:** feature/CUR-514-viewtrace-port
+Re-implement elspais with Architecture 3.0 in a parallel `arch3/` directory, implementing:
+1. **DomainDeserializer** - Unified controller for text domain → graph deserialization
+2. **MDparser** - Line-claiming parser system (parsers claim lines in priority order)
+3. **Clean Graph module** - GraphNode, relations, annotators separation
 
-## Workflow
+## Approach: Parallel Implementation in `src/elspais/arch3/`
 
-1. **Pick next issue**: Find the first `[ ]` (incomplete) phase below
-2. **Refine into plan**: Analyze the codebase and create detailed implementation steps
-3. **Implement**: Execute the plan, writing code and tests
-4. **Verify**: Run tests, ensure the feature works
-5. **Mark complete**: Change `[ ]` to `[x]` for the phase
-6. **Commit**: Create a git commit for the changes
-7. **Clear context**: Run `/clear` to free up context
-8. **Resume**: After clear, read this file and continue with next phase
+Create the new architecture in a separate directory to:
+- Preserve original code for reference during development
+- Enable side-by-side comparison and validation
+- Allow gradual migration without breaking existing functionality
 
----
+## Target Directory Structure
 
-## [x] Phase 1: Eliminate reformat/hierarchy.py ✅
+```
+src/elspais/arch3/
+├── __init__.py
+├── Graph/
+│   ├── __init__.py
+│   ├── GraphNode.py           # Node definitions (from core/graph.py)
+│   ├── relations.py           # Edge definitions (new)
+│   ├── annotators.py          # Graph annotations (from core/annotators.py)
+│   ├── builder.py             # Graph builder (from core/graph_builder.py)
+│   ├── serialize.py           # Graph → output formats
+│   ├── DomainDeserializer.py  # Abstract controller
+│   │   ├── DomainFile.py      # Directory/file deserializer
+│   │   ├── DomainStdio.py     # stdin deserializer
+│   │   └── DomainCLI.py       # CLI args deserializer
+│   └── MDparser/
+│       ├── __init__.py        # LineClaimingParser protocol
+│       ├── comments.py        # Priority 0: Comment blocks
+│       ├── heredocs.py        # Priority 10: Variables/heredocs
+│       ├── requirement.py     # Priority 50: Requirements
+│       │   └── assertions.py  # Sub-parser for assertions
+│       ├── journey.py         # Priority 60: User journeys
+│       ├── code.py            # Priority 70: Code references
+│       ├── test.py            # Priority 80: Test references
+│       ├── results/
+│       │   ├── junit_xml.py   # JUnit XML results
+│       │   └── pytest_json.py # Pytest JSON results
+│       └── remainder.py       # Priority 999: Unclaimed lines
+├── config/
+│   ├── __init__.py
+│   ├── ConfigLoader.py        # Abstract config loader
+│   ├── LoaderFile.py          # TOML file loader
+│   ├── LoaderStdio.py         # Stdin config
+│   └── defaults.py            # Default configuration
+└── utilities/
+    ├── __init__.py
+    ├── patterns.py            # ID pattern validation
+    ├── hasher.py              # Content hashing
+    └── git.py                 # Git integration
+```
 
-**Problem**: `reformat/hierarchy.py` duplicates graph traversal logic that now exists in TraceGraph.
+## Real-World Test Data
 
-**Solution implemented**:
-1. Updated `transformer.py` to use `TraceNode` instead of `RequirementNode`
-2. Updated `reformat_cmd.py` to build TraceGraph directly via `TraceGraphBuilder`
-3. Added `_traverse_requirements()` helper using BFS on `node.children`
-4. Removed `RequirementNode`, `get_all_requirements`, `traverse_top_down` exports from `__init__.py`
-5. DELETED `src/elspais/reformat/hierarchy.py`
+The `spec/` directory contains real-world requirement specifications that serve as integration test fixtures. Use these for:
+- Validating parser behavior against actual spec files
+- Testing edge cases in requirement format
+- Ensuring output equivalence between old and new architecture
 
-**Files modified**:
-- `src/elspais/reformat/transformer.py` - Uses `TraceNode` type hints
-- `src/elspais/reformat/__init__.py` - Removed hierarchy exports
-- `src/elspais/commands/reformat_cmd.py` - Uses TraceGraph directly
-- `tests/test_trace_view/test_integration.py` - Updated import test
+## Implementation Phases
 
-**Verification**: ✅ All 1136 tests pass
+### [x] Phase 1: Foundation (TDD) - COMPLETE
 
----
+**Files to Create:**
+1. `arch3/Graph/GraphNode.py` - Port NodeKind, SourceLocation, TraceNode → GraphNode
+2. `arch3/Graph/relations.py` - New: Edge types (implements, refines, validates)
+3. `arch3/utilities/patterns.py` - Port from core/patterns.py
+4. `arch3/utilities/hasher.py` - Port from core/hasher.py
 
-## [x] Phase 2: Consolidate trace.py Output Paths ✅
+**Tests First:**
+```
+tests/arch3/
+├── conftest.py
+├── test_graph_node.py
+└── test_relations.py
+```
 
-**Problem**: `run_trace_view()` is a separate code path that should use the unified graph architecture.
+**Key Test Cases:**
+- `test_create_minimal_node` - Node with id and kind
+- `test_implements_relation_creates_edge` - Bidirectional linking
+- `test_refines_vs_implements_semantics` - Coverage rollup differences
 
-**Current state** (VERIFIED - Already Complete):
-- `TraceViewGenerator._build_graph()` uses `TraceGraphBuilder` directly
-- `HTMLGenerator` takes `TraceGraph` in constructor - no Dict intermediates
-- `annotate_git_state()` and `annotate_display_info()` annotate `node.metrics`
-- No Dict-based structures remain after graph building
+### [ ] Phase 2: MDparser Infrastructure
 
-**What was already in place**:
-1. ✅ `TraceViewGenerator._build_graph()` builds graph via TraceGraphBuilder
-2. ✅ `HTMLGenerator(graph=self._graph, ...)` - TraceGraph passed directly
-3. ✅ No Dict-based intermediate structures after graph building
-4. ✅ Git state annotation uses `node.metrics` via `annotate_git_state()`
+**Files to Create:**
+1. `arch3/Graph/MDparser/__init__.py` - LineClaimingParser protocol
+2. `arch3/Graph/MDparser/comments.py` - Priority 0 parser
+3. `arch3/Graph/MDparser/remainder.py` - Priority 999 parser
 
-**Files verified**:
-- `src/elspais/trace_view/generators/base.py` - Uses TraceGraphBuilder
-- `src/elspais/trace_view/html/generator.py` - Consumes TraceGraph directly
-- `src/elspais/core/annotators.py` - Pure functions annotating node.metrics
+**Core Protocol:**
+```python
+class LineClaimingParser(Protocol):
+    @property
+    def priority(self) -> int: ...
 
-**Verification**: ✅ All 1136 tests pass, `elspais trace --view` generates HTML correctly
+    def claim_and_parse(
+        self,
+        lines: list[tuple[int, str]],  # (line_number, content)
+        context: ParseContext,
+    ) -> Iterator[ParsedContent]: ...
+```
 
----
+**Tests First:**
+```
+tests/arch3/test_mdparser/
+├── conftest.py
+├── test_mdparser_base.py
+├── test_comments_parser.py
+└── test_remainder_parser.py
+```
 
-## [ ] Phase 3: Real-World Testing Against fda-specs
+### [ ] Phase 3: Node-Type Parsers
 
-**Goal**: Test all major elspais functions against the real fda-specs project to verify reasonableness and find bugs.
+**Files to Create:**
+1. `arch3/Graph/MDparser/requirement.py` - Adapt from core/parser.py
+2. `arch3/Graph/MDparser/requirement/assertions.py` - Assertion sub-parser
+3. `arch3/Graph/MDparser/journey.py` - Port from parsers/journey.py
+4. `arch3/Graph/MDparser/code.py` - Port from parsers/code.py
+5. `arch3/Graph/MDparser/test.py` - Port from parsers/test.py
 
-**Test Target**: `~/cure-hht/hht_diary-worktrees/fda-specs/`
+**Tests:**
+```
+tests/arch3/test_mdparser/
+├── test_requirement_parser.py
+├── test_assertion_parser.py
+├── test_journey_parser.py
+├── test_code_parser.py
+└── test_test_parser.py
+```
 
-**IMPORTANT Rules**:
-- ❌ DO NOT modify any files in fda-specs
-- ✅ DO fix bugs found in elspais (this repo)
-- ✅ DO document issues found in fda-specs at `~/cure-hht/hht_diary-worktrees/fda-specs/ELSPAIS-found-bugs.md`
+### [ ] Phase 4: DomainDeserializer
 
-**Functions to test**:
+**Files to Create:**
+1. `arch3/Graph/DomainDeserializer.py` - Abstract protocol
+2. `arch3/Graph/DomainFile.py` - File/directory iteration
+3. `arch3/Graph/DomainStdio.py` - stdin reading
+4. `arch3/Graph/DomainCLI.py` - CLI argument parsing
 
-### 1. Graph (`elspais trace --graph`)
-- [ ] Run `elspais trace --graph` and verify output
-- [ ] Run `elspais trace --graph --format html` and check HTML reasonableness
-- [ ] Run `elspais trace --graph-json` and validate JSON structure
-- [ ] Check for warnings/errors in validation output
+**Core Pattern:**
+```python
+class DomainDeserializer(Protocol):
+    def iterate_sources(self) -> Iterator[tuple[DomainContext, str]]: ...
+    def deserialize(self, parsers: list[LineClaimingParser]) -> TraceGraph: ...
+```
 
-### 2. View (`elspais trace --view`)
-- [ ] Run `elspais trace --view` and verify HTML generation
-- [ ] Run `elspais trace --view --embed-content` and check embedded data
-- [ ] Verify hierarchy display and expand/collapse
-- [ ] Check git state annotations (uncommitted, modified, etc.)
+**Tests:**
+```
+tests/arch3/test_deserializer/
+├── conftest.py
+├── test_domain_base.py
+├── test_domain_file.py
+├── test_domain_stdio.py
+└── test_domain_cli.py
+```
 
-### 3. Edit (`elspais trace --view --edit-mode`)
-- [ ] Run with `--edit-mode` and verify edit UI appears
-- [ ] Check roadmap move buttons render correctly
-- [ ] Verify file picker modal works
+### [ ] Phase 5: Graph Builder & Serialization
 
-### 4. Review (`elspais trace --view --review-mode`)
-- [ ] Run with `--review-mode` and verify review UI appears
-- [ ] Check comment thread display
-- [ ] Verify status request display
+**Files to Create:**
+1. `arch3/Graph/builder.py` - Graph building from nodes
+2. `arch3/Graph/serialize.py` - Output format generation
+3. `arch3/Graph/annotators.py` - Port from core/annotators.py
 
-### 5. Validate (`elspais validate`)
-- [ ] Run `elspais validate` and check for errors
-- [ ] Review any hierarchy violations
-- [ ] Check for broken links or orphaned requirements
+### [ ] Phase 6: Config Layer
 
-### 6. Analyze (`elspais analyze`)
-- [ ] Run `elspais analyze hierarchy`
-- [ ] Run `elspais analyze orphans`
-- [ ] Run `elspais analyze coverage`
+**Files to Create:**
+1. `arch3/config/ConfigLoader.py` - Abstract loader
+2. `arch3/config/LoaderFile.py` - TOML loading (from config/loader.py)
+3. `arch3/config/LoaderStdio.py` - stdin config stripping
+4. `arch3/config/defaults.py` - Port from config/defaults.py
 
-**Execution approach**:
-- Use sub-agents (debugger, Explore) for each function test
-- Debug and fix any elspais bugs found
-- Document fda-specs issues in ELSPAIS-found-bugs.md
+### [ ] Phase 7: Integration & Migration
 
-**Output files**:
-- `~/cure-hht/hht_diary-worktrees/fda-specs/ELSPAIS-found-bugs.md` - Issues found in fda-specs
-- Commits to this repo for any elspais fixes
+**Integration Tests:**
+```
+tests/arch3/test_integration/
+├── test_pipeline.py            # Full Deserializer → MDparser → Graph
+├── test_mcp_compatibility.py   # Verify MCP tools still work
+└── test_output_equivalence.py  # Compare old vs new output
+```
 
----
+**Migration Strategy:**
+1. Add `ELSPAIS_ARCH3=1` environment flag
+2. Create adapter: `arch3/compat.py` wrapping new Graph for old interfaces
+3. Update commands to conditionally use arch3
+4. Run parallel validation with all fixtures
 
-## Completed Phases
+## Critical Files to Modify/Port
 
-1. **Phase 1**: Eliminated `reformat/hierarchy.py` - uses TraceGraph directly ✅
-2. **Phase 2**: Verified `run_trace_view()` already uses unified graph architecture ✅
+| Source File | Target File | Notes |
+|-------------|-------------|-------|
+| `core/graph.py` | `arch3/Graph/GraphNode.py` | Port TraceNode, NodeKind, SourceLocation |
+| `core/graph_builder.py` | `arch3/Graph/builder.py` | Adapt to use relations.py |
+| `core/parser.py` | `arch3/Graph/MDparser/requirement.py` | Adapt to line-claiming |
+| `core/patterns.py` | `arch3/utilities/patterns.py` | Direct port |
+| `core/hasher.py` | `arch3/utilities/hasher.py` | Direct port |
+| `core/annotators.py` | `arch3/Graph/annotators.py` | Direct port |
+| `parsers/__init__.py` | `arch3/Graph/MDparser/__init__.py` | Evolve SpecParser → LineClaimingParser |
+| `parsers/journey.py` | `arch3/Graph/MDparser/journey.py` | Adapt to line-claiming |
+| `parsers/code.py` | `arch3/Graph/MDparser/code.py` | Adapt to line-claiming |
+| `parsers/test.py` | `arch3/Graph/MDparser/test.py` | Adapt to line-claiming |
+| `config/loader.py` | `arch3/config/LoaderFile.py` | Split into loader hierarchy |
+
+## TDD Implementation Order
+
+| # | Component | Test File | Depends On |
+|---|-----------|-----------|------------|
+| 1 | GraphNode | `test_graph_node.py` | None |
+| 2 | Relations | `test_relations.py` | GraphNode |
+| 3 | MDparser base | `test_mdparser_base.py` | None |
+| 4 | CommentsParser | `test_comments_parser.py` | MDparser |
+| 5 | RemainderParser | `test_remainder_parser.py` | MDparser |
+| 6 | RequirementParser | `test_requirement_parser.py` | MDparser |
+| 7 | AssertionParser | `test_assertion_parser.py` | RequirementParser |
+| 8 | JourneyParser | `test_journey_parser.py` | MDparser |
+| 9 | DomainDeserializer | `test_domain_base.py` | MDparser |
+| 10 | DomainFile | `test_domain_file.py` | DomainDeserializer |
+| 11 | Graph Builder | `test_builder.py` | GraphNode, Relations |
+| 12 | Pipeline Integration | `test_pipeline.py` | All above |
+| 13 | MCP Compatibility | `test_mcp_compatibility.py` | Pipeline |
+
+## Verification Plan
+
+### Unit Tests
+```bash
+# Run arch3 tests only
+pytest tests/arch3/ -v
+
+# Run with coverage
+pytest tests/arch3/ --cov=src/elspais/arch3
+```
+
+### Integration Tests
+```bash
+# Compare outputs between architectures
+pytest tests/arch3/test_integration/test_output_equivalence.py -v
+```
+
+### Manual Validation
+```bash
+# Enable arch3 mode
+export ELSPAIS_ARCH3=1
+
+# Test CLI commands
+elspais validate
+elspais trace --graph
+elspais analyze hierarchy
+
+# Test MCP server
+elspais mcp
+```
+
+### Fixture Coverage
+- Use existing fixtures: `hht-like`, `fda-style`, `jira-style`, `assertions`
+- Add new fixtures for line-claiming edge cases
+
+## Constraints
+
+1. **Zero Dependencies** - Must not add external packages
+2. **Python 3.9+** - Use compatible typing syntax
+3. **Backward Compatibility** - CLI and MCP interfaces unchanged
+4. **Config Format** - `.elspais.toml` format preserved
+
+## Success Criteria
+
+1. All existing tests pass (via adapters if needed)
+2. All fixtures produce equivalent output
+3. MCP tools work identically
+4. Line-claiming exhaustive (every line assigned to exactly one node)
+5. Performance comparable to current implementation

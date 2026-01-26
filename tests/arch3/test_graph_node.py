@@ -1,0 +1,240 @@
+"""Tests for GraphNode - Phase 1 Foundation."""
+
+import pytest
+
+from elspais.arch3.Graph import GraphNode, NodeKind, SourceLocation
+
+
+class TestNodeKind:
+    """Tests for NodeKind enum."""
+
+    def test_requirement_kind_exists(self):
+        assert NodeKind.REQUIREMENT.value == "requirement"
+
+    def test_assertion_kind_exists(self):
+        assert NodeKind.ASSERTION.value == "assertion"
+
+    def test_code_kind_exists(self):
+        assert NodeKind.CODE.value == "code"
+
+    def test_test_kind_exists(self):
+        assert NodeKind.TEST.value == "test"
+
+    def test_result_kind_exists(self):
+        assert NodeKind.TEST_RESULT.value == "result"
+
+    def test_journey_kind_exists(self):
+        assert NodeKind.USER_JOURNEY.value == "journey"
+
+    def test_file_kind_exists(self):
+        assert NodeKind.FILE.value == "file"
+
+    def test_file_region_kind_exists(self):
+        assert NodeKind.FILE_REGION.value == "file_region"
+
+
+class TestSourceLocation:
+    """Tests for SourceLocation dataclass."""
+
+    def test_create_minimal(self):
+        loc = SourceLocation(path="spec/prd.md", line=1)
+        assert loc.path == "spec/prd.md"
+        assert loc.line == 1
+        assert loc.end_line is None
+        assert loc.repo is None
+
+    def test_create_with_end_line(self):
+        loc = SourceLocation(path="spec/prd.md", line=10, end_line=25)
+        assert loc.end_line == 25
+
+    def test_create_with_repo(self):
+        loc = SourceLocation(path="spec/prd.md", line=1, repo="CAL")
+        assert loc.repo == "CAL"
+
+    def test_str_without_repo(self):
+        loc = SourceLocation(path="spec/prd.md", line=10)
+        assert str(loc) == "spec/prd.md:10"
+
+    def test_str_with_repo(self):
+        loc = SourceLocation(path="spec/prd.md", line=10, repo="CAL")
+        assert str(loc) == "CAL:spec/prd.md:10"
+
+    def test_absolute_path(self):
+        from pathlib import Path
+
+        loc = SourceLocation(path="spec/prd.md", line=1)
+        abs_path = loc.absolute(Path("/home/user/repo"))
+        assert abs_path == Path("/home/user/repo/spec/prd.md")
+
+
+class TestGraphNode:
+    """Tests for GraphNode dataclass."""
+
+    def test_create_minimal_node(self):
+        """Node with id and kind only."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        assert node.id == "REQ-p00001"
+        assert node.kind == NodeKind.REQUIREMENT
+        assert node.label == ""  # Default empty
+        assert node.source is None
+        assert node.children == []
+        assert node.parents == []
+        assert node.content == {}
+        assert node.metrics == {}
+
+    def test_create_with_label(self):
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="User Authentication",
+        )
+        assert node.label == "User Authentication"
+
+    def test_create_with_source(self):
+        source = SourceLocation(path="spec/prd.md", line=10)
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            source=source,
+        )
+        assert node.source == source
+        assert node.source.line == 10
+
+    def test_create_with_content(self):
+        """Content is typed data based on node kind."""
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            content={"title": "Auth", "status": "Active"},
+        )
+        assert node.content["title"] == "Auth"
+        assert node.content["status"] == "Active"
+
+    def test_add_child(self):
+        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION)
+
+        parent.add_child(child)
+
+        assert child in parent.children
+        assert parent in child.parents
+
+    def test_add_child_is_idempotent(self):
+        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION)
+
+        parent.add_child(child)
+        parent.add_child(child)  # Add again
+
+        assert len(parent.children) == 1
+        assert len(child.parents) == 1
+
+    def test_depth_for_root(self):
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        assert node.depth == 0
+
+    def test_depth_for_child(self):
+        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        parent.add_child(child)
+
+        assert child.depth == 1
+
+    def test_depth_for_grandchild(self):
+        grandparent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        parent = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT)
+
+        grandparent.add_child(parent)
+        parent.add_child(child)
+
+        assert child.depth == 2
+
+    def test_depth_dag_uses_minimum(self):
+        """With multiple parents, depth is minimum path to root."""
+        root = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        mid = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        leaf = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT)
+
+        root.add_child(mid)
+        root.add_child(leaf)  # Direct child of root
+        mid.add_child(leaf)  # Also child of mid
+
+        # leaf has two parents: root (depth 1) and mid (depth 2)
+        # Should use minimum = 1
+        assert leaf.depth == 1
+
+
+class TestGraphNodeTraversal:
+    """Tests for GraphNode traversal methods."""
+
+    def test_walk_preorder(self):
+        root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
+        child1 = GraphNode(id="c1", kind=NodeKind.REQUIREMENT)
+        child2 = GraphNode(id="c2", kind=NodeKind.REQUIREMENT)
+        grandchild = GraphNode(id="gc", kind=NodeKind.REQUIREMENT)
+
+        root.add_child(child1)
+        root.add_child(child2)
+        child1.add_child(grandchild)
+
+        ids = [n.id for n in root.walk("pre")]
+        assert ids == ["root", "c1", "gc", "c2"]
+
+    def test_walk_postorder(self):
+        root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
+        child1 = GraphNode(id="c1", kind=NodeKind.REQUIREMENT)
+        child2 = GraphNode(id="c2", kind=NodeKind.REQUIREMENT)
+
+        root.add_child(child1)
+        root.add_child(child2)
+
+        ids = [n.id for n in root.walk("post")]
+        assert ids == ["c1", "c2", "root"]
+
+    def test_walk_level(self):
+        root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
+        child1 = GraphNode(id="c1", kind=NodeKind.REQUIREMENT)
+        child2 = GraphNode(id="c2", kind=NodeKind.REQUIREMENT)
+        grandchild = GraphNode(id="gc", kind=NodeKind.REQUIREMENT)
+
+        root.add_child(child1)
+        root.add_child(child2)
+        child1.add_child(grandchild)
+
+        ids = [n.id for n in root.walk("level")]
+        assert ids == ["root", "c1", "c2", "gc"]
+
+    def test_ancestors(self):
+        grandparent = GraphNode(id="gp", kind=NodeKind.REQUIREMENT)
+        parent = GraphNode(id="p", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="c", kind=NodeKind.REQUIREMENT)
+
+        grandparent.add_child(parent)
+        parent.add_child(child)
+
+        ancestors = list(child.ancestors())
+        assert len(ancestors) == 2
+        assert parent in ancestors
+        assert grandparent in ancestors
+
+    def test_find_by_kind(self):
+        root = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        assertion = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION)
+        code = GraphNode(id="code:auth.py:10", kind=NodeKind.CODE)
+
+        root.add_child(assertion)
+        assertion.add_child(code)
+
+        assertions = list(root.find_by_kind(NodeKind.ASSERTION))
+        assert len(assertions) == 1
+        assert assertions[0].id == "REQ-p00001-A"
+
+    def test_find_with_predicate(self):
+        root = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Auth")
+        child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT, label="OAuth")
+
+        root.add_child(child)
+
+        found = list(root.find(lambda n: "Auth" in n.label))
+        assert len(found) == 2  # Both contain "Auth"
