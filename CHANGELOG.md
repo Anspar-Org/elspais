@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-01-25
+### Changed
+- **Refactor**: Eliminated `reformat/hierarchy.py` - now uses TraceGraph directly
+  - `transformer.py` uses `TraceNode` instead of `RequirementNode`
+  - `reformat_cmd.py` builds TraceGraph via `TraceGraphBuilder`
+  - BFS traversal via `node.children` replaces custom hierarchy classes
+  - Removed `RequirementNode`, `get_all_requirements`, `traverse_top_down` exports
+### Fixed
+- **Scanning**: Added missing `scan_implementations_to_graph` function in `trace_view/scanning.py`
+### Documentation
+- Verified Phase 2 complete - `run_trace_view()` already uses unified graph architecture
+- Master Plan marked as complete with all phases finished
+
 ## [0.23.0] - 2026-01-25
 ### Added
 - **Assertion Indicator in Trace View** - Shows which assertions a child implements
