@@ -954,6 +954,7 @@ def build_graph_from_repo(
 
 
 # Backwards compatibility aliases (deprecated)
+# Use TraceGraphBuilder, build_graph_from_requirements, build_graph_from_repo instead
 TraceTreeBuilder = TraceGraphBuilder
 build_tree_from_requirements = build_graph_from_requirements
 build_tree_from_repo = build_graph_from_repo

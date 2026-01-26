@@ -266,6 +266,12 @@ elspais mcp                       # Start MCP server (requires elspais[mcp])
     - State restored on page load (DOMContentLoaded)
     - "Clear" button resets both DOM filters AND cookie state
 
+23. **Assertion Indicator in Trace View**: When a child requirement implements specific assertions (e.g., `Implements: REQ-p00001-A-B`), the hierarchy view shows:
+    - Assertion label indicator "(A,B)" before the expand/collapse icon
+    - Children implementing assertions are included in the hierarchy tree (not just direct REQ implementers)
+    - `_find_children_with_assertion_info()` method extracts assertion labels from implements references
+    - Both the assertion indicator and collapse icon are clickable for expand/collapse
+
 ### Requirement Format (Updated)
 
 Requirements use Markdown with assertions as the unit of verification:

@@ -18,7 +18,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -497,6 +497,56 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
 
         return flat_list
 
+    def _find_children_with_assertion_info(
+        self, req: Requirement
+    ) -> List[Tuple[Requirement, List[str]]]:
+        """Find child requirements that implement this requirement or its assertions.
+
+        Returns list of (child_req, assertion_labels) tuples.
+        - If child implements the parent REQ directly, assertion_labels is empty
+        - If child implements specific assertions (e.g., REQ-p00001-A-B), assertion_labels = ["A", "B"]
+
+        Args:
+            req: The parent requirement to find children for
+
+        Returns:
+            List of (Requirement, List[str]) tuples sorted by requirement ID
+        """
+        import re
+
+        children_with_assertions: List[Tuple[Requirement, List[str]]] = []
+        parent_id = req.full_id  # Get full ID with REQ- prefix
+
+        for r in self.requirements.values():
+            assertion_labels: List[str] = []
+            is_child = False
+
+            for impl_ref in r.implements:
+                if impl_ref == parent_id:
+                    # Direct implementation of the requirement
+                    is_child = True
+                    # Don't break - keep checking for assertion refs too
+                elif impl_ref.startswith(parent_id + "-"):
+                    # Implements an assertion of this requirement
+                    # Extract assertion labels from reference like "REQ-p00001-A-B-C"
+                    suffix = impl_ref[len(parent_id) + 1 :]  # Get "A-B-C"
+                    # Split by dash to get individual labels
+                    labels = suffix.split("-")
+                    # Filter to only uppercase letters (assertion labels)
+                    labels = [lbl for lbl in labels if re.match(r"^[A-Z]$", lbl)]
+                    if labels:
+                        assertion_labels.extend(labels)
+                        is_child = True
+
+            if is_child:
+                # Remove duplicates and sort assertion labels
+                unique_labels = sorted(set(assertion_labels))
+                children_with_assertions.append((r, unique_labels))
+
+        # Sort by requirement ID
+        children_with_assertions.sort(key=lambda x: x[0].id)
+        return children_with_assertions
+
     def _add_requirement_and_children(
         self,
         req: Requirement,
@@ -505,6 +555,7 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
         parent_instance_id: str,
         ancestor_path: list[str],
         is_orphan: bool = False,
+        assertion_labels: List[str] = None,
     ):
         """Recursively add requirement and its children to flat list
 
@@ -515,7 +566,11 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
             parent_instance_id: Instance ID of parent item
             ancestor_path: List of requirement IDs in current traversal path (for cycle detection)
             is_orphan: Whether this requirement is an orphan (has missing parent)
+            assertion_labels: List of assertion labels this req implements from parent (e.g., ["A", "B"])
         """
+        if assertion_labels is None:
+            assertion_labels = []
+
         # Cycle detection: check if this requirement is already in our traversal path
         if req.id in ancestor_path:
             cycle_path = ancestor_path + [req.id]
@@ -530,12 +585,11 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
         instance_id = f"inst_{self._instance_counter}"
         self._instance_counter += 1
 
-        # Find child requirements
-        children = [r for r in self.requirements.values() if req.id in r.implements]
-        children.sort(key=lambda r: r.id)
+        # Find child requirements (including those implementing assertions)
+        children_with_assertions = self._find_children_with_assertion_info(req)
 
         # Check if this requirement has children (either child reqs or implementation files)
-        has_children = len(children) > 0 or len(req.implementation_files) > 0
+        has_children = len(children_with_assertions) > 0 or len(req.implementation_files) > 0
 
         # Add this requirement
         flat_list.append(
@@ -546,6 +600,7 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
                 "parent_instance_id": parent_instance_id,
                 "has_children": has_children,
                 "item_type": "requirement",
+                "assertion_labels": assertion_labels,  # Labels this req implements from parent
             }
         )
 
@@ -567,9 +622,14 @@ font-weight: bold;">*</span> MODIFIED (content changed)</li>
 
         # Recursively add child requirements (with updated ancestor path for cycle detection)
         current_path = ancestor_path + [req.id]
-        for child in children:
+        for child, child_assertion_labels in children_with_assertions:
             self._add_requirement_and_children(
-                child, flat_list, indent + 1, instance_id, current_path
+                child,
+                flat_list,
+                indent + 1,
+                instance_id,
+                current_path,
+                assertion_labels=child_assertion_labels,
             )
 
     def _format_item_flat_html(
@@ -657,12 +717,21 @@ monospace; font-size: 12px;">{file_link}</div>
         instance_id = req_data["instance_id"]
         parent_instance_id = req_data["parent_instance_id"]
         has_children = req_data["has_children"]
+        assertion_labels = req_data.get("assertion_labels", [])
 
         status_class = req.status.lower()
         level_class = req.level.lower()
 
         # Only show collapse icon if there are children
-        collapse_icon = "▼" if has_children else ""
+        # Show triangle for expandable nodes, circle for leaf nodes
+        collapse_icon = "▼" if has_children else "●"
+
+        # Build assertion indicator if this req implements specific assertions from parent
+        # Format: "(A)" or "(A,B,C)" shown before the collapse icon
+        assertion_indicator = ""
+        if assertion_labels:
+            labels_str = ",".join(assertion_labels)
+            assertion_indicator = f'<span class="assertion-indicator" title="Implements assertion(s) {labels_str}">({labels_str})</span>'
 
         # Determine implementation coverage status
         impl_status = self._get_implementation_status(req.id)
@@ -917,7 +986,7 @@ monospace; font-size: 12px;">{file_link}</div>
         html = f"""
         <div class="req-item {level_class} {deprecated_class} {item_class}" {data_attrs}>
             <div class="req-header-container" onclick="toggleRequirement(this)">
-                <span class="collapse-icon">{collapse_icon}</span>
+                {assertion_indicator}<span class="collapse-icon">{collapse_icon}</span>
                 <div class="req-content">
                     <div class="req-id">{conflict_icon}{cycle_icon}{req_link}{roadmap_icon}</div>
                     <div class="req-header">{req.title}</div>

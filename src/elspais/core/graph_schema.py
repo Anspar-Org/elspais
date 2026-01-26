@@ -764,4 +764,5 @@ class GraphSchema:
 
 
 # Backwards compatibility alias (deprecated)
+# Use GraphSchema instead
 TreeSchema = GraphSchema

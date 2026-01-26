@@ -662,6 +662,28 @@ h2 {
     transform: rotate(-90deg);
 }
 
+/* Leaf node indicator (circle) - non-functional, muted appearance */
+.req-item[data-has-children="false"] .collapse-icon {
+    font-size: 6px;
+    color: #ccc;
+    cursor: default;
+    transform: none !important;  /* Never rotate the circle */
+}
+
+/* Assertion indicator shown before collapse icon for requirements implementing assertions */
+.assertion-indicator {
+    font-size: 11px;
+    color: #007bff;
+    font-weight: 500;
+    margin-right: 2px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.assertion-indicator:hover {
+    color: #0056b3;
+}
+
 .req-content {
     flex: 1;
     display: grid;

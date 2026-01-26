@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-01-25
+### Added
+- **Assertion Indicator in Trace View** - Shows which assertions a child implements
+  - When requirement implements assertions (e.g., `Implements: REQ-p00001-A-B`), indicator "(A,B)" shown before expand/collapse icon
+  - New `_find_children_with_assertion_info()` method in HTMLGenerator
+  - Includes children implementing assertions in hierarchy tree (previously hidden)
+  - CSS styling for `.assertion-indicator` with blue color and hover effect
+  - 4 new tests for assertion indicator feature
+
 ## [0.22.0] - 2026-01-25
 ### Added
 - **MCP Server Documentation** - Comprehensive guide for MCP server
