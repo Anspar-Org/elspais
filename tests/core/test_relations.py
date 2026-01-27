@@ -17,20 +17,18 @@ from tests.core.graph_test_helpers import (
 class TestEdgeKind:
     """Tests for EdgeKind enum."""
 
-    def test_implements_exists(self):
-        assert EdgeKind.IMPLEMENTS.value == "implements"
-
-    def test_refines_exists(self):
-        assert EdgeKind.REFINES.value == "refines"
-
-    def test_validates_exists(self):
-        assert EdgeKind.VALIDATES.value == "validates"
-
-    def test_addresses_exists(self):
-        assert EdgeKind.ADDRESSES.value == "addresses"
-
-    def test_contains_exists(self):
-        assert EdgeKind.CONTAINS.value == "contains"
+    def test_all_edge_kinds_exist(self):
+        """All expected edge kinds exist with correct values."""
+        expected = {
+            "IMPLEMENTS": "implements",
+            "REFINES": "refines",
+            "VALIDATES": "validates",
+            "ADDRESSES": "addresses",
+            "CONTAINS": "contains",
+        }
+        for name, value in expected.items():
+            kind = getattr(EdgeKind, name)
+            assert kind.value == value, f"EdgeKind.{name} should have value '{value}'"
 
 
 class TestEdge:
@@ -78,6 +76,38 @@ class TestEdge:
 
         assert edge1 != edge2
 
+    def test_edge_inequality_different_assertion_targets(self):
+        """Edges with different assertion_targets are not equal."""
+        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        edge1 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "B"],
+        )
+        edge2 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "C"],
+        )
+
+        assert edge1 != edge2
+
+    def test_edge_equality_with_non_edge(self):
+        """Edge compared with non-Edge returns NotImplemented."""
+        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        edge = Edge(source=source, target=target, kind=EdgeKind.IMPLEMENTS)
+
+        # Comparing with non-Edge should not raise, should return False
+        assert edge != "not an edge"
+        assert edge != 42
+        assert edge != None
+
 
 class TestEdgeSemantics:
     """Tests for edge semantic differences."""
@@ -116,12 +146,12 @@ class TestNodeEdgeIntegration:
         parent = graph.find_by_id("REQ-p00001")
         child = graph.find_by_id("REQ-o00001")
 
-        # Verify relationships via string helpers
-        assert "REQ-o00001" in children_string(parent)
-        assert "REQ-p00001" in parents_string(child)
-        # Verify edge kind
-        assert "REQ-p00001->REQ-o00001:implements" in outgoing_edges_string(parent)
-        assert "REQ-p00001->REQ-o00001:implements" in incoming_edges_string(child)
+        # Verify relationships via string helpers (exact equality)
+        assert children_string(parent) == "REQ-o00001"
+        assert parents_string(child) == "REQ-p00001"
+        # Verify edge kind (exact equality)
+        assert outgoing_edges_string(parent) == "REQ-p00001->REQ-o00001:implements"
+        assert incoming_edges_string(child) == "REQ-p00001->REQ-o00001:implements"
 
     def test_refines_relationship(self):
         """Child refining parent creates refines edge."""
@@ -133,9 +163,9 @@ class TestNodeEdgeIntegration:
         parent = graph.find_by_id("REQ-p00001")
         child = graph.find_by_id("REQ-p00002")
 
-        # Verify relationships
-        assert "REQ-p00002" in children_string(parent)
-        assert "REQ-p00001->REQ-p00002:refines" in outgoing_edges_string(parent)
+        # Verify relationships (exact equality)
+        assert children_string(parent) == "REQ-p00002"
+        assert outgoing_edges_string(parent) == "REQ-p00001->REQ-p00002:refines"
 
     def test_multiple_edge_kinds(self):
         """Graph can have both implements and refines edges from same parent."""

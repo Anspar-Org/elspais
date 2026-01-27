@@ -94,17 +94,17 @@ This file contains a prioritized queue of enhancement issues for iterative imple
 
 ---
 
-### [ ] Phase 4: Fix test_relations.py
+### [x] Phase 4: Fix test_relations.py (COMPLETED)
 
 **File**: `tests/core/test_relations.py`
 
-1. **Consolidate enum tests**: Replace 5 `TestEdgeKind` tests with single `test_all_edge_kinds_exist`
+1. ✅ **Consolidated enum tests**: Replaced 5 `TestEdgeKind` tests with single `test_all_edge_kinds_exist`
 
-2. **Add edge case tests**:
+2. ✅ **Added edge case tests**:
    - `test_edge_inequality_different_assertion_targets`
    - `test_edge_equality_with_non_edge`
 
-3. **Strengthen assertions**: Use exact equality instead of substring contains
+3. ✅ **Strengthened assertions**: Used exact equality instead of substring contains
 
 ---
 
