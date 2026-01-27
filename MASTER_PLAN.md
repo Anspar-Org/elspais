@@ -1,188 +1,217 @@
-# MASTER_PLAN.md
+# MASTER_PLAN: Graph Iterator-Only API + Factory
 
-This file contains a prioritized queue of enhancement issues for iterative implementation.
+## Architecture Principles
+1. **Commands only traverse the graph. They never read from disk.**
+2. **Don't make helper functions when you can just use the graph directly.** The graph structure is the API - use it inline.
+3. **Always use iterators, never extract lists/dicts.** Process one node at a time. No `sorted()`, no `list()`, no materializing iterators.
 
----
-
-## Issue 1: Test Quality Improvements
-
-**Goal**: Implement recommendations from test quality assessment to improve coverage, eliminate trivial tests, strengthen assertions, and ensure full black-box compliance.
-
-### Summary of Issues by Priority
-
-| Priority | Issue | Count |
-|----------|-------|-------|
-| High | Black-box violations (`_content`, `_metrics`, `_index` access) | 7+ |
-| High | Missing node type coverage (`TEST_RESULT`, `TODO`) | 2 |
-| High | Missing edge type coverage (`ADDRESSES`, `CONTAINS`) | 2 |
-| Medium | Missing test scenarios | 40+ |
-| Medium | Weak assertions (substring, `>=` instead of exact) | 15+ |
-| Low | Trivial tests (verify assignment worked) | 14+ |
-| Low | Missing helper functions | 5+ |
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `tests/core/graph_test_helpers.py` | Add factories, `build_graph()`, validation |
-| `tests/core/conftest.py` | Add missing fixtures |
-| `tests/core/test_graph_node.py` | Consolidate enum tests, add coverage |
-| `tests/core/test_relations.py` | Remove trivial tests, add edge cases |
-| `tests/core/test_builder.py` | Add content types, strengthen assertions |
-| `tests/core/test_serialize.py` | Fix black-box violation, add scenarios |
-| `tests/core/test_annotators.py` | Fix 6+ black-box violations, add edge cases |
+## Files to Modify
+- **MODIFY**: `src/elspais/graph/builder.py` - Refactor TraceGraph to iterator-only API
+- **MODIFY**: `src/elspais/graph/GraphNode.py` - Refactor to iterator-only API
+- **NEW**: `src/elspais/graph/factory.py` - Shared graph-building utility
 
 ---
 
-### [x] Phase 1: Enhance Test Helpers (COMPLETED)
+## Issue Queue
 
-**File**: `tests/core/graph_test_helpers.py`
+### [x] Part 0: Refactor Graph to Iterator-Only API
+**Files**: `builder.py`, `GraphNode.py`
+**Scope**: Delete public list/dict attributes, add iterator methods, add UUID for GUI referencing
 
-1. ✅ Added missing factories:
-   - `make_test_result(result_id, status, test_id, duration)` - creates TEST_RESULT nodes
-   - `make_remainder(remainder_id, text, source_path, start_line)` - creates TODO/remainder nodes
+#### TraceGraph Changes (`builder.py`)
 
-2. ✅ Added convenience builder:
-   ```python
-   def build_graph(*contents: ParsedContent, repo_root: Path | None = None) -> TraceGraph
-   ```
+**DELETE these public attributes:**
+```python
+roots: list[GraphNode]           # DELETE - exposes list
+```
 
-3. ✅ Added validation to `make_requirement`:
-   ```python
-   VALID_LEVELS = {"PRD", "OPS", "DEV"}
-   if level not in VALID_LEVELS:
-       raise ValueError(f"Invalid level '{level}'")
-   ```
+**Refactored (iterator-only):**
+```python
+@dataclass
+class TraceGraph:
+    _roots: list[GraphNode] = field(default_factory=list)  # Internal
+    _index: dict[str, GraphNode] = field(default_factory=dict, repr=False)  # Internal
+    repo_root: Path = field(default_factory=Path.cwd)
 
-4. ✅ Added missing string helpers:
-   - `descendants_string(node)` - sorted IDs excluding self
-   - `edges_by_kind_string(node, kind)` - filtered edges
-   - `metrics_string(node, *keys)` - key=value pairs
+    def iter_roots(self) -> Iterator[GraphNode]:
+        """Iterate root nodes."""
+        yield from self._roots
 
-**Also modified**:
-- `src/elspais/graph/builder.py` - Added `_add_test_result()` and `_add_remainder()` handlers
-- `tests/core/test_html/test_generator.py` - Fixed black-box violation in `sample_graph` fixture
+    def find_by_id(self, node_id: str) -> GraphNode | None:
+        """Find single node by ID."""  # Returns node
+        return self._index.get(node_id)
+
+    def all_nodes(self, order: str = "pre") -> Iterator[GraphNode]:
+        """Iterate all nodes."""  # Returns iterator
+        ...
+
+    def nodes_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
+        """Iterate nodes of a kind."""  # Returns iterator
+        ...
+
+    def node_count(self) -> int:
+        """Return count."""  # Returns int
+        return len(self._index)
+```
+
+#### GraphNode Changes (`GraphNode.py`)
+
+**DELETE these public attributes and methods:**
+```python
+children: list[GraphNode]        # DELETE - exposes list
+parents: list[GraphNode]         # DELETE - exposes list
+outgoing_edges: list[Edge]       # DELETE - exposes list
+incoming_edges: list[Edge]       # DELETE - exposes list
+content: dict[str, Any]          # DELETE - exposes dict
+metrics: dict[str, Any]          # DELETE - exposes dict
+
+def edges_by_kind(self, kind) -> list[Edge]:  # DELETE - returns list
+```
+
+**Refactored (iterators + field accessors):**
+```python
+@dataclass
+class GraphNode:
+    id: str
+    kind: NodeKind
+    label: str = ""
+    source: SourceLocation | None = None
+    uuid: str = field(default_factory=lambda: uuid4().hex)  # Stable reference for GUI
+
+    # Internal storage (prefixed)
+    _children: list[GraphNode] = field(default_factory=list)
+    _parents: list[GraphNode] = field(default_factory=list, repr=False)
+    _outgoing_edges: list[Edge] = field(default_factory=list, repr=False)
+    _incoming_edges: list[Edge] = field(default_factory=list, repr=False)
+    _content: dict[str, Any] = field(default_factory=dict)
+    _metrics: dict[str, Any] = field(default_factory=dict)
+
+    # Iterator access
+    def iter_children(self) -> Iterator[GraphNode]:
+        yield from self._children
+
+    def iter_parents(self) -> Iterator[GraphNode]:
+        yield from self._parents
+
+    def iter_outgoing_edges(self) -> Iterator[Edge]:
+        yield from self._outgoing_edges
+
+    def iter_incoming_edges(self) -> Iterator[Edge]:
+        yield from self._incoming_edges
+
+    def iter_edges_by_kind(self, edge_kind: EdgeKind) -> Iterator[Edge]:
+        for e in self._outgoing_edges:
+            if e.kind == edge_kind:
+                yield e
+
+    # Field accessors (return single value)
+    def get_field(self, key: str, default: Any = None) -> Any:
+        return self._content.get(key, default)
+
+    def get_metric(self, key: str, default: Any = None) -> Any:
+        return self._metrics.get(key, default)
+
+    def set_metric(self, key: str, value: Any) -> None:
+        self._metrics[key] = value
+
+    # Convenience properties for common fields
+    @property
+    def level(self) -> str | None:
+        return self._content.get("level")
+
+    @property
+    def status(self) -> str | None:
+        return self._content.get("status")
+
+    @property
+    def hash(self) -> str | None:
+        return self._content.get("hash")
+```
+
+#### UUID for GUI References
+Each node gets a stable UUID (`uuid4().hex`) for direct referencing in HTML/GUI contexts. Unlike `id` (which may contain special characters or be hierarchical like `REQ-p00001-A`), the UUID is a simple 32-char hex string suitable for DOM IDs, URL fragments, and API endpoints.
+
+```python
+from uuid import uuid4
+```
+
+#### Update GraphBuilder to use internal attributes
+The builder sets `_children`, `_parents`, etc. instead of public lists.
 
 ---
 
-### [x] Phase 2: Enhance Fixtures (COMPLETED)
+### [x] Part 1: Graph Factory (`src/elspais/graph/factory.py`) (COMPLETED)
+**Files**: NEW `src/elspais/graph/factory.py`
+**Scope**: Single utility that builds a `TraceGraph` from config/spec directories
 
-**File**: `tests/core/conftest.py`
+#### Purpose
+All commands call this instead of implementing their own file reading.
 
-✅ Added fixtures:
-- `builder()` - Fresh GraphBuilder instance
-- `graph_with_assertions()` - Requirement with A, B, C assertions
-- `comprehensive_graph()` - Requirements + code refs + test refs
-- `git_modified_files()` - GitChangeInfo with modified files
-- `git_untracked_files()` - GitChangeInfo with untracked files
+#### Function Signature
+```python
+def build_graph(
+    config: dict | None = None,
+    spec_dirs: list[Path] | None = None,
+    config_path: Path | None = None,
+) -> TraceGraph:
+    """Build a TraceGraph from spec directories.
 
----
+    Args:
+        config: Pre-loaded config dict (optional)
+        spec_dirs: Explicit spec directories (optional)
+        config_path: Path to config file (optional)
 
-### [x] Phase 3: Fix test_graph_node.py (COMPLETED)
+    Priority: spec_dirs > config > config_path > defaults
 
-**File**: `tests/core/test_graph_node.py`
+    Returns:
+        Complete TraceGraph with all requirements linked.
+    """
+```
 
-1. ✅ **Consolidated enum tests**: Replaced 7 `TestNodeKind` tests with single `test_all_node_kinds_exist`
+#### Implementation Flow
+```python
+from pathlib import Path
+from elspais.config import get_config, get_spec_directories
+from elspais.utilities.patterns import PatternConfig
+from elspais.graph.parsers import ParserRegistry
+from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.journey import JourneyParser
+from elspais.graph.parsers.code import CodeParser
+from elspais.graph.parsers.test import TestParser
+from elspais.graph.deserializer import DomainFile
+from elspais.graph.builder import GraphBuilder, TraceGraph
 
-2. ✅ **Added missing coverage**:
-   - `test_uuid_is_unique_per_node`
-   - `test_set_and_get_field`
-   - `test_set_and_get_metric`
-   - `test_walk_invalid_order_raises`
-   - `test_ancestors_empty_for_root`
-   - `test_find_returns_empty_when_no_match`
+def build_graph(...) -> TraceGraph:
+    # 1. Resolve config
+    if config is None:
+        config = get_config(config_path, Path.cwd())
 
----
+    # 2. Resolve spec directories
+    if spec_dirs is None:
+        spec_dirs = get_spec_directories(None, config)
 
-### [x] Phase 4: Fix test_relations.py (COMPLETED)
+    # 3. Create parser registry with ALL parsers
+    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    registry = ParserRegistry()
+    registry.register(RequirementParser(pattern_config))
+    registry.register(JourneyParser())
+    registry.register(CodeParser())
+    registry.register(TestParser())
 
-**File**: `tests/core/test_relations.py`
+    # 4. Build graph from all spec directories
+    builder = GraphBuilder(repo_root=Path.cwd())
+    for spec_dir in spec_dirs:
+        domain_file = DomainFile(spec_dir, patterns=["*.md"], recursive=True)
+        for parsed_content in domain_file.deserialize(registry):
+            builder.add_parsed_content(parsed_content)
 
-1. ✅ **Consolidated enum tests**: Replaced 5 `TestEdgeKind` tests with single `test_all_edge_kinds_exist`
-
-2. ✅ **Added edge case tests**:
-   - `test_edge_inequality_different_assertion_targets`
-   - `test_edge_equality_with_non_edge`
-
-3. ✅ **Strengthened assertions**: Used exact equality instead of substring contains
-
----
-
-### [x] Phase 5: Fix test_builder.py (COMPLETED)
-
-**File**: `tests/core/test_builder.py`
-
-1. **Add missing content type tests**:
-   - `test_build_creates_journey_nodes`
-   - `test_build_creates_code_ref_nodes`
-   - `test_build_creates_test_ref_nodes`
-   - `test_build_creates_refines_edges`
-   - `test_build_ignores_missing_targets`
-   - `test_node_content_fields_accessible`
-
-2. **Strengthen assertions**: Change `>= 4` to `== 4` in `test_all_nodes_iterator`
-
----
-
-### [x] Phase 6: Fix test_serialize.py (COMPLETED)
-
-**File**: `tests/core/test_serialize.py`
-
-1. **Fix black-box violation**: Change `node._metrics = {...}` to `node.set_metric()`
-
-2. **Fix weak assertion**: Remove OR condition in `test_csv_handles_commas`
-
-3. **Add missing coverage**:
-   - `test_serialize_node_with_parents`
-   - `test_serialize_node_with_edges`
-   - `test_serialize_empty_graph`
-   - `test_csv_handles_quotes`
-
----
-
-### [x] Phase 7: Fix test_annotators.py (COMPLETED)
-
-**File**: `tests/core/test_annotators.py`
-
-1. **Fix all black-box violations** (6+ instances):
-   - Replace `node._content = {...}` with `node.set_field()`
-   - Replace `node._metrics = {...}` with `node.set_metric()`
-   - Replace `graph._index = {...}` with `build_graph()`
-
-2. **Add missing edge cases**:
-   - `test_annotate_git_state_handles_assertion_ids`
-   - `test_get_implementation_status_boundary_99`
-   - `test_get_implementation_status_boundary_1`
-
-3. **Strengthen assertions**: Verify actual content, not just length
+    return builder.build()
+```
 
 ---
 
 ## Verification
 
-After completing all phases:
-
-```bash
-# Run all core tests
-pytest tests/core/ -v
-
-# Verify no black-box violations
-grep -r "node\._content\s*=" tests/core/ --include="*.py"
-grep -r "node\._metrics\s*=" tests/core/ --include="*.py"
-grep -r "graph\._index\s*=" tests/core/ --include="*.py"
-grep -r "graph\._roots\s*=" tests/core/ --include="*.py"
-
-# Should return no matches
-```
-
----
-
-## Execution Order
-
-1. Phase 1 - Enhance helpers (enables cleaner tests)
-2. Phase 2 - Enhance fixtures (reduces boilerplate)
-3. Phase 7 - Fix annotators (most black-box violations)
-4. Phase 6 - Fix serialize (1 black-box violation)
-5. Phase 3 - Fix graph_node (consolidate enums, add coverage)
-6. Phase 4 - Fix relations (consolidate enums, add edge cases)
-7. Phase 5 - Fix builder (add content type coverage)
+1. **Graph API tests**: `pytest tests/graph/ -v` - Verify iterator-only API works
+2. **Factory import**: `python -c "from elspais.graph.factory import build_graph"`
+3. **Verify iterator-only**: Grep GraphNode.py for `-> list` or `-> dict` - should find none in public methods
