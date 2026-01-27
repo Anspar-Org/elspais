@@ -52,7 +52,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         print("No configuration file found. Run 'elspais init' to create one.")
         return 1
 
-    config = load_config(config_path)
+    config = load_config(config_path).get_raw()
     section = getattr(args, "section", None)
 
     if section:
@@ -78,14 +78,16 @@ def cmd_get(args: argparse.Namespace) -> int:
         print("No configuration file found.", file=sys.stderr)
         return 1
 
-    config = load_config(config_path)
+    config_loader = load_config(config_path)
     key = args.key
 
-    value = _get_by_path(config, key)
+    # Use ConfigLoader.get() for dot-notation access
+    value = config_loader.get(key)
     if value is None:
-        # Check if it's truly None vs not found
+        # Check if it's truly None vs not found using raw dict
+        raw = config_loader.get_raw()
         parts = key.split(".")
-        current = config
+        current = raw
         for part in parts[:-1]:
             if part not in current:
                 print(f"Key not found: {key}", file=sys.stderr)
@@ -209,8 +211,8 @@ def cmd_remove(args: argparse.Namespace) -> int:
     user_config = _load_user_config(config_path)
     merged_config = load_config(config_path)
 
-    # Get current merged value to see what's there
-    current = _get_by_path(merged_config, key)
+    # Get current merged value using ConfigLoader.get() for dot-notation access
+    current = merged_config.get(key)
 
     if current is None or not isinstance(current, list):
         print(f"Error: {key} is not an array or doesn't exist", file=sys.stderr)

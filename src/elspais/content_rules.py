@@ -5,8 +5,20 @@ Content rules are markdown files that provide semantic validation guidance
 for requirements authoring. They can include YAML frontmatter for metadata.
 """
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+
+@dataclass
+class ContentRule:
+    """A content rule loaded from a markdown file."""
+
+    file_path: Path
+    title: str
+    content: str
+    type: str = "guidance"
+    applies_to: List[str] = field(default_factory=list)
 
 
 def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:

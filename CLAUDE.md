@@ -9,6 +9,8 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: there is ONE config data struct and one modular system for CRUD operations.
+**IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
+**IMPORTANT**: **DO NOT** consult git history for context. It will only give you bad ideas.
 
 1. **Zero Dependencies**: Uses only Python 3.9+ stdlib. Custom TOML parser in `config/loader.py`.
 
@@ -76,7 +78,7 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Follow this workflow:
 
-1. **Read MASTER_PLAN.md** - Find the first issue with `[ ]` (incomplete) status
+1. **Read MASTER_PLAN.md** - Find the first phase with `[ ]` (incomplete) status
 2. **Refine the plan** - Use sub-agents to:
    - Explore relevant code files
    - Understand the current implementation
@@ -84,8 +86,13 @@ The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Fo
 3. **Implement** - Write the code and tests
 4. **Verify** - Run `pytest` to ensure all tests pass
 5. **Mark complete** - Change `[ ]` to `[x]` in MASTER_PLAN.md
-6. **Commit** - Create a git commit with `[CUR-514]` prefix
+6. **Commit after each phase** - Create a git commit with `[CUR-514]` prefix immediately after completing each phase. Do not batch multiple phases into one commit.
 7. **Clear context** - Suggest `/clear` to the user to free context
-8. **Resume** - After clear, read MASTER_PLAN.md and continue with next issue
+8. **Resume** - After clear, read MASTER_PLAN.md and continue with next phase
 
-This enables iterative implementation of multiple issues across context boundaries.
+**Commit Discipline**: Each phase should result in exactly one commit. This ensures:
+- Atomic, reviewable changes
+- Easy rollback if issues arise
+- Clear progress tracking in git history
+
+This enables iterative implementation of multiple phases across context boundaries.
