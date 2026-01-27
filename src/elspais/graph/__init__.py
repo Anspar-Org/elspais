@@ -6,7 +6,8 @@ Exports:
 - GraphNode: Unified node representation
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
-- TraceGraph: Container for the complete graph
+
+Note: TraceGraph is in elspais.graph.builder (use graph.factory.build_graph() to construct)
 """
 
 from elspais.graph.GraphNode import (
