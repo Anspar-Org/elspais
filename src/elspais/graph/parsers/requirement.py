@@ -223,7 +223,11 @@ class RequirementParser:
         return data
 
     def _parse_refs(self, refs_str: str) -> list[str]:
-        """Parse comma-separated reference list."""
+        """Parse comma-separated reference list.
+
+        Handles both full IDs (REQ-p00001) and shorthand (p00001).
+        Shorthand references are normalized to full IDs using the configured prefix.
+        """
         if not refs_str:
             return []
 
@@ -231,8 +235,19 @@ class RequirementParser:
         if stripped in self.NO_REFERENCE_VALUES:
             return []
 
+        prefix = self.pattern_config.prefix
         parts = [p.strip() for p in refs_str.split(",")]
-        return [p for p in parts if p and p not in self.NO_REFERENCE_VALUES]
+        result = []
+
+        for p in parts:
+            if not p or p in self.NO_REFERENCE_VALUES:
+                continue
+            # Normalize shorthand to full ID (e.g., "o00001" -> "REQ-o00001")
+            if not p.startswith(f"{prefix}-"):
+                p = f"{prefix}-{p}"
+            result.append(p)
+
+        return result
 
     def _expand_multi_assertion(self, refs: list[str]) -> list[str]:
         """Expand multi-assertion syntax.

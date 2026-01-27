@@ -111,6 +111,22 @@ class TestRequirementParserBasic:
         assert len(results) == 1
         assert results[0].parsed_data["implements"] == ["REQ-p00001"]
 
+    def test_parses_implements_shorthand_format(self, parser):
+        """Test that shorthand references (without REQ- prefix) are normalized."""
+        lines = [
+            (1, "## REQ-d00001: Dev Req"),
+            (2, "**Level**: Dev | **Status**: Draft | **Implements**: o00001, o00002"),
+            (3, "Body."),
+            (4, "*End* *REQ-d00001*"),
+        ]
+        ctx = ParseContext(file_path="spec/dev.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        # Shorthand "o00001" should be normalized to "REQ-o00001"
+        assert results[0].parsed_data["implements"] == ["REQ-o00001", "REQ-o00002"]
+
     def test_parses_refines_field(self, parser):
         lines = [
             (1, "## REQ-p00002: Refining Req"),
