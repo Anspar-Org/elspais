@@ -399,7 +399,7 @@ Examples:
   elspais edit --from-json edits.json
 
 JSON batch format:
-  {"edits": [{"req_id": "...", "status": "...", "implements": [...]}]}
+  [{"req_id": "...", "status": "...", "implements": [...]}]
 """,
     )
     edit_parser.add_argument(
