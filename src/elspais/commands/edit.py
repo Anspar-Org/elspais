@@ -49,7 +49,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
-        return run_single_edit(args, base_spec_dir, dry_run)
+        return run_single_edit(args, base_spec_dir, dry_run, validate_refs)
 
     print("Error: Must specify --req-id or --from-json", file=sys.stderr)
     return 1
@@ -94,7 +94,9 @@ def run_batch_edit(
     return 0
 
 
-def run_single_edit(args: argparse.Namespace, spec_dir: Path, dry_run: bool) -> int:
+def run_single_edit(
+    args: argparse.Namespace, spec_dir: Path, dry_run: bool, validate_refs: bool = False
+) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
 
@@ -107,9 +109,28 @@ def run_single_edit(args: argparse.Namespace, spec_dir: Path, dry_run: bool) -> 
     file_path = location["file_path"]
     results = []
 
+    # Collect valid refs if validation is enabled
+    valid_refs: Optional[set] = None
+    if validate_refs:
+        valid_refs = collect_all_req_ids(spec_dir)
+
     # Apply implements change
     if hasattr(args, "implements") and args.implements is not None:
         impl_list = [i.strip() for i in args.implements.split(",")]
+
+        # Validate references if enabled
+        if validate_refs and valid_refs:
+            invalid_refs = []
+            for ref in impl_list:
+                if ref not in valid_refs and f"REQ-{ref}" not in valid_refs:
+                    invalid_refs.append(ref)
+            if invalid_refs:
+                print(
+                    f"Error: Invalid implements references: {', '.join(invalid_refs)}",
+                    file=sys.stderr,
+                )
+                return 1
+
         result = modify_implements(file_path, req_id, impl_list, dry_run=dry_run)
         results.append(("implements", result))
 
