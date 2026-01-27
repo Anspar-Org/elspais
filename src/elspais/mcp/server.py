@@ -612,17 +612,42 @@ def _register_tools(
         Args:
             skip_rules: Optional list of rule names to skip
         """
-        from elspais.rules import RuleEngine, RulesConfig, Severity
+        import fnmatch
+        from elspais.mcp.serializers import RuleViolation, Severity
 
+        graph, _ = ctx.get_graph(force_refresh=True)
         requirements = ctx.get_requirements(force_refresh=True)
-        rules_config = RulesConfig.from_dict(ctx.config.get("rules", {}))
-        engine = RuleEngine(rules_config)
 
-        violations = engine.validate(requirements)
+        # Collect validation issues using graph
+        violations = []
+
+        for node in requirements.values():
+            # Check for orphan requirements (no parents except roots)
+            if node.parent_count() == 0 and (node.level or "").upper() not in ("PRD",):
+                violations.append(RuleViolation(
+                    rule_name="hierarchy.orphan",
+                    requirement_id=node.id,
+                    message=f"Requirement {node.id} has no parent (orphan)",
+                    severity=Severity.WARNING,
+                    location=node.source.path if node.source else None,
+                ))
+
+            # Check for hash presence
+            if not node.hash:
+                violations.append(RuleViolation(
+                    rule_name="hash.missing",
+                    requirement_id=node.id,
+                    message=f"Requirement {node.id} is missing a hash",
+                    severity=Severity.WARNING,
+                    location=node.source.path if node.source else None,
+                ))
 
         # Filter by skip_rules
         if skip_rules:
-            violations = [v for v in violations if v.rule_name not in skip_rules]
+            violations = [
+                v for v in violations
+                if not any(fnmatch.fnmatch(v.rule_name, p) for p in skip_rules)
+            ]
 
         errors = [v for v in violations if v.severity == Severity.ERROR]
         warnings = [v for v in violations if v.severity == Severity.WARNING]
@@ -646,17 +671,28 @@ def _register_tools(
             text: Markdown text containing one or more requirements
             file_path: Optional source file path for location info
         """
-        from elspais.loader import create_parser
+        from elspais.graph.parsers import ParserRegistry
+        from elspais.graph.parsers.requirement import RequirementParser
+        from elspais.utilities.patterns import PatternConfig
 
-        parser = create_parser(ctx.config)
-        path = Path(file_path) if file_path else None
-        requirements = parser.parse_text(text, file_path=path)
+        pattern_config = PatternConfig.from_dict(ctx.config.get("patterns", {}))
+        registry = ParserRegistry()
+        registry.register(RequirementParser(pattern_config))
+
+        # Parse text to extract requirements
+        source_id = file_path or "<text>"
+        parsed_items = list(registry.parse_text(text, source_id))
+
+        requirements = {}
+        for item in parsed_items:
+            if item.content_type == "requirement":
+                req_id = item.parsed_data.get("id", "")
+                if req_id:
+                    requirements[req_id] = item.parsed_data
 
         return {
             "count": len(requirements),
-            "requirements": {
-                req_id: serialize_requirement(req) for req_id, req in requirements.items()
-            },
+            "requirements": requirements,
         }
 
     @mcp.tool()
