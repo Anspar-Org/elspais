@@ -71,10 +71,21 @@ def build_graph(
     # 4. Build graph from all spec directories
     builder = GraphBuilder(repo_root=repo_root)
 
+    # Get skip configuration
+    spec_config = config.get("spec", {})
+    skip_dirs = spec_config.get("skip_dirs", [])
+    skip_files = spec_config.get("skip_files", [])
+
     for spec_dir in spec_dirs:
         # Get file patterns from config
-        file_patterns = config.get("spec", {}).get("patterns", ["*.md"])
-        domain_file = DomainFile(spec_dir, patterns=file_patterns, recursive=True)
+        file_patterns = spec_config.get("patterns", ["*.md"])
+        domain_file = DomainFile(
+            spec_dir,
+            patterns=file_patterns,
+            recursive=True,
+            skip_dirs=skip_dirs,
+            skip_files=skip_files,
+        )
 
         for parsed_content in domain_file.deserialize(registry):
             builder.add_parsed_content(parsed_content)

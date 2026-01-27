@@ -85,3 +85,73 @@ class TestDomainFile:
         for result in results:
             assert hasattr(result, "source_context")
             assert "prd.md" in result.source_context.source_id
+
+    def test_skip_dirs_filters_subdirectories(self, temp_spec_dir):
+        """Test that skip_dirs excludes files in specified subdirectories."""
+        # Create a roadmap subdirectory with a file
+        roadmap_dir = temp_spec_dir / "roadmap"
+        roadmap_dir.mkdir()
+        roadmap_file = roadmap_dir / "future.md"
+        roadmap_file.write_text("# Future\n\nSome future content.")
+
+        # Without skip_dirs - should include roadmap file
+        deserializer = DomainFile(temp_spec_dir, patterns=["*.md"], recursive=True)
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+        assert any("roadmap" in s for s in source_paths), "Should include roadmap without skip"
+
+        # With skip_dirs - should exclude roadmap file
+        deserializer = DomainFile(
+            temp_spec_dir, patterns=["*.md"], recursive=True, skip_dirs=["roadmap"]
+        )
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+        assert not any("roadmap" in s for s in source_paths), "Should exclude roadmap with skip"
+
+    def test_skip_files_filters_specific_files(self, temp_spec_dir):
+        """Test that skip_files excludes files with specified names."""
+        # Create a README.md file
+        readme = temp_spec_dir / "README.md"
+        readme.write_text("# README\n\nThis is a readme.")
+
+        # Without skip_files - should include README.md
+        deserializer = DomainFile(temp_spec_dir, patterns=["*.md"])
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+        assert any("README.md" in s for s in source_paths), "Should include README without skip"
+
+        # With skip_files - should exclude README.md
+        deserializer = DomainFile(
+            temp_spec_dir, patterns=["*.md"], skip_files=["README.md"]
+        )
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+        assert not any("README.md" in s for s in source_paths), "Should exclude README with skip"
+
+    def test_skip_dirs_and_files_combined(self, temp_spec_dir):
+        """Test that skip_dirs and skip_files work together."""
+        # Create a roadmap subdirectory with files
+        roadmap_dir = temp_spec_dir / "roadmap"
+        roadmap_dir.mkdir()
+        (roadmap_dir / "future.md").write_text("# Future")
+
+        # Create INDEX.md
+        (temp_spec_dir / "INDEX.md").write_text("# Index")
+
+        deserializer = DomainFile(
+            temp_spec_dir,
+            patterns=["*.md"],
+            recursive=True,
+            skip_dirs=["roadmap"],
+            skip_files=["INDEX.md"],
+        )
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+
+        # Should not contain roadmap or INDEX.md
+        assert not any("roadmap" in s for s in source_paths)
+        assert not any("INDEX.md" in s for s in source_paths)
+
+        # But should contain the original prd.md and ops.md
+        assert any("prd.md" in s for s in source_paths)
+        assert any("ops.md" in s for s in source_paths)

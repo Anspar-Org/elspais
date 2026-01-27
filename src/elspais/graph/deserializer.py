@@ -82,6 +82,8 @@ class DomainFile:
         path: Path | str,
         patterns: list[str] | None = None,
         recursive: bool = False,
+        skip_dirs: list[str] | None = None,
+        skip_files: list[str] | None = None,
     ) -> None:
         """Initialize file deserializer.
 
@@ -89,10 +91,43 @@ class DomainFile:
             path: Path to file or directory.
             patterns: Glob patterns for directory (default: ["*.md"]).
             recursive: Whether to search recursively.
+            skip_dirs: Directory names to skip (e.g., ["roadmap", "reference"]).
+            skip_files: File names to skip (e.g., ["README.md", "INDEX.md"]).
         """
         self.path = Path(path)
         self.patterns = patterns or ["*.md"]
         self.recursive = recursive
+        self.skip_dirs = skip_dirs or []
+        self.skip_files = skip_files or []
+
+    def _should_skip(self, file_path: Path) -> bool:
+        """Check if a file should be skipped based on skip_dirs and skip_files.
+
+        Args:
+            file_path: Path to check.
+
+        Returns:
+            True if the file should be skipped.
+        """
+        # Check if file name matches skip_files
+        if file_path.name in self.skip_files:
+            return True
+
+        # Check if any parent directory matches skip_dirs
+        # Get path relative to base to check directory names
+        try:
+            rel_path = file_path.relative_to(self.path)
+            # Check each part of the relative path (excluding the file name)
+            for part in rel_path.parts[:-1]:
+                if part in self.skip_dirs:
+                    return True
+        except ValueError:
+            # file_path is not relative to self.path, check absolute path parts
+            for part in file_path.parts:
+                if part in self.skip_dirs:
+                    return True
+
+        return False
 
     def iterate_sources(self) -> Iterator[tuple[DomainContext, str]]:
         """Iterate over file sources.
@@ -101,7 +136,8 @@ class DomainFile:
             Tuples of (DomainContext, file_content).
         """
         if self.path.is_file():
-            yield self._read_file(self.path)
+            if not self._should_skip(self.path):
+                yield self._read_file(self.path)
         elif self.path.is_dir():
             for pattern in self.patterns:
                 if self.recursive:
@@ -110,7 +146,7 @@ class DomainFile:
                     file_iter = self.path.glob(pattern)
 
                 for file_path in sorted(file_iter):
-                    if file_path.is_file():
+                    if file_path.is_file() and not self._should_skip(file_path):
                         yield self._read_file(file_path)
 
     def _read_file(self, file_path: Path) -> tuple[DomainContext, str]:
