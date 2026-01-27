@@ -155,8 +155,8 @@ def find_requirement_in_files(
     Returns:
         Dict with file_path, req_id, line_number, or None if not found
     """
-    # Pattern to match requirement header
-    pattern = re.compile(rf"^#\s*{re.escape(req_id)}:", re.MULTILINE)
+    # Pattern to match requirement header (any markdown header level ##, ###, etc.)
+    pattern = re.compile(rf"^#+\s*{re.escape(req_id)}:", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
@@ -193,8 +193,8 @@ def modify_implements(
     """
     content = file_path.read_text()
 
-    # Find the requirement header
-    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
+    # Find the requirement header (any markdown header level)
+    req_pattern = re.compile(rf"^(#+\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
     req_match = req_pattern.search(content)
 
     if not req_match:
@@ -270,8 +270,8 @@ def modify_status(
     """
     content = file_path.read_text()
 
-    # Find the requirement header
-    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
+    # Find the requirement header (any markdown header level)
+    req_pattern = re.compile(rf"^(#+\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
     req_match = req_pattern.search(content)
 
     if not req_match:
@@ -339,9 +339,9 @@ def move_requirement(
     source_content = source_file.read_text()
 
     # Find the requirement block
-    # Pattern: # REQ-xxx: title ... *End* *title* | **Hash**: xxx\n---
+    # Pattern: ## REQ-xxx: title ... *End* *title* | **Hash**: xxx\n---
     req_pattern = re.compile(
-        rf"(^#\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
+        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
         re.MULTILINE | re.DOTALL,
     )
 
@@ -398,7 +398,7 @@ def collect_all_req_ids(spec_dir: Path) -> set:
     import re
 
     req_ids = set()
-    pattern = re.compile(r"^#\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
+    pattern = re.compile(r"^#+\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
