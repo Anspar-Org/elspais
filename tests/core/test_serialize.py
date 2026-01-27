@@ -104,8 +104,9 @@ class TestSerializeNode:
             kind=NodeKind.REQUIREMENT,
             label="Test",
         )
-        # Set metrics after construction (private field has init=False)
-        node._metrics = {"coverage_pct": 75.0, "total_tests": 5}
+        # Use public API to set metrics
+        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("total_tests", 5)
 
         result = serialize_node(node)
 
@@ -208,5 +209,59 @@ class TestToCsv:
 
         result = to_csv(graph)
 
-        # Comma should be escaped with quotes
-        assert '"Title with, comma"' in result or "Title with comma" in result
+        # Comma should be properly quoted in CSV
+        assert '"Title with, comma"' in result
+
+    def test_csv_handles_quotes(self):
+        """Escapes quotes in values."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement(
+            "REQ-test",
+            title='Title with "quotes"',
+            level="PRD",
+            status="Active",
+        ))
+        graph = builder.build()
+
+        result = to_csv(graph)
+
+        # Quotes should be escaped by doubling them per CSV spec
+        assert '"Title with ""quotes"""' in result
+
+
+class TestSerializeAdditionalCoverage:
+    """Additional coverage tests for serialization."""
+
+    def test_serialize_node_with_parents(self, sample_graph):
+        """Includes parent IDs in serialization."""
+        node = sample_graph.find_by_id("REQ-o00001")
+
+        result = serialize_node(node)
+
+        assert "parents" in result
+        assert "REQ-p00001" in result["parents"]
+
+    def test_serialize_node_with_edges(self, sample_graph):
+        """Includes edge information in serialization."""
+        node = sample_graph.find_by_id("REQ-p00001")
+
+        result = serialize_node(node)
+
+        # Should have outgoing edges to children
+        assert "edges" in result
+        # Should include implements edge to child requirement REQ-o00001
+        edge_targets = [e.get("target") for e in result["edges"]]
+        assert "REQ-o00001" in edge_targets
+
+    def test_serialize_empty_graph(self):
+        """Serializes empty graph correctly."""
+        builder = GraphBuilder()
+        graph = builder.build()
+
+        result = serialize_graph(graph)
+
+        # serialize_graph returns nodes as a dict keyed by ID
+        assert result["nodes"] == {}
+        assert result["roots"] == []
+        assert result["metadata"]["node_count"] == 0
+        assert result["metadata"]["root_count"] == 0
