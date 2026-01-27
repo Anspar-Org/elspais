@@ -42,11 +42,9 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - `elspais[all]`: All optional features
     Missing dependencies produce clear installation instructions.
 
-14. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
+14. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
 
-15. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
-
-16. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
+15. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
 
 **Multi-Language Comment Support:**
