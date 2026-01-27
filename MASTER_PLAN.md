@@ -78,13 +78,13 @@ This file contains a prioritized queue of enhancement issues for iterative imple
 
 ---
 
-### [ ] Phase 3: Fix test_graph_node.py
+### [x] Phase 3: Fix test_graph_node.py (COMPLETED)
 
 **File**: `tests/core/test_graph_node.py`
 
-1. **Consolidate enum tests**: Replace 7 `TestNodeKind` tests with single `test_all_node_kinds_exist`
+1. ✅ **Consolidated enum tests**: Replaced 7 `TestNodeKind` tests with single `test_all_node_kinds_exist`
 
-2. **Add missing coverage**:
+2. ✅ **Added missing coverage**:
    - `test_uuid_is_unique_per_node`
    - `test_set_and_get_field`
    - `test_set_and_get_metric`

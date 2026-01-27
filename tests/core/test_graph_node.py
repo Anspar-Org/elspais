@@ -17,26 +17,20 @@ from tests.core.graph_test_helpers import (
 class TestNodeKind:
     """Tests for NodeKind enum."""
 
-    def test_requirement_kind_exists(self):
-        assert NodeKind.REQUIREMENT.value == "requirement"
-
-    def test_assertion_kind_exists(self):
-        assert NodeKind.ASSERTION.value == "assertion"
-
-    def test_code_kind_exists(self):
-        assert NodeKind.CODE.value == "code"
-
-    def test_test_kind_exists(self):
-        assert NodeKind.TEST.value == "test"
-
-    def test_result_kind_exists(self):
-        assert NodeKind.TEST_RESULT.value == "result"
-
-    def test_journey_kind_exists(self):
-        assert NodeKind.USER_JOURNEY.value == "journey"
-
-    def test_todo_kind_exists(self):
-        assert NodeKind.TODO.value == "todo"
+    def test_all_node_kinds_exist(self):
+        """All expected node kinds exist with correct values."""
+        expected = {
+            "REQUIREMENT": "requirement",
+            "ASSERTION": "assertion",
+            "CODE": "code",
+            "TEST": "test",
+            "TEST_RESULT": "result",
+            "USER_JOURNEY": "journey",
+            "TODO": "todo",
+        }
+        for name, value in expected.items():
+            kind = getattr(NodeKind, name)
+            assert kind.value == value, f"NodeKind.{name} should have value '{value}'"
 
 
 class TestSourceLocation:
@@ -252,3 +246,67 @@ class TestGraphNodeTraversal:
 
         found = list(root.find(lambda n: "Auth" in n.label))
         assert len(found) == 2  # Both contain "Auth"
+
+
+class TestGraphNodeAdditionalCoverage:
+    """Additional coverage tests for GraphNode."""
+
+    def test_uuid_is_unique_per_node(self):
+        """Each node gets a unique UUID."""
+        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
+        node3 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)  # Same id
+
+        # All UUIDs should be unique even with same node id
+        assert node1.uuid != node2.uuid
+        assert node1.uuid != node3.uuid
+        assert node2.uuid != node3.uuid
+        # UUID is 32 hex chars
+        assert len(node1.uuid) == 32
+
+    def test_set_and_get_field(self):
+        """Test field setter and getter."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        node.set_field("level", "PRD")
+        node.set_field("status", "Active")
+
+        assert node.get_field("level") == "PRD"
+        assert node.get_field("status") == "Active"
+        assert node.get_field("nonexistent") is None
+        assert node.get_field("nonexistent", "default") == "default"
+
+    def test_set_and_get_metric(self):
+        """Test metric setter and getter."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        node.set_metric("coverage", 75.5)
+        node.set_metric("test_count", 3)
+
+        assert node.get_metric("coverage") == 75.5
+        assert node.get_metric("test_count") == 3
+        assert node.get_metric("nonexistent") is None
+        assert node.get_metric("nonexistent", 0) == 0
+
+    def test_walk_invalid_order_raises(self):
+        """Invalid walk order raises ValueError."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        with pytest.raises(ValueError, match="Unknown traversal order"):
+            list(node.walk("invalid"))
+
+    def test_ancestors_empty_for_root(self):
+        """Root node has no ancestors."""
+        root = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        ancestors = list(root.ancestors())
+        assert ancestors == []
+
+    def test_find_returns_empty_when_no_match(self):
+        """find() returns empty iterator when predicate never matches."""
+        root = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        root.add_child(child)
+
+        found = list(root.find(lambda n: n.kind == NodeKind.CODE))
+        assert found == []
