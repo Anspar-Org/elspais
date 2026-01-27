@@ -74,7 +74,7 @@ class TestFullPipeline:
 
         # REQ-p00001 should have 3 assertions
         p00001 = graph.find_by_id("REQ-p00001")
-        assertions = [c for c in p00001.children if c.kind == NodeKind.ASSERTION]
+        assertions = [c for c in p00001.iter_children() if c.kind == NodeKind.ASSERTION]
         assert len(assertions) == 3
 
         # Verify assertion IDs
@@ -104,7 +104,7 @@ class TestFullPipeline:
         p00001_A = graph.find_by_id("REQ-p00001-A")
 
         # OPS req should have assertion as parent
-        assert p00001_A in o00001.parents
+        assert o00001.has_parent(p00001_A)
 
     def test_pipeline_identifies_roots(self, integration_spec_dir):
         """Verify root nodes are correctly identified."""
@@ -123,13 +123,12 @@ class TestFullPipeline:
         graph = builder.build()
 
         # Only PRD requirements should be roots (no parents)
-        root_ids = {r.id for r in graph.roots}
-        assert "REQ-p00001" in root_ids
-        assert "REQ-p00002" in root_ids
+        assert graph.has_root("REQ-p00001")
+        assert graph.has_root("REQ-p00002")
 
         # OPS requirements have parents, so not roots
-        assert "REQ-o00001" not in root_ids
-        assert "REQ-o00002" not in root_ids
+        assert not graph.has_root("REQ-o00001")
+        assert not graph.has_root("REQ-o00002")
 
     def test_pipeline_node_counts(self, integration_spec_dir):
         """Verify expected node counts by type."""

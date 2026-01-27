@@ -111,7 +111,7 @@ class TestRealWorldSpecs:
         graph = builder.build()
 
         # Should have at least one root (top-level PRD req)
-        assert len(graph.roots) > 0
+        assert graph.root_count() > 0
 
     def test_assertions_are_created(self, parser_registry):
         """Verify assertions are extracted from requirements."""
@@ -147,7 +147,7 @@ class TestRealWorldSpecs:
         # Count requirements with parents (i.e., they implement something)
         reqs_with_parents = [
             n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)
-            if n.parents
+            if not n.is_root
         ]
 
         # Should have at least some hierarchical relationships

@@ -46,6 +46,11 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 15. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
+16. **Iterator-Only Graph API**: The graph uses an iterator-only API to prevent accidental list materialization:
+    - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`.
+    - **TraceGraph**: Use `iter_roots()` for traversal. Use `root_count()`, `has_root()` for checks. Internal storage uses `_roots`, `_index` prefixed attributes.
+    - **UUID for GUI**: Each node has a stable `uuid` (32-char hex) for DOM IDs and API endpoints.
+
 
 **Multi-Language Comment Support:**
 

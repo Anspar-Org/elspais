@@ -76,13 +76,13 @@ class HTMLGenerator:
         rows = []
         for node in requirements:
             req_id = html.escape(node.id)
-            level = html.escape(node.content.get("level", ""))
+            level = html.escape(node.get_field("level", ""))
             title = html.escape(node.label or "")
-            status = html.escape(node.content.get("status", ""))
+            status = html.escape(node.get_field("status", ""))
 
             # Get implements (from incoming edges)
             implements = []
-            for edge in node.incoming_edges:
+            for edge in node.iter_incoming_edges():
                 if edge.kind == EdgeKind.IMPLEMENTS:
                     implements.append(edge.source.id)
 
@@ -123,9 +123,10 @@ class HTMLGenerator:
             data[node.id] = {
                 "id": node.id,
                 "label": node.label,
-                "level": node.content.get("level"),
-                "status": node.content.get("status"),
-                "hash": node.content.get("hash"),
+                "uuid": node.uuid,
+                "level": node.get_field("level"),
+                "status": node.get_field("status"),
+                "hash": node.get_field("hash"),
                 "source": {
                     "path": node.source.path if node.source else None,
                     "line": node.source.line if node.source else None,

@@ -81,8 +81,8 @@ class TestGraphBuilder:
         parent = graph.find_by_id("REQ-p00001")
         assertion_a = graph.find_by_id("REQ-p00001-A")
 
-        assert assertion_a in parent.children
-        assert parent in assertion_a.parents
+        assert parent.has_child(assertion_a)
+        assert assertion_a.has_parent(parent)
 
     def test_build_creates_implements_edges(self, sample_requirements):
         builder = GraphBuilder()
@@ -96,7 +96,7 @@ class TestGraphBuilder:
         assertion_a = graph.find_by_id("REQ-p00001-A")
 
         # OPS req should implement assertion A
-        assert assertion_a in ops_req.parents
+        assert ops_req.has_parent(assertion_a)
 
     def test_roots_are_top_level_requirements(self, sample_requirements):
         builder = GraphBuilder()
@@ -106,9 +106,8 @@ class TestGraphBuilder:
 
         graph = builder.build()
 
-        root_ids = [r.id for r in graph.roots]
-        assert "REQ-p00001" in root_ids
-        assert "REQ-o00001" not in root_ids  # Has parent via implements
+        assert graph.has_root("REQ-p00001")
+        assert not graph.has_root("REQ-o00001")  # Has parent via implements
 
 
 class TestTraceGraph:

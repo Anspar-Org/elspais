@@ -20,16 +20,27 @@ class TraceGraph:
     """Container for the complete traceability graph.
 
     Provides indexed access to all nodes and methods for graph-wide
-    operations.
+    operations. Uses iterator-only API for traversal.
 
     Attributes:
-        roots: Top-level nodes (requirements with no implements).
         repo_root: Path to the repository root.
     """
 
-    roots: list[GraphNode] = field(default_factory=list)
-    repo_root: Path = field(default_factory=Path.cwd)
+    _roots: list[GraphNode] = field(default_factory=list)
     _index: dict[str, GraphNode] = field(default_factory=dict, repr=False)
+    repo_root: Path = field(default_factory=Path.cwd)
+
+    def iter_roots(self) -> Iterator[GraphNode]:
+        """Iterate root nodes."""
+        yield from self._roots
+
+    def root_count(self) -> int:
+        """Return number of root nodes."""
+        return len(self._roots)
+
+    def has_root(self, node_id: str) -> bool:
+        """Check if a node ID is a root."""
+        return any(r.id == node_id for r in self._roots)
 
     def find_by_id(self, node_id: str) -> GraphNode | None:
         """Find node by ID.
@@ -51,7 +62,7 @@ class TraceGraph:
         Yields:
             All GraphNode instances in the graph.
         """
-        for root in self.roots:
+        for root in self._roots:
             yield from root.walk(order)
 
     def nodes_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
@@ -128,7 +139,7 @@ class GraphBuilder:
             kind=NodeKind.REQUIREMENT,
             label=data.get("title", ""),
             source=source,
-            content={
+            _content={
                 "level": data.get("level"),
                 "status": data.get("status"),
                 "hash": data.get("hash"),
@@ -143,7 +154,7 @@ class GraphBuilder:
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
                 label=assertion["text"],
-                content={"label": assertion["label"]},
+                _content={"label": assertion["label"]},
             )
             self._nodes[assertion_id] = assertion_node
 
@@ -166,7 +177,7 @@ class GraphBuilder:
             id=journey_id,
             kind=NodeKind.USER_JOURNEY,
             label=data.get("title", ""),
-            content={
+            _content={
                 "actor": data.get("actor"),
                 "goal": data.get("goal"),
             },
@@ -229,7 +240,7 @@ class GraphBuilder:
         # Identify roots (nodes with no parents)
         roots = [
             node for node in self._nodes.values()
-            if not node.parents and node.kind == NodeKind.REQUIREMENT
+            if not node._parents and node.kind == NodeKind.REQUIREMENT
         ]
 
         # Also include journeys as roots
@@ -239,7 +250,7 @@ class GraphBuilder:
         )
 
         return TraceGraph(
-            roots=roots,
+            _roots=roots,
             repo_root=self.repo_root,
             _index=dict(self._nodes),
         )

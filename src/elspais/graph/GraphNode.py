@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from elspais.graph.relations import Edge, EdgeKind
@@ -67,24 +68,105 @@ class GraphNode:
         kind: The type of node (requirement, assertion, etc.).
         label: Human-readable display label.
         source: Where this node is defined in source files.
-        content: Typed data based on node kind (dict for flexibility).
-        children: Child nodes (populated via link()).
-        parents: Parent nodes (DAG - multiple parents allowed).
-        outgoing_edges: Edges from this node to children.
-        incoming_edges: Edges from parents to this node.
-        metrics: Mutable storage for computed metrics.
+        uuid: Stable 32-char hex string for GUI/DOM referencing.
     """
 
     id: str
     kind: NodeKind
     label: str = ""
     source: SourceLocation | None = None
-    content: dict[str, Any] = field(default_factory=dict)
-    children: list[GraphNode] = field(default_factory=list)
-    parents: list[GraphNode] = field(default_factory=list, repr=False)
-    outgoing_edges: list[Edge] = field(default_factory=list, repr=False)
-    incoming_edges: list[Edge] = field(default_factory=list, repr=False)
-    metrics: dict[str, Any] = field(default_factory=dict)
+    uuid: str = field(default_factory=lambda: uuid4().hex)
+
+    # Internal storage (prefixed)
+    _children: list[GraphNode] = field(default_factory=list)
+    _parents: list[GraphNode] = field(default_factory=list, repr=False)
+    _outgoing_edges: list[Edge] = field(default_factory=list, repr=False)
+    _incoming_edges: list[Edge] = field(default_factory=list, repr=False)
+    _content: dict[str, Any] = field(default_factory=dict)
+    _metrics: dict[str, Any] = field(default_factory=dict)
+
+    # Iterator access
+    def iter_children(self) -> Iterator[GraphNode]:
+        """Iterate over child nodes."""
+        yield from self._children
+
+    def iter_parents(self) -> Iterator[GraphNode]:
+        """Iterate over parent nodes."""
+        yield from self._parents
+
+    def iter_outgoing_edges(self) -> Iterator[Edge]:
+        """Iterate over outgoing edges."""
+        yield from self._outgoing_edges
+
+    def iter_incoming_edges(self) -> Iterator[Edge]:
+        """Iterate over incoming edges."""
+        yield from self._incoming_edges
+
+    def iter_edges_by_kind(self, edge_kind: EdgeKind) -> Iterator[Edge]:
+        """Iterate outgoing edges of a specific kind."""
+        for e in self._outgoing_edges:
+            if e.kind == edge_kind:
+                yield e
+
+    # Count and membership checks (avoid materializing lists)
+    def child_count(self) -> int:
+        """Return number of children."""
+        return len(self._children)
+
+    def parent_count(self) -> int:
+        """Return number of parents."""
+        return len(self._parents)
+
+    def has_child(self, node: GraphNode) -> bool:
+        """Check if node is a child."""
+        return node in self._children
+
+    def has_parent(self, node: GraphNode) -> bool:
+        """Check if node is a parent."""
+        return node in self._parents
+
+    @property
+    def is_root(self) -> bool:
+        """True if this node has no parents."""
+        return len(self._parents) == 0
+
+    @property
+    def is_leaf(self) -> bool:
+        """True if this node has no children."""
+        return len(self._children) == 0
+
+    # Field accessors (return single value)
+    def get_field(self, key: str, default: Any = None) -> Any:
+        """Get a field from content."""
+        return self._content.get(key, default)
+
+    def set_field(self, key: str, value: Any) -> None:
+        """Set a field in content."""
+        self._content[key] = value
+
+    def get_metric(self, key: str, default: Any = None) -> Any:
+        """Get a metric value."""
+        return self._metrics.get(key, default)
+
+    def set_metric(self, key: str, value: Any) -> None:
+        """Set a metric value."""
+        self._metrics[key] = value
+
+    # Convenience properties for common fields
+    @property
+    def level(self) -> str | None:
+        """Get the requirement level (PRD, OPS, DEV)."""
+        return self._content.get("level")
+
+    @property
+    def status(self) -> str | None:
+        """Get the requirement status."""
+        return self._content.get("status")
+
+    @property
+    def hash(self) -> str | None:
+        """Get the content hash."""
+        return self._content.get("hash")
 
     def add_child(self, child: GraphNode) -> None:
         """Add a child node with bidirectional linking.
@@ -95,10 +177,10 @@ class GraphNode:
         Args:
             child: The child node to add.
         """
-        if child not in self.children:
-            self.children.append(child)
-        if self not in child.parents:
-            child.parents.append(self)
+        if child not in self._children:
+            self._children.append(child)
+        if self not in child._parents:
+            child._parents.append(self)
 
     def link(
         self,
@@ -127,27 +209,16 @@ class GraphNode:
         )
 
         # Add bidirectional node links
-        if child not in self.children:
-            self.children.append(child)
-        if self not in child.parents:
-            child.parents.append(self)
+        if child not in self._children:
+            self._children.append(child)
+        if self not in child._parents:
+            child._parents.append(self)
 
         # Track edges
-        self.outgoing_edges.append(edge)
-        child.incoming_edges.append(edge)
+        self._outgoing_edges.append(edge)
+        child._incoming_edges.append(edge)
 
         return edge
-
-    def edges_by_kind(self, edge_kind: EdgeKind) -> list[Edge]:
-        """Get outgoing edges of a specific kind.
-
-        Args:
-            edge_kind: The edge type to filter by.
-
-        Returns:
-            List of matching edges.
-        """
-        return [e for e in self.outgoing_edges if e.kind == edge_kind]
 
     @property
     def depth(self) -> int:
@@ -155,9 +226,9 @@ class GraphNode:
 
         For DAG structures, returns minimum depth (shortest path to root).
         """
-        if not self.parents:
+        if not self._parents:
             return 0
-        return 1 + min(p.depth for p in self.parents)
+        return 1 + min(p.depth for p in self._parents)
 
     def walk(self, order: str = "pre") -> Iterator[GraphNode]:
         """Iterate over this node and descendants.
@@ -183,12 +254,12 @@ class GraphNode:
     def _walk_preorder(self) -> Iterator[GraphNode]:
         """Pre-order traversal (parent before children)."""
         yield self
-        for child in self.children:
+        for child in self._children:
             yield from child._walk_preorder()
 
     def _walk_postorder(self) -> Iterator[GraphNode]:
         """Post-order traversal (children before parent)."""
-        for child in self.children:
+        for child in self._children:
             yield from child._walk_postorder()
         yield self
 
@@ -198,7 +269,7 @@ class GraphNode:
         while queue:
             node = queue.popleft()
             yield node
-            queue.extend(node.children)
+            queue.extend(node._children)
 
     def ancestors(self) -> Iterator[GraphNode]:
         """Iterate up through all ancestor paths (BFS).
@@ -209,13 +280,13 @@ class GraphNode:
             Ancestor GraphNode instances.
         """
         visited: set[str] = set()
-        queue: deque[GraphNode] = deque(self.parents)
+        queue: deque[GraphNode] = deque(self._parents)
         while queue:
             node = queue.popleft()
             if node.id not in visited:
                 visited.add(node.id)
                 yield node
-                queue.extend(node.parents)
+                queue.extend(node._parents)
 
     def find(self, predicate: Callable[[GraphNode], bool]) -> Iterator[GraphNode]:
         """Find all descendants matching predicate.

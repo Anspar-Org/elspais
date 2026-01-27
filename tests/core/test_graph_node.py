@@ -74,10 +74,10 @@ class TestGraphNode:
         assert node.kind == NodeKind.REQUIREMENT
         assert node.label == ""  # Default empty
         assert node.source is None
-        assert node.children == []
-        assert node.parents == []
-        assert node.content == {}
-        assert node.metrics == {}
+        assert node.child_count() == 0
+        assert node.parent_count() == 0
+        assert node.is_root
+        assert node.is_leaf
 
     def test_create_with_label(self):
         node = GraphNode(
@@ -102,10 +102,10 @@ class TestGraphNode:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            content={"title": "Auth", "status": "Active"},
+            _content={"title": "Auth", "status": "Active"},
         )
-        assert node.content["title"] == "Auth"
-        assert node.content["status"] == "Active"
+        assert node.get_field("title") == "Auth"
+        assert node.get_field("status") == "Active"
 
     def test_add_child(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -113,8 +113,8 @@ class TestGraphNode:
 
         parent.add_child(child)
 
-        assert child in parent.children
-        assert parent in child.parents
+        assert parent.has_child(child)
+        assert child.has_parent(parent)
 
     def test_add_child_is_idempotent(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -123,8 +123,8 @@ class TestGraphNode:
         parent.add_child(child)
         parent.add_child(child)  # Add again
 
-        assert len(parent.children) == 1
-        assert len(child.parents) == 1
+        assert parent.child_count() == 1
+        assert child.parent_count() == 1
 
     def test_depth_for_root(self):
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)

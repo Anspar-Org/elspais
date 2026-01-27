@@ -34,9 +34,9 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, git_info)
 
-        assert node.metrics["is_uncommitted"] is True
-        assert node.metrics["is_modified"] is True
-        assert node.metrics["is_untracked"] is False
+        assert node.get_metric("is_uncommitted") is True
+        assert node.get_metric("is_modified") is True
+        assert node.get_metric("is_untracked") is False
 
     def test_annotates_untracked(self):
         """Marks node as untracked when file is new."""
@@ -51,9 +51,9 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, git_info)
 
-        assert node.metrics["is_uncommitted"] is True
-        assert node.metrics["is_untracked"] is True
-        assert node.metrics["is_new"] is True
+        assert node.get_metric("is_uncommitted") is True
+        assert node.get_metric("is_untracked") is True
+        assert node.get_metric("is_new") is True
 
     def test_annotates_branch_changed(self):
         """Marks node when file differs from main branch."""
@@ -68,7 +68,7 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, git_info)
 
-        assert node.metrics["is_branch_changed"] is True
+        assert node.get_metric("is_branch_changed") is True
 
     def test_annotates_moved(self):
         """Marks node as moved when file location changed."""
@@ -76,7 +76,7 @@ class TestAnnotateGitState:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
             source=SourceLocation(path="spec/new.md", line=1),
-            content={"id": "REQ-p00001"},
+            _content={"id": "REQ-p00001"},
         )
         git_info = GitChangeInfo(
             committed_req_locations={"p00001": "spec/old.md"},
@@ -84,7 +84,7 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, git_info)
 
-        assert node.metrics["is_moved"] is True
+        assert node.get_metric("is_moved") is True
 
     def test_defaults_to_false(self):
         """All git states default to False when no git info."""
@@ -96,12 +96,12 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, None)
 
-        assert node.metrics["is_uncommitted"] is False
-        assert node.metrics["is_modified"] is False
-        assert node.metrics["is_untracked"] is False
-        assert node.metrics["is_branch_changed"] is False
-        assert node.metrics["is_moved"] is False
-        assert node.metrics["is_new"] is False
+        assert node.get_metric("is_uncommitted") is False
+        assert node.get_metric("is_modified") is False
+        assert node.get_metric("is_untracked") is False
+        assert node.get_metric("is_branch_changed") is False
+        assert node.get_metric("is_moved") is False
+        assert node.get_metric("is_new") is False
 
     def test_skips_non_requirement_nodes(self):
         """Does not annotate non-requirement nodes."""
@@ -113,7 +113,7 @@ class TestAnnotateGitState:
 
         annotate_git_state(node, git_info)
 
-        assert "is_uncommitted" not in node.metrics
+        assert node.get_metric("is_uncommitted") is None
 
 
 class TestAnnotateDisplayInfo:
@@ -129,7 +129,7 @@ class TestAnnotateDisplayInfo:
 
         annotate_display_info(node)
 
-        assert node.metrics["is_roadmap"] is True
+        assert node.get_metric("is_roadmap") is True
 
     def test_annotates_not_roadmap(self):
         """Marks node as not roadmap when not in roadmap directory."""
@@ -141,20 +141,20 @@ class TestAnnotateDisplayInfo:
 
         annotate_display_info(node)
 
-        assert node.metrics["is_roadmap"] is False
+        assert node.get_metric("is_roadmap") is False
 
     def test_annotates_conflict(self):
         """Marks node as conflict when is_conflict is True."""
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            content={"is_conflict": True, "conflict_with": "REQ-p00001__conflict"},
+            _content={"is_conflict": True, "conflict_with": "REQ-p00001__conflict"},
         )
 
         annotate_display_info(node)
 
-        assert node.metrics["is_conflict"] is True
-        assert node.metrics["conflict_with"] == "REQ-p00001__conflict"
+        assert node.get_metric("is_conflict") is True
+        assert node.get_metric("conflict_with") == "REQ-p00001__conflict"
 
     def test_annotates_display_filename(self):
         """Stores display-friendly filename info."""
@@ -166,20 +166,20 @@ class TestAnnotateDisplayInfo:
 
         annotate_display_info(node)
 
-        assert node.metrics["display_filename"] == "prd-authentication"
-        assert node.metrics["file_name"] == "prd-authentication.md"
+        assert node.get_metric("display_filename") == "prd-authentication"
+        assert node.get_metric("file_name") == "prd-authentication.md"
 
     def test_annotates_repo_prefix(self):
         """Stores repo prefix from content."""
         node = GraphNode(
             id="REQ-CAL-p00001",
             kind=NodeKind.REQUIREMENT,
-            content={"repo_prefix": "CAL"},
+            _content={"repo_prefix": "CAL"},
         )
 
         annotate_display_info(node)
 
-        assert node.metrics["repo_prefix"] == "CAL"
+        assert node.get_metric("repo_prefix") == "CAL"
 
     def test_defaults_to_core_prefix(self):
         """Defaults to CORE when no repo prefix."""
@@ -190,7 +190,7 @@ class TestAnnotateDisplayInfo:
 
         annotate_display_info(node)
 
-        assert node.metrics["repo_prefix"] == "CORE"
+        assert node.get_metric("repo_prefix") == "CORE"
 
 
 class TestAnnotateImplementationFiles:
@@ -206,20 +206,20 @@ class TestAnnotateImplementationFiles:
 
         annotate_implementation_files(node, impl_files)
 
-        assert node.metrics["implementation_files"] == impl_files
+        assert node.get_metric("implementation_files") == impl_files
 
     def test_appends_to_existing(self):
         """Appends to existing implementation files."""
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            metrics={"implementation_files": [("src/old.py", 1)]},
+            _metrics={"implementation_files": [("src/old.py", 1)]},
         )
         impl_files = [("src/new.py", 2)]
 
         annotate_implementation_files(node, impl_files)
 
-        assert len(node.metrics["implementation_files"]) == 2
+        assert len(node.get_metric("implementation_files")) == 2
 
 
 class TestCountByLevel:
@@ -232,17 +232,17 @@ class TestCountByLevel:
             "REQ-p00001": GraphNode(
                 id="REQ-p00001",
                 kind=NodeKind.REQUIREMENT,
-                content={"level": "PRD", "status": "Active"},
+                _content={"level": "PRD", "status": "Active"},
             ),
             "REQ-o00001": GraphNode(
                 id="REQ-o00001",
                 kind=NodeKind.REQUIREMENT,
-                content={"level": "OPS", "status": "Active"},
+                _content={"level": "OPS", "status": "Active"},
             ),
             "REQ-d00001": GraphNode(
                 id="REQ-d00001",
                 kind=NodeKind.REQUIREMENT,
-                content={"level": "DEV", "status": "Deprecated"},
+                _content={"level": "DEV", "status": "Deprecated"},
             ),
         }
 
@@ -262,14 +262,14 @@ class TestCountByRepo:
         node1 = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            content={"status": "Active"},
-            metrics={"repo_prefix": "CORE"},
+            _content={"status": "Active"},
+            _metrics={"repo_prefix": "CORE"},
         )
         node2 = GraphNode(
             id="REQ-CAL-p00001",
             kind=NodeKind.REQUIREMENT,
-            content={"status": "Active"},
-            metrics={"repo_prefix": "CAL"},
+            _content={"status": "Active"},
+            _metrics={"repo_prefix": "CAL"},
         )
         graph = TraceGraph()
         graph._index = {"REQ-p00001": node1, "REQ-CAL-p00001": node2}
@@ -288,12 +288,12 @@ class TestCountImplementationFiles:
         node1 = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            metrics={"implementation_files": [("a.py", 1), ("b.py", 2)]},
+            _metrics={"implementation_files": [("a.py", 1), ("b.py", 2)]},
         )
         node2 = GraphNode(
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
-            metrics={"implementation_files": [("c.py", 3)]},
+            _metrics={"implementation_files": [("c.py", 3)]},
         )
         graph = TraceGraph()
         graph._index = {"REQ-p00001": node1, "REQ-p00002": node2}
@@ -335,7 +335,7 @@ class TestGetImplementationStatus:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            metrics={"coverage_pct": 100},
+            _metrics={"coverage_pct": 100},
         )
 
         status = get_implementation_status(node)
@@ -347,7 +347,7 @@ class TestGetImplementationStatus:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            metrics={"coverage_pct": 50},
+            _metrics={"coverage_pct": 50},
         )
 
         status = get_implementation_status(node)
@@ -359,7 +359,7 @@ class TestGetImplementationStatus:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            metrics={"coverage_pct": 0},
+            _metrics={"coverage_pct": 0},
         )
 
         status = get_implementation_status(node)

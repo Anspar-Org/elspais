@@ -52,7 +52,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
     assertions = []
     gaps = []
 
-    for child in node.children:
+    for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
             assertion_info = {
                 "id": child.id,
@@ -64,7 +64,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
             }
 
             # Check for coverage sources
-            contributions = child.metrics.get("_coverage_contributions", [])
+            contributions = child.get_metric("_coverage_contributions", [])
             if contributions:
                 assertion_info["covered"] = True
                 # Get the source type from the first contribution
@@ -79,7 +79,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
                     assertion_info["coverage_source"] = "unknown"
 
             # Get implementing code (direct children of kind CODE)
-            for code_child in child.children:
+            for code_child in child.iter_children():
                 if code_child.kind == NodeKind.CODE:
                     code_info = {"id": code_child.id, "label": code_child.label}
                     if code_child.source:
@@ -88,7 +88,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
                     assertion_info["implementing_code"].append(code_info)
 
             # Get validating tests
-            for test_child in child.children:
+            for test_child in child.iter_children():
                 if test_child.kind == NodeKind.TEST:
                     test_info = {
                         "id": test_child.id,
@@ -99,7 +99,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
                         test_info["file"] = test_child.source.path
                         test_info["line"] = test_child.source.line
                     # Check for test results
-                    for result_child in test_child.children:
+                    for result_child in test_child.iter_children():
                         if (
                             result_child.kind == NodeKind.TEST_RESULT
                             and result_child.test_result
@@ -115,8 +115,6 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
             if not assertion_info["covered"]:
                 gaps.append(child.id)
 
-    metrics = node.metrics or {}
-
     return {
         "id": req_id,
         "label": node.label,
@@ -125,10 +123,10 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
         "summary": {
             "total_assertions": len(assertions),
             "covered_assertions": len([a for a in assertions if a["covered"]]),
-            "coverage_pct": metrics.get("coverage_pct", 0.0),
-            "direct_covered": metrics.get("direct_covered", 0),
-            "explicit_covered": metrics.get("explicit_covered", 0),
-            "inferred_covered": metrics.get("inferred_covered", 0),
+            "coverage_pct": node.get_metric("coverage_pct", 0.0),
+            "direct_covered": node.get_metric("direct_covered", 0),
+            "explicit_covered": node.get_metric("explicit_covered", 0),
+            "inferred_covered": node.get_metric("inferred_covered", 0),
         },
     }
 
@@ -443,19 +441,19 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
                     "line": n.source.line,
                 }
 
-            if n.metrics:
-                coverage = n.metrics.get("coverage_pct")
-                if coverage is not None:
-                    result["coverage_pct"] = coverage
+            coverage = n.get_metric("coverage_pct")
+            if coverage is not None:
+                result["coverage_pct"] = coverage
 
             if n.kind == NodeKind.TEST_RESULT and n.test_result:
                 result["status"] = (
                     n.test_result.status.value if n.test_result.status else None
                 )
 
-            if n.children:
+            children = list(n.iter_children())
+            if children:
                 children_by_kind: Dict[str, list] = {}
-                for child in n.children:
+                for child in children:
                     kind_key = child.kind.value
                     if kind_key not in children_by_kind:
                         children_by_kind[kind_key] = []
@@ -467,10 +465,10 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
 
         tree = build_tree(node)
 
-        total_assertions = len([c for c in node.children if c.kind == NodeKind.ASSERTION])
-        covered_assertions = node.metrics.get("covered_assertions", 0) if node.metrics else 0
-        total_tests = node.metrics.get("total_tests", 0) if node.metrics else 0
-        passed_tests = node.metrics.get("passed_tests", 0) if node.metrics else 0
+        total_assertions = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
+        covered_assertions = node.get_metric("covered_assertions", 0)
+        total_tests = node.get_metric("total_tests", 0)
+        passed_tests = node.get_metric("passed_tests", 0)
 
         return json.dumps(
             {
@@ -478,10 +476,10 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
                 "summary": {
                     "total_assertions": total_assertions,
                     "covered_assertions": covered_assertions,
-                    "coverage_pct": node.metrics.get("coverage_pct", 0.0) if node.metrics else 0.0,
+                    "coverage_pct": node.get_metric("coverage_pct", 0.0),
                     "total_tests": total_tests,
                     "passed_tests": passed_tests,
-                    "pass_rate_pct": node.metrics.get("pass_rate_pct", 0.0) if node.metrics else 0.0,
+                    "pass_rate_pct": node.get_metric("pass_rate_pct", 0.0),
                 },
             },
             indent=2,
@@ -563,7 +561,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             if depth > max_depth:
                 return []
             descendants = []
-            for child in n.children:
+            for child in n.iter_children():
                 child_info = {
                     "id": child.id,
                     "kind": child.kind.value,
@@ -822,8 +820,8 @@ def _register_tools(
         ancestors = [a.id for a in node.ancestors()]
 
         # Get children (direct descendants, filtered by kind)
-        children_reqs = [c.id for c in node.children if c.kind == NodeKind.REQUIREMENT]
-        children_assertions = [c.id for c in node.children if c.kind == NodeKind.ASSERTION]
+        children_reqs = [c.id for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT]
+        children_assertions = [c.id for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
 
         return {
             "id": req_id,
@@ -886,20 +884,19 @@ def _register_tools(
                 }
 
             # Add metrics if available
-            if n.metrics:
-                # Only include key metrics
-                coverage = n.metrics.get("coverage_pct")
-                if coverage is not None:
-                    result["coverage_pct"] = coverage
+            coverage = n.get_metric("coverage_pct")
+            if coverage is not None:
+                result["coverage_pct"] = coverage
 
             # Add test status if this is a test result
             if n.kind == NodeKind.TEST_RESULT and n.test_result:
                 result["status"] = n.test_result.status.value if n.test_result.status else None
 
             # Add children organized by kind
-            if n.children:
+            children = list(n.iter_children())
+            if children:
                 children_by_kind: Dict[str, list] = {}
-                for child in n.children:
+                for child in children:
                     kind_key = child.kind.value
                     if kind_key not in children_by_kind:
                         children_by_kind[kind_key] = []
@@ -912,20 +909,20 @@ def _register_tools(
         tree = build_tree(node)
 
         # Add summary metrics
-        total_assertions = len([c for c in node.children if c.kind == NodeKind.ASSERTION])
-        covered_assertions = node.metrics.get("covered_assertions", 0) if node.metrics else 0
-        total_tests = node.metrics.get("total_tests", 0) if node.metrics else 0
-        passed_tests = node.metrics.get("passed_tests", 0) if node.metrics else 0
+        total_assertions = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
+        covered_assertions = node.get_metric("covered_assertions", 0)
+        total_tests = node.get_metric("total_tests", 0)
+        passed_tests = node.get_metric("passed_tests", 0)
 
         return {
             "tree": tree,
             "summary": {
                 "total_assertions": total_assertions,
                 "covered_assertions": covered_assertions,
-                "coverage_pct": node.metrics.get("coverage_pct", 0.0) if node.metrics else 0.0,
+                "coverage_pct": node.get_metric("coverage_pct", 0.0),
                 "total_tests": total_tests,
                 "passed_tests": passed_tests,
-                "pass_rate_pct": node.metrics.get("pass_rate_pct", 0.0) if node.metrics else 0.0,
+                "pass_rate_pct": node.get_metric("pass_rate_pct", 0.0),
             },
         }
 
@@ -986,17 +983,16 @@ def _register_tools(
 
             # Get graph node for metrics
             node = graph.find_by_id(req.id)
-            metrics = node.metrics if node else {}
 
             # Coverage filter
-            coverage_pct = metrics.get("coverage_pct", 0.0) if metrics else 0.0
+            coverage_pct = node.get_metric("coverage_pct", 0.0) if node else 0.0
             if coverage_below is not None and coverage_pct >= coverage_below:
                 continue
 
             # Gaps filter
             if has_gaps is not None:
-                total = metrics.get("total_assertions", 0) if metrics else 0
-                covered = metrics.get("covered_assertions", 0) if metrics else 0
+                total = node.get_metric("total_assertions", 0) if node else 0
+                covered = node.get_metric("covered_assertions", 0) if node else 0
                 req_has_gaps = total > covered
                 if has_gaps and not req_has_gaps:
                     continue
@@ -1010,8 +1006,8 @@ def _register_tools(
                 "level": req.level,
                 "status": req.status,
                 "coverage_pct": coverage_pct,
-                "total_assertions": metrics.get("total_assertions", 0) if metrics else 0,
-                "covered_assertions": metrics.get("covered_assertions", 0) if metrics else 0,
+                "total_assertions": node.get_metric("total_assertions", 0) if node else 0,
+                "covered_assertions": node.get_metric("covered_assertions", 0) if node else 0,
             }
 
             if node and node.source:
@@ -1095,24 +1091,23 @@ def _register_tools(
             ]
 
         # Coverage metrics
-        if node and node.metrics:
-            metrics = node.metrics
+        if node:
             result["metrics"] = {
-                "total_assertions": metrics.get("total_assertions", 0),
-                "covered_assertions": metrics.get("covered_assertions", 0),
-                "coverage_pct": metrics.get("coverage_pct", 0.0),
-                "direct_covered": metrics.get("direct_covered", 0),
-                "explicit_covered": metrics.get("explicit_covered", 0),
-                "inferred_covered": metrics.get("inferred_covered", 0),
-                "total_tests": metrics.get("total_tests", 0),
-                "passed_tests": metrics.get("passed_tests", 0),
-                "pass_rate_pct": metrics.get("pass_rate_pct", 0.0),
+                "total_assertions": node.get_metric("total_assertions", 0),
+                "covered_assertions": node.get_metric("covered_assertions", 0),
+                "coverage_pct": node.get_metric("coverage_pct", 0.0),
+                "direct_covered": node.get_metric("direct_covered", 0),
+                "explicit_covered": node.get_metric("explicit_covered", 0),
+                "inferred_covered": node.get_metric("inferred_covered", 0),
+                "total_tests": node.get_metric("total_tests", 0),
+                "passed_tests": node.get_metric("passed_tests", 0),
+                "pass_rate_pct": node.get_metric("pass_rate_pct", 0.0),
             }
 
         # Implementing requirements (children)
         if include_implementers and node:
             implementers = []
-            for child in node.children:
+            for child in node.iter_children():
                 if child.kind == NodeKind.REQUIREMENT:
                     implementer = {
                         "id": child.id,
@@ -1123,8 +1118,7 @@ def _register_tools(
                             "file": child.source.path,
                             "line": child.source.line,
                         }
-                    child_metrics = child.metrics or {}
-                    implementer["coverage_pct"] = child_metrics.get("coverage_pct", 0.0)
+                    implementer["coverage_pct"] = child.get_metric("coverage_pct", 0.0)
                     implementers.append(implementer)
             result["implementers"] = implementers
 

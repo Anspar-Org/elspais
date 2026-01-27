@@ -18,7 +18,7 @@ def sample_graph():
         kind=NodeKind.REQUIREMENT,
         label="Product Requirement",
         source=SourceLocation(path="spec/prd.md", line=10, end_line=20),
-        content={"level": "PRD", "status": "Active", "hash": "abc12345"},
+        _content={"level": "PRD", "status": "Active", "hash": "abc12345"},
     )
 
     ops = GraphNode(
@@ -26,7 +26,7 @@ def sample_graph():
         kind=NodeKind.REQUIREMENT,
         label="Operations Requirement",
         source=SourceLocation(path="spec/ops.md", line=5, end_line=15),
-        content={"level": "OPS", "status": "Active", "hash": "def67890"},
+        _content={"level": "OPS", "status": "Active", "hash": "def67890"},
     )
 
     dev = GraphNode(
@@ -34,7 +34,7 @@ def sample_graph():
         kind=NodeKind.REQUIREMENT,
         label="Dev Requirement",
         source=SourceLocation(path="spec/dev.md", line=1, end_line=10),
-        content={"level": "DEV", "status": "Active", "hash": "ghi13579"},
+        _content={"level": "DEV", "status": "Active", "hash": "ghi13579"},
     )
 
     # Create assertions
@@ -42,7 +42,7 @@ def sample_graph():
         id="REQ-p00001-A",
         kind=NodeKind.ASSERTION,
         label="First assertion",
-        content={"label": "A"},
+        _content={"label": "A"},
     )
     prd.add_child(assertion_a)
 
@@ -52,7 +52,7 @@ def sample_graph():
 
     # Build graph
     graph = TraceGraph(
-        roots=[prd],
+        _roots=[prd],
         repo_root=Path("/test/repo"),
         _index={
             "REQ-p00001": prd,

@@ -30,7 +30,8 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         "id": node.id,
         "kind": node.kind.name,
         "label": node.label,
-        "content": dict(node.content),
+        "uuid": node.uuid,
+        "content": dict(node._content),
     }
 
     # Include source location if present
@@ -44,25 +45,28 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
             result["source"]["repo"] = node.source.repo
 
     # Include child IDs
-    if node.children:
-        result["children"] = [child.id for child in node.children]
+    children = list(node.iter_children())
+    if children:
+        result["children"] = [child.id for child in children]
 
     # Include parent IDs
-    if node.parents:
-        result["parents"] = [parent.id for parent in node.parents]
+    parents = list(node.iter_parents())
+    if parents:
+        result["parents"] = [parent.id for parent in parents]
 
     # Include metrics
-    if node.metrics:
-        result["metrics"] = dict(node.metrics)
+    if node._metrics:
+        result["metrics"] = dict(node._metrics)
 
     # Include outgoing edges
-    if node.outgoing_edges:
+    edges = list(node.iter_outgoing_edges())
+    if edges:
         result["edges"] = [
             {
                 "target": edge.target.id,
                 "kind": edge.kind.name,
             }
-            for edge in node.outgoing_edges
+            for edge in edges
         ]
 
     return result
@@ -90,12 +94,13 @@ def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
         kind_name = node.kind.name
         kind_counts[kind_name] = kind_counts.get(kind_name, 0) + 1
 
+    roots = list(graph.iter_roots())
     return {
         "nodes": nodes,
-        "roots": [root.id for root in graph.roots],
+        "roots": [root.id for root in roots],
         "metadata": {
             "node_count": len(nodes),
-            "root_count": len(graph.roots),
+            "root_count": len(roots),
             "repo_root": str(graph.repo_root),
             "by_kind": kind_counts,
         },
@@ -128,13 +133,13 @@ def to_markdown(graph: TraceGraph) -> str:
 
     for node in requirements:
         req_id = node.id
-        level = node.content.get("level", "")
+        level = node.get_field("level", "")
         title = node.label or ""
-        status = node.content.get("status", "")
+        status = node.get_field("status", "")
 
         # Get implements from incoming edges (what this node implements)
         implements = []
-        for edge in node.incoming_edges:
+        for edge in node.iter_incoming_edges():
             from elspais.graph.relations import EdgeKind
             if edge.kind == EdgeKind.IMPLEMENTS:
                 implements.append(edge.source.id)
@@ -183,19 +188,19 @@ def to_csv(graph: TraceGraph) -> str:
 
         # Get implements from incoming edges (what this node implements)
         implements = []
-        for edge in node.incoming_edges:
+        for edge in node.iter_incoming_edges():
             from elspais.graph.relations import EdgeKind
             if edge.kind == EdgeKind.IMPLEMENTS:
                 implements.append(edge.source.id)
 
         writer.writerow([
             node.id,
-            node.content.get("level", ""),
+            node.get_field("level", ""),
             node.label,
-            node.content.get("status", ""),
+            node.get_field("status", ""),
             file_path,
             line,
-            node.content.get("hash", ""),
+            node.get_field("hash", ""),
             "; ".join(implements),
         ])
 

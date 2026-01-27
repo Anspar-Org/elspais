@@ -282,11 +282,11 @@ def _serialize_assertions_with_coverage(
     # Build a map of assertion coverage from graph
     assertion_coverage: Dict[str, Dict[str, Any]] = {}
     if node:
-        for child in node.children:
+        for child in node.iter_children():
             if child.kind == NodeKind.ASSERTION:
                 # Extract assertion label from ID (e.g., "REQ-p00001-A" -> "A")
                 label = child.id.rsplit("-", 1)[-1] if "-" in child.id else child.id
-                contributions = child.metrics.get("_coverage_contributions", [])
+                contributions = child.get_metric("_coverage_contributions", [])
                 covered = len(contributions) > 0
                 source_type = None
                 if contributions:
@@ -332,7 +332,7 @@ def _get_implementing_children(node: GraphNode) -> List[str]:
         List of requirement IDs that implement this node
     """
     implementers = []
-    for child in node.children:
+    for child in node.iter_children():
         if child.kind == NodeKind.REQUIREMENT:
             implementers.append(child.id)
     return implementers

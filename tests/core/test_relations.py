@@ -105,10 +105,11 @@ class TestNodeEdgeIntegration:
         edge = parent.link(child, EdgeKind.IMPLEMENTS)
 
         assert edge.kind == EdgeKind.IMPLEMENTS
-        assert child in parent.children
-        assert parent in child.parents
-        assert edge in parent.outgoing_edges
-        assert edge in child.incoming_edges
+        assert parent.has_child(child)
+        assert child.has_parent(parent)
+        # Verify edges are tracked
+        assert any(e == edge for e in parent.iter_outgoing_edges())
+        assert any(e == edge for e in child.iter_incoming_edges())
 
     def test_link_with_refines(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -117,7 +118,7 @@ class TestNodeEdgeIntegration:
         edge = parent.link(child, EdgeKind.REFINES)
 
         assert edge.kind == EdgeKind.REFINES
-        assert child in parent.children
+        assert parent.has_child(child)
 
     def test_link_with_assertion_targets(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -135,10 +136,10 @@ class TestNodeEdgeIntegration:
         parent.link(impl_child, EdgeKind.IMPLEMENTS)
         parent.link(refine_child, EdgeKind.REFINES)
 
-        impl_edges = parent.edges_by_kind(EdgeKind.IMPLEMENTS)
+        impl_edges = list(parent.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
         assert len(impl_edges) == 1
         assert impl_edges[0].target == impl_child
 
-        refine_edges = parent.edges_by_kind(EdgeKind.REFINES)
+        refine_edges = list(parent.iter_edges_by_kind(EdgeKind.REFINES))
         assert len(refine_edges) == 1
         assert refine_edges[0].target == refine_child

@@ -89,12 +89,12 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     is_new = is_untracked
 
     # Annotate node metrics
-    node.metrics["is_uncommitted"] = is_uncommitted
-    node.metrics["is_untracked"] = is_untracked
-    node.metrics["is_branch_changed"] = is_branch_changed
-    node.metrics["is_moved"] = is_moved
-    node.metrics["is_modified"] = is_modified
-    node.metrics["is_new"] = is_new
+    node.set_metric("is_uncommitted", is_uncommitted)
+    node.set_metric("is_untracked", is_untracked)
+    node.set_metric("is_branch_changed", is_branch_changed)
+    node.set_metric("is_moved", is_moved)
+    node.set_metric("is_modified", is_modified)
+    node.set_metric("is_new", is_new)
 
 
 def annotate_display_info(node: GraphNode) -> None:
@@ -125,32 +125,32 @@ def annotate_display_info(node: GraphNode) -> None:
 
     # Roadmap detection from path
     is_roadmap = "roadmap" in file_path.lower()
-    node.metrics["is_roadmap"] = is_roadmap
+    node.set_metric("is_roadmap", is_roadmap)
 
     # Conflict detection from content
-    is_conflict = node.content.get("is_conflict", False)
-    conflict_with = node.content.get("conflict_with")
-    node.metrics["is_conflict"] = is_conflict
+    is_conflict = node.get_field("is_conflict", False)
+    conflict_with = node.get_field("conflict_with")
+    node.set_metric("is_conflict", is_conflict)
     if conflict_with:
-        node.metrics["conflict_with"] = conflict_with
+        node.set_metric("conflict_with", conflict_with)
 
     # Store display-friendly file info
     if file_path:
         path = Path(file_path)
-        node.metrics["display_filename"] = path.stem
-        node.metrics["file_name"] = path.name
+        node.set_metric("display_filename", path.stem)
+        node.set_metric("file_name", path.name)
     else:
-        node.metrics["display_filename"] = ""
-        node.metrics["file_name"] = ""
+        node.set_metric("display_filename", "")
+        node.set_metric("file_name", "")
 
     # Repo prefix for multi-repo setups
-    repo_prefix = node.content.get("repo_prefix")
-    node.metrics["repo_prefix"] = repo_prefix or "CORE"
+    repo_prefix = node.get_field("repo_prefix")
+    node.set_metric("repo_prefix", repo_prefix or "CORE")
 
     # External spec path for associated repos
-    external_spec_path = node.content.get("external_spec_path")
+    external_spec_path = node.get_field("external_spec_path")
     if external_spec_path:
-        node.metrics["external_spec_path"] = str(external_spec_path)
+        node.set_metric("external_spec_path", str(external_spec_path))
 
 
 def annotate_implementation_files(
@@ -169,9 +169,9 @@ def annotate_implementation_files(
         return
 
     # Store implementation files in metrics
-    existing = node.metrics.get("implementation_files", [])
+    existing = node.get_metric("implementation_files", [])
     existing.extend(implementation_files)
-    node.metrics["implementation_files"] = existing
+    node.set_metric("implementation_files", existing)
 
 
 # =============================================================================
@@ -200,8 +200,8 @@ def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
     for node in graph._index.values():
         if node.kind != NodeKind.REQUIREMENT:
             continue
-        level = node.content.get("level", "")
-        status = node.content.get("status", "Active")
+        level = node.get_field("level", "")
+        status = node.get_field("status", "Active")
         if level:
             counts["all"][level] = counts["all"].get(level, 0) + 1
             if status != "Deprecated":
@@ -227,8 +227,8 @@ def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
         if node.kind != NodeKind.REQUIREMENT:
             continue
 
-        prefix = node.metrics.get("repo_prefix", "CORE")
-        status = node.content.get("status", "Active")
+        prefix = node.get_metric("repo_prefix", "CORE")
+        status = node.get_field("status", "Active")
 
         if prefix not in repo_counts:
             repo_counts[prefix] = {"active": 0, "all": 0}
@@ -255,7 +255,7 @@ def count_implementation_files(graph: TraceGraph) -> int:
     for node in graph._index.values():
         if node.kind != NodeKind.REQUIREMENT:
             continue
-        impl_files = node.metrics.get("implementation_files", [])
+        impl_files = node.get_metric("implementation_files", [])
         total += len(impl_files)
     return total
 
@@ -293,7 +293,7 @@ def get_implementation_status(node: GraphNode) -> str:
         'Partial': coverage_pct > 0
         'Unimplemented': coverage_pct == 0
     """
-    coverage_pct = node.metrics.get("coverage_pct", 0)
+    coverage_pct = node.get_metric("coverage_pct", 0)
     if coverage_pct >= 100:
         return "Full"
     elif coverage_pct > 0:
