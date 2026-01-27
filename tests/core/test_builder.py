@@ -5,6 +5,7 @@ import pytest
 from elspais.graph import GraphNode, NodeKind, Edge, EdgeKind
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
+from tests.core.graph_test_helpers import children_string, parents_string
 
 
 @pytest.fixture
@@ -81,8 +82,8 @@ class TestGraphBuilder:
         parent = graph.find_by_id("REQ-p00001")
         assertion_a = graph.find_by_id("REQ-p00001-A")
 
-        assert parent.has_child(assertion_a)
-        assert assertion_a.has_parent(parent)
+        assert "REQ-p00001-A" in children_string(parent)
+        assert "REQ-p00001" in parents_string(assertion_a)
 
     def test_build_creates_implements_edges(self, sample_requirements):
         builder = GraphBuilder()
@@ -93,10 +94,9 @@ class TestGraphBuilder:
         graph = builder.build()
 
         ops_req = graph.find_by_id("REQ-o00001")
-        assertion_a = graph.find_by_id("REQ-p00001-A")
 
         # OPS req should implement assertion A
-        assert ops_req.has_parent(assertion_a)
+        assert "REQ-p00001-A" in parents_string(ops_req)
 
     def test_roots_are_top_level_requirements(self, sample_requirements):
         builder = GraphBuilder()

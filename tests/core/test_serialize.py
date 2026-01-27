@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
-from elspais.graph.builder import TraceGraph
+from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.relations import EdgeKind
 from elspais.graph.serialize import (
     serialize_node,
@@ -12,62 +12,54 @@ from elspais.graph.serialize import (
     to_markdown,
     to_csv,
 )
+from tests.core.graph_test_helpers import make_requirement
 
 
 @pytest.fixture
 def sample_graph():
     """Create a sample graph for testing."""
-    # Create a simple graph with PRD -> OPS -> DEV hierarchy
-    prd = GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Requirement",
-        source=SourceLocation(path="spec/prd.md", line=10, end_line=20),
-        _content={"level": "PRD", "status": "Active", "hash": "abc12345"},
-    )
+    builder = GraphBuilder(repo_root=Path("/test/repo"))
 
-    ops = GraphNode(
-        id="REQ-o00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Operations Requirement",
-        source=SourceLocation(path="spec/ops.md", line=5, end_line=15),
-        _content={"level": "OPS", "status": "Active", "hash": "def67890"},
-    )
+    # PRD with assertions
+    builder.add_parsed_content(make_requirement(
+        "REQ-p00001",
+        title="Product Requirement",
+        level="PRD",
+        status="Active",
+        source_path="spec/prd.md",
+        start_line=10,
+        end_line=20,
+        hash_value="abc12345",
+        assertions=[{"label": "A", "text": "First assertion"}],
+    ))
 
-    dev = GraphNode(
-        id="REQ-d00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Dev Requirement",
-        source=SourceLocation(path="spec/dev.md", line=1, end_line=10),
-        _content={"level": "DEV", "status": "Active", "hash": "ghi13579"},
-    )
+    # OPS implements PRD
+    builder.add_parsed_content(make_requirement(
+        "REQ-o00001",
+        title="Operations Requirement",
+        level="OPS",
+        status="Active",
+        source_path="spec/ops.md",
+        start_line=5,
+        end_line=15,
+        hash_value="def67890",
+        implements=["REQ-p00001"],
+    ))
 
-    # Create assertions
-    assertion_a = GraphNode(
-        id="REQ-p00001-A",
-        kind=NodeKind.ASSERTION,
-        label="First assertion",
-        _content={"label": "A"},
-    )
-    prd.add_child(assertion_a)
+    # DEV implements OPS
+    builder.add_parsed_content(make_requirement(
+        "REQ-d00001",
+        title="Dev Requirement",
+        level="DEV",
+        status="Active",
+        source_path="spec/dev.md",
+        start_line=1,
+        end_line=10,
+        hash_value="ghi13579",
+        implements=["REQ-o00001"],
+    ))
 
-    # Link hierarchy
-    prd.link(ops, EdgeKind.IMPLEMENTS)
-    ops.link(dev, EdgeKind.IMPLEMENTS)
-
-    # Build graph
-    graph = TraceGraph(
-        _roots=[prd],
-        repo_root=Path("/test/repo"),
-        _index={
-            "REQ-p00001": prd,
-            "REQ-o00001": ops,
-            "REQ-d00001": dev,
-            "REQ-p00001-A": assertion_a,
-        },
-    )
-
-    return graph
+    return builder.build()
 
 
 class TestSerializeNode:
@@ -111,8 +103,9 @@ class TestSerializeNode:
             id="REQ-test",
             kind=NodeKind.REQUIREMENT,
             label="Test",
-            _metrics={"coverage_pct": 75.0, "total_tests": 5},
         )
+        # Set metrics after construction (private field has init=False)
+        node._metrics = {"coverage_pct": 75.0, "total_tests": 5}
 
         result = serialize_node(node)
 
@@ -204,17 +197,14 @@ class TestToCsv:
 
     def test_csv_handles_commas(self):
         """Escapes commas in values."""
-        node = GraphNode(
-            id="REQ-test",
-            kind=NodeKind.REQUIREMENT,
-            label='Title with, comma',
-            _content={"level": "PRD", "status": "Active"},
-        )
-        graph = TraceGraph(
-            _roots=[node],
-            repo_root=Path.cwd(),
-            _index={"REQ-test": node},
-        )
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement(
+            "REQ-test",
+            title="Title with, comma",
+            level="PRD",
+            status="Active",
+        ))
+        graph = builder.build()
 
         result = to_csv(graph)
 

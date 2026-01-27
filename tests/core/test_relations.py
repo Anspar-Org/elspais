@@ -3,7 +3,15 @@
 import pytest
 
 from elspais.graph import GraphNode, NodeKind
+from elspais.graph.builder import GraphBuilder
 from elspais.graph.relations import Edge, EdgeKind
+from tests.core.graph_test_helpers import (
+    make_requirement,
+    children_string,
+    parents_string,
+    outgoing_edges_string,
+    incoming_edges_string,
+)
 
 
 class TestEdgeKind:
@@ -96,50 +104,72 @@ class TestEdgeSemantics:
 
 
 class TestNodeEdgeIntegration:
-    """Tests for GraphNode edge management."""
+    """Tests for GraphNode edge management via GraphBuilder."""
 
-    def test_link_with_implements(self):
-        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+    def test_implements_relationship(self):
+        """Child implementing parent creates correct edges and relationships."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement("REQ-p00001"))
+        builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
+        graph = builder.build()
 
-        edge = parent.link(child, EdgeKind.IMPLEMENTS)
+        parent = graph.find_by_id("REQ-p00001")
+        child = graph.find_by_id("REQ-o00001")
 
-        assert edge.kind == EdgeKind.IMPLEMENTS
-        assert parent.has_child(child)
-        assert child.has_parent(parent)
-        # Verify edges are tracked
-        assert any(e == edge for e in parent.iter_outgoing_edges())
-        assert any(e == edge for e in child.iter_incoming_edges())
+        # Verify relationships via string helpers
+        assert "REQ-o00001" in children_string(parent)
+        assert "REQ-p00001" in parents_string(child)
+        # Verify edge kind
+        assert "REQ-p00001->REQ-o00001:implements" in outgoing_edges_string(parent)
+        assert "REQ-p00001->REQ-o00001:implements" in incoming_edges_string(child)
 
-    def test_link_with_refines(self):
-        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        child = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
+    def test_refines_relationship(self):
+        """Child refining parent creates refines edge."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement("REQ-p00001"))
+        builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))
+        graph = builder.build()
 
-        edge = parent.link(child, EdgeKind.REFINES)
+        parent = graph.find_by_id("REQ-p00001")
+        child = graph.find_by_id("REQ-p00002")
 
-        assert edge.kind == EdgeKind.REFINES
-        assert parent.has_child(child)
+        # Verify relationships
+        assert "REQ-p00002" in children_string(parent)
+        assert "REQ-p00001->REQ-p00002:refines" in outgoing_edges_string(parent)
 
-    def test_link_with_assertion_targets(self):
-        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+    def test_multiple_edge_kinds(self):
+        """Graph can have both implements and refines edges from same parent."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement("REQ-p00001"))
+        builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
+        builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))
+        graph = builder.build()
 
-        edge = parent.link(child, EdgeKind.IMPLEMENTS, assertion_targets=["A", "B"])
+        parent = graph.find_by_id("REQ-p00001")
 
-        assert edge.assertion_targets == ["A", "B"]
+        # Both children linked
+        assert "REQ-o00001" in children_string(parent)
+        assert "REQ-p00002" in children_string(parent)
 
-    def test_get_edges_by_kind(self):
-        parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        impl_child = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
-        refine_child = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
+        # Different edge kinds
+        edges_str = outgoing_edges_string(parent)
+        assert "REQ-p00001->REQ-o00001:implements" in edges_str
+        assert "REQ-p00001->REQ-p00002:refines" in edges_str
 
-        parent.link(impl_child, EdgeKind.IMPLEMENTS)
-        parent.link(refine_child, EdgeKind.REFINES)
+    def test_iter_edges_by_kind(self):
+        """iter_edges_by_kind filters correctly."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(make_requirement("REQ-p00001"))
+        builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
+        builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))
+        graph = builder.build()
+
+        parent = graph.find_by_id("REQ-p00001")
 
         impl_edges = list(parent.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
         assert len(impl_edges) == 1
-        assert impl_edges[0].target == impl_child
+        assert impl_edges[0].target.id == "REQ-o00001"
 
         refine_edges = list(parent.iter_edges_by_kind(EdgeKind.REFINES))
         assert len(refine_edges) == 1
-        assert refine_edges[0].target == refine_child
+        assert refine_edges[0].target.id == "REQ-p00002"

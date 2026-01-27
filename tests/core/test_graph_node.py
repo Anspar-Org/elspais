@@ -3,6 +3,15 @@
 import pytest
 
 from elspais.graph import GraphNode, NodeKind, SourceLocation
+from elspais.graph.builder import GraphBuilder
+
+from tests.core.graph_test_helpers import (
+    make_requirement,
+    children_string,
+    parents_string,
+    walk_string,
+    ancestors_string,
+)
 
 
 class TestNodeKind:
@@ -98,14 +107,22 @@ class TestGraphNode:
         assert node.source.line == 10
 
     def test_create_with_content(self):
-        """Content is typed data based on node kind."""
-        node = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _content={"title": "Auth", "status": "Active"},
+        """Content is typed data based on node kind - use builder."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                title="Auth",
+                status="Active",
+            )
         )
-        assert node.get_field("title") == "Auth"
+        graph = builder.build()
+        node = graph.find_by_id("REQ-p00001")
+
+        assert node is not None
         assert node.get_field("status") == "Active"
+        # Title is stored in label, not content
+        assert node.label == "Auth"
 
     def test_add_child(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)

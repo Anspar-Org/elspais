@@ -26,9 +26,11 @@ class TraceGraph:
         repo_root: Path to the repository root.
     """
 
-    _roots: list[GraphNode] = field(default_factory=list)
-    _index: dict[str, GraphNode] = field(default_factory=dict, repr=False)
     repo_root: Path = field(default_factory=Path.cwd)
+
+    # Internal storage (prefixed) - excluded from constructor
+    _roots: list[GraphNode] = field(default_factory=list, init=False)
+    _index: dict[str, GraphNode] = field(default_factory=dict, init=False, repr=False)
 
     def iter_roots(self) -> Iterator[GraphNode]:
         """Iterate root nodes."""
@@ -139,12 +141,12 @@ class GraphBuilder:
             kind=NodeKind.REQUIREMENT,
             label=data.get("title", ""),
             source=source,
-            _content={
-                "level": data.get("level"),
-                "status": data.get("status"),
-                "hash": data.get("hash"),
-            },
         )
+        node._content = {
+            "level": data.get("level"),
+            "status": data.get("status"),
+            "hash": data.get("hash"),
+        }
         self._nodes[req_id] = node
 
         # Create assertion nodes
@@ -154,8 +156,8 @@ class GraphBuilder:
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
                 label=assertion["text"],
-                _content={"label": assertion["label"]},
             )
+            assertion_node._content = {"label": assertion["label"]}
             self._nodes[assertion_id] = assertion_node
 
             # Link assertion to parent requirement
@@ -177,11 +179,11 @@ class GraphBuilder:
             id=journey_id,
             kind=NodeKind.USER_JOURNEY,
             label=data.get("title", ""),
-            _content={
-                "actor": data.get("actor"),
-                "goal": data.get("goal"),
-            },
         )
+        node._content = {
+            "actor": data.get("actor"),
+            "goal": data.get("goal"),
+        }
         self._nodes[journey_id] = node
 
     def _add_code_ref(self, content: ParsedContent) -> None:
@@ -249,8 +251,7 @@ class GraphBuilder:
             if node.kind == NodeKind.USER_JOURNEY
         )
 
-        return TraceGraph(
-            _roots=roots,
-            repo_root=self.repo_root,
-            _index=dict(self._nodes),
-        )
+        graph = TraceGraph(repo_root=self.repo_root)
+        graph._roots = roots
+        graph._index = dict(self._nodes)
+        return graph

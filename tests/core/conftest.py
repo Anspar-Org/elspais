@@ -12,13 +12,29 @@ def sample_source_location():
 
 
 @pytest.fixture
-def sample_node():
-    """Create a sample graph node."""
-    from elspais.graph import GraphNode, NodeKind, SourceLocation
+def simple_graph():
+    """Create a simple graph with one requirement."""
+    from elspais.graph.builder import GraphBuilder
+    from tests.core.graph_test_helpers import make_requirement
 
-    return GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="User Authentication",
-        source=SourceLocation(path="spec/prd-auth.md", line=10),
-    )
+    builder = GraphBuilder()
+    builder.add_parsed_content(make_requirement(
+        "REQ-p00001",
+        title="User Authentication",
+        source_path="spec/prd-auth.md",
+        start_line=10,
+    ))
+    return builder.build()
+
+
+@pytest.fixture
+def hierarchy_graph():
+    """Graph with PRD -> OPS -> DEV hierarchy."""
+    from elspais.graph.builder import GraphBuilder
+    from tests.core.graph_test_helpers import make_requirement
+
+    builder = GraphBuilder()
+    builder.add_parsed_content(make_requirement("REQ-p00001", level="PRD"))
+    builder.add_parsed_content(make_requirement("REQ-o00001", level="OPS", implements=["REQ-p00001"]))
+    builder.add_parsed_content(make_requirement("REQ-d00001", level="DEV", implements=["REQ-o00001"]))
+    return builder.build()

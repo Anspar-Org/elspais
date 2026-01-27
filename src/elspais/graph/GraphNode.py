@@ -77,13 +77,13 @@ class GraphNode:
     source: SourceLocation | None = None
     uuid: str = field(default_factory=lambda: uuid4().hex)
 
-    # Internal storage (prefixed)
-    _children: list[GraphNode] = field(default_factory=list)
-    _parents: list[GraphNode] = field(default_factory=list, repr=False)
-    _outgoing_edges: list[Edge] = field(default_factory=list, repr=False)
-    _incoming_edges: list[Edge] = field(default_factory=list, repr=False)
-    _content: dict[str, Any] = field(default_factory=dict)
-    _metrics: dict[str, Any] = field(default_factory=dict)
+    # Internal storage (prefixed) - excluded from constructor
+    _children: list[GraphNode] = field(default_factory=list, init=False)
+    _parents: list[GraphNode] = field(default_factory=list, init=False, repr=False)
+    _outgoing_edges: list[Edge] = field(default_factory=list, init=False, repr=False)
+    _incoming_edges: list[Edge] = field(default_factory=list, init=False, repr=False)
+    _content: dict[str, Any] = field(default_factory=dict, init=False)
+    _metrics: dict[str, Any] = field(default_factory=dict, init=False)
 
     # Iterator access
     def iter_children(self) -> Iterator[GraphNode]:

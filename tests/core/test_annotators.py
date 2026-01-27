@@ -76,8 +76,8 @@ class TestAnnotateGitState:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
             source=SourceLocation(path="spec/new.md", line=1),
-            _content={"id": "REQ-p00001"},
         )
+        node._content = {"id": "REQ-p00001"}
         git_info = GitChangeInfo(
             committed_req_locations={"p00001": "spec/old.md"},
         )
@@ -148,8 +148,8 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            _content={"is_conflict": True, "conflict_with": "REQ-p00001__conflict"},
         )
+        node._content = {"is_conflict": True, "conflict_with": "REQ-p00001__conflict"}
 
         annotate_display_info(node)
 
@@ -174,8 +174,8 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-CAL-p00001",
             kind=NodeKind.REQUIREMENT,
-            _content={"repo_prefix": "CAL"},
         )
+        node._content = {"repo_prefix": "CAL"}
 
         annotate_display_info(node)
 
@@ -213,8 +213,8 @@ class TestAnnotateImplementationFiles:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            _metrics={"implementation_files": [("src/old.py", 1)]},
         )
+        node._metrics = {"implementation_files": [("src/old.py", 1)]}
         impl_files = [("src/new.py", 2)]
 
         annotate_implementation_files(node, impl_files)
@@ -227,23 +227,18 @@ class TestCountByLevel:
 
     def test_counts_by_level(self):
         """Counts requirements by level."""
+        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node1._content = {"level": "PRD", "status": "Active"}
+        node2 = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        node2._content = {"level": "OPS", "status": "Active"}
+        node3 = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT)
+        node3._content = {"level": "DEV", "status": "Deprecated"}
+
         graph = TraceGraph()
         graph._index = {
-            "REQ-p00001": GraphNode(
-                id="REQ-p00001",
-                kind=NodeKind.REQUIREMENT,
-                _content={"level": "PRD", "status": "Active"},
-            ),
-            "REQ-o00001": GraphNode(
-                id="REQ-o00001",
-                kind=NodeKind.REQUIREMENT,
-                _content={"level": "OPS", "status": "Active"},
-            ),
-            "REQ-d00001": GraphNode(
-                id="REQ-d00001",
-                kind=NodeKind.REQUIREMENT,
-                _content={"level": "DEV", "status": "Deprecated"},
-            ),
+            "REQ-p00001": node1,
+            "REQ-o00001": node2,
+            "REQ-d00001": node3,
         }
 
         counts = count_by_level(graph)
@@ -259,18 +254,12 @@ class TestCountByRepo:
 
     def test_counts_by_repo(self):
         """Counts requirements by repo prefix."""
-        node1 = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _content={"status": "Active"},
-            _metrics={"repo_prefix": "CORE"},
-        )
-        node2 = GraphNode(
-            id="REQ-CAL-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _content={"status": "Active"},
-            _metrics={"repo_prefix": "CAL"},
-        )
+        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node1._content = {"status": "Active"}
+        node1._metrics = {"repo_prefix": "CORE"}
+        node2 = GraphNode(id="REQ-CAL-p00001", kind=NodeKind.REQUIREMENT)
+        node2._content = {"status": "Active"}
+        node2._metrics = {"repo_prefix": "CAL"}
         graph = TraceGraph()
         graph._index = {"REQ-p00001": node1, "REQ-CAL-p00001": node2}
 
@@ -285,16 +274,10 @@ class TestCountImplementationFiles:
 
     def test_counts_total_files(self):
         """Counts total implementation files."""
-        node1 = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _metrics={"implementation_files": [("a.py", 1), ("b.py", 2)]},
-        )
-        node2 = GraphNode(
-            id="REQ-p00002",
-            kind=NodeKind.REQUIREMENT,
-            _metrics={"implementation_files": [("c.py", 3)]},
-        )
+        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node1._metrics = {"implementation_files": [("a.py", 1), ("b.py", 2)]}
+        node2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
+        node2._metrics = {"implementation_files": [("c.py", 3)]}
         graph = TraceGraph()
         graph._index = {"REQ-p00001": node1, "REQ-p00002": node2}
 
@@ -332,11 +315,8 @@ class TestGetImplementationStatus:
 
     def test_full_coverage(self):
         """Returns Full when coverage is 100%."""
-        node = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _metrics={"coverage_pct": 100},
-        )
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node._metrics = {"coverage_pct": 100}
 
         status = get_implementation_status(node)
 
@@ -344,11 +324,8 @@ class TestGetImplementationStatus:
 
     def test_partial_coverage(self):
         """Returns Partial when coverage is between 0 and 100."""
-        node = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _metrics={"coverage_pct": 50},
-        )
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node._metrics = {"coverage_pct": 50}
 
         status = get_implementation_status(node)
 
@@ -356,11 +333,8 @@ class TestGetImplementationStatus:
 
     def test_unimplemented(self):
         """Returns Unimplemented when coverage is 0."""
-        node = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            _metrics={"coverage_pct": 0},
-        )
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node._metrics = {"coverage_pct": 0}
 
         status = get_implementation_status(node)
 
