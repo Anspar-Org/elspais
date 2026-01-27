@@ -112,7 +112,9 @@ A. The system SHALL do something.
         assert output_path.exists()
         content = output_path.read_text()
         data = json.loads(content)
-        assert "REQ-p00001" in data
+        # JSON format returns a list of dicts, not a dict keyed by ID
+        assert isinstance(data, list)
+        assert any(item["id"] == "REQ-p00001" for item in data)
 
     def test_trace_csv_format(self, temp_spec_dir: Path, tmp_path: Path):
         """Test trace command with CSV format."""
