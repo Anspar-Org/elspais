@@ -18,32 +18,32 @@ def sample_graph():
         kind=NodeKind.REQUIREMENT,
         label="Product Requirement",
         source=SourceLocation(path="spec/prd.md", line=10, end_line=20),
-        _content={"level": "PRD", "status": "Active", "hash": "abc12345"},
     )
+    prd._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
 
     ops = GraphNode(
         id="REQ-o00001",
         kind=NodeKind.REQUIREMENT,
         label="Operations Requirement",
         source=SourceLocation(path="spec/ops.md", line=5, end_line=15),
-        _content={"level": "OPS", "status": "Active", "hash": "def67890"},
     )
+    ops._content = {"level": "OPS", "status": "Active", "hash": "def67890"}
 
     dev = GraphNode(
         id="REQ-d00001",
         kind=NodeKind.REQUIREMENT,
         label="Dev Requirement",
         source=SourceLocation(path="spec/dev.md", line=1, end_line=10),
-        _content={"level": "DEV", "status": "Active", "hash": "ghi13579"},
     )
+    dev._content = {"level": "DEV", "status": "Active", "hash": "ghi13579"}
 
     # Create assertions
     assertion_a = GraphNode(
         id="REQ-p00001-A",
         kind=NodeKind.ASSERTION,
         label="First assertion",
-        _content={"label": "A"},
     )
+    assertion_a._content = {"label": "A"}
     prd.add_child(assertion_a)
 
     # Link hierarchy
@@ -51,16 +51,14 @@ def sample_graph():
     ops.link(dev, EdgeKind.IMPLEMENTS)
 
     # Build graph
-    graph = TraceGraph(
-        _roots=[prd],
-        repo_root=Path("/test/repo"),
-        _index={
-            "REQ-p00001": prd,
-            "REQ-o00001": ops,
-            "REQ-d00001": dev,
-            "REQ-p00001-A": assertion_a,
-        },
-    )
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph._roots = [prd]
+    graph._index = {
+        "REQ-p00001": prd,
+        "REQ-o00001": ops,
+        "REQ-d00001": dev,
+        "REQ-p00001-A": assertion_a,
+    }
 
     return graph
 

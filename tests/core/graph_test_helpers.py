@@ -6,9 +6,17 @@ the graph through observable output rather than internal state.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from elspais.graph import GraphNode
-from elspais.graph.builder import TraceGraph
+from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.relations import EdgeKind
+
+
+# === Constants ===
+
+VALID_LEVELS = {"PRD", "OPS", "DEV"}
 
 
 # === Mock Source Context ===
@@ -54,7 +62,13 @@ def make_requirement(
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
+
+    Raises:
+        ValueError: If level is not one of PRD, OPS, DEV.
     """
+    if level not in VALID_LEVELS:
+        raise ValueError(f"Invalid level '{level}'. Must be one of: {VALID_LEVELS}")
+
     content = ParsedContent(
         content_type="requirement",
         start_line=start_line,
@@ -174,6 +188,105 @@ def make_test_ref(
     return content
 
 
+def make_test_result(
+    result_id: str,
+    status: str = "passed",
+    test_id: str | None = None,
+    duration: float = 0.0,
+    source_path: str = "results/test_results.xml",
+    start_line: int = 1,
+    end_line: int = 1,
+) -> ParsedContent:
+    """Factory for creating test result content.
+
+    Args:
+        result_id: Unique result ID
+        status: Test status ("passed", "failed", "skipped", "error")
+        test_id: Optional ID of the test that produced this result
+        duration: Test duration in seconds
+        source_path: Path to results file
+        start_line: Start line in results file
+        end_line: End line in results file
+
+    Returns:
+        ParsedContent ready for GraphBuilder.add_parsed_content()
+    """
+    content = ParsedContent(
+        content_type="test_result",
+        start_line=start_line,
+        end_line=end_line,
+        raw_text="",
+        parsed_data={
+            "id": result_id,
+            "status": status,
+            "test_id": test_id,
+            "duration": duration,
+        },
+    )
+    content.source_context = MockSourceContext(source_id=source_path)
+    return content
+
+
+def make_remainder(
+    remainder_id: str,
+    text: str = "",
+    source_path: str = "spec/file.md",
+    start_line: int = 1,
+    end_line: int = 1,
+) -> ParsedContent:
+    """Factory for creating remainder content.
+
+    Remainder nodes represent unclaimed content - lines not matched by
+    any other parser (requirements, journeys, code refs, etc).
+
+    Args:
+        remainder_id: Unique node ID
+        text: The unclaimed text content
+        source_path: Path to source file
+        start_line: Start line in source
+        end_line: End line in source
+
+    Returns:
+        ParsedContent ready for GraphBuilder.add_parsed_content()
+    """
+    content = ParsedContent(
+        content_type="remainder",
+        start_line=start_line,
+        end_line=end_line,
+        raw_text=text,
+        parsed_data={
+            "id": remainder_id,
+            "text": text,
+        },
+    )
+    content.source_context = MockSourceContext(source_id=source_path)
+    return content
+
+
+# === Graph Builder Convenience ===
+
+
+def build_graph(
+    *contents: ParsedContent,
+    repo_root: Path | None = None,
+) -> TraceGraph:
+    """Build a TraceGraph from multiple ParsedContent items.
+
+    Convenience wrapper around GraphBuilder that eliminates boilerplate.
+
+    Args:
+        *contents: ParsedContent items to add to the graph
+        repo_root: Optional repository root path
+
+    Returns:
+        Constructed TraceGraph
+    """
+    builder = GraphBuilder(repo_root=repo_root)
+    for content in contents:
+        builder.add_parsed_content(content)
+    return builder.build()
+
+
 # === String Conversion Helpers (use public methods only) ===
 
 
@@ -284,3 +397,51 @@ def graph_node_ids_string(graph: TraceGraph) -> str:
         Comma-separated string of all node IDs, sorted alphabetically
     """
     return ",".join(sorted(n.id for n in graph.all_nodes()))
+
+
+def descendants_string(node: GraphNode) -> str:
+    """Return sorted comma-separated descendant IDs, excluding self.
+
+    Args:
+        node: GraphNode to inspect
+
+    Returns:
+        Comma-separated string of descendant IDs, sorted alphabetically
+    """
+    return ",".join(sorted(d.id for d in node.walk("pre") if d.id != node.id))
+
+
+def edges_by_kind_string(node: GraphNode, kind: EdgeKind) -> str:
+    """Return sorted semicolon-separated edges of a specific kind.
+
+    Format: "source_id->target_id"
+
+    Args:
+        node: GraphNode to inspect
+        kind: EdgeKind to filter by
+
+    Returns:
+        Semicolon-separated string of edge descriptions
+    """
+    parts = []
+    for e in node.iter_edges_by_kind(kind):
+        parts.append(f"{e.source.id}->{e.target.id}")
+    return ";".join(sorted(parts))
+
+
+def metrics_string(node: GraphNode, *keys: str) -> str:
+    """Return comma-separated key=value pairs for specified metrics.
+
+    Args:
+        node: GraphNode to inspect
+        *keys: Metric keys to include
+
+    Returns:
+        Comma-separated string of key=value pairs
+    """
+    parts = []
+    for key in keys:
+        value = node.get_metric(key)
+        if value is not None:
+            parts.append(f"{key}={value}")
+    return ",".join(parts)

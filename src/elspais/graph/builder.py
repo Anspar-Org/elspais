@@ -119,6 +119,10 @@ class GraphBuilder:
             self._add_code_ref(content)
         elif content.content_type == "test_ref":
             self._add_test_ref(content)
+        elif content.content_type == "test_result":
+            self._add_test_result(content)
+        elif content.content_type == "remainder":
+            self._add_remainder(content)
 
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
@@ -221,6 +225,53 @@ class GraphBuilder:
                 self._nodes[test_id] = node
 
             self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
+
+    def _add_test_result(self, content: ParsedContent) -> None:
+        """Add a test result node."""
+        data = content.parsed_data
+        result_id = data["id"]
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else ""
+
+        node = GraphNode(
+            id=result_id,
+            kind=NodeKind.TEST_RESULT,
+            label=f"{data.get('status', 'unknown')}: {result_id}",
+            source=SourceLocation(
+                path=source_path,
+                line=content.start_line,
+                end_line=content.end_line,
+            ),
+        )
+        node._content = {
+            "status": data.get("status"),
+            "test_id": data.get("test_id"),
+            "duration": data.get("duration"),
+        }
+        self._nodes[result_id] = node
+
+    def _add_remainder(self, content: ParsedContent) -> None:
+        """Add a remainder/unclaimed content node."""
+        data = content.parsed_data
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else ""
+
+        # Use provided ID or generate from source location
+        remainder_id = data.get("id") or f"rem:{source_path}:{content.start_line}"
+        text = data.get("text", content.raw_text or "")
+
+        node = GraphNode(
+            id=remainder_id,
+            kind=NodeKind.TODO,
+            label=text[:50] + "..." if len(text) > 50 else text,
+            source=SourceLocation(
+                path=source_path,
+                line=content.start_line,
+                end_line=content.end_line,
+            ),
+        )
+        node._content = {"text": text}
+        self._nodes[remainder_id] = node
 
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
