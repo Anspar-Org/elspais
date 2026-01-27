@@ -1,217 +1,159 @@
-# MASTER_PLAN: Graph Iterator-Only API + Factory
+# MASTER_PLAN: Trace Command Implementation [COMPLETED]
 
-## Architecture Principles
-1. **Commands only traverse the graph. They never read from disk.**
-2. **Don't make helper functions when you can just use the graph directly.** The graph structure is the API - use it inline.
-3. **Always use iterators, never extract lists/dicts.** Process one node at a time. No `sorted()`, no `list()`, no materializing iterators.
+**Depends on**: OLD_PLAN2.md (Graph iterator-only API + Factory)
 
 ## Files to Modify
-- **MODIFY**: `src/elspais/graph/builder.py` - Refactor TraceGraph to iterator-only API
-- **MODIFY**: `src/elspais/graph/GraphNode.py` - Refactor to iterator-only API
-- **NEW**: `src/elspais/graph/factory.py` - Shared graph-building utility
+- **MODIFY**: `src/elspais/commands/trace.py` - Use factory, implement formats
 
 ---
 
-## Issue Queue
+## Trace Command (`src/elspais/commands/trace.py`)
 
-### [x] Part 0: Refactor Graph to Iterator-Only API
-**Files**: `builder.py`, `GraphNode.py`
-**Scope**: Delete public list/dict attributes, add iterator methods, add UUID for GUI referencing
+### Core Principle
+- Command only works with graph data (zero file I/O for reading requirements)
+- One pure function per format (graph in, iterator out)
+- `run()` is thin orchestration: build graph → format → write output
 
-#### TraceGraph Changes (`builder.py`)
+### Pure Format Functions
 
-**DELETE these public attributes:**
+Each function takes a `TraceGraph` and yields strings. No side effects.
+
 ```python
-roots: list[GraphNode]           # DELETE - exposes list
+from elspais.graph.relations import EdgeKind
+
+def format_markdown(graph: TraceGraph) -> Iterator[str]:
+    """Generate markdown table. Streams one node at a time."""
+    yield "# Traceability Matrix"
+    yield ""
+    yield "| ID | Title | Level | Status | Implements |"
+    yield "|----|-------|-------|--------|------------|"
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        # Use iterator API for edges
+        impl_ids = (e.target.id for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
+        impl = ", ".join(impl_ids) or "-"
+        yield f"| {node.id} | {node.label} | {node.level or ''} | {node.status or ''} | {impl} |"
+
+
+def format_csv(graph: TraceGraph) -> Iterator[str]:
+    """Generate CSV. Streams one node at a time."""
+    def escape(s: str) -> str:
+        if "," in s or '"' in s or "\n" in s:
+            return '"' + s.replace('"', '""') + '"'
+        return s
+
+    yield "id,title,level,status,implements"
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        impl_ids = (e.target.id for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
+        impl = ";".join(impl_ids)
+        yield ",".join([
+            escape(node.id),
+            escape(node.label or ""),
+            escape(node.level or ""),
+            escape(node.status or ""),
+            escape(impl),
+        ])
+
+
+def format_html(graph: TraceGraph) -> Iterator[str]:
+    """Generate basic HTML table. Streams one node at a time."""
+    yield "<!DOCTYPE html><html><body><table>"
+    yield "<tr><th>ID</th><th>Title</th><th>Level</th><th>Status</th><th>Implements</th></tr>"
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        impl_ids = (e.target.id for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
+        impl = ", ".join(impl_ids) or "-"
+        yield f"<tr><td>{node.id}</td><td>{node.label}</td><td>{node.level or ''}</td><td>{node.status or ''}</td><td>{impl}</td></tr>"
+
+    yield "</table></body></html>"
+
+
+def format_json(graph: TraceGraph) -> Iterator[str]:
+    """Generate JSON array. Streams one node at a time."""
+    yield "["
+    first = True
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not first:
+            yield ","
+        first = False
+        # Stream implements IDs via iterator
+        impl_ids = [e.target.id for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)]
+        node_json = json.dumps({
+            "id": node.id,
+            "title": node.label,
+            "level": node.level,
+            "status": node.status,
+            "hash": node.hash,
+            "implements": impl_ids,
+            "source": {
+                "path": node.source.path if node.source else None,
+                "line": node.source.line if node.source else None,
+            },
+        }, indent=2)
+        yield node_json
+    yield "]"
+
+
+def format_view(graph: TraceGraph, embed_content: bool = False) -> str:
+    """Generate interactive HTML via HTMLGenerator."""
+    from elspais.html import HTMLGenerator
+    generator = HTMLGenerator(graph)
+    return generator.generate(embed_content=embed_content)
 ```
 
-**Refactored (iterator-only):**
-```python
-@dataclass
-class TraceGraph:
-    _roots: list[GraphNode] = field(default_factory=list)  # Internal
-    _index: dict[str, GraphNode] = field(default_factory=dict, repr=False)  # Internal
-    repo_root: Path = field(default_factory=Path.cwd)
-
-    def iter_roots(self) -> Iterator[GraphNode]:
-        """Iterate root nodes."""
-        yield from self._roots
-
-    def find_by_id(self, node_id: str) -> GraphNode | None:
-        """Find single node by ID."""  # Returns node
-        return self._index.get(node_id)
-
-    def all_nodes(self, order: str = "pre") -> Iterator[GraphNode]:
-        """Iterate all nodes."""  # Returns iterator
-        ...
-
-    def nodes_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
-        """Iterate nodes of a kind."""  # Returns iterator
-        ...
-
-    def node_count(self) -> int:
-        """Return count."""  # Returns int
-        return len(self._index)
-```
-
-#### GraphNode Changes (`GraphNode.py`)
-
-**DELETE these public attributes and methods:**
-```python
-children: list[GraphNode]        # DELETE - exposes list
-parents: list[GraphNode]         # DELETE - exposes list
-outgoing_edges: list[Edge]       # DELETE - exposes list
-incoming_edges: list[Edge]       # DELETE - exposes list
-content: dict[str, Any]          # DELETE - exposes dict
-metrics: dict[str, Any]          # DELETE - exposes dict
-
-def edges_by_kind(self, kind) -> list[Edge]:  # DELETE - returns list
-```
-
-**Refactored (iterators + field accessors):**
-```python
-@dataclass
-class GraphNode:
-    id: str
-    kind: NodeKind
-    label: str = ""
-    source: SourceLocation | None = None
-    uuid: str = field(default_factory=lambda: uuid4().hex)  # Stable reference for GUI
-
-    # Internal storage (prefixed)
-    _children: list[GraphNode] = field(default_factory=list)
-    _parents: list[GraphNode] = field(default_factory=list, repr=False)
-    _outgoing_edges: list[Edge] = field(default_factory=list, repr=False)
-    _incoming_edges: list[Edge] = field(default_factory=list, repr=False)
-    _content: dict[str, Any] = field(default_factory=dict)
-    _metrics: dict[str, Any] = field(default_factory=dict)
-
-    # Iterator access
-    def iter_children(self) -> Iterator[GraphNode]:
-        yield from self._children
-
-    def iter_parents(self) -> Iterator[GraphNode]:
-        yield from self._parents
-
-    def iter_outgoing_edges(self) -> Iterator[Edge]:
-        yield from self._outgoing_edges
-
-    def iter_incoming_edges(self) -> Iterator[Edge]:
-        yield from self._incoming_edges
-
-    def iter_edges_by_kind(self, edge_kind: EdgeKind) -> Iterator[Edge]:
-        for e in self._outgoing_edges:
-            if e.kind == edge_kind:
-                yield e
-
-    # Field accessors (return single value)
-    def get_field(self, key: str, default: Any = None) -> Any:
-        return self._content.get(key, default)
-
-    def get_metric(self, key: str, default: Any = None) -> Any:
-        return self._metrics.get(key, default)
-
-    def set_metric(self, key: str, value: Any) -> None:
-        self._metrics[key] = value
-
-    # Convenience properties for common fields
-    @property
-    def level(self) -> str | None:
-        return self._content.get("level")
-
-    @property
-    def status(self) -> str | None:
-        return self._content.get("status")
-
-    @property
-    def hash(self) -> str | None:
-        return self._content.get("hash")
-```
-
-#### UUID for GUI References
-Each node gets a stable UUID (`uuid4().hex`) for direct referencing in HTML/GUI contexts. Unlike `id` (which may contain special characters or be hierarchical like `REQ-p00001-A`), the UUID is a simple 32-char hex string suitable for DOM IDs, URL fragments, and API endpoints.
+### `run(args) -> int` - Thin Orchestration
 
 ```python
-from uuid import uuid4
-```
+def run(args: argparse.Namespace) -> int:
+    # Handle not-implemented features
+    for flag in ("edit_mode", "review_mode", "server"):
+        if getattr(args, flag, False):
+            print(f"Error: --{flag.replace('_', '-')} not yet implemented", file=sys.stderr)
+            return 1
 
-#### Update GraphBuilder to use internal attributes
-The builder sets `_children`, `_parents`, etc. instead of public lists.
+    # Build graph using factory
+    from elspais.graph.factory import build_graph
+    graph = build_graph(
+        spec_dirs=[args.spec_dir] if getattr(args, "spec_dir", None) else None,
+        config_path=getattr(args, "config", None),
+    )
 
----
+    # Select formatter (returns generator)
+    if getattr(args, "view", False):
+        # format_view returns a single string (HTMLGenerator)
+        content = format_view(graph, getattr(args, "embed_content", False))
+        output_path = args.output or Path("traceability_view.html")
+        Path(output_path).write_text(content)
+    else:
+        formatters = {
+            "markdown": format_markdown,
+            "csv": format_csv,
+            "html": format_html,
+            "json": format_json,
+        }
+        line_generator = formatters[args.format](graph)
+        output_path = args.output
 
-### [x] Part 1: Graph Factory (`src/elspais/graph/factory.py`) (COMPLETED)
-**Files**: NEW `src/elspais/graph/factory.py`
-**Scope**: Single utility that builds a `TraceGraph` from config/spec directories
+        # Stream output line by line
+        if output_path:
+            with open(output_path, "w") as f:
+                for line in line_generator:
+                    f.write(line + "\n")
+        else:
+            for line in line_generator:
+                print(line)
 
-#### Purpose
-All commands call this instead of implementing their own file reading.
+    if output_path and not getattr(args, "quiet", False):
+        print(f"Generated: {output_path}", file=sys.stderr)
 
-#### Function Signature
-```python
-def build_graph(
-    config: dict | None = None,
-    spec_dirs: list[Path] | None = None,
-    config_path: Path | None = None,
-) -> TraceGraph:
-    """Build a TraceGraph from spec directories.
-
-    Args:
-        config: Pre-loaded config dict (optional)
-        spec_dirs: Explicit spec directories (optional)
-        config_path: Path to config file (optional)
-
-    Priority: spec_dirs > config > config_path > defaults
-
-    Returns:
-        Complete TraceGraph with all requirements linked.
-    """
-```
-
-#### Implementation Flow
-```python
-from pathlib import Path
-from elspais.config import get_config, get_spec_directories
-from elspais.utilities.patterns import PatternConfig
-from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.requirement import RequirementParser
-from elspais.graph.parsers.journey import JourneyParser
-from elspais.graph.parsers.code import CodeParser
-from elspais.graph.parsers.test import TestParser
-from elspais.graph.deserializer import DomainFile
-from elspais.graph.builder import GraphBuilder, TraceGraph
-
-def build_graph(...) -> TraceGraph:
-    # 1. Resolve config
-    if config is None:
-        config = get_config(config_path, Path.cwd())
-
-    # 2. Resolve spec directories
-    if spec_dirs is None:
-        spec_dirs = get_spec_directories(None, config)
-
-    # 3. Create parser registry with ALL parsers
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    registry = ParserRegistry()
-    registry.register(RequirementParser(pattern_config))
-    registry.register(JourneyParser())
-    registry.register(CodeParser())
-    registry.register(TestParser())
-
-    # 4. Build graph from all spec directories
-    builder = GraphBuilder(repo_root=Path.cwd())
-    for spec_dir in spec_dirs:
-        domain_file = DomainFile(spec_dir, patterns=["*.md"], recursive=True)
-        for parsed_content in domain_file.deserialize(registry):
-            builder.add_parsed_content(parsed_content)
-
-    return builder.build()
+    return 0
 ```
 
 ---
 
 ## Verification
 
-1. **Graph API tests**: `pytest tests/graph/ -v` - Verify iterator-only API works
-2. **Factory import**: `python -c "from elspais.graph.factory import build_graph"`
-3. **Verify iterator-only**: Grep GraphNode.py for `-> list` or `-> dict` - should find none in public methods
+1. **Trace tests**: `pytest tests/test_trace_command.py -v`
+2. **CLI test**: `elspais trace spec/ --format markdown`
+3. **View test**: `elspais trace spec/ --view --embed-content`
