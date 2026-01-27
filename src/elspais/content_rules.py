@@ -180,6 +180,7 @@ def load_content_rules(
 
 
 __all__ = [
+    "ContentRule",
     "parse_frontmatter",
     "load_content_rule",
     "load_content_rules",

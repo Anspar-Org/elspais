@@ -1,14 +1,18 @@
+# Implements: REQ-int-d00003 (MCP Server)
 """
 elspais.mcp.serializers - JSON serialization for MCP responses.
 
-Provides functions to serialize elspais data models to JSON-compatible dicts.
+Provides functions to serialize GraphNode objects to JSON-compatible dicts.
 
 Uses GraphNode from the traceability graph module.
 """
 
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from elspais.content_rules import ContentRule
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 
@@ -16,69 +20,107 @@ if TYPE_CHECKING:
     from elspais.mcp.context import WorkspaceContext
 
 
-def serialize_requirement(req: Requirement) -> Dict[str, Any]:
+class Severity(Enum):
+    """Validation rule severity levels."""
+
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+
+@dataclass
+class RuleViolation:
+    """A validation rule violation."""
+
+    rule_name: str
+    requirement_id: str
+    message: str
+    severity: Severity
+    location: Optional[str] = None
+
+
+def serialize_requirement(node: GraphNode) -> Dict[str, Any]:
     """
-    Serialize a Requirement to a JSON-compatible dict.
+    Serialize a requirement GraphNode to a JSON-compatible dict.
 
     Args:
-        req: Requirement to serialize
+        node: GraphNode of kind REQUIREMENT
 
     Returns:
         Dict suitable for JSON serialization
     """
+    # Get implements/refines from parent relationships
+    implements = []
+    for parent in node.iter_parents():
+        if parent.kind == NodeKind.REQUIREMENT:
+            implements.append(parent.id)
+
+    # Get assertions from children
+    assertions = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append(serialize_assertion(child))
+
     return {
-        "id": req.id,
-        "title": req.title,
-        "level": req.level,
-        "status": req.status,
-        "body": req.body,
-        "implements": req.implements,
-        "refines": req.refines,
-        "assertions": [serialize_assertion(a) for a in req.assertions],
-        "rationale": req.rationale,
-        "hash": req.hash,
-        "file_path": str(req.file_path) if req.file_path else None,
-        "line_number": req.line_number,
-        "subdir": req.subdir,
-        "type_code": req.type_code,
+        "id": node.id,
+        "title": node.label,
+        "level": node.level,
+        "status": node.status,
+        "body": node.get_field("body", ""),
+        "implements": implements,
+        "refines": [],
+        "assertions": assertions,
+        "rationale": node.get_field("rationale", ""),
+        "hash": node.hash,
+        "file_path": node.source.path if node.source else None,
+        "line_number": node.source.line if node.source else None,
+        "subdir": node.get_field("subdir", ""),
+        "type_code": node.get_field("type_code", ""),
     }
 
 
-def serialize_requirement_summary(req: Requirement) -> Dict[str, Any]:
+def serialize_requirement_summary(node: GraphNode) -> Dict[str, Any]:
     """
     Serialize requirement summary (lighter weight, for listings).
 
     Args:
-        req: Requirement to serialize
+        node: GraphNode of kind REQUIREMENT
 
     Returns:
         Dict with summary fields only
     """
+    implements = []
+    for parent in node.iter_parents():
+        if parent.kind == NodeKind.REQUIREMENT:
+            implements.append(parent.id)
+
+    assertion_count = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
+
     return {
-        "id": req.id,
-        "title": req.title,
-        "level": req.level,
-        "status": req.status,
-        "implements": req.implements,
-        "refines": req.refines,
-        "assertion_count": len(req.assertions),
+        "id": node.id,
+        "title": node.label,
+        "level": node.level,
+        "status": node.status,
+        "implements": implements,
+        "refines": [],
+        "assertion_count": assertion_count,
     }
 
 
-def serialize_assertion(assertion: Assertion) -> Dict[str, Any]:
+def serialize_assertion(node: GraphNode) -> Dict[str, Any]:
     """
-    Serialize an Assertion to a JSON-compatible dict.
+    Serialize an assertion GraphNode to a JSON-compatible dict.
 
     Args:
-        assertion: Assertion to serialize
+        node: GraphNode of kind ASSERTION
 
     Returns:
         Dict suitable for JSON serialization
     """
     return {
-        "label": assertion.label,
-        "text": assertion.text,
-        "is_placeholder": assertion.is_placeholder,
+        "label": node.label,
+        "text": node.get_field("text", ""),
+        "is_placeholder": node.get_field("is_placeholder", False),
     }
 
 
@@ -121,7 +163,7 @@ def serialize_content_rule(rule: ContentRule) -> Dict[str, Any]:
 
 
 def serialize_node_full(
-    req: Requirement,
+    node: GraphNode,
     context: "WorkspaceContext",
     include_full_text: bool = True,
 ) -> Dict[str, Any]:
@@ -136,7 +178,7 @@ def serialize_node_full(
     - Source location with line range
 
     Args:
-        req: Requirement to serialize
+        node: GraphNode of kind REQUIREMENT
         context: WorkspaceContext for graph access
         include_full_text: If True, include full_text from file
 
@@ -144,195 +186,159 @@ def serialize_node_full(
         Dict suitable for JSON serialization and AI processing
     """
     result: Dict[str, Any] = {
-        "id": req.id,
-        "title": req.title,
-        "level": req.level,
-        "status": req.status,
-        "type_code": req.type_code,
+        "id": node.id,
+        "title": node.label,
+        "level": node.level,
+        "status": node.status,
+        "type_code": node.get_field("type_code", ""),
     }
 
-    # Get the graph node for metrics and relationships
-    graph, _ = context.get_graph()
-    node = graph.find_by_id(req.id)
-
     # Source location
-    if req.file_path:
-        result["file_path"] = str(req.file_path)
-        result["line_number"] = req.line_number
-
-        # Get line range from mutator if we need full text
-        if include_full_text:
-            full_text = _get_requirement_full_text(req, context)
-            if full_text:
-                result["full_text"] = full_text
-
-                # Calculate line range
-                if req.line_number:
-                    line_count = full_text.count("\n") + 1
-                    result["line_range"] = [req.line_number, req.line_number + line_count - 1]
-
-    # Source info from graph node (if available)
-    if node and node.source:
+    if node.source:
+        result["file_path"] = node.source.path
+        result["line_number"] = node.source.line
         result["source"] = {
             "path": node.source.path,
             "line": node.source.line,
             "end_line": node.source.end_line,
         }
 
+        # Get full text from file if requested
+        if include_full_text and node.source.path:
+            full_text = _get_node_full_text(node, context)
+            if full_text:
+                result["full_text"] = full_text
+                line_count = full_text.count("\n") + 1
+                result["line_range"] = [node.source.line, node.source.line + line_count - 1]
+
     # Assertions with coverage info
-    assertions_info = _serialize_assertions_with_coverage(req, node)
+    assertions_info = _serialize_assertions_with_coverage(node)
     result["assertions"] = assertions_info
 
-    # Relationships
-    result["implements"] = req.implements
-    result["refines"] = req.refines
+    # Relationships - implements (parents)
+    implements = []
+    for parent in node.iter_parents():
+        if parent.kind == NodeKind.REQUIREMENT:
+            implements.append(parent.id)
+    result["implements"] = implements
+    result["refines"] = []
 
-    # Implemented_by - find children that implement this requirement
-    if node:
-        implemented_by = _get_implementing_children(node)
-        result["implemented_by"] = implemented_by
-        result["refined_by"] = []  # Not currently tracked in reverse
+    # Implemented_by (children)
+    implemented_by = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.REQUIREMENT:
+            implemented_by.append(child.id)
+    result["implemented_by"] = implemented_by
+    result["refined_by"] = []
 
     # Metrics from graph node
-    if node and node.metrics:
-        metrics = node.metrics
-        result["metrics"] = {
-            "total_assertions": metrics.get("total_assertions", len(req.assertions)),
-            "covered_assertions": metrics.get("covered_assertions", 0),
-            "coverage_pct": metrics.get("coverage_pct", 0.0),
-            "direct_covered": metrics.get("direct_covered", 0),
-            "explicit_covered": metrics.get("explicit_covered", 0),
-            "inferred_covered": metrics.get("inferred_covered", 0),
-            "total_tests": metrics.get("total_tests", 0),
-            "passed_tests": metrics.get("passed_tests", 0),
-            "pass_rate_pct": metrics.get("pass_rate_pct", 0.0),
-        }
-    else:
-        result["metrics"] = {
-            "total_assertions": len(req.assertions),
-            "covered_assertions": 0,
-            "coverage_pct": 0.0,
-        }
+    result["metrics"] = {
+        "total_assertions": sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION),
+        "covered_assertions": node.get_metric("covered_assertions", 0),
+        "coverage_pct": node.get_metric("coverage_pct", 0.0),
+        "direct_covered": node.get_metric("direct_covered", 0),
+        "explicit_covered": node.get_metric("explicit_covered", 0),
+        "inferred_covered": node.get_metric("inferred_covered", 0),
+        "total_tests": node.get_metric("total_tests", 0),
+        "passed_tests": node.get_metric("passed_tests", 0),
+        "pass_rate_pct": node.get_metric("pass_rate_pct", 0.0),
+    }
 
     # Body and rationale
-    result["body"] = req.body
-    result["rationale"] = req.rationale
+    result["body"] = node.get_field("body", "")
+    result["rationale"] = node.get_field("rationale", "")
 
     # Hash for change detection
-    result["hash"] = req.hash
+    result["hash"] = node.hash
 
     # Metadata
-    result["subdir"] = req.subdir
-    result["tags"] = req.tags
-    result["is_conflict"] = req.is_conflict
-    if req.is_conflict:
-        result["conflict_with"] = req.conflict_with
+    result["subdir"] = node.get_field("subdir", "")
+    result["tags"] = node.get_field("tags", [])
+    result["is_conflict"] = node.get_field("is_conflict", False)
+    if result["is_conflict"]:
+        result["conflict_with"] = node.get_field("conflict_with", "")
 
     return result
 
 
-def _get_requirement_full_text(
-    req: Requirement,
+def _get_node_full_text(
+    node: GraphNode,
     context: "WorkspaceContext",
 ) -> Optional[str]:
     """
     Get the full requirement text from its source file.
 
     Args:
-        req: Requirement with file_path
-        context: WorkspaceContext for mutator access
+        node: GraphNode with source location
+        context: WorkspaceContext for file access
 
     Returns:
         Full requirement text or None if not accessible
     """
-    if not req.file_path:
+    if not node.source or not node.source.path:
         return None
 
     try:
         from elspais.mcp.mutator import SpecFileMutator
 
         mutator = SpecFileMutator(context.working_dir)
-        content = mutator._read_spec_file(Path(req.file_path))
-        location = mutator._find_requirement_lines(content, req.id)
+        content = mutator._read_spec_file(Path(node.source.path))
+        location = mutator._find_requirement_lines(content, node.id)
 
         if location:
             return mutator.get_requirement_text(content, location)
-    except (FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError, AttributeError):
         pass
 
     return None
 
 
-def _serialize_assertions_with_coverage(
-    req: Requirement,
-    node: Optional[GraphNode],
-) -> List[Dict[str, Any]]:
+def _serialize_assertions_with_coverage(node: GraphNode) -> List[Dict[str, Any]]:
     """
     Serialize assertions with coverage information from graph.
 
     Args:
-        req: Requirement containing assertions
-        node: GraphNode for the requirement (may be None)
+        node: GraphNode for the requirement
 
     Returns:
         List of assertion dicts with coverage info
     """
     assertions_info = []
 
-    # Build a map of assertion coverage from graph
-    assertion_coverage: Dict[str, Dict[str, Any]] = {}
-    if node:
-        for child in node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                # Extract assertion label from ID (e.g., "REQ-p00001-A" -> "A")
-                label = child.id.rsplit("-", 1)[-1] if "-" in child.id else child.id
-                contributions = child.get_metric("_coverage_contributions", [])
-                covered = len(contributions) > 0
-                source_type = None
-                if contributions:
-                    first = contributions[0]
-                    if hasattr(first, "source_type"):
-                        source_type = (
-                            first.source_type.value
-                            if hasattr(first.source_type, "value")
-                            else str(first.source_type)
-                        )
-                assertion_coverage[label] = {
-                    "covered": covered,
-                    "coverage_source": source_type,
-                }
+    for child in node.iter_children():
+        if child.kind != NodeKind.ASSERTION:
+            continue
 
-    # Serialize each assertion
-    for assertion in req.assertions:
         info: Dict[str, Any] = {
-            "label": assertion.label,
-            "text": assertion.text,
-            "is_placeholder": assertion.is_placeholder,
+            "label": child.label,
+            "text": child.get_field("text", ""),
+            "is_placeholder": child.get_field("is_placeholder", False),
         }
 
-        # Add coverage info if available
-        coverage = assertion_coverage.get(assertion.label, {})
-        info["covered"] = coverage.get("covered", False)
-        if coverage.get("coverage_source"):
-            info["coverage_source"] = coverage["coverage_source"]
+        # Add coverage info
+        contributions = child.get_metric("_coverage_contributions", [])
+        info["covered"] = len(contributions) > 0
+        if contributions:
+            first = contributions[0]
+            if hasattr(first, "source_type"):
+                info["coverage_source"] = (
+                    first.source_type.value
+                    if hasattr(first.source_type, "value")
+                    else str(first.source_type)
+                )
 
         assertions_info.append(info)
 
     return assertions_info
 
 
-def _get_implementing_children(node: GraphNode) -> List[str]:
-    """
-    Get IDs of requirement children that implement this node.
-
-    Args:
-        node: GraphNode to find implementers for
-
-    Returns:
-        List of requirement IDs that implement this node
-    """
-    implementers = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.REQUIREMENT:
-            implementers.append(child.id)
-    return implementers
+__all__ = [
+    "Severity",
+    "RuleViolation",
+    "serialize_assertion",
+    "serialize_content_rule",
+    "serialize_node_full",
+    "serialize_requirement",
+    "serialize_requirement_summary",
+    "serialize_violation",
+]
