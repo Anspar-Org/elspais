@@ -108,7 +108,7 @@ This file contains a prioritized queue of enhancement issues for iterative imple
 
 ---
 
-### [ ] Phase 5: Fix test_builder.py
+### [x] Phase 5: Fix test_builder.py (COMPLETED)
 
 **File**: `tests/core/test_builder.py`
 
