@@ -4,7 +4,7 @@ import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.GraphNode import GraphNode, SourceLocation
-from elspais.graph.builder import TraceGraph
+from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.utilities.git import GitChangeInfo
 from elspais.graph.annotators import (
     annotate_git_state,
@@ -16,6 +16,7 @@ from elspais.graph.annotators import (
     collect_topics,
     get_implementation_status,
 )
+from tests.core.graph_test_helpers import build_graph, make_requirement
 
 
 class TestAnnotateGitState:
@@ -77,7 +78,7 @@ class TestAnnotateGitState:
             kind=NodeKind.REQUIREMENT,
             source=SourceLocation(path="spec/new.md", line=1),
         )
-        node._content = {"id": "REQ-p00001"}
+        node.set_field("id", "REQ-p00001")
         git_info = GitChangeInfo(
             committed_req_locations={"p00001": "spec/old.md"},
         )
@@ -115,6 +116,23 @@ class TestAnnotateGitState:
 
         assert node.get_metric("is_uncommitted") is None
 
+    def test_handles_assertion_id_format(self):
+        """Handles requirement ID with assertion suffix for move detection."""
+        # Assertion nodes (REQ-xxx-A) should be skipped
+        node = GraphNode(
+            id="REQ-p00001-A",
+            kind=NodeKind.ASSERTION,
+            source=SourceLocation(path="spec/prd.md", line=5),
+        )
+        git_info = GitChangeInfo(
+            committed_req_locations={"p00001": "spec/old.md"},
+        )
+
+        # Should not raise and should not annotate
+        annotate_git_state(node, git_info)
+
+        assert node.get_metric("is_moved") is None
+
 
 class TestAnnotateDisplayInfo:
     """Tests for annotate_display_info function."""
@@ -149,7 +167,8 @@ class TestAnnotateDisplayInfo:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
         )
-        node._content = {"is_conflict": True, "conflict_with": "REQ-p00001__conflict"}
+        node.set_field("is_conflict", True)
+        node.set_field("conflict_with", "REQ-p00001__conflict")
 
         annotate_display_info(node)
 
@@ -175,7 +194,7 @@ class TestAnnotateDisplayInfo:
             id="REQ-CAL-p00001",
             kind=NodeKind.REQUIREMENT,
         )
-        node._content = {"repo_prefix": "CAL"}
+        node.set_field("repo_prefix", "CAL")
 
         annotate_display_info(node)
 
@@ -214,12 +233,15 @@ class TestAnnotateImplementationFiles:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
         )
-        node._metrics = {"implementation_files": [("src/old.py", 1)]}
+        node.set_metric("implementation_files", [("src/old.py", 1)])
         impl_files = [("src/new.py", 2)]
 
         annotate_implementation_files(node, impl_files)
 
-        assert len(node.get_metric("implementation_files")) == 2
+        files = node.get_metric("implementation_files")
+        assert len(files) == 2
+        assert ("src/old.py", 1) in files
+        assert ("src/new.py", 2) in files
 
 
 class TestCountByLevel:
@@ -227,19 +249,11 @@ class TestCountByLevel:
 
     def test_counts_by_level(self):
         """Counts requirements by level."""
-        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node1._content = {"level": "PRD", "status": "Active"}
-        node2 = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
-        node2._content = {"level": "OPS", "status": "Active"}
-        node3 = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT)
-        node3._content = {"level": "DEV", "status": "Deprecated"}
-
-        graph = TraceGraph()
-        graph._index = {
-            "REQ-p00001": node1,
-            "REQ-o00001": node2,
-            "REQ-d00001": node3,
-        }
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD", status="Active"),
+            make_requirement("REQ-o00001", level="OPS", status="Active"),
+            make_requirement("REQ-d00001", level="DEV", status="Deprecated"),
+        )
 
         counts = count_by_level(graph)
 
@@ -254,14 +268,15 @@ class TestCountByRepo:
 
     def test_counts_by_repo(self):
         """Counts requirements by repo prefix."""
-        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node1._content = {"status": "Active"}
-        node1._metrics = {"repo_prefix": "CORE"}
-        node2 = GraphNode(id="REQ-CAL-p00001", kind=NodeKind.REQUIREMENT)
-        node2._content = {"status": "Active"}
-        node2._metrics = {"repo_prefix": "CAL"}
-        graph = TraceGraph()
-        graph._index = {"REQ-p00001": node1, "REQ-CAL-p00001": node2}
+        graph = build_graph(
+            make_requirement("REQ-p00001", status="Active"),
+            make_requirement("REQ-CAL-p00001", status="Active"),
+        )
+        # Annotate with repo prefixes using public API
+        node1 = graph.find_by_id("REQ-p00001")
+        node1.set_metric("repo_prefix", "CORE")
+        node2 = graph.find_by_id("REQ-CAL-p00001")
+        node2.set_metric("repo_prefix", "CAL")
 
         counts = count_by_repo(graph)
 
@@ -274,12 +289,15 @@ class TestCountImplementationFiles:
 
     def test_counts_total_files(self):
         """Counts total implementation files."""
-        node1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node1._metrics = {"implementation_files": [("a.py", 1), ("b.py", 2)]}
-        node2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
-        node2._metrics = {"implementation_files": [("c.py", 3)]}
-        graph = TraceGraph()
-        graph._index = {"REQ-p00001": node1, "REQ-p00002": node2}
+        graph = build_graph(
+            make_requirement("REQ-p00001"),
+            make_requirement("REQ-p00002"),
+        )
+        # Set implementation files using public API
+        node1 = graph.find_by_id("REQ-p00001")
+        node1.set_metric("implementation_files", [("a.py", 1), ("b.py", 2)])
+        node2 = graph.find_by_id("REQ-p00002")
+        node2.set_metric("implementation_files", [("c.py", 3)])
 
         total = count_implementation_files(graph)
 
@@ -291,18 +309,10 @@ class TestCollectTopics:
 
     def test_collects_topics_from_filenames(self):
         """Extracts topics from file stems."""
-        node1 = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd-authentication.md", line=1),
+        graph = build_graph(
+            make_requirement("REQ-p00001", source_path="spec/prd-authentication.md"),
+            make_requirement("REQ-p00002", source_path="spec/prd-billing.md"),
         )
-        node2 = GraphNode(
-            id="REQ-p00002",
-            kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd-billing.md", line=1),
-        )
-        graph = TraceGraph()
-        graph._index = {"REQ-p00001": node1, "REQ-p00002": node2}
 
         topics = collect_topics(graph)
 
@@ -316,7 +326,7 @@ class TestGetImplementationStatus:
     def test_full_coverage(self):
         """Returns Full when coverage is 100%."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node._metrics = {"coverage_pct": 100}
+        node.set_metric("coverage_pct", 100)
 
         status = get_implementation_status(node)
 
@@ -325,7 +335,7 @@ class TestGetImplementationStatus:
     def test_partial_coverage(self):
         """Returns Partial when coverage is between 0 and 100."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node._metrics = {"coverage_pct": 50}
+        node.set_metric("coverage_pct", 50)
 
         status = get_implementation_status(node)
 
@@ -334,7 +344,7 @@ class TestGetImplementationStatus:
     def test_unimplemented(self):
         """Returns Unimplemented when coverage is 0."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node._metrics = {"coverage_pct": 0}
+        node.set_metric("coverage_pct", 0)
 
         status = get_implementation_status(node)
 
@@ -350,3 +360,21 @@ class TestGetImplementationStatus:
         status = get_implementation_status(node)
 
         assert status == "Unimplemented"
+
+    def test_boundary_99_is_partial(self):
+        """Coverage of 99% is still Partial, not Full."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node.set_metric("coverage_pct", 99)
+
+        status = get_implementation_status(node)
+
+        assert status == "Partial"
+
+    def test_boundary_1_is_partial(self):
+        """Coverage of 1% is Partial, not Unimplemented."""
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        node.set_metric("coverage_pct", 1)
+
+        status = get_implementation_status(node)
+
+        assert status == "Partial"
