@@ -641,6 +641,44 @@ Full Documentation:
         help="Which repos to include in hierarchy (default: combined)",
     )
 
+    # docs command - comprehensive user documentation
+    docs_parser = subparsers.add_parser(
+        "docs",
+        help="Read the user guide (topics: quickstart, format, hierarchy, ...)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Available Topics:
+  quickstart   Getting started with elspais (default)
+  format       Requirement file format and structure
+  hierarchy    PRD → OPS → DEV levels and implements
+  assertions   Writing testable assertions with SHALL
+  traceability Linking requirements to code and tests
+  validation   Running validation and fixing issues
+  git          Change detection and git integration
+  config       Configuration file reference
+  all          Show complete documentation
+
+Examples:
+  elspais docs                  # Quick start guide
+  elspais docs format           # Requirement format reference
+  elspais docs all              # Complete documentation
+  elspais docs all | less       # Page through docs
+""",
+    )
+    docs_parser.add_argument(
+        "topic",
+        nargs="?",
+        default="quickstart",
+        choices=["quickstart", "format", "hierarchy", "assertions",
+                 "traceability", "validation", "git", "config", "all"],
+        help="Documentation topic (default: quickstart)",
+    )
+    docs_parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="Plain text output (no ANSI colors)",
+    )
+
     # completion command - shell tab-completion setup
     completion_parser = subparsers.add_parser(
         "completion",
@@ -789,6 +827,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return rules_cmd.run(args)
         elif args.command == "reformat-with-claude":
             return reformat_cmd.run(args)
+        elif args.command == "docs":
+            return docs_command(args)
         elif args.command == "completion":
             return completion_command(args)
         elif args.command == "mcp":
@@ -805,6 +845,481 @@ def main(argv: Optional[List[str]] = None) -> int:
             raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def docs_command(args: argparse.Namespace) -> int:
+    """Handle docs command - display user documentation."""
+    topic = args.topic
+    use_color = not args.plain and sys.stdout.isatty()
+
+    # ANSI color codes
+    BOLD = "\033[1m" if use_color else ""
+    CYAN = "\033[36m" if use_color else ""
+    GREEN = "\033[32m" if use_color else ""
+    YELLOW = "\033[33m" if use_color else ""
+    RESET = "\033[0m" if use_color else ""
+    DIM = "\033[2m" if use_color else ""
+
+    def heading(text: str) -> str:
+        return f"\n{BOLD}{CYAN}{'═' * 60}{RESET}\n{BOLD}{text}{RESET}\n{BOLD}{CYAN}{'═' * 60}{RESET}\n"
+
+    def subheading(text: str) -> str:
+        return f"\n{BOLD}{GREEN}{text}{RESET}\n{DIM}{'─' * 40}{RESET}\n"
+
+    docs = {}
+
+    docs["quickstart"] = f"""{heading("ELSPAIS QUICK START GUIDE")}
+
+{BOLD}elspais{RESET} validates requirements and traces them through code to tests.
+Requirements live as Markdown files in your {CYAN}spec/{RESET} directory.
+
+{subheading("1. Initialize Your Project")}
+
+  {GREEN}${RESET} elspais init              {DIM}# Creates .elspais.toml{RESET}
+  {GREEN}${RESET} elspais init --template   {DIM}# Also creates example requirement{RESET}
+
+{subheading("2. Write Your First Requirement")}
+
+Create {CYAN}spec/prd-auth.md{RESET}:
+
+  {DIM}# REQ-p00001: User Authentication{RESET}
+  {DIM}{RESET}
+  {DIM}**Level**: PRD | **Status**: Active{RESET}
+  {DIM}{RESET}
+  {DIM}**Purpose:** Enable secure user login.{RESET}
+  {DIM}{RESET}
+  {DIM}## Assertions{RESET}
+  {DIM}{RESET}
+  {DIM}A. The system SHALL authenticate users via email and password.{RESET}
+  {DIM}B. The system SHALL lock accounts after 5 failed login attempts.{RESET}
+  {DIM}{RESET}
+  {DIM}*End* *User Authentication* | **Hash**: 00000000{RESET}
+
+{subheading("3. Validate and Update Hashes")}
+
+  {GREEN}${RESET} elspais validate     {DIM}# Check format, links, hierarchy{RESET}
+  {GREEN}${RESET} elspais hash update  {DIM}# Compute content hashes{RESET}
+
+{subheading("4. Create Implementing Requirements")}
+
+DEV requirements implement PRD requirements:
+
+  {DIM}# REQ-d00001: Password Hashing{RESET}
+  {DIM}{RESET}
+  {DIM}**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001-A{RESET}
+  {DIM}{RESET}
+  {DIM}## Assertions{RESET}
+  {DIM}{RESET}
+  {DIM}A. The system SHALL use bcrypt with cost factor 12.{RESET}
+
+{subheading("5. Generate Traceability Report")}
+
+  {GREEN}${RESET} elspais trace --view   {DIM}# Interactive HTML tree{RESET}
+  {GREEN}${RESET} elspais trace --format html -o trace.html{RESET}
+
+{subheading("Next Steps")}
+
+  {GREEN}${RESET} elspais docs format      {DIM}# Full format reference{RESET}
+  {GREEN}${RESET} elspais docs hierarchy   {DIM}# Learn about PRD/OPS/DEV{RESET}
+  {GREEN}${RESET} elspais docs all         {DIM}# Complete documentation{RESET}
+"""
+
+    docs["format"] = f"""{heading("REQUIREMENT FORMAT REFERENCE")}
+
+{subheading("File Structure")}
+
+Requirements are Markdown files in {CYAN}spec/{RESET}. Each file can contain
+one or more requirements separated by {CYAN}---{RESET} (horizontal rule).
+
+Naming convention: {CYAN}spec/<level>-<topic>.md{RESET}
+  Examples: {DIM}spec/prd-auth.md, spec/dev-api.md{RESET}
+
+{subheading("Requirement Structure")}
+
+  {CYAN}# REQ-p00001: Human-Readable Title{RESET}
+
+  {CYAN}**Level**: PRD | **Status**: Active | **Implements**: none{RESET}
+
+  {CYAN}**Purpose:** One-line description of why this requirement exists.{RESET}
+
+  {CYAN}## Assertions{RESET}
+
+  {CYAN}A. The system SHALL do something specific and testable.{RESET}
+  {CYAN}B. The system SHALL NOT do something prohibited.{RESET}
+
+  {CYAN}*End* *Human-Readable Title* | **Hash**: a1b2c3d4{RESET}
+
+{subheading("ID Format")}
+
+  {BOLD}REQ-<type><number>{RESET}
+
+  Types:
+    {GREEN}p{RESET} = PRD (Product)     e.g., REQ-p00001
+    {GREEN}o{RESET} = OPS (Operations)  e.g., REQ-o00001
+    {GREEN}d{RESET} = DEV (Development) e.g., REQ-d00001
+
+  The shorthand {GREEN}p00001{RESET} can be used in displays (without REQ- prefix).
+
+{subheading("Header Line Fields")}
+
+  {BOLD}Level{RESET}:      PRD, OPS, or DEV (determines hierarchy position)
+  {BOLD}Status{RESET}:     Active, Draft, Deprecated, or Proposed
+  {BOLD}Implements{RESET}: Parent requirement ID(s), comma-separated
+  {BOLD}Refines{RESET}:    Parent ID when adding detail without claiming coverage
+
+{subheading("Hash")}
+
+The 8-character hash is computed from the requirement body content.
+When content changes, the hash changes, triggering review.
+
+  {GREEN}${RESET} elspais hash update   {DIM}# Recompute all hashes{RESET}
+  {GREEN}${RESET} elspais hash verify   {DIM}# Check for stale hashes{RESET}
+
+{subheading("Multiple Requirements Per File")}
+
+Separate requirements with a horizontal rule:
+
+  {DIM}# REQ-p00001: First Requirement{RESET}
+  {DIM}...{RESET}
+  {DIM}*End* *First Requirement* | **Hash**: ...\n{RESET}
+  {DIM}---{RESET}
+  {DIM}# REQ-p00002: Second Requirement{RESET}
+  {DIM}...{RESET}
+"""
+
+    docs["hierarchy"] = f"""{heading("REQUIREMENT HIERARCHY")}
+
+{subheading("The Three Levels")}
+
+elspais enforces a {BOLD}PRD → OPS → DEV{RESET} hierarchy:
+
+  {BOLD}PRD (Product){RESET}    - Business needs, user outcomes
+                     "What the product must achieve"
+
+  {BOLD}OPS (Operations){RESET} - Operational constraints, compliance
+                     "How the system must behave operationally"
+
+  {BOLD}DEV (Development){RESET} - Technical specifications
+                     "How we implement it technically"
+
+{subheading("Implements Relationships")}
+
+Lower levels {BOLD}implement{RESET} higher levels:
+
+  DEV → OPS   {DIM}(DEV implements OPS){RESET}
+  DEV → PRD   {DIM}(DEV implements PRD){RESET}
+  OPS → PRD   {DIM}(OPS implements PRD){RESET}
+
+{YELLOW}Never{RESET} the reverse: PRD cannot implement DEV.
+
+Example chain:
+
+  {GREEN}REQ-p00001{RESET}: Users can reset passwords (PRD)
+       ↑
+  {GREEN}REQ-o00001{RESET}: Reset tokens expire in 1 hour (OPS)
+       ↑           Implements: REQ-p00001
+  {GREEN}REQ-d00001{RESET}: Tokens use HMAC-SHA256 (DEV)
+                   Implements: REQ-o00001
+
+{subheading("Implements vs Refines")}
+
+  {BOLD}Implements{RESET} - Claims to satisfy the parent requirement
+               Coverage rolls up in traceability reports
+
+  {BOLD}Refines{RESET}    - Adds detail to parent without claiming satisfaction
+               No coverage rollup; just shows relationship
+
+Use {CYAN}Refines{RESET} when you're adding constraints but the parent still
+needs its own implementation.
+
+{subheading("Assertion-Specific Implementation")}
+
+Implement specific assertions, not the whole requirement:
+
+  {DIM}**Implements**: REQ-p00001-A{RESET}    {DIM}# Just assertion A{RESET}
+  {DIM}**Implements**: REQ-p00001-A-B{RESET}  {DIM}# Assertions A and B{RESET}
+
+This gives precise traceability coverage.
+
+{subheading("Viewing the Hierarchy")}
+
+  {GREEN}${RESET} elspais analyze hierarchy  {DIM}# ASCII tree view{RESET}
+  {GREEN}${RESET} elspais trace --view       {DIM}# Interactive HTML{RESET}
+"""
+
+    docs["assertions"] = f"""{heading("WRITING ASSERTIONS")}
+
+{subheading("What is an Assertion?")}
+
+An assertion is a single, testable statement about system behavior.
+Each assertion:
+  • Uses {BOLD}SHALL{RESET} or {BOLD}SHALL NOT{RESET} (normative language)
+  • Is labeled A, B, C, etc.
+  • Can be independently verified by a test
+
+{subheading("Assertion Format")}
+
+  {CYAN}## Assertions{RESET}
+
+  {CYAN}A. The system SHALL authenticate users via email and password.{RESET}
+  {CYAN}B. The system SHALL lock accounts after 5 failed attempts.{RESET}
+  {CYAN}C. The system SHALL NOT store passwords in plain text.{RESET}
+
+{subheading("Normative Keywords")}
+
+  {BOLD}SHALL{RESET}         Absolute requirement (must be implemented)
+  {BOLD}SHALL NOT{RESET}     Absolute prohibition (must never happen)
+  {BOLD}SHOULD{RESET}        Recommended but not required
+  {BOLD}SHOULD NOT{RESET}    Not recommended but not prohibited
+  {BOLD}MAY{RESET}           Optional behavior
+
+Most assertions use {BOLD}SHALL{RESET} or {BOLD}SHALL NOT{RESET}.
+
+{subheading("Good vs Bad Assertions")}
+
+{GREEN}Good{RESET} (testable, specific):
+  A. The system SHALL respond to API requests within 200ms.
+  B. The system SHALL encrypt data at rest using AES-256.
+
+{YELLOW}Bad{RESET} (vague, untestable):
+  A. The system should be fast.
+  B. The system must be secure.
+
+{subheading("Referencing Assertions")}
+
+In implementing requirements:
+  {DIM}**Implements**: REQ-p00001-A{RESET}
+
+In code comments:
+  {DIM}# Implements: REQ-p00001-A{RESET}
+
+In tests:
+  {DIM}def test_login():{RESET}
+  {DIM}    \"\"\"REQ-p00001-A: Verify email/password auth\"\"\"{RESET}
+
+{subheading("Removed Assertions")}
+
+If you remove an assertion, keep a placeholder to maintain letter sequence:
+
+  {DIM}A. The system SHALL do X.{RESET}
+  {DIM}B. [Removed - superseded by REQ-d00005]{RESET}
+  {DIM}C. The system SHALL do Z.{RESET}
+"""
+
+    docs["traceability"] = f"""{heading("TRACEABILITY")}
+
+{subheading("What is Traceability?")}
+
+Traceability connects requirements to their implementations and tests:
+
+  {BOLD}Requirement{RESET} → {BOLD}Assertion{RESET} → {BOLD}Code{RESET} → {BOLD}Test{RESET} → {BOLD}Result{RESET}
+
+This answers: "How do we know this requirement is satisfied?"
+
+{subheading("Marking Code as Implementing")}
+
+In Python, JavaScript, Go, etc., use comments:
+
+  {DIM}# Implements: REQ-d00001-A{RESET}
+  {DIM}def hash_password(plain: str) -> str:{RESET}
+  {DIM}    ...{RESET}
+
+Or:
+  {DIM}// Implements: REQ-d00001{RESET}
+  {DIM}function hashPassword(plain) {{ ... }}{RESET}
+
+{subheading("Marking Tests as Validating")}
+
+Reference requirement IDs in test docstrings or names:
+
+  {DIM}def test_password_uses_bcrypt():{RESET}
+  {DIM}    \"\"\"REQ-d00001-A: Verify bcrypt with cost 12\"\"\"{RESET}
+  {DIM}    ...{RESET}
+
+Or in test names:
+  {DIM}def test_REQ_d00001_A_bcrypt_cost():{RESET}
+
+{subheading("Generating Reports")}
+
+  {GREEN}${RESET} elspais trace --view         {DIM}# Interactive HTML tree{RESET}
+  {GREEN}${RESET} elspais trace --format html  {DIM}# Basic HTML matrix{RESET}
+  {GREEN}${RESET} elspais trace --format csv   {DIM}# Spreadsheet export{RESET}
+  {GREEN}${RESET} elspais trace --graph        {DIM}# Full requirement→code→test graph{RESET}
+
+{subheading("Coverage Indicators")}
+
+In trace view:
+  {BOLD}○{RESET} None    - No code implements this assertion
+  {BOLD}◐{RESET} Partial - Some assertions have implementations
+  {BOLD}●{RESET} Full    - All assertions have implementations
+  {BOLD}⚡{RESET} Failure - Test failures detected
+
+{subheading("Understanding the Graph")}
+
+  {GREEN}${RESET} elspais trace --graph-json  {DIM}# Export as JSON{RESET}
+
+The graph shows:
+  • Requirements and their assertions
+  • Which code files implement which assertions
+  • Which tests validate which requirements
+  • Test pass/fail status from JUnit/pytest results
+"""
+
+    docs["validation"] = f"""{heading("VALIDATION")}
+
+{subheading("Running Validation")}
+
+  {GREEN}${RESET} elspais validate          {DIM}# Check all rules{RESET}
+  {GREEN}${RESET} elspais validate --fix    {DIM}# Auto-fix what's fixable{RESET}
+  {GREEN}${RESET} elspais validate -v       {DIM}# Verbose output{RESET}
+
+{subheading("What Gets Validated")}
+
+  {BOLD}Format{RESET}      - Header line structure, hash presence
+  {BOLD}Hierarchy{RESET}   - Implements relationships follow level rules
+  {BOLD}Links{RESET}       - Referenced requirements exist
+  {BOLD}Hashes{RESET}      - Content matches stored hash
+  {BOLD}IDs{RESET}         - No duplicate requirement IDs
+
+{subheading("Common Validation Errors")}
+
+  {YELLOW}Missing hash{RESET}
+    Fix: {GREEN}elspais hash update{RESET}
+
+  {YELLOW}Stale hash{RESET} (content changed)
+    Fix: {GREEN}elspais hash update{RESET} after reviewing changes
+
+  {YELLOW}Broken link{RESET} (implements non-existent requirement)
+    Fix: Correct the ID or create the missing requirement
+
+  {YELLOW}Hierarchy violation{RESET} (PRD implements DEV)
+    Fix: Reverse the relationship or change levels
+
+{subheading("Suppressing Warnings")}
+
+For expected issues, add inline suppression:
+
+  {DIM}# elspais: expected-broken-links 2{RESET}
+  {DIM}**Implements**: REQ-future-001, REQ-future-002{RESET}
+
+{subheading("CI Integration")}
+
+Add to your CI pipeline:
+
+  {DIM}# .github/workflows/validate.yml{RESET}
+  {DIM}steps:{RESET}
+  {DIM}  - uses: actions/checkout@v4{RESET}
+  {DIM}  - run: pip install elspais{RESET}
+  {DIM}  - run: elspais validate{RESET}
+"""
+
+    docs["git"] = f"""{heading("GIT INTEGRATION")}
+
+{subheading("Detecting Changes")}
+
+  {GREEN}${RESET} elspais changed            {DIM}# Show all spec changes{RESET}
+  {GREEN}${RESET} elspais changed --staged   {DIM}# Only staged changes{RESET}
+  {GREEN}${RESET} elspais changed --hash     {DIM}# Only hash mismatches{RESET}
+
+{subheading("What 'Changed' Detects")}
+
+  {BOLD}Uncommitted{RESET} - Modified/untracked spec files
+  {BOLD}Hash mismatch{RESET} - Content changed but hash not updated
+  {BOLD}Moved{RESET} - Requirement relocated to different file
+  {BOLD}vs Main{RESET} - Changes compared to main/master branch
+
+{subheading("In Trace View")}
+
+The interactive trace view ({CYAN}elspais trace --view{RESET}) shows:
+
+  {YELLOW}◆{RESET} Changed vs main branch (diamond indicator)
+  Filter buttons: {DIM}[Uncommitted] [Changed vs Main]{RESET}
+
+{subheading("Pre-Commit Hook Example")}
+
+  {DIM}#!/bin/sh{RESET}
+  {DIM}# .git/hooks/pre-commit{RESET}
+  {DIM}elspais validate || exit 1{RESET}
+  {DIM}elspais hash verify || echo "Warning: stale hashes"{RESET}
+
+{subheading("Workflow")}
+
+1. Edit requirements
+2. {GREEN}elspais validate{RESET} - Check format
+3. {GREEN}elspais hash update{RESET} - Update hashes
+4. {GREEN}elspais changed{RESET} - Review what changed
+5. Commit with message referencing requirement IDs
+"""
+
+    docs["config"] = f"""{heading("CONFIGURATION")}
+
+{subheading("Configuration File")}
+
+elspais looks for {CYAN}.elspais.toml{RESET} in the current directory
+or parent directories.
+
+  {GREEN}${RESET} elspais init          {DIM}# Create default config{RESET}
+  {GREEN}${RESET} elspais config path   {DIM}# Show config location{RESET}
+  {GREEN}${RESET} elspais config show   {DIM}# View all settings{RESET}
+
+{subheading("Basic Configuration")}
+
+{CYAN}.elspais.toml{RESET}:
+
+  {DIM}[project]{RESET}
+  {DIM}name = "my-project"{RESET}
+  {DIM}spec_dir = "spec"          # Requirement file location{RESET}
+
+  {DIM}[patterns]{RESET}
+  {DIM}prefix = "REQ"             # ID prefix (REQ-p00001){RESET}
+  {DIM}separator = "-"            # ID separator{RESET}
+
+  {DIM}[rules]{RESET}
+  {DIM}strict_mode = false        # Strict implements semantics{RESET}
+
+  {DIM}[rules.hierarchy]{RESET}
+  {DIM}allowed = [{RESET}
+  {DIM}    "dev -> ops, prd",     # DEV can implement OPS or PRD{RESET}
+  {DIM}    "ops -> prd"           # OPS can implement PRD{RESET}
+  {DIM}]{RESET}
+
+{subheading("Config Commands")}
+
+  {GREEN}${RESET} elspais config get patterns.prefix
+  {GREEN}${RESET} elspais config set project.name "NewName"
+  {GREEN}${RESET} elspais config unset rules.strict_mode
+
+{subheading("Skip Directories")}
+
+Exclude directories from scanning:
+
+  {DIM}[project]{RESET}
+  {DIM}skip_dirs = ["spec/archive", "spec/drafts"]{RESET}
+
+{subheading("Multi-Repository")}
+
+For associated/sponsor repositories:
+
+  {DIM}[associated]{RESET}
+  {DIM}prefix = "TTN"             # Their ID prefix{RESET}
+  {DIM}repo_path = "../titan-spec"{RESET}
+"""
+
+    # Combine all topics for 'all'
+    all_content = ""
+    for topic_name in ["quickstart", "format", "hierarchy", "assertions",
+                       "traceability", "validation", "git", "config"]:
+        all_content += docs[topic_name] + "\n"
+    docs["all"] = all_content
+
+    # Display requested topic
+    if topic in docs:
+        print(docs[topic])
+    else:
+        print(f"Unknown topic: {topic}", file=sys.stderr)
+        return 1
+
+    return 0
 
 
 def completion_command(args: argparse.Namespace) -> int:
