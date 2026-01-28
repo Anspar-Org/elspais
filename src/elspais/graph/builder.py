@@ -239,7 +239,7 @@ class TraceGraph:
         new_id = entry.after_state.get("id")
         if old_id and new_id and new_id in self._index:
             node = self._index.pop(new_id)
-            node._id = old_id
+            node.set_id(old_id)
             self._index[old_id] = node
 
     def _undo_update_title(self, entry: MutationEntry) -> None:
@@ -247,7 +247,7 @@ class TraceGraph:
         node_id = entry.target_id
         old_title = entry.before_state.get("title")
         if node_id in self._index and old_title is not None:
-            self._index[node_id].label = old_title
+            self._index[node_id].set_label(old_title)
 
     def _undo_change_status(self, entry: MutationEntry) -> None:
         """Undo a status change operation."""
@@ -344,7 +344,7 @@ class TraceGraph:
         node_id = entry.target_id
         old_text = entry.before_state.get("text")
         if node_id in self._index and old_text is not None:
-            self._index[node_id].label = old_text
+            self._index[node_id].set_label(old_text)
 
     def _undo_rename_assertion(self, entry: MutationEntry) -> None:
         """Undo an assertion rename."""
@@ -352,8 +352,309 @@ class TraceGraph:
         new_id = entry.after_state.get("id")
         if old_id and new_id and new_id in self._index:
             node = self._index.pop(new_id)
-            node._id = old_id
+            node.set_id(old_id)
             self._index[old_id] = node
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Node Mutation API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def rename_node(self, old_id: str, new_id: str) -> MutationEntry:
+        """Rename a node (e.g., REQ-p00001 -> REQ-p00002).
+
+        Updates the node's ID, all edges pointing to/from this node,
+        and assertion IDs if the node is a requirement.
+
+        Args:
+            old_id: Current node ID.
+            new_id: New node ID.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If old_id is not found.
+            ValueError: If new_id already exists.
+        """
+        if old_id not in self._index:
+            raise KeyError(f"Node '{old_id}' not found")
+        if new_id in self._index:
+            raise ValueError(f"Node '{new_id}' already exists")
+
+        node = self._index.pop(old_id)
+        old_title = node.get_label()
+
+        # Create mutation entry
+        entry = MutationEntry(
+            operation="rename_node",
+            target_id=old_id,
+            before_state={"id": old_id, "title": old_title},
+            after_state={"id": new_id, "title": old_title},
+        )
+
+        # Update node ID
+        node.set_id(new_id)
+        self._index[new_id] = node
+
+        # Update roots list if this was a root
+        for i, root in enumerate(self._roots):
+            if root is node:
+                break  # Root reference is same object, no update needed
+
+        # Update orphaned_ids if this was an orphan
+        if old_id in self._orphaned_ids:
+            self._orphaned_ids.discard(old_id)
+            self._orphaned_ids.add(new_id)
+
+        # Update broken references that reference this node
+        for i, br in enumerate(self._broken_references):
+            if br.source_id == old_id:
+                self._broken_references[i] = BrokenReference(
+                    source_id=new_id,
+                    target_id=br.target_id,
+                    edge_kind=br.edge_kind,
+                )
+            elif br.target_id == old_id:
+                self._broken_references[i] = BrokenReference(
+                    source_id=br.source_id,
+                    target_id=new_id,
+                    edge_kind=br.edge_kind,
+                )
+
+        # If this is a requirement, rename its assertion children
+        if node.kind == NodeKind.REQUIREMENT:
+            for child in list(node.iter_children()):
+                if child.kind == NodeKind.ASSERTION:
+                    assertion_label = child.get_field("label", "")
+                    if assertion_label:
+                        old_assertion_id = f"{old_id}-{assertion_label}"
+                        new_assertion_id = f"{new_id}-{assertion_label}"
+                        if old_assertion_id in self._index:
+                            self._index.pop(old_assertion_id)
+                            child.set_id(new_assertion_id)
+                            self._index[new_assertion_id] = child
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def update_title(self, node_id: str, new_title: str) -> MutationEntry:
+        """Update requirement title. Does not affect hash.
+
+        Args:
+            node_id: The node ID to update.
+            new_title: The new title.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        old_title = node.get_label()
+
+        entry = MutationEntry(
+            operation="update_title",
+            target_id=node_id,
+            before_state={"title": old_title},
+            after_state={"title": new_title},
+        )
+
+        node.set_label(new_title)
+        self._mutation_log.append(entry)
+        return entry
+
+    def change_status(self, node_id: str, new_status: str) -> MutationEntry:
+        """Change requirement status (e.g., Draft -> Active).
+
+        Args:
+            node_id: The node ID to update.
+            new_status: The new status value.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        old_status = node.get_field("status")
+
+        entry = MutationEntry(
+            operation="change_status",
+            target_id=node_id,
+            before_state={"status": old_status},
+            after_state={"status": new_status},
+        )
+
+        node.set_field("status", new_status)
+        self._mutation_log.append(entry)
+        return entry
+
+    def add_requirement(
+        self,
+        req_id: str,
+        title: str,
+        level: str,
+        status: str = "Draft",
+        parent_id: str | None = None,
+        edge_kind: EdgeKind = EdgeKind.IMPLEMENTS,
+    ) -> MutationEntry:
+        """Add a new requirement node.
+
+        Creates a node with the specified properties and optionally
+        links it to a parent. Computes initial hash (empty body = specific hash).
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001").
+            title: The requirement title.
+            level: The requirement level ("PRD", "OPS", "DEV").
+            status: The requirement status (default "Draft").
+            parent_id: Optional parent node ID to link to.
+            edge_kind: Edge type for parent link (default IMPLEMENTS).
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            ValueError: If req_id already exists.
+            KeyError: If parent_id is specified but not found.
+        """
+        from elspais.utilities.hasher import calculate_hash
+
+        if req_id in self._index:
+            raise ValueError(f"Node '{req_id}' already exists")
+        if parent_id and parent_id not in self._index:
+            raise KeyError(f"Parent node '{parent_id}' not found")
+
+        # Create the node
+        node = GraphNode(
+            id=req_id,
+            kind=NodeKind.REQUIREMENT,
+            label=title,
+        )
+
+        # Compute hash for empty body
+        empty_hash = calculate_hash("")
+
+        node._content = {
+            "level": level,
+            "status": status,
+            "hash": empty_hash,
+        }
+
+        # Add to index
+        self._index[req_id] = node
+
+        # Build entry with before/after state
+        entry = MutationEntry(
+            operation="add_requirement",
+            target_id=req_id,
+            before_state={},  # Node didn't exist
+            after_state={
+                "id": req_id,
+                "title": title,
+                "level": level,
+                "status": status,
+                "hash": empty_hash,
+                "parent_id": parent_id,
+            },
+        )
+
+        # Link to parent if specified
+        if parent_id:
+            parent = self._index[parent_id]
+            parent.link(node, edge_kind)
+        else:
+            # No parent - this is a root node
+            self._roots.append(node)
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_requirement(
+        self,
+        node_id: str,
+        compact_assertions: bool = True,
+    ) -> MutationEntry:
+        """Delete a requirement.
+
+        Removes the node from the index, moves it to _deleted_nodes for
+        delta tracking, removes all edges to/from this node, and marks
+        children as orphans.
+
+        Args:
+            node_id: The requirement ID to delete.
+            compact_assertions: If True, sibling assertions are renumbered
+                after deletion. (Currently not implemented - reserved for
+                assertion deletion.)
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        was_root = node in self._roots
+
+        # Record state before deletion
+        entry = MutationEntry(
+            operation="delete_requirement",
+            target_id=node_id,
+            before_state={
+                "id": node_id,
+                "title": node.get_label(),
+                "level": node.get_field("level"),
+                "status": node.get_field("status"),
+                "hash": node.get_field("hash"),
+                "was_root": was_root,
+                "parent_ids": [p.id for p in node.iter_parents()],
+                "child_ids": [c.id for c in node.iter_children()],
+            },
+            after_state={},  # Node deleted
+        )
+
+        # Remove from index
+        self._index.pop(node_id)
+
+        # Move to deleted_nodes for delta tracking
+        self._deleted_nodes.append(node)
+
+        # Remove from roots if present
+        if was_root:
+            self._roots = [r for r in self._roots if r.id != node_id]
+
+        # Remove from orphaned_ids if present
+        self._orphaned_ids.discard(node_id)
+
+        # Disconnect from parents
+        for parent in list(node.iter_parents()):
+            parent.remove_child(node)
+
+        # Mark children as orphans (except assertions which go with the req)
+        for child in list(node.iter_children()):
+            if child.kind == NodeKind.ASSERTION:
+                # Delete assertion children too
+                if child.id in self._index:
+                    self._index.pop(child.id)
+                    self._deleted_nodes.append(child)
+            else:
+                # Non-assertion children become orphans
+                node.remove_child(child)
+                self._orphaned_ids.add(child.id)
+
+        self._mutation_log.append(entry)
+        return entry
 
 
 class GraphBuilder:

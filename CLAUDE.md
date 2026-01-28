@@ -87,9 +87,20 @@ elspais is a zero-dependency Python requirements validation and traceability too
 15. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
 
 16. **Iterator-Only Graph API**: The graph uses an iterator-only API to prevent accidental list materialization:
-    - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`.
+    - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`. Use `set_id()` for ID mutations.
     - **TraceGraph**: Use `iter_roots()` for traversal. Use `root_count()`, `has_root()` for checks. Internal storage uses `_roots`, `_index` prefixed attributes.
     - **UUID for GUI**: Each node has a stable `uuid` (32-char hex) for DOM IDs and API endpoints.
+
+20. **Node Mutation API**: TraceGraph provides mutation methods with full undo support:
+    - **`rename_node(old_id, new_id)`**: Renames node and its assertion children.
+    - **`update_title(node_id, new_title)`**: Updates requirement title (no hash change).
+    - **`change_status(node_id, new_status)`**: Changes requirement status.
+    - **`add_requirement(req_id, title, level, status, parent_id, edge_kind)`**: Creates new requirement with optional parent link.
+    - **`delete_requirement(node_id, compact_assertions)`**: Deletes requirement, preserves in `_deleted_nodes` for delta tracking.
+    - All mutations log `MutationEntry` to `graph.mutation_log` for audit/undo.
+    - **Undo**: `graph.undo_last()` reverses last mutation, `graph.undo_to(mutation_id)` reverts to specific point.
+    - **Orphans**: `_orphaned_ids` updated when parent relationships change.
+    - **Deleted tracking**: `graph.deleted_nodes()` returns nodes removed via `delete_requirement()`.
 
 
 **Multi-Language Comment Support:**

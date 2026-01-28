@@ -84,7 +84,7 @@ This provides the simplest API while keeping all graph state in one place.
 
 ---
 
-## [ ] Phase 3: Node Mutations
+## [x] Phase 3: Node Mutations
 
 ### 3.1 Rename Node
 Change a requirement's ID while maintaining all edges.

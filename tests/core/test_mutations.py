@@ -290,7 +290,7 @@ class TestUndoRenameNode:
 
         # Apply the rename
         graph._index.pop(old_id)
-        node._id = new_id
+        node.set_id(new_id)
         graph._index[new_id] = node
         graph._mutation_log.append(entry)
 

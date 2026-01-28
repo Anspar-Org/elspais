@@ -9,7 +9,7 @@ This module provides the core data structures for Architecture 3.0:
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator
@@ -64,18 +64,23 @@ class GraphNode:
     structure of `content`.
 
     Attributes:
-        id: Unique identifier for this node.
+        id: Unique identifier for this node (mutable via set_id()).
         kind: The type of node (requirement, assertion, etc.).
-        label: Human-readable display label.
         source: Where this node is defined in source files.
         uuid: Stable 32-char hex string for GUI/DOM referencing.
+
+    Use get_label()/set_label() for label access.
+    Use set_id() for ID mutations.
     """
 
     id: str
     kind: NodeKind
-    label: str = ""
+    label: InitVar[str] = ""  # Constructor parameter, stored in _label
     source: SourceLocation | None = None
     uuid: str = field(default_factory=lambda: uuid4().hex)
+
+    # Label stored internally - use get_label()/set_label() or label property
+    _label: str = field(default="", init=False)
 
     # Internal storage (prefixed) - excluded from constructor
     _children: list[GraphNode] = field(default_factory=list, init=False)
@@ -84,6 +89,35 @@ class GraphNode:
     _incoming_edges: list[Edge] = field(default_factory=list, init=False, repr=False)
     _content: dict[str, Any] = field(default_factory=dict, init=False)
     _metrics: dict[str, Any] = field(default_factory=dict, init=False)
+
+    def __post_init__(self, label: str) -> None:
+        """Initialize internal label from constructor parameter."""
+        self._label = label
+
+    def set_id(self, value: str) -> None:
+        """Set the node's unique identifier.
+
+        Use this method for mutations - it allows graph updates
+        without breaking the dataclass contract.
+
+        Note: This only changes the node's internal ID. The graph's
+        _index must be updated separately by the mutation method.
+        """
+        # Dataclass field assignment - directly mutate the id attribute
+        object.__setattr__(self, 'id', value)
+
+    # Label accessors - encapsulated for future hooks (e.g., index updates)
+    def get_label(self) -> str:
+        """Get the node's display label."""
+        return self._label
+
+    def set_label(self, value: str) -> None:
+        """Set the node's display label.
+
+        Use this method for mutations - it may trigger graph updates
+        in the future (e.g., search index, change tracking).
+        """
+        self._label = value
 
     # Iterator access
     def iter_children(self) -> Iterator[GraphNode]:
@@ -181,6 +215,38 @@ class GraphNode:
             self._children.append(child)
         if self not in child._parents:
             child._parents.append(self)
+
+    def remove_child(self, child: GraphNode) -> bool:
+        """Remove a child node and clean up all links.
+
+        Removes the bidirectional node link and any edges between
+        this node and the child.
+
+        Args:
+            child: The child node to remove.
+
+        Returns:
+            True if the child was found and removed, False otherwise.
+        """
+        if child not in self._children:
+            return False
+
+        # Remove bidirectional node links
+        self._children.remove(child)
+        if self in child._parents:
+            child._parents.remove(self)
+
+        # Remove outgoing edges to this child
+        self._outgoing_edges = [
+            e for e in self._outgoing_edges if e.target is not child
+        ]
+
+        # Remove incoming edges from this parent on the child
+        child._incoming_edges = [
+            e for e in child._incoming_edges if e.source is not self
+        ]
+
+        return True
 
     def link(
         self,

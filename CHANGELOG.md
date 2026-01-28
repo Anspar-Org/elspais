@@ -2,6 +2,20 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.28.0] - 2026-01-28
+
+### Added
+- **Node Mutation API**: TraceGraph now supports CRUD operations with full undo:
+  - `rename_node(old_id, new_id)` - Renames node and its assertion children
+  - `update_title(node_id, new_title)` - Updates requirement title
+  - `change_status(node_id, new_status)` - Changes requirement status
+  - `add_requirement(...)` - Creates new requirement with optional parent link
+  - `delete_requirement(node_id)` - Deletes requirement, tracks in `_deleted_nodes`
+- **Mutation Logging**: All mutations log `MutationEntry` to `graph.mutation_log` for audit
+- **Undo Support**: `graph.undo_last()` and `graph.undo_to(mutation_id)` for reverting changes
+- **GraphNode.set_id()**: Mutable node IDs for rename operations
+- **GraphNode.remove_child()**: Removes child node with bidirectional link cleanup
+
 ## [0.27.0] - 2026-01-27
 
 ### Fixed
