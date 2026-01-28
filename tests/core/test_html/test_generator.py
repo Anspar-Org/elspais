@@ -181,8 +181,8 @@ class TestHTMLGeneratorStats:
 
         result = generator.generate()
 
-        # Total count should be shown
-        assert "CORE:" in result
+        # Total count should be shown (Core badge shows non-associated count)
+        assert "Core:" in result
 
 
 class TestHTMLGeneratorTreeStructure:

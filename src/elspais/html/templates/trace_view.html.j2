@@ -76,6 +76,7 @@ body {
 .stat-badge.prd.active { color: #212529; }
 .stat-badge.ops.active { color: #fd7e14; }
 .stat-badge.dev.active { color: #20c997; }
+.stat-badge.core.active { color: #0d6efd; }
 
 .stat-badge.prd { background: #212529; color: white; }
 .stat-badge.ops { background: #fd7e14; color: white; }
@@ -778,7 +779,7 @@ body {
         <span class="stat-badge ops" id="badge-ops" onclick="toggleLevelFilter('OPS')" title="Click to filter OPS only">OPS: {{ stats.ops_count }}</span>
         <span class="stat-badge dev" id="badge-dev" onclick="toggleLevelFilter('DEV')" title="Click to filter DEV only">DEV: {{ stats.dev_count }}</span>
         <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge core">CORE: {{ stats.total_count }}</span>
+        <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
         <span style="color: #adb5bd;">|</span>
         <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to show/hide test nodes">Tests: {{ stats.test_count }}</span>
         <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
@@ -1153,6 +1154,7 @@ const state = {
         changed: false,
         tests: false,
         associated: false,
+        core: false,
         levelPrd: false,
         levelOps: false,
         levelDev: false
@@ -1225,6 +1227,7 @@ function restoreState() {
         document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
         document.getElementById('badge-tests')?.classList.toggle('active', state.activeFilters.tests);
         document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
+        document.getElementById('badge-core')?.classList.toggle('active', state.activeFilters.core);
     }
 
     // Restore checkboxes
@@ -1251,7 +1254,7 @@ function clearAllCookies() {
     // Reset to defaults
     state.viewMode = 'hierarchical';
     state.activeFilters = {
-        uncommitted: false, changed: false, tests: false, associated: false,
+        uncommitted: false, changed: false, tests: false, associated: false, core: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
     state.activeTab = 'requirements';
@@ -1338,7 +1341,7 @@ function toggleLevelFilter(level) {
 function clearFilters() {
     // Reset all filters
     state.activeFilters = {
-        uncommitted: false, changed: false, tests: false, associated: false,
+        uncommitted: false, changed: false, tests: false, associated: false, core: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
 
@@ -1429,11 +1432,10 @@ function applyFilters() {
             if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
             if (state.activeFilters.levelOps && level === 'OPS') visible = false;
             if (state.activeFilters.levelDev && level === 'DEV') visible = false;
-        }
-
-        // Associated filter (when active, only show associated rows)
-        if (state.activeFilters.associated && !isAssociated) {
-            visible = false;
+            // Associated filter - same HIDE logic as level filters
+            if (state.activeFilters.associated && isAssociated) visible = false;
+            // Core filter - HIDE logic: hide non-associated (core) requirements
+            if (state.activeFilters.core && !isAssociated) visible = false;
         }
 
         // Tests filter - when active, show test rows (overrides showCode toggle)

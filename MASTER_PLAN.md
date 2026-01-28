@@ -6,12 +6,14 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 
 ## Bugs
 
-- [ ] trace --view: Assoc (Associated) toggle is broken
-  - Should have same look/operation as PRD/OPS/DEV toggles
-  - Currently makes ALL REQs disappear (even though 16 associated REQs exist in hht_diary)
+- [x] trace --view: Assoc (Associated) toggle is broken
+  - Fixed: Changed from "SHOW ONLY" to "HIDE" semantic (consistent with PRD/OPS/DEV)
+  - Now clicking Assoc badge hides associated requirements
 
-- [ ] trace --view: Core toggle doesn't work
-  - Should filter to show only core requirements
+- [x] trace --view: Core toggle doesn't work
+  - Fixed: Added Core filter with HIDE semantic
+  - Clicking Core badge now hides core (non-associated) requirements
+  - Added CSS active state styling for consistency
 
 - [ ] trace --view: State persistence with cookies
   - Should save/restore: toggle states (on/off), tree collapse/expand state
@@ -29,6 +31,13 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
   - This is a common pattern when features are added to CLI interface but backend handler is not updated
   - Always grep for argument names in both the CLI definition AND the implementation code
   - Verify ALL CLI commands are fully implemented and documented
+
+- [ ] CLI argument consistency: Standardize argument format
+  - Some CLI options use `--` prefix and some don't (inconsistent)
+  - Decide on a consistent methodology (preferably no `--` for positional/subcommands)
+  - Example: `elspais trace report [tab]` doesn't offer autocomplete options
+  - There are 3 fixed report presets (minimal, standard, full) + potential config-defined option
+  - Add shell completion support for fixed option values
 
 - [ ] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
   - Currently shows duplicate entries if REQ A implements multiple assertions in REQ B

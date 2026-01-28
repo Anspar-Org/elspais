@@ -30,3 +30,19 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
     - Added `is_test` attribute to TreeRow and template
   - **Completed**: 2026-01-27
   - **Commit**: [CUR-514] fix(html): Replace Files filter with Tests filter
+
+### [x] trace --view: Assoc (Associated) toggle is broken
+  - **Issue**: Assoc filter used "SHOW ONLY" semantic while PRD/OPS/DEV used "HIDE" semantic
+  - **Fix**: Changed to HIDE semantic - clicking Assoc badge now hides associated requirements
+  - **Completed**: 2026-01-27
+  - **Commit**: [CUR-514] fix(html): Fix Assoc toggle and add Core toggle
+
+### [x] trace --view: Core toggle doesn't work
+  - **Issue**: Core badge was added to HTML but filter logic was missing
+  - **Fix**:
+    - Added `core: false` to activeFilters state
+    - Added filter logic: when active, hides non-associated (core) requirements
+    - Added CSS active state styling for consistency
+    - Integrated with restoreState() for cookie persistence
+  - **Completed**: 2026-01-27
+  - **Commit**: [CUR-514] fix(html): Fix Assoc toggle and add Core toggle
