@@ -112,17 +112,7 @@ Common rules to skip:
   format.*         All format rules
 """,
     )
-    validate_parser.add_argument(
-        "--fix",
-        action="store_true",
-        help="Auto-fix fixable issues",
-    )
-    validate_parser.add_argument(
-        "--core-repo",
-        type=Path,
-        help="Path to core repository (for associated repo validation)",
-        metavar="PATH",
-    )
+    # NOTE: --fix, --core-repo removed (dead code - never implemented)
     validate_parser.add_argument(
         "--skip-rule",
         action="append",
@@ -135,22 +125,7 @@ Common rules to skip:
         action="store_true",
         help="Output requirements as JSON (hht_diary compatible format)",
     )
-    validate_parser.add_argument(
-        "--tests",
-        action="store_true",
-        help="Force test scanning even if disabled in config",
-    )
-    validate_parser.add_argument(
-        "--no-tests",
-        action="store_true",
-        help="Skip test scanning",
-    )
-    validate_parser.add_argument(
-        "--mode",
-        choices=["core", "combined"],
-        default="combined",
-        help="Scope: core (this repo only), combined (include sponsor repos)",
-    )
+    # NOTE: --tests, --no-tests, --mode removed (dead code - never implemented)
 
     # health command
     health_parser = subparsers.add_parser(
@@ -248,29 +223,8 @@ Checks performed:
         action="store_true",
         help="Start review server (requires trace-review extra)",
     )
-    trace_parser.add_argument(
-        "--port",
-        type=int,
-        default=8080,
-        help="Port for review server (default: 8080)",
-    )
-    trace_parser.add_argument(
-        "--mode",
-        choices=["core", "sponsor", "combined"],
-        default="core",
-        help="Report mode: core, sponsor, or combined (default: core)",
-    )
-    trace_parser.add_argument(
-        "--sponsor",
-        help="Sponsor name for sponsor-specific reports",
-        metavar="NAME",
-    )
+    # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
     # Graph-based trace options
-    trace_parser.add_argument(
-        "--graph",
-        action="store_true",
-        help="Use unified traceability graph (includes assertions as nodes)",
-    )
     trace_parser.add_argument(
         "--graph-json",
         action="store_true",
@@ -281,15 +235,7 @@ Checks performed:
         metavar="NAME",
         help="Report preset to use (minimal, standard, full, or custom)",
     )
-    trace_parser.add_argument(
-        "--depth",
-        metavar="LEVEL",
-        help=(
-            "Maximum graph depth to display. Can be a number (0=roots, 1=children, ...) "
-            "or a named level: requirements (1), assertions (2), implementation (3), "
-            "full (unlimited)"
-        ),
-    )
+    # NOTE: --depth removed (dead code - never implemented)
 
     # hash command
     hash_parser = subparsers.add_parser(
@@ -648,52 +594,13 @@ Full Documentation:
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
 
-    # reformat-with-claude command
-    reformat_parser = subparsers.add_parser(
+    # reformat-with-claude command (NOT YET IMPLEMENTED - placeholder for future feature)
+    subparsers.add_parser(
         "reformat-with-claude",
-        help="Reformat requirements using AI (Acceptance Criteria -> Assertions)",
+        help="[NOT IMPLEMENTED] Reformat requirements using AI (Acceptance Criteria -> Assertions)",
     )
-    reformat_parser.add_argument(
-        "--start-req",
-        help="Starting requirement ID (default: all PRD requirements)",
-        metavar="ID",
-    )
-    reformat_parser.add_argument(
-        "--depth",
-        type=int,
-        help="Maximum traversal depth (default: unlimited)",
-    )
-    reformat_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without applying",
-    )
-    reformat_parser.add_argument(
-        "--backup",
-        action="store_true",
-        help="Create .bak files before editing",
-    )
-    reformat_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Reformat even if already in new format",
-    )
-    reformat_parser.add_argument(
-        "--fix-line-breaks",
-        action="store_true",
-        help="Normalize line breaks (remove extra blank lines)",
-    )
-    reformat_parser.add_argument(
-        "--line-breaks-only",
-        action="store_true",
-        help="Only fix line breaks, skip AI-based reformatting",
-    )
-    reformat_parser.add_argument(
-        "--mode",
-        choices=["combined", "core-only", "local-only"],
-        default="combined",
-        help="Which repos to include in hierarchy (default: combined)",
-    )
+    # NOTE: All arguments removed - command not yet implemented
+    # See src/elspais/commands/reformat_cmd.py for planned features
 
     # docs command - comprehensive user documentation
     docs_parser = subparsers.add_parser(

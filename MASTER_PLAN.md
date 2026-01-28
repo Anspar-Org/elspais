@@ -27,11 +27,12 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 - [x] elspais should check if it is in a git repo and always run as if in the root
   - Already implemented: `find_git_root()` in `config/__init__.py` (see CLAUDE.md 7b)
 
-- [ ] CLI implementation audit: Check all CLI arguments are fully implemented
-  - The --report parameter was a "dead code" scenario - CLI parsed it but implementation never read it
-  - This is a common pattern when features are added to CLI interface but backend handler is not updated
-  - Always grep for argument names in both the CLI definition AND the implementation code
-  - Verify ALL CLI commands are fully implemented and documented
+- [x] CLI implementation audit: Check all CLI arguments are fully implemented
+  - Found and removed 19 dead arguments across 3 commands:
+    - validate: 5 dead args (--fix, --core-repo, --tests, --no-tests, --mode)
+    - trace: 5 dead args (--port, --mode, --sponsor, --graph, --depth)
+    - reformat-with-claude: 8 dead args (entire command not implemented - simplified to stub)
+  - Kept properly-stubbed features (trace --edit-mode, --review-mode, --server)
 
 - [ ] CLI argument consistency: Standardize argument format
   - Some CLI options use `--` prefix and some don't (inconsistent)
@@ -403,3 +404,13 @@ graph.undo_mutation(entry)
 assert graph.find_by_id('REQ-p00001') is not None
 "
 ```
+
+---
+
+## [ ] MCP Mutator Capabilities
+
+Add mutation operations to the MCP server to allow AI-driven requirement management:
+- Expose TraceGraph mutation methods via MCP tools
+- Enable AI to create, rename, move, and delete requirements
+- Support undo/redo for AI-initiated changes
+- Add safety checks and confirmation prompts for destructive operations

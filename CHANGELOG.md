@@ -9,6 +9,12 @@ All notable changes to elspais will be documented in this file.
 - **trace --view**: Fixed Core toggle - clicking now hides core (non-associated) requirements with proper styling
 - **trace --view**: Added tree collapse/expand state persistence via cookies - tree state now survives page refresh
 - **trace --report**: Implemented report presets that were previously ignored
+
+### Changed
+- **CLI**: Removed 19 dead arguments that were defined but never implemented:
+  - `validate`: --fix, --core-repo, --tests, --no-tests, --mode
+  - `trace`: --port, --mode, --sponsor, --graph, --depth
+  - `reformat-with-claude`: Simplified to placeholder stub (entire command not yet implemented)
   - `--report minimal`: ID, Title, Status only (quick overview)
   - `--report standard`: ID, Title, Level, Status, Implements (default)
   - `--report full`: All fields including Body, Assertions, Hash, Code/Test refs

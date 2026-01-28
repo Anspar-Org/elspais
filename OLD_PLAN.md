@@ -56,3 +56,19 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
     - Added collapsedNodes.clear() to clearAllCookies() reset
   - **Completed**: 2026-01-28
   - **Commit**: [CUR-514] fix(html): Add tree collapse/expand state persistence
+
+---
+
+## Completed Quick Wins
+
+### [x] CLI implementation audit
+  - **Issue**: Multiple CLI arguments were defined but never used in implementation (dead code)
+  - **Audit Result**: Found 19 dead arguments across 3 commands
+  - **Fix**:
+    - Removed 5 dead args from `validate`: --fix, --core-repo, --tests, --no-tests, --mode
+    - Removed 5 dead args from `trace`: --port, --mode, --sponsor, --graph, --depth
+    - Simplified `reformat-with-claude` to stub (8 dead args removed, entire command not implemented)
+    - Added NOTE comments explaining removed arguments
+    - Kept properly-stubbed features (trace --edit-mode, --review-mode, --server)
+  - **Completed**: 2026-01-28
+  - **Commit**: [CUR-514] chore(cli): Remove dead code arguments from CLI
