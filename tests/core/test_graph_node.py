@@ -26,7 +26,7 @@ class TestNodeKind:
             "TEST": "test",
             "TEST_RESULT": "result",
             "USER_JOURNEY": "journey",
-            "TODO": "todo",
+            "REMAINDER": "remainder",
         }
         for name, value in expected.items():
             kind = getattr(NodeKind, name)

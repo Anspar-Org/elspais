@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requirements Traceability</title>
+    <style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSS STYLES - Trace View
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    background: #f8f9fa;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Header
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.header-stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.stat-badge.prd { background: #212529; color: white; }
+.stat-badge.ops { background: #fd7e14; color: white; }
+.stat-badge.dev { background: #20c997; color: white; }
+.stat-badge.core { background: #0d6efd; color: white; }
+.stat-badge.files {
+    background: white;
+    color: #dc3545;
+    border: 1px solid #dc3545;
+}
+
+.header-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.version-badge {
+    padding: 4px 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.legend-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.legend-btn:hover {
+    background: #5a6268;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Toolbar
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.toolbar {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-group {
+    display: flex;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.btn-group .btn {
+    border: none;
+    border-right: 1px solid #dee2e6;
+    background: white;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn-group .btn:last-child {
+    border-right: none;
+}
+
+.btn-group .btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-group .btn.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: #495057;
+    cursor: pointer;
+}
+
+.toggle-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-icon {
+    padding: 8px 12px;
+}
+
+.counter {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tabs
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tabs {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+}
+
+.tab {
+    padding: 12px 24px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #6c757d;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.tab:hover {
+    color: #495057;
+}
+
+.tab.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Main Content
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.main-content {
+    padding: 24px;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 16px;
+}
+
+.table-container {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Traceability Table
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.trace-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.trace-table th {
+    background: #f8f9fa;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.trace-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f1f3f4;
+    vertical-align: middle;
+}
+
+.trace-table tr:hover {
+    background: #f8f9fa;
+}
+
+.trace-table tr.hidden {
+    display: none;
+}
+
+/* Column widths */
+.col-id { width: 180px; }
+.col-title { min-width: 200px; }
+.col-level { width: 70px; }
+.col-status { width: 100px; }
+.col-cov { width: 60px; text-align: center; }
+.col-topic { width: 180px; }
+
+/* Filter inputs in header */
+.filter-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-top: 6px;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-top: 6px;
+    background: white;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tree Structure
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tree-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tree-indent {
+    display: inline-block;
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.tree-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #6c757d;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    font-size: 10px;
+}
+
+.tree-toggle:hover {
+    color: #495057;
+}
+
+.tree-toggle.collapsed::before {
+    content: "▶";
+}
+
+.tree-toggle.expanded::before {
+    content: "▼";
+}
+
+.tree-toggle.leaf {
+    visibility: hidden;
+}
+
+.req-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.875rem;
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.req-id:hover {
+    text-decoration: underline;
+}
+
+.assertion-badges {
+    display: flex;
+    gap: 2px;
+    margin-left: 4px;
+}
+
+.assertion-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: #e7f1ff;
+    color: #0d6efd;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Status Badges
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.draft {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.status-badge.active {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.status-badge.deprecated {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.status-badge.proposed {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.change-indicator {
+    color: #fd7e14;
+    font-size: 0.75rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Coverage Indicators
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.coverage-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.coverage-icon {
+    font-size: 1rem;
+}
+
+.coverage-icon.none { color: #adb5bd; }
+.coverage-icon.partial { color: #6c757d; }
+.coverage-icon.full { color: #212529; }
+
+.warning-icon {
+    color: #ffc107;
+    font-size: 0.875rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Topic Tags
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.topic-tag {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Code Node Rows
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.code-row {
+    background: #f8f9fa;
+}
+
+.code-row td {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.code-icon {
+    color: #6c757d;
+    margin-right: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Legend Modal
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+}
+
+.modal-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.legend-section {
+    margin-bottom: 20px;
+}
+
+.legend-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 4px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 0.875rem;
+}
+
+.legend-icon {
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Responsive
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .toolbar-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<header class="header">
+    <h1 class="header-title">Requirements Traceability</h1>
+
+    <div class="header-stats">
+        <span class="stat-badge prd">PRD: {{ stats.prd_count }}</span>
+        <span class="stat-badge ops">OPS: {{ stats.ops_count }}</span>
+        <span class="stat-badge dev">DEV: {{ stats.dev_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge core">CORE: {{ stats.total_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge files">Files: {{ stats.file_count }}</span>
+    </div>
+
+    <div class="header-meta">
+        <span class="version-badge">v{{ version }}</span>
+        <button class="legend-btn" onclick="toggleLegend()">
+            <span>ℹ</span> Legend
+        </button>
+    </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOOLBAR
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="toolbar">
+    <!-- View Mode -->
+    <div class="btn-group" role="group">
+        <button class="btn" data-view="flat" onclick="setViewMode('flat')">Flat View</button>
+        <button class="btn active" data-view="hierarchical" onclick="setViewMode('hierarchical')">Hierarchical View</button>
+    </div>
+
+    <!-- Git Filters -->
+    <div class="btn-group" role="group">
+        <button class="btn" id="btn-uncommitted" onclick="toggleFilter('uncommitted')">Uncommitted</button>
+        <button class="btn" id="btn-changed" onclick="toggleFilter('changed')">Changed vs Main</button>
+    </div>
+
+    <!-- Content Toggles -->
+    <div class="toggle-group">
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-leaf" onchange="applyFilters()">
+            <span>🌿 Leaf Only</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-deprecated" checked onchange="applyFilters()">
+            <span>Include deprecated</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-roadmap" checked onchange="applyFilters()">
+            <span>Include roadmap</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-code" onchange="applyFilters()">
+            <span>Show code refs</span>
+        </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="toolbar-actions">
+        <button class="btn btn-icon" onclick="expandAll()" title="Expand All">▼ Expand All</button>
+        <button class="btn btn-icon" onclick="collapseAll()" title="Collapse All">▶ Collapse All</button>
+        <button class="btn" onclick="clearFilters()">Clear</button>
+        <span class="counter" id="counter">Showing {{ stats.total_count }} of {{ stats.total_count }} requirements</span>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TABS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="tabs">
+    <button class="tab active" data-tab="requirements" onclick="switchTab('requirements')">Requirements</button>
+    <button class="tab" data-tab="journeys" onclick="switchTab('journeys')">User Journeys</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MAIN CONTENT
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<main class="main-content">
+    <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
+
+    <div class="table-container">
+        <table class="trace-table" id="trace-table">
+            <thead>
+                <tr>
+                    <th class="col-id">
+                        REQ ID
+                        <input type="text" class="filter-input" id="filter-id" placeholder="Filter..." oninput="applyFilters()">
+                    </th>
+                    <th class="col-title">
+                        TITLE
+                        <input type="text" class="filter-input" id="filter-title" placeholder="Search title..." oninput="applyFilters()">
+                    </th>
+                    <th class="col-level">
+                        LEVEL
+                        <select class="filter-select" id="filter-level" onchange="applyFilters()">
+                            <option value="">All</option>
+                            <option value="PRD">PRD</option>
+                            <option value="OPS">OPS</option>
+                            <option value="DEV">DEV</option>
+                        </select>
+                    </th>
+                    <th class="col-status">
+                        STATUS
+                        <select class="filter-select" id="filter-status" onchange="applyFilters()">
+                            <option value="">All</option>
+                            {% for status in statuses %}
+                            <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </th>
+                    <th class="col-cov">
+                        COV
+                        <select class="filter-select" id="filter-cov" onchange="applyFilters()">
+                            <option value="">All</option>
+                            <option value="none">○ None</option>
+                            <option value="partial">◐ Partial</option>
+                            <option value="full">● Full</option>
+                        </select>
+                    </th>
+                    <th class="col-topic">
+                        TOPIC
+                        <select class="filter-select" id="filter-topic" onchange="applyFilters()">
+                            <option value="">All</option>
+                            {% for topic in topics %}
+                            <option value="{{ topic }}">{{ topic }}</option>
+                            {% endfor %}
+                        </select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                {% for row in rows %}
+                <tr class="req-row {{ 'code-row' if row.is_code else '' }}"
+                    data-id="{{ row.id }}"
+                    data-parent="{{ row.parent_id or '' }}"
+                    data-level="{{ row.level }}"
+                    data-status="{{ row.status }}"
+                    data-coverage="{{ row.coverage }}"
+                    data-topic="{{ row.topic }}"
+                    data-depth="{{ row.depth }}"
+                    data-is-leaf="{{ 'true' if row.is_leaf else 'false' }}"
+                    data-is-changed="{{ 'true' if row.is_changed else 'false' }}"
+                    data-is-uncommitted="{{ 'true' if row.is_uncommitted else 'false' }}"
+                    data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
+                    data-is-code="{{ 'true' if row.is_code else 'false' }}"
+                    data-has-children="{{ 'true' if row.has_children else 'false' }}">
+                    <td class="col-id">
+                        <div class="tree-cell">
+                            {% for i in range(row.depth) %}
+                            <span class="tree-indent"></span>
+                            {% endfor %}
+                            <button class="tree-toggle {{ 'expanded' if row.has_children else 'leaf' }}"
+                                    onclick="toggleNode('{{ row.id }}')"
+                                    data-node-id="{{ row.id }}"></button>
+                            {% if row.is_code %}
+                            <span class="code-icon">📄</span>
+                            {% endif %}
+                            <a href="#{{ row.id }}" class="req-id">{{ row.display_id }}</a>
+                            {% if row.assertions %}
+                            <span class="assertion-badges">
+                                {% for a in row.assertions %}
+                                <span class="assertion-badge">{{ a }}</span>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="col-title">{{ row.title }}</td>
+                    <td class="col-level">{{ row.level }}</td>
+                    <td class="col-status">
+                        {% if row.status %}
+                        <span class="status-badge {{ row.status|lower }}">
+                            {{ row.status }}
+                            {% if row.is_changed %}<span class="change-indicator">◆</span>{% endif %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="col-cov">
+                        <div class="coverage-cell">
+                            {% if row.coverage == 'full' %}
+                            <span class="coverage-icon full">●</span>
+                            {% elif row.coverage == 'partial' %}
+                            <span class="coverage-icon partial">◐</span>
+                            {% else %}
+                            <span class="coverage-icon none">○</span>
+                            {% endif %}
+                            {% if row.has_failures %}
+                            <span class="warning-icon">⚡</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="col-topic">
+                        <span class="topic-tag">{{ row.topic }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     LEGEND MODAL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="modal-overlay" id="legend-modal" onclick="closeLegendOnOverlay(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 class="modal-title">Legend</h3>
+            <button class="modal-close" onclick="toggleLegend()">&times;</button>
+        </div>
+
+        <div class="legend-section">
+            <h4>Coverage Status</h4>
+            <div class="legend-item">
+                <span class="legend-icon">○</span>
+                <span>No implementations - no code references this requirement</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">◐</span>
+                <span>Partial - some assertions have code implementations</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">●</span>
+                <span>Full - all assertions have code implementations</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon" style="color: #ffc107;">⚡</span>
+                <span>Test failures or warnings detected</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Change Indicators</h4>
+            <div class="legend-item">
+                <span class="legend-icon" style="color: #fd7e14;">◆</span>
+                <span>Changed vs remote main branch</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Assertion Badges</h4>
+            <div class="legend-item">
+                <span class="legend-icon"><span class="assertion-badge">A</span></span>
+                <span>Implements specific assertion(s) from parent requirement</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Status Badges</h4>
+            <div class="legend-item">
+                <span class="status-badge draft">DRAFT</span>
+                <span>Work in progress</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge active">ACTIVE</span>
+                <span>Approved and active</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge deprecated">DEPRECATED</span>
+                <span>No longer applicable</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Levels</h4>
+            <div class="legend-item">
+                <span class="stat-badge prd" style="font-size: 0.75rem;">PRD</span>
+                <span>Product Requirements - business-level needs</span>
+            </div>
+            <div class="legend-item">
+                <span class="stat-badge ops" style="font-size: 0.75rem;">OPS</span>
+                <span>Operations Requirements - operational constraints</span>
+            </div>
+            <div class="legend-item">
+                <span class="stat-badge dev" style="font-size: 0.75rem;">DEV</span>
+                <span>Development Requirements - technical specifications</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     EMBEDDED DATA
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<script type="application/json" id="tree-data">
+{{ tree_data | tojson }}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+
+const state = {
+    viewMode: 'hierarchical',
+    activeFilters: {
+        uncommitted: false,
+        changed: false
+    },
+    collapsedNodes: new Set(),
+    totalCount: {{ stats.total_count }},
+    treeData: JSON.parse(document.getElementById('tree-data').textContent)
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// View Mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setViewMode(mode) {
+    state.viewMode = mode;
+
+    // Update button states
+    document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === mode);
+    });
+
+    // Update label
+    document.getElementById('view-mode-label').textContent =
+        mode === 'flat' ? 'Flat View' : 'Hierarchical View';
+
+    applyFilters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter Toggles
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleFilter(filter) {
+    state.activeFilters[filter] = !state.activeFilters[filter];
+
+    const btn = document.getElementById('btn-' + filter);
+    btn.classList.toggle('active', state.activeFilters[filter]);
+
+    applyFilters();
+}
+
+function clearFilters() {
+    // Reset all filters
+    state.activeFilters.uncommitted = false;
+    state.activeFilters.changed = false;
+
+    document.getElementById('btn-uncommitted').classList.remove('active');
+    document.getElementById('btn-changed').classList.remove('active');
+
+    document.getElementById('filter-id').value = '';
+    document.getElementById('filter-title').value = '';
+    document.getElementById('filter-level').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-cov').value = '';
+    document.getElementById('filter-topic').value = '';
+
+    document.getElementById('toggle-leaf').checked = false;
+    document.getElementById('toggle-deprecated').checked = true;
+    document.getElementById('toggle-roadmap').checked = true;
+    document.getElementById('toggle-code').checked = false;
+
+    applyFilters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apply Filters
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+    const rows = document.querySelectorAll('#table-body .req-row');
+    const filterIdValue = document.getElementById('filter-id').value.toLowerCase();
+    const filterTitleValue = document.getElementById('filter-title').value.toLowerCase();
+    const filterLevelValue = document.getElementById('filter-level').value;
+    const filterStatusValue = document.getElementById('filter-status').value;
+    const filterCovValue = document.getElementById('filter-cov').value;
+    const filterTopicValue = document.getElementById('filter-topic').value;
+
+    const leafOnly = document.getElementById('toggle-leaf').checked;
+    const includeDeprecated = document.getElementById('toggle-deprecated').checked;
+    const includeRoadmap = document.getElementById('toggle-roadmap').checked;
+    const showCode = document.getElementById('toggle-code').checked;
+
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const id = row.dataset.id.toLowerCase();
+        const level = row.dataset.level;
+        const status = row.dataset.status;
+        const coverage = row.dataset.coverage;
+        const topic = row.dataset.topic;
+        const title = row.querySelector('.col-title')?.textContent.toLowerCase() || '';
+        const isLeaf = row.dataset.isLeaf === 'true';
+        const isChanged = row.dataset.isChanged === 'true';
+        const isUncommitted = row.dataset.isUncommitted === 'true';
+        const isRoadmap = row.dataset.isRoadmap === 'true';
+        const isCode = row.dataset.isCode === 'true';
+        const depth = parseInt(row.dataset.depth);
+        const parentId = row.dataset.parent;
+
+        let visible = true;
+
+        // Code rows visibility
+        if (isCode && !showCode) {
+            visible = false;
+        }
+
+        // Text filters
+        if (filterIdValue && !id.includes(filterIdValue)) visible = false;
+        if (filterTitleValue && !title.includes(filterTitleValue)) visible = false;
+
+        // Dropdown filters
+        if (filterLevelValue && level !== filterLevelValue) visible = false;
+        if (filterStatusValue && status !== filterStatusValue) visible = false;
+        if (filterCovValue && coverage !== filterCovValue) visible = false;
+        if (filterTopicValue && topic !== filterTopicValue) visible = false;
+
+        // Toggle filters
+        if (leafOnly && !isLeaf && !isCode) visible = false;
+        if (!includeDeprecated && status === 'DEPRECATED') visible = false;
+        if (!includeRoadmap && isRoadmap) visible = false;
+
+        // Git filters
+        if (state.activeFilters.uncommitted && !isUncommitted) visible = false;
+        if (state.activeFilters.changed && !isChanged) visible = false;
+
+        // Hierarchical mode: hide if parent is collapsed
+        if (state.viewMode === 'hierarchical' && parentId && depth > 0) {
+            if (isParentCollapsed(parentId)) {
+                visible = false;
+            }
+        }
+
+        // Flat mode: reset indentation visually
+        if (state.viewMode === 'flat') {
+            // In flat mode, all rows are at depth 0 visually
+            // We keep the data but hide tree structure
+            row.querySelectorAll('.tree-indent').forEach(indent => {
+                indent.style.display = 'none';
+            });
+            row.querySelector('.tree-toggle')?.classList.add('leaf');
+        } else {
+            row.querySelectorAll('.tree-indent').forEach(indent => {
+                indent.style.display = '';
+            });
+            const toggle = row.querySelector('.tree-toggle');
+            if (toggle && row.dataset.hasChildren === 'true') {
+                toggle.classList.remove('leaf');
+            }
+        }
+
+        row.classList.toggle('hidden', !visible);
+        if (visible && !isCode) visibleCount++;
+    });
+
+    updateCounter(visibleCount);
+}
+
+function isParentCollapsed(parentId) {
+    if (!parentId) return false;
+    if (state.collapsedNodes.has(parentId)) return true;
+
+    // Check ancestors
+    const parentRow = document.querySelector(`[data-id="${parentId}"]`);
+    if (parentRow && parentRow.dataset.parent) {
+        return isParentCollapsed(parentRow.dataset.parent);
+    }
+    return false;
+}
+
+function updateCounter(count) {
+    document.getElementById('counter').textContent =
+        `Showing ${count} of ${state.totalCount} requirements`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tree Expand/Collapse
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleNode(nodeId) {
+    const toggle = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!toggle) return;
+
+    if (state.collapsedNodes.has(nodeId)) {
+        state.collapsedNodes.delete(nodeId);
+        toggle.classList.remove('collapsed');
+        toggle.classList.add('expanded');
+    } else {
+        state.collapsedNodes.add(nodeId);
+        toggle.classList.remove('expanded');
+        toggle.classList.add('collapsed');
+    }
+
+    applyFilters();
+}
+
+function expandAll() {
+    state.collapsedNodes.clear();
+    document.querySelectorAll('.tree-toggle').forEach(toggle => {
+        if (!toggle.classList.contains('leaf')) {
+            toggle.classList.remove('collapsed');
+            toggle.classList.add('expanded');
+        }
+    });
+    applyFilters();
+}
+
+function collapseAll() {
+    document.querySelectorAll('.tree-toggle').forEach(toggle => {
+        if (!toggle.classList.contains('leaf')) {
+            const nodeId = toggle.dataset.nodeId;
+            state.collapsedNodes.add(nodeId);
+            toggle.classList.remove('expanded');
+            toggle.classList.add('collapsed');
+        }
+    });
+    applyFilters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────────────────────────
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    // TODO: Implement tab content switching when journeys are added
+    console.log('Switched to tab:', tabName);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legend Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleLegend() {
+    const modal = document.getElementById('legend-modal');
+    modal.classList.toggle('visible');
+}
+
+function closeLegendOnOverlay(event) {
+    if (event.target === event.currentTarget) {
+        toggleLegend();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyboard Shortcuts
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', function(e) {
+    // Escape closes modal
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('legend-modal');
+        if (modal.classList.contains('visible')) {
+            toggleLegend();
+        }
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Initialize
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', function() {
+    applyFilters();
+});
+</script>
+
+</body>
+</html>

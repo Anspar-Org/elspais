@@ -210,8 +210,8 @@ A. The implementation SHALL follow the spec.
 
         # Check for interactive HTML structure
         assert "<!DOCTYPE html>" in content
-        assert "Traceability Matrix" in content
-        assert "requirement-row" in content  # Interactive row class
+        assert "Requirements Traceability" in content
+        assert "req-row" in content  # Interactive row class
         assert "REQ-p00001" in content
         assert "REQ-d00001" in content
 
@@ -271,7 +271,7 @@ A. The implementation SHALL follow the spec.
         content = output_path.read_text()
 
         # Check for embedded JSON data
-        assert 'id="requirement-content"' in content
+        assert 'id="tree-data"' in content
         assert "application/json" in content
         # Verify it contains requirement data as JSON
         assert '"REQ-p00001"' in content

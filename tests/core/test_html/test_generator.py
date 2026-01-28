@@ -82,7 +82,7 @@ class TestHTMLGeneratorBasic:
 
         result = generator.generate()
 
-        assert "Traceability Matrix" in result
+        assert "Requirements Traceability" in result
 
     def test_generate_includes_requirements(self, sample_graph):
         """Includes requirement IDs in HTML."""
@@ -138,3 +138,199 @@ class TestHTMLGeneratorHierarchy:
 
         assert "Product Requirement" in result
         assert "Operations Requirement" in result
+
+
+class TestHTMLGeneratorStats:
+    """Tests for statistics computation."""
+
+    def test_counts_levels(self, sample_graph):
+        """Counts requirements by level."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        # Should show counts in header
+        assert "PRD:" in result
+        assert "OPS:" in result
+        assert "DEV:" in result
+
+    def test_shows_total_count(self, sample_graph):
+        """Shows total requirement count."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        # Total count should be shown
+        assert "CORE:" in result
+
+
+class TestHTMLGeneratorTreeStructure:
+    """Tests for hierarchical tree structure."""
+
+    def test_includes_tree_toggles(self, sample_graph):
+        """Includes expand/collapse toggles."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "tree-toggle" in result
+
+    def test_includes_depth_data(self, sample_graph):
+        """Includes depth data for indentation."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert 'data-depth="0"' in result  # Root
+        assert 'data-depth="1"' in result  # First level children
+
+    def test_includes_parent_id(self, sample_graph):
+        """Includes parent ID for hierarchy."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "data-parent" in result
+
+
+class TestHTMLGeneratorCoverage:
+    """Tests for coverage indicators."""
+
+    def test_includes_coverage_data(self, sample_graph):
+        """Includes coverage status data."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "data-coverage" in result
+
+    def test_coverage_values(self, sample_graph):
+        """Coverage has valid values."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        # Should have coverage filter options
+        assert "none" in result.lower()
+        assert "partial" in result.lower()
+        assert "full" in result.lower()
+
+
+class TestHTMLGeneratorFiltering:
+    """Tests for filtering features."""
+
+    def test_includes_filter_inputs(self, sample_graph):
+        """Includes filter input fields."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "filter-id" in result
+        assert "filter-title" in result
+
+    def test_includes_filter_dropdowns(self, sample_graph):
+        """Includes filter dropdown selects."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "filter-level" in result
+        assert "filter-status" in result
+
+    def test_includes_toggle_checkboxes(self, sample_graph):
+        """Includes toggle checkboxes."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "toggle-leaf" in result
+        assert "toggle-deprecated" in result
+
+
+class TestHTMLGeneratorTopics:
+    """Tests for topic extraction."""
+
+    def test_extracts_topic_from_path(self, sample_graph):
+        """Extracts topic from file path."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        # Topics should be derived from filenames
+        assert "data-topic" in result
+
+
+class TestHTMLGeneratorViewModes:
+    """Tests for view mode support."""
+
+    def test_includes_view_mode_buttons(self, sample_graph):
+        """Includes view mode toggle buttons."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "Flat View" in result
+        assert "Hierarchical View" in result
+
+    def test_includes_view_mode_javascript(self, sample_graph):
+        """Includes JavaScript for view mode switching."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "setViewMode" in result
+
+
+class TestHTMLGeneratorLegend:
+    """Tests for legend modal."""
+
+    def test_includes_legend_button(self, sample_graph):
+        """Includes legend button."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "Legend" in result
+
+    def test_includes_legend_modal(self, sample_graph):
+        """Includes legend modal content."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "legend-modal" in result
+        assert "Coverage Status" in result
+
+
+class TestHTMLGeneratorAssertions:
+    """Tests for assertion letter badges."""
+
+    def test_assertion_badge_class(self, sample_graph):
+        """Has assertion badge CSS class."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "assertion-badge" in result
+
+
+class TestHTMLGeneratorGitIntegration:
+    """Tests for git change detection integration."""
+
+    def test_includes_git_data_attributes(self, sample_graph):
+        """Includes git state data attributes."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "data-is-changed" in result
+        assert "data-is-uncommitted" in result
+
+    def test_includes_git_filter_buttons(self, sample_graph):
+        """Includes git filter buttons."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        assert "Uncommitted" in result
+        assert "Changed vs Main" in result

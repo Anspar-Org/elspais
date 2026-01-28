@@ -44,6 +44,21 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - `elspais[all]`: All optional features
     Missing dependencies produce clear installation instructions.
 
+17. **Interactive Trace View** (`trace --view`): Generates rich interactive HTML with Jinja2 templates:
+    - **Hierarchical Tree**: Requirements displayed as collapsible tree with expand/collapse
+    - **View Modes**: Flat view or hierarchical view toggle
+    - **Git Filters**: "Uncommitted" and "Changed vs Main" filters using git detection
+    - **Content Filters**: Leaf only, include deprecated, include roadmap, show code refs
+    - **Column Filters**: Text search for ID/title, dropdowns for level/status/coverage/topic
+    - **Coverage Indicators**: ○ (none), ◐ (partial), ● (full) based on CODE node references
+    - **Assertion Letters**: `[A][B]` badges show which parent assertions a child implements
+    - **Change Indicator**: ◆ diamond shows nodes changed vs main branch
+    - **Lightning Bolt**: ⚡ indicates test failures from TEST_RESULT nodes
+    - **Legend Modal**: Explains all icons and indicators
+    - **DAG as Tree**: Nodes can appear under multiple parents for complete traceability
+
+18. **NodeKind.REMAINDER**: Unclaimed file content (not requirements). Previously named TODO, renamed for clarity.
+
 14. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
 
 15. **Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.

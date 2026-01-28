@@ -262,7 +262,7 @@ class GraphBuilder:
 
         node = GraphNode(
             id=remainder_id,
-            kind=NodeKind.TODO,
+            kind=NodeKind.REMAINDER,
             label=text[:50] + "..." if len(text) > 50 else text,
             source=SourceLocation(
                 path=source_path,
