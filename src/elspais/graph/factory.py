@@ -11,6 +11,7 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
+from elspais.associates import get_associate_spec_directories
 from elspais.config import get_config, get_spec_directories
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.deserializer import DomainFile
@@ -22,6 +23,66 @@ from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import PatternConfig
 
 
+def _find_repo_root(spec_dir: Path) -> Path | None:
+    """Find the repository root containing .elspais.toml for a spec directory.
+
+    Walks up the directory tree looking for .elspais.toml.
+
+    Args:
+        spec_dir: The spec directory path
+
+    Returns:
+        Path to repo root, or None if not found
+    """
+    current = spec_dir.resolve()
+    while current != current.parent:
+        if (current / ".elspais.toml").exists():
+            return current
+        current = current.parent
+    return None
+
+
+def _create_registry_for_spec_dir(
+    spec_dir: Path,
+    default_pattern_config: PatternConfig,
+) -> ParserRegistry:
+    """Create a parser registry for a spec directory.
+
+    If the spec directory is in a different repo (has its own .elspais.toml),
+    loads that repo's config and creates a registry with its pattern config.
+    Otherwise uses the default pattern config.
+
+    Args:
+        spec_dir: The spec directory path
+        default_pattern_config: The default pattern config from main repo
+
+    Returns:
+        ParserRegistry configured for this spec directory
+    """
+    registry = ParserRegistry()
+
+    # Check if this spec dir is in a different repo with its own config
+    repo_root = _find_repo_root(spec_dir)
+    if repo_root:
+        config_path = repo_root / ".elspais.toml"
+        if config_path.exists():
+            repo_config = get_config(config_path, repo_root)
+            patterns_dict = repo_config.get("patterns", {})
+            pattern_config = PatternConfig.from_dict(patterns_dict)
+            registry.register(RequirementParser(pattern_config))
+            registry.register(JourneyParser())
+            registry.register(CodeParser())
+            registry.register(TestParser())
+            return registry
+
+    # Fall back to default
+    registry.register(RequirementParser(default_pattern_config))
+    registry.register(JourneyParser())
+    registry.register(CodeParser())
+    registry.register(TestParser())
+    return registry
+
+
 def build_graph(
     config: dict[str, Any] | None = None,
     spec_dirs: list[Path] | None = None,
@@ -29,6 +90,7 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
+    scan_sponsors: bool = True,
 ) -> TraceGraph:
     """Build a TraceGraph from spec directories.
 
@@ -36,6 +98,7 @@ def build_graph(
     It handles:
     - Configuration loading (auto-discovery or explicit)
     - Spec directory resolution
+    - Sponsor/associate spec directory resolution
     - Parser registration
     - Graph construction
     - Code and test directory scanning (configurable)
@@ -47,6 +110,7 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
+        scan_sponsors: Whether to scan sponsor/associate spec directories.
 
     Returns:
         Complete TraceGraph with all requirements linked.
@@ -66,15 +130,13 @@ def build_graph(
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
-    # 3. Create parser registries
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    # 2b. Add sponsor/associate spec directories if enabled
+    if scan_sponsors:
+        sponsor_dirs = get_associate_spec_directories(config, repo_root)
+        spec_dirs = list(spec_dirs) + sponsor_dirs
 
-    # Registry for spec files (all parsers)
-    spec_registry = ParserRegistry()
-    spec_registry.register(RequirementParser(pattern_config))
-    spec_registry.register(JourneyParser())
-    spec_registry.register(CodeParser())
-    spec_registry.register(TestParser())
+    # 3. Create default pattern config (for code/test registries)
+    default_pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
 
     # Registry for code files (code parser only)
     code_registry = ParserRegistry()
@@ -93,6 +155,10 @@ def build_graph(
     skip_files = spec_config.get("skip_files", [])
 
     for spec_dir in spec_dirs:
+        # Create registry with appropriate pattern config for this spec dir
+        # (uses sponsor repo's config if applicable)
+        spec_registry = _create_registry_for_spec_dir(spec_dir, default_pattern_config)
+
         # Get file patterns from config
         file_patterns = spec_config.get("patterns", ["*.md"])
         domain_file = DomainFile(

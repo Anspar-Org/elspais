@@ -352,7 +352,7 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
     yield "]"
 
 
-def format_view(graph: TraceGraph, embed_content: bool = False) -> str:
+def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str = "") -> str:
     """Generate interactive HTML via HTMLGenerator."""
     try:
         from elspais.html import HTMLGenerator
@@ -361,7 +361,7 @@ def format_view(graph: TraceGraph, embed_content: bool = False) -> str:
             "HTMLGenerator requires the trace-view extra. "
             "Install with: pip install elspais[trace-view]"
         )
-    generator = HTMLGenerator(graph)
+    generator = HTMLGenerator(graph, base_path=base_path)
     return generator.generate(embed_content=embed_content)
 
 
@@ -402,7 +402,9 @@ def run(args: argparse.Namespace) -> int:
     # Handle --view mode (interactive HTML)
     if getattr(args, "view", False):
         try:
-            content = format_view(graph, getattr(args, "embed_content", False))
+            # Get absolute base path for VS Code links
+            base_path = str(Path.cwd().resolve())
+            content = format_view(graph, getattr(args, "embed_content", False), base_path=base_path)
         except ImportError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1

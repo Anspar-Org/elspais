@@ -657,6 +657,15 @@ body {
     text-decoration: underline;
 }
 
+.file-link {
+    color: #198754;
+    text-decoration: none;
+}
+
+.file-link:hover {
+    text-decoration: underline;
+}
+
 .assertion-badges {
     display: flex;
     gap: 2px;
@@ -909,7 +918,7 @@ body {
         <span style="color: #adb5bd;">|</span>
         <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
         <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to show/hide test nodes">Tests: {{ stats.test_count }}</span>
+        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">🧪 {{ stats.test_count }}</span>
         <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
     </div>
 
@@ -1055,7 +1064,9 @@ body {
                     data-is-code="{{ 'true' if row.is_code else 'false' }}"
                     data-is-test="{{ 'true' if row.is_test else 'false' }}"
                     data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
-                    data-has-children="{{ 'true' if row.has_children else 'false' }}">
+                    data-has-children="{{ 'true' if row.has_children else 'false' }}"
+                    data-source-file="{{ row.source_file }}"
+                    data-source-line="{{ row.source_line }}">
                     <td class="col-id">
                         <div class="tree-cell">
                             {% for i in range(row.depth) %}
@@ -1069,7 +1080,11 @@ body {
                             {% elif row.is_test %}
                             <span class="test-icon">🧪</span>
                             {% endif %}
-                            <a href="#{{ row.id }}" class="req-id">{{ row.display_id | replace('REQ-', '') }}</a>
+                            {% if row.source_file %}
+                            <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="req-id" title="Open in VS Code: {{ row.source_file }}:{{ row.source_line }}">{{ row.display_id | replace('REQ-', '') }}</a>
+                            {% else %}
+                            <span class="req-id">{{ row.display_id | replace('REQ-', '') }}</span>
+                            {% endif %}
                             {% if row.assertions %}
                             <span class="assertion-badges">
                                 {% for a in row.assertions %}
@@ -1079,7 +1094,13 @@ body {
                             {% endif %}
                         </div>
                     </td>
-                    <td class="col-title">{{ row.title }}</td>
+                    <td class="col-title">
+                        {% if (row.is_test or row.is_code) and row.source_file %}
+                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
+                        {% else %}
+                        {{ row.title }}
+                        {% endif %}
+                    </td>
                     <td class="col-level">{{ row.level }}</td>
                     <td class="col-status">
                         {% if row.status %}
@@ -1601,12 +1622,17 @@ function applyFilters() {
         const isAssociated = row.dataset.isAssociated === 'true';
         const depth = parseInt(row.dataset.depth);
         const parentId = row.dataset.parent;
-        const isImplNode = isCode;  // Code nodes only (tests handled separately)
+        const isImplNode = isCode || isTest;  // Implementation nodes (code or test)
 
         let visible = true;
 
-        // Code rows visibility - hide code nodes by default unless showCode is on
-        if (isImplNode && !showCode) {
+        // Code rows visibility - hide code nodes by default unless showCode checkbox is on
+        if (isCode && !showCode) {
+            visible = false;
+        }
+
+        // Tests badge filter - HIDE logic: tests visible by default, hide when badge is active
+        if (isTest && state.activeFilters.tests) {
             visible = false;
         }
 
@@ -1621,8 +1647,7 @@ function applyFilters() {
         if (filterTopicValue && topic !== filterTopicValue) visible = false;
 
         // Level badge filters (HIDE logic - hide if that level's filter is active)
-        // Only apply to requirements, not code or test nodes
-        if (!isImplNode && !isTest) {
+        if (!isImplNode) {
             if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
             if (state.activeFilters.levelOps && level === 'OPS') visible = false;
             if (state.activeFilters.levelDev && level === 'DEV') visible = false;
@@ -1632,13 +1657,8 @@ function applyFilters() {
             if (state.activeFilters.core && !isAssociated) visible = false;
         }
 
-        // Tests filter - when active, hide test rows
-        if (state.activeFilters.tests && isTest) {
-            visible = false;
-        }
-
         // Toggle filters
-        if (leafOnly && !isLeaf && !isImplNode && !isTest) visible = false;
+        if (leafOnly && !isLeaf && !isImplNode) visible = false;
         if (!includeDeprecated && status === 'DEPRECATED') visible = false;
         if (!includeRoadmap && isRoadmap) visible = false;
 
@@ -1672,7 +1692,7 @@ function applyFilters() {
         }
 
         row.classList.toggle('hidden', !visible);
-        if (visible && !isImplNode && !isTest) visibleCount++;  // Only count requirements, not code/test
+        if (visible && !isImplNode) visibleCount++;  // Only count requirements, not code/test
     });
 
     updateCounter(visibleCount);

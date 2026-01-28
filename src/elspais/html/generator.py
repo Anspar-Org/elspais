@@ -41,6 +41,8 @@ class TreeRow:
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
+    source_file: str = ""  # Relative path to source file
+    source_line: int = 0  # Line number in source file
 
 
 @dataclass
@@ -140,6 +142,7 @@ class HTMLGenerator:
             topics=sorted(topics),
             tree_data=tree_data,
             version=self.version,
+            base_path=self.base_path,
         )
 
         return html_content
@@ -376,6 +379,10 @@ class HTMLGenerator:
             coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
             assertion_letters = get_assertion_letters(node, parent_id) if parent_assertions is None else parent_assertions
 
+            # Get source location
+            source_file = node.source.path if node.source else ""
+            source_line = node.source.line if node.source else 0
+
             # Create row
             row = TreeRow(
                 id=f"{node.id}_{depth}_{parent_id or 'root'}",  # Unique key for multi-parent
@@ -397,6 +404,8 @@ class HTMLGenerator:
                 has_children=has_req_children(node) or has_code_children(node) or has_test_children(node),
                 has_failures=has_failures,
                 is_associated=self._is_associated(node) if not is_impl_node else False,
+                source_file=source_file,
+                source_line=source_line,
             )
 
             # Fix parent_id to reference actual row id
