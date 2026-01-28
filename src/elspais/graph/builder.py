@@ -13,6 +13,7 @@ from typing import Any, Iterator
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.graph.relations import Edge, EdgeKind
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.mutations import BrokenReference
 
 
 @dataclass
@@ -31,6 +32,10 @@ class TraceGraph:
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
     _index: dict[str, GraphNode] = field(default_factory=dict, init=False, repr=False)
+
+    # Detection: orphans and broken references (populated at build time)
+    _orphaned_ids: set[str] = field(default_factory=set, init=False)
+    _broken_references: list[BrokenReference] = field(default_factory=list, init=False)
 
     def iter_roots(self) -> Iterator[GraphNode]:
         """Iterate root nodes."""
@@ -84,6 +89,48 @@ class TraceGraph:
         """Return total number of nodes in the graph."""
         return len(self._index)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Detection API: Orphans and Broken References
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def orphaned_nodes(self) -> Iterator[GraphNode]:
+        """Iterate over orphaned nodes (nodes without parents).
+
+        Orphans are nodes that were never linked to a parent during
+        graph construction. This excludes root nodes which are intentionally
+        parentless.
+
+        Yields:
+            GraphNode instances that are orphaned.
+        """
+        for node_id in self._orphaned_ids:
+            node = self._index.get(node_id)
+            if node:
+                yield node
+
+    def has_orphans(self) -> bool:
+        """Check if the graph has orphaned nodes."""
+        return len(self._orphaned_ids) > 0
+
+    def orphan_count(self) -> int:
+        """Return the number of orphaned nodes."""
+        return len(self._orphaned_ids)
+
+    def broken_references(self) -> list[BrokenReference]:
+        """Get all broken references detected during build.
+
+        Broken references occur when a node references a target ID
+        that doesn't exist in the graph.
+
+        Returns:
+            List of BrokenReference instances.
+        """
+        return list(self._broken_references)
+
+    def has_broken_references(self) -> bool:
+        """Check if the graph has broken references."""
+        return len(self._broken_references) > 0
+
 
 class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.
@@ -104,6 +151,9 @@ class GraphBuilder:
         self.repo_root = repo_root or Path.cwd()
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # Detection: track orphan candidates and broken references
+        self._orphan_candidates: set[str] = set()
+        self._broken_references: list[BrokenReference] = []
 
     def add_parsed_content(self, content: ParsedContent) -> None:
         """Add parsed content to the graph.
@@ -152,6 +202,7 @@ class GraphBuilder:
             "hash": data.get("hash"),
         }
         self._nodes[req_id] = node
+        self._orphan_candidates.add(req_id)  # Track as potential orphan
 
         # Create assertion nodes
         for assertion in data.get("assertions", []):
@@ -277,9 +328,10 @@ class GraphBuilder:
         """Build the final TraceGraph.
 
         Resolves all pending links and identifies root nodes.
+        Also detects orphaned nodes and broken references.
 
         Returns:
-            Complete TraceGraph.
+            Complete TraceGraph with detection data populated.
         """
         # Resolve pending links
         for source_id, target_id, edge_kind in self._pending_links:
@@ -287,6 +339,9 @@ class GraphBuilder:
             target = self._nodes.get(target_id)
 
             if source and target:
+                # Node is being linked to a parent - no longer orphan candidate
+                self._orphan_candidates.discard(source_id)
+
                 # If target is an assertion, link from its parent requirement
                 # with assertion_targets set, so the child appears under the
                 # parent REQ (not the assertion node) with assertion badges
@@ -310,6 +365,15 @@ class GraphBuilder:
                 else:
                     # Link target as parent of source (implements relationship)
                     target.link(source, edge_kind)
+            elif source and not target:
+                # Broken reference: target doesn't exist
+                self._broken_references.append(
+                    BrokenReference(
+                        source_id=source_id,
+                        target_id=target_id,
+                        edge_kind=edge_kind.value,
+                    )
+                )
 
         # Identify roots (nodes with no parents)
         roots = [
@@ -323,7 +387,15 @@ class GraphBuilder:
             if node.kind == NodeKind.USER_JOURNEY
         )
 
+        # Root nodes are not orphans - they're intentionally parentless
+        root_ids = {r.id for r in roots}
+
+        # Final orphan set: candidates that aren't roots
+        orphaned_ids = self._orphan_candidates - root_ids
+
         graph = TraceGraph(repo_root=self.repo_root)
         graph._roots = roots
         graph._index = dict(self._nodes)
+        graph._orphaned_ids = orphaned_ids
+        graph._broken_references = list(self._broken_references)
         return graph

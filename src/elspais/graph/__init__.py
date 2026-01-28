@@ -6,6 +6,7 @@ Exports:
 - GraphNode: Unified node representation
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
+- BrokenReference: Reference to non-existent target (detection)
 
 Note: TraceGraph is in elspais.graph.builder (use graph.factory.build_graph() to construct)
 """
@@ -16,6 +17,7 @@ from elspais.graph.GraphNode import (
     SourceLocation,
 )
 from elspais.graph.relations import Edge, EdgeKind
+from elspais.graph.mutations import BrokenReference
 
 __all__ = [
     "NodeKind",
@@ -23,4 +25,5 @@ __all__ = [
     "GraphNode",
     "Edge",
     "EdgeKind",
+    "BrokenReference",
 ]

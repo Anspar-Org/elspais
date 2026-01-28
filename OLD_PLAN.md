@@ -21,3 +21,26 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 **Files Modified:**
 - `src/elspais/html/generator.py`: Extended JourneyItem dataclass, updated _collect_journeys()
 - `src/elspais/html/templates/trace_view.html.j2`: Added CSS for groups, grouping controls, JavaScript for dynamic regrouping
+
+---
+
+## Phase 1: Detection (Build-Time Capture) (Completed 2026-01-28)
+
+- [x] Orphaned Nodes Detection
+  - Added `_orphan_candidates: set[str]` to GraphBuilder
+  - Tracks nodes added, discards when linked during build()
+  - TraceGraph API: `orphaned_nodes()`, `has_orphans()`, `orphan_count()`
+
+- [x] Broken References Detection
+  - Created `BrokenReference` dataclass in `mutations.py`
+  - Captures failed link resolutions during build()
+  - TraceGraph API: `broken_references()`, `has_broken_references()`
+
+- [x] Tests: 12 new tests in `tests/core/test_detection.py`
+
+**Files Created:**
+- `src/elspais/graph/mutations.py`: BrokenReference dataclass
+
+**Files Modified:**
+- `src/elspais/graph/builder.py`: Added detection tracking to GraphBuilder and TraceGraph
+- `src/elspais/graph/__init__.py`: Export BrokenReference
