@@ -269,7 +269,7 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     issues = []
 
     # Known non-level keys in rules.hierarchy (config options, not level definitions)
-    non_level_keys = {"allowed_implements", "allow_circular", "allow_orphans", "max_depth", "allowed"}
+    non_level_keys = {"allowed_implements", "allow_circular", "allow_orphans", "allowed"}
 
     for level, allowed_parents in hierarchy.items():
         # Skip known config options that aren't level definitions
@@ -351,6 +351,45 @@ def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCh
     )
 
 
+def check_config_project_type(config: ConfigLoader) -> HealthCheck:
+    """Validate project type configuration consistency.
+
+    Checks that project.type matches the presence of [core] and [associated] sections.
+    """
+    from elspais.config import validate_project_config
+
+    raw = config.get_raw()
+    errors = validate_project_config(raw)
+
+    if errors:
+        return HealthCheck(
+            name="config.project_type",
+            passed=False,
+            message=errors[0],  # First error as main message
+            category="config",
+            severity="warning",
+            details={"errors": errors},
+        )
+
+    project_type = raw.get("project", {}).get("type")
+    if project_type:
+        return HealthCheck(
+            name="config.project_type",
+            passed=True,
+            message=f"Project type '{project_type}' configuration is valid",
+            category="config",
+            details={"type": project_type},
+        )
+
+    return HealthCheck(
+        name="config.project_type",
+        passed=True,
+        message="Project type not set (using defaults)",
+        category="config",
+        severity="info",
+    )
+
+
 def run_config_checks(
     config_path: Path | None, config: ConfigLoader, start_path: Path
 ) -> list[HealthCheck]:
@@ -359,6 +398,7 @@ def run_config_checks(
         check_config_exists(config_path, start_path),
         check_config_syntax(config_path, start_path),
         check_config_required_fields(config),
+        check_config_project_type(config),
         check_config_pattern_tokens(config),
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
@@ -510,6 +550,27 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
+    """Parse hierarchy rules from config.
+
+    Expected format: { "dev": ["ops", "prd"], "prd": ["prd"] }
+
+    Returns:
+        Dict mapping child level -> list of allowed parent levels (lowercase)
+    """
+    result: dict[str, list[str]] = {}
+
+    # Filter out non-level keys
+    non_level_keys = {"allow_circular", "allow_orphans", "cross_repo_implements"}
+    for key, value in hierarchy.items():
+        if key in non_level_keys:
+            continue
+        if isinstance(value, list):
+            result[key.lower()] = [v.lower() for v in value]
+
+    return result
+
+
 def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
@@ -517,6 +578,9 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
     hierarchy = config.get("rules.hierarchy", {})
     types = config.get("patterns.types", {})
     strict_hierarchy = config.get("validation.strict_hierarchy", False)
+
+    # Parse hierarchy rules
+    allowed_parents_map = _parse_hierarchy_rules(hierarchy)
 
     # Build level lookup: type_id -> level_name (lowercase)
     level_lookup = {v["id"]: k for k, v in types.items()}
@@ -528,7 +592,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
         if not node_level:
             continue
 
-        allowed_parents = hierarchy.get(node_level, [])
+        allowed_parents = allowed_parents_map.get(node_level, [])
 
         for parent in node.iter_parents():
             if parent.kind != NodeKind.REQUIREMENT:
@@ -599,6 +663,77 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Check that requirements comply with configured format rules."""
+    from elspais.graph import NodeKind
+    from elspais.validation.format import get_format_rules_config, validate_requirement_format
+
+    rules = get_format_rules_config(config.get_raw())
+
+    # Check if any rules are enabled
+    rules_enabled = any([
+        rules.require_hash,
+        rules.require_assertions,
+        rules.require_rationale,
+        rules.require_shall,
+        rules.require_status,
+        bool(rules.allowed_statuses),
+        rules.labels_sequential,
+        rules.labels_unique,
+    ])
+
+    if not rules_enabled:
+        return HealthCheck(
+            name="spec.format_rules",
+            passed=True,
+            message="No format rules enabled (configure in [rules.format])",
+            category="spec",
+            severity="info",
+        )
+
+    all_violations = []
+    req_count = 0
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        req_count += 1
+        violations = validate_requirement_format(node, rules)
+        all_violations.extend(violations)
+
+    errors = [v for v in all_violations if v.severity == "error"]
+    warnings = [v for v in all_violations if v.severity == "warning"]
+
+    if errors:
+        return HealthCheck(
+            name="spec.format_rules",
+            passed=False,
+            message=f"{len(errors)} format error(s) in {req_count} requirements",
+            category="spec",
+            details={
+                "errors": [{"rule": v.rule, "message": v.message, "node": v.node_id} for v in errors],
+                "warnings": [{"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings],
+            },
+        )
+
+    if warnings:
+        return HealthCheck(
+            name="spec.format_rules",
+            passed=True,
+            message=f"{req_count} requirements pass format rules ({len(warnings)} warning(s))",
+            category="spec",
+            severity="warning",
+            details={
+                "warnings": [{"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings],
+            },
+        )
+
+    return HealthCheck(
+        name="spec.format_rules",
+        passed=True,
+        message=f"{req_count} requirements pass all format rules",
+        category="spec",
+    )
+
+
 def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck]:
     """Run all spec file health checks."""
     return [
@@ -608,6 +743,7 @@ def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck
         check_spec_refines_resolve(graph),
         check_spec_hierarchy_levels(graph, config),
         check_spec_orphans(graph),
+        check_spec_format_rules(graph, config),
     ]
 
 

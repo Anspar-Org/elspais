@@ -356,7 +356,7 @@ Get full traceability from requirement to tests.
 
 **Parameters:**
 - `req_id` (str): Requirement ID
-- `max_depth` (int): Maximum traversal depth (default: 10)
+- `max_depth` (int): Maximum traversal depth (default: 99)
 
 **Returns:**
 ```json

@@ -163,11 +163,9 @@ format = "uppercase"
 separator = "-"
 
 [rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
-]
+dev = ["dev", "ops", "prd"]
+ops = ["ops", "prd"]
+prd = ["prd"]
 cross_repo_implements = true
 allow_orphans = true  # More permissive for associated development
 
@@ -187,7 +185,6 @@ type = "core"
 [directories]
 spec = "spec"
 docs = "docs"
-database = "database"
 code = ["src", "apps", "packages"]
 
 [patterns]
@@ -210,6 +207,11 @@ length = 3
 format = "uppercase"
 separator = "-"
 
+[patterns.assertions]
+label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
+# max_count = 26           # Defaults to style maximum (26 for uppercase, 100 for numeric)
+# zero_pad = false         # For numeric styles: "01" vs "1"
+
 [spec]
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
@@ -220,11 +222,9 @@ skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 "dev-*.md" = "dev"
 
 [rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
-]
+dev = ["dev", "ops", "prd"]
+ops = ["ops", "prd"]
+prd = ["prd"]
 allow_circular = false
 allow_orphans = false
 
@@ -235,15 +235,20 @@ require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
-[validation]
-hash_algorithm = "sha256"
-hash_length = 8
+[testing]
+enabled = false
+test_dirs = ["tests"]
+patterns = ["test_*.py", "*_test.py"]
+# result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
+reference_keyword = "Validates"
 
-[traceability]
-output_formats = ["markdown", "html"]
-scan_patterns = [
-    "database/**/*.sql",
-    "src/**/*.py",
-    "apps/**/*.dart",
-]
+[ignore]
+# Global patterns applied everywhere
+global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+# Additional patterns for spec file scanning
+spec = ["README.md", "INDEX.md", "drafts/**"]
+# Additional patterns for code scanning
+code = ["*_test.py", "conftest.py", "test_*.py"]
+# Additional patterns for test scanning
+test = ["fixtures/**", "__snapshots__"]
 """

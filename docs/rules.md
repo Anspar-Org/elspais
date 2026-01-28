@@ -81,17 +81,6 @@ When `false`:
 - All DEV requirements must implement at least one other requirement
 - All OPS requirements must implement at least one PRD
 
-### `max_depth`
-
-Limit implementation chain depth:
-
-```toml
-[rules.hierarchy]
-max_depth = 5  # A -> B -> C -> D -> E -> F is forbidden
-```text
-
-Prevents excessively deep hierarchies.
-
 ### `cross_repo_implements`
 
 Allow cross-repository references:

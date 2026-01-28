@@ -244,7 +244,6 @@ Starts MCP server for Claude Code integration.
 - `allowed_implements`: Valid parent-child type relationships
 - `allow_circular`: Permit circular dependencies
 - `allow_orphans`: Permit parentless requirements
-- `max_depth`: Maximum hierarchy depth
 
 ### [rules.format]
 - `require_hash` / `require_rationale` / `require_assertions` / `require_status`

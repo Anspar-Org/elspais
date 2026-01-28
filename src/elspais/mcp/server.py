@@ -424,7 +424,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         if node is None:
             return json.dumps({"error": f"Requirement {req_id} not found in graph"})
 
-        def build_tree(n, depth=0, max_depth=10):
+        def build_tree(n, depth=0, max_depth=99):
             """Recursively build tree structure."""
             if depth > max_depth:
                 return {"id": n.id, "truncated": True}
@@ -556,7 +556,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
         if node is None:
             return json.dumps({"error": f"Requirement {req_id} not found in graph"})
 
-        def collect_descendants(n, depth=0, max_depth=10):
+        def collect_descendants(n, depth=0, max_depth=99):
             """Collect all descendants recursively."""
             if depth > max_depth:
                 return []
@@ -876,7 +876,7 @@ def _register_tools(
         }
 
     @mcp.tool()
-    def get_traceability_path(req_id: str, max_depth: int = 10) -> Dict[str, Any]:
+    def get_traceability_path(req_id: str, max_depth: int = 99) -> Dict[str, Any]:
         """
         Get full traceability path from a requirement down to tests.
 
@@ -888,7 +888,7 @@ def _register_tools(
 
         Args:
             req_id: The requirement ID (e.g., "REQ-p00001")
-            max_depth: Maximum depth to traverse (default 10)
+            max_depth: Maximum depth to traverse (default 99)
 
         Returns:
             Tree structure with full traceability path

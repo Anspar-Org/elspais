@@ -18,7 +18,19 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 3. **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
 
-4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes.
+4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
+
+5. **Configuration System** (`config/__init__.py`): Unified configuration with helpers:
+   - `get_testing_config()`: Returns `TestingConfig` from `[testing]` section
+   - `get_ignore_config()`: Returns `IgnoreConfig` from `[ignore]` section with legacy support
+   - `get_docs_directories()`: Returns docs paths from `[directories].docs`
+   - `validate_project_config()`: Validates `project.type` consistency with `[core]`/`[associated]` sections
+
+6. **Format Validation** (`validation/format.py`): Configurable format rules in `[rules.format]`:
+   - `require_hash`, `require_assertions`, `require_rationale`, `require_shall`, `require_status`
+   - `allowed_statuses`: List of valid status values
+   - `labels_sequential`, `labels_unique`: Assertion label validation
+   - Integrated into `elspais health` command via `check_spec_format_rules()`
 
 7. **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files, files changed vs main branch, and moved requirements (by comparing current location to committed state).
 

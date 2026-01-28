@@ -212,9 +212,6 @@ allow_circular = false
 # Require all requirements to implement something (except root PRD)
 allow_orphans = false
 
-# Maximum implementation chain depth
-max_depth = 5
-
 # Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
 

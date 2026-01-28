@@ -123,7 +123,6 @@ allowed = [
 
 allow_circular = false      # Allow circular dependencies
 allow_orphans = false       # Allow requirements with no parent
-max_depth = 5               # Maximum hierarchy depth
 
 # Format validation rules
 [rules.format]

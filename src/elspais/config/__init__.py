@@ -8,8 +8,10 @@ Exports:
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +40,20 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "ops": ["prd"],
             "prd": [],
         },
+    },
+    "testing": {
+        "enabled": False,
+        "test_dirs": ["tests"],
+        "patterns": ["test_*.py", "*_test.py"],
+        "result_files": [],
+        "reference_patterns": [],
+        "reference_keyword": "Validates",
+    },
+    "ignore": {
+        "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
+        "spec": ["README.md", "INDEX.md"],
+        "code": ["*_test.py", "conftest.py", "test_*.py"],
+        "test": ["fixtures/**", "__snapshots__"],
     },
 }
 
@@ -450,18 +466,326 @@ def get_code_directories(
     return result
 
 
+def get_docs_directories(
+    config: dict[str, Any],
+    base_path: Path | None = None,
+) -> list[Path]:
+    """Get documentation directories from configuration.
+
+    Uses [directories].docs config for scanning documentation files
+    for requirement references and traceability.
+
+    Args:
+        config: Configuration dictionary
+        base_path: Base path to resolve relative directories (defaults to cwd)
+
+    Returns:
+        List of existing docs directory paths
+    """
+    if base_path is None:
+        base_path = Path.cwd()
+
+    dir_config = config.get("directories", {}).get("docs", ["docs"])
+
+    # Handle both string and list
+    if isinstance(dir_config, str):
+        dir_list = [dir_config]
+    else:
+        dir_list = list(dir_config)
+
+    # Resolve paths and filter to existing
+    result = []
+    for d in dir_list:
+        path = Path(d)
+        if not path.is_absolute():
+            path = base_path / path
+        if path.exists() and path.is_dir():
+            result.append(path)
+
+    return result
+
+
 # Re-export parse_toml for use by config_cmd
 parse_toml = _parse_toml
 
 
+@dataclass
+class IgnoreConfig:
+    """Unified configuration for ignoring files and directories.
+
+    Supports glob patterns (fnmatch) for flexible matching.
+    Patterns can be scoped to specific contexts (spec, code, test).
+
+    Attributes:
+        global_patterns: Patterns applied everywhere
+        spec_patterns: Additional patterns for spec file scanning
+        code_patterns: Additional patterns for code scanning
+        test_patterns: Additional patterns for test scanning
+    """
+
+    global_patterns: list[str]
+    spec_patterns: list[str]
+    code_patterns: list[str]
+    test_patterns: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "IgnoreConfig":
+        """Create IgnoreConfig from configuration dictionary.
+
+        Args:
+            data: Dictionary from [ignore] config section
+
+        Returns:
+            IgnoreConfig instance
+        """
+        return cls(
+            global_patterns=data.get("global", []),
+            spec_patterns=data.get("spec", []),
+            code_patterns=data.get("code", []),
+            test_patterns=data.get("test", []),
+        )
+
+    def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
+        """Check if a path should be ignored based on patterns.
+
+        Matches against:
+        1. Global patterns (always checked)
+        2. Scope-specific patterns (if scope is provided)
+
+        Supports glob patterns via fnmatch:
+        - "*" matches any characters within a path component
+        - "**" matches across directory separators (when using pathlib)
+        - "?" matches a single character
+
+        Args:
+            path: Path to check (can be file or directory)
+            scope: Context scope ("global", "spec", "code", "test")
+
+        Returns:
+            True if path should be ignored
+        """
+        if isinstance(path, Path):
+            path_str = str(path)
+            path_name = path.name
+            path_parts = path.parts
+        else:
+            path_str = path
+            path_obj = Path(path)
+            path_name = path_obj.name
+            path_parts = path_obj.parts
+
+        # Collect all applicable patterns
+        patterns = list(self.global_patterns)
+        if scope == "spec":
+            patterns.extend(self.spec_patterns)
+        elif scope == "code":
+            patterns.extend(self.code_patterns)
+        elif scope == "test":
+            patterns.extend(self.test_patterns)
+
+        for pattern in patterns:
+            # Check if pattern matches the file/dir name directly
+            if fnmatch.fnmatch(path_name, pattern):
+                return True
+
+            # Check if pattern matches any path component
+            for part in path_parts:
+                if fnmatch.fnmatch(part, pattern):
+                    return True
+
+            # Check if pattern matches the full relative path
+            if fnmatch.fnmatch(path_str, pattern):
+                return True
+
+        return False
+
+    def get_patterns_for_scope(self, scope: str) -> list[str]:
+        """Get all patterns applicable to a scope (global + scope-specific).
+
+        Args:
+            scope: Context scope ("global", "spec", "code", "test")
+
+        Returns:
+            Combined list of patterns
+        """
+        patterns = list(self.global_patterns)
+        if scope == "spec":
+            patterns.extend(self.spec_patterns)
+        elif scope == "code":
+            patterns.extend(self.code_patterns)
+        elif scope == "test":
+            patterns.extend(self.test_patterns)
+        return patterns
+
+
+class ConfigValidationError(Exception):
+    """Raised when configuration validation fails."""
+
+    pass
+
+
+def validate_project_config(config: dict[str, Any]) -> list[str]:
+    """Validate project type configuration consistency.
+
+    Checks that project.type matches the presence of [core] and [associated] sections:
+    - project.type = "core" → [associated] MAY exist (defines associated repos)
+    - project.type = "associated" → [core] MUST exist (specifies core repo path)
+    - project.type not set → [core] and [associated] sections are ERRORS
+
+    Args:
+        config: Configuration dictionary
+
+    Returns:
+        List of validation error messages (empty if valid)
+    """
+    errors = []
+
+    project_type = config.get("project", {}).get("type")
+    has_core_section = "core" in config and isinstance(config["core"], dict)
+    has_associated_section = "associated" in config and isinstance(
+        config["associated"], dict
+    )
+
+    if project_type == "associated":
+        # Associated repos MUST have a [core] section
+        if not has_core_section:
+            errors.append(
+                "project.type='associated' requires a [core] section with 'path' "
+                "to the core repository"
+            )
+        elif not config["core"].get("path"):
+            errors.append(
+                "[core] section must specify 'path' to core repository "
+                "for associated projects"
+            )
+    elif project_type == "core":
+        # Core repos MAY have [associated] section - no validation needed
+        pass
+    elif project_type is None:
+        # No project type set - [core] and [associated] sections are errors
+        if has_core_section:
+            errors.append(
+                "[core] section found but project.type is not set. "
+                "Set project.type='associated' to use this section"
+            )
+        if has_associated_section:
+            errors.append(
+                "[associated] section found but project.type is not set. "
+                "Set project.type='core' or 'associated' to use this section"
+            )
+    else:
+        # Unknown project type
+        errors.append(
+            f"Unknown project.type='{project_type}'. "
+            "Valid values: 'core', 'associated'"
+        )
+
+    return errors
+
+
+def get_testing_config(config: dict[str, Any]) -> "TestingConfig":
+    """Get TestingConfig from configuration dictionary.
+
+    Args:
+        config: Configuration dictionary from get_config() or load_config().get_raw()
+
+    Returns:
+        TestingConfig instance with values from [testing] section or defaults.
+    """
+    from elspais.testing.config import TestingConfig
+
+    testing_data = config.get("testing", {})
+    return TestingConfig.from_dict(testing_data)
+
+
+def get_test_directories(
+    config: dict[str, Any],
+    base_path: Path | None = None,
+) -> list[Path]:
+    """Get test directories from configuration.
+
+    Uses [testing].test_dirs config, falling back to common defaults.
+
+    Args:
+        config: Configuration dictionary
+        base_path: Base path to resolve relative directories (defaults to cwd)
+
+    Returns:
+        List of existing test directory paths
+    """
+    if base_path is None:
+        base_path = Path.cwd()
+
+    # Get from [testing] section first, then fall back to defaults
+    testing_config = config.get("testing", {})
+    dir_config = testing_config.get("test_dirs", ["tests"])
+
+    # Handle both string and list
+    if isinstance(dir_config, str):
+        dir_list = [dir_config]
+    else:
+        dir_list = list(dir_config)
+
+    # Resolve paths and filter to existing
+    result = []
+    for d in dir_list:
+        path = Path(d)
+        if not path.is_absolute():
+            path = base_path / path
+        if path.exists() and path.is_dir():
+            result.append(path)
+
+    return result
+
+
+def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
+    """Get IgnoreConfig from configuration dictionary.
+
+    The IgnoreConfig provides a unified way to check if paths should be ignored
+    during file scanning. It supports glob patterns and scope-specific rules.
+
+    Args:
+        config: Configuration dictionary from get_config() or load_config().get_raw()
+
+    Returns:
+        IgnoreConfig instance with patterns from [ignore] section or defaults.
+    """
+    ignore_data = config.get("ignore", {})
+
+    # Also check legacy spec.skip_files and spec.skip_dirs and merge them
+    spec_config = config.get("spec", {})
+    legacy_skip_files = spec_config.get("skip_files", [])
+    legacy_skip_dirs = spec_config.get("skip_dirs", [])
+
+    # Merge legacy patterns into spec scope
+    merged_spec = list(ignore_data.get("spec", []))
+    merged_spec.extend(legacy_skip_files)
+    merged_spec.extend(legacy_skip_dirs)
+
+    # Create config with merged patterns
+    return IgnoreConfig(
+        global_patterns=ignore_data.get("global", []),
+        spec_patterns=list(set(merged_spec)),  # Deduplicate
+        code_patterns=ignore_data.get("code", []),
+        test_patterns=ignore_data.get("test", []),
+    )
+
+
 __all__ = [
     "ConfigLoader",
+    "ConfigValidationError",
+    "IgnoreConfig",
     "load_config",
     "find_config_file",
     "find_git_root",
     "get_config",
     "get_spec_directories",
     "get_code_directories",
+    "get_docs_directories",
+    "get_testing_config",
+    "get_test_directories",
+    "get_ignore_config",
+    "validate_project_config",
     "DEFAULT_CONFIG",
     "parse_toml",
 ]
