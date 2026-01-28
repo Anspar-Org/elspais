@@ -44,3 +44,34 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 **Files Modified:**
 - `src/elspais/graph/builder.py`: Added detection tracking to GraphBuilder and TraceGraph
 - `src/elspais/graph/__init__.py`: Export BrokenReference
+
+---
+
+## Phase 2: Mutation Infrastructure (Completed 2026-01-28)
+
+- [x] MutationEntry dataclass
+  - Records operation, target_id, before_state, after_state
+  - Auto-generated UUID and timestamp
+  - affects_hash flag for hash-sensitive operations
+
+- [x] MutationLog class
+  - Append-only history with iteration
+  - find_by_id(), entries_since(), pop(), clear()
+  - last() for most recent entry
+
+- [x] TraceGraph mutation infrastructure
+  - _mutation_log: MutationLog for tracking all mutations
+  - _deleted_nodes: list for soft-delete tracking
+  - deleted_nodes(), has_deletions() API
+
+- [x] Undo implementation
+  - undo_last(): Undo most recent mutation
+  - undo_to(mutation_id): Batch undo to specific point
+  - _apply_undo() dispatcher for all mutation types
+
+- [x] Tests: 18 new tests in `tests/core/test_mutations.py`
+
+**Files Modified:**
+- `src/elspais/graph/mutations.py`: Added MutationEntry, MutationLog
+- `src/elspais/graph/builder.py`: Added mutation infrastructure and undo methods to TraceGraph
+- `src/elspais/graph/__init__.py`: Export MutationEntry, MutationLog

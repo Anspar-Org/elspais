@@ -17,7 +17,7 @@ from elspais.graph.GraphNode import (
     SourceLocation,
 )
 from elspais.graph.relations import Edge, EdgeKind
-from elspais.graph.mutations import BrokenReference
+from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 
 __all__ = [
     "NodeKind",
@@ -26,4 +26,6 @@ __all__ = [
     "Edge",
     "EdgeKind",
     "BrokenReference",
+    "MutationEntry",
+    "MutationLog",
 ]
