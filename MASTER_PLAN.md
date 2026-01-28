@@ -24,6 +24,12 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 - [x] elspais should check if it is in a git repo and always run as if in the root
   - Already implemented: `find_git_root()` in `config/__init__.py` (see CLAUDE.md 7b)
 
+- [ ] CLI implementation audit: Check all CLI arguments are fully implemented
+  - The --report parameter was a "dead code" scenario - CLI parsed it but implementation never read it
+  - This is a common pattern when features are added to CLI interface but backend handler is not updated
+  - Always grep for argument names in both the CLI definition AND the implementation code
+  - Verify ALL CLI commands are fully implemented and documented
+
 - [ ] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
   - Currently shows duplicate entries if REQ A implements multiple assertions in REQ B
   - Should collapse to single relationship with assertion badges
