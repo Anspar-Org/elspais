@@ -606,6 +606,43 @@ JSON batch format:
         help="Which repos to include in hierarchy (default: combined)",
     )
 
+    # completion command - shell tab-completion setup
+    completion_parser = subparsers.add_parser(
+        "completion",
+        help="Generate shell tab-completion scripts",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Shell Completion Setup:
+
+  First, install the completion extra:
+    pip install elspais[completion]
+
+  Bash (add to ~/.bashrc):
+    eval "$(register-python-argcomplete elspais)"
+
+  Zsh (add to ~/.zshrc):
+    autoload -U bashcompinit
+    bashcompinit
+    eval "$(register-python-argcomplete elspais)"
+
+  Fish (add to ~/.config/fish/config.fish):
+    register-python-argcomplete --shell fish elspais | source
+
+  Tcsh (add to ~/.tcshrc):
+    eval `register-python-argcomplete --shell tcsh elspais`
+
+  Global activation (for all argcomplete-enabled tools):
+    activate-global-python-argcomplete
+
+After adding the appropriate line, restart your shell or source the config file.
+""",
+    )
+    completion_parser.add_argument(
+        "--shell",
+        choices=["bash", "zsh", "fish", "tcsh"],
+        help="Generate script for specific shell",
+    )
+
     # mcp command
     mcp_parser = subparsers.add_parser(
         "mcp",
@@ -671,6 +708,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         Exit code (0 for success, non-zero for failure)
     """
     parser = create_parser()
+
+    # Enable shell tab-completion if argcomplete is installed
+    # Install with: pip install elspais[completion]
+    # Then activate: eval "$(register-python-argcomplete elspais)"
+    try:
+        import argcomplete
+
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
+
     args = parser.parse_args(argv)
 
     # Handle no command
@@ -706,6 +754,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return rules_cmd.run(args)
         elif args.command == "reformat-with-claude":
             return reformat_cmd.run(args)
+        elif args.command == "completion":
+            return completion_command(args)
         elif args.command == "mcp":
             return mcp_command(args)
         else:
@@ -720,6 +770,70 @@ def main(argv: Optional[List[str]] = None) -> int:
             raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def completion_command(args: argparse.Namespace) -> int:
+    """Handle completion command - generate shell completion scripts."""
+    try:
+        import argcomplete
+    except ImportError:
+        print("Error: argcomplete not installed.", file=sys.stderr)
+        print("Install with: pip install elspais[completion]", file=sys.stderr)
+        return 1
+
+    shell = args.shell
+
+    if shell:
+        # Generate script for specific shell
+        import subprocess
+
+        shell_flag = f"--shell={shell}" if shell in ("fish", "tcsh") else ""
+        cmd = ["register-python-argcomplete"]
+        if shell_flag:
+            cmd.append(shell_flag)
+        cmd.append("elspais")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(result.stdout)
+            else:
+                print(f"Error generating completion script: {result.stderr}", file=sys.stderr)
+                return 1
+        except FileNotFoundError:
+            print("Error: register-python-argcomplete not found.", file=sys.stderr)
+            print("Make sure argcomplete is properly installed.", file=sys.stderr)
+            return 1
+    else:
+        # Show setup instructions
+        print("""
+Shell Completion Setup for elspais
+===================================
+
+Bash (add to ~/.bashrc):
+  eval "$(register-python-argcomplete elspais)"
+
+Zsh (add to ~/.zshrc):
+  autoload -U bashcompinit
+  bashcompinit
+  eval "$(register-python-argcomplete elspais)"
+
+Fish (add to ~/.config/fish/config.fish):
+  register-python-argcomplete --shell fish elspais | source
+
+Tcsh (add to ~/.tcshrc):
+  eval `register-python-argcomplete --shell tcsh elspais`
+
+Generate script for a specific shell:
+  elspais completion --shell bash
+  elspais completion --shell zsh
+  elspais completion --shell fish
+  elspais completion --shell tcsh
+
+After adding the line, restart your shell or source the config file.
+""")
+
+    return 0
 
 
 def version_command(args: argparse.Namespace) -> int:

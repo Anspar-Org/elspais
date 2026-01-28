@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.25.1"
+version = "0.25.2"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -38,6 +38,8 @@ dev = [
 ]
 binary = ["pyinstaller>=6.0"]
 mcp = ["mcp>=1.0"]
+# Shell tab-completion support (bash, zsh, fish, tcsh)
+completion = ["argcomplete>=3.0"]
 # REQ-int-d00002-B: HTML generation requires jinja2
 trace-view = ["jinja2>=3.0"]
 # REQ-int-d00002-C: Review server requires flask
@@ -52,6 +54,7 @@ all = [
     "flask>=2.0",
     "flask-cors>=4.0",
     "mcp>=1.0",
+    "argcomplete>=3.0",
 ]
 
 [project.scripts]
