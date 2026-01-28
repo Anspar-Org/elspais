@@ -83,14 +83,23 @@ body {
 .stat-badge.dev { background: #20c997; color: white; }
 .stat-badge.core { background: #0d6efd; color: white; }
 .stat-badge.tests {
-    background: white;
+    /* Tests filter is inverted: active=show, so default (hidden) is hollow */
+    background: transparent;
     color: #198754;
-    border: 1px solid #198754;
+    box-shadow: inset 0 0 0 2px #198754;
+}
+.stat-badge.tests.active {
+    /* When active, tests are shown - solid appearance */
+    background: #198754;
+    color: white;
+    box-shadow: none;
 }
 .stat-badge.associated {
-    background: white;
+    background: #6f42c1;
+    color: white;
+}
+.stat-badge.associated.active {
     color: #6f42c1;
-    border: 1px solid #6f42c1;
 }
 
 .header-meta {
