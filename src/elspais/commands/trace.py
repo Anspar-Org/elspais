@@ -98,11 +98,11 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
     assertions = []
     for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
-            assertions.append({"label": child.get_field("label", ""), "text": child.label or ""})
+            assertions.append({"label": child.get_field("label", ""), "text": child.get_label() or ""})
 
     return {
         "id": node.id,
-        "title": node.label or "",
+        "title": node.get_label() or "",
         "level": node.level or "",
         "status": node.status or "",
         "implements": impl_ids,

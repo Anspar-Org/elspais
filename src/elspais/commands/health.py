@@ -884,7 +884,7 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
         if not has_valid_parent:
             unresolved.append({
                 "source": node.get_field("source_file", "unknown"),
-                "test_name": node.label or node.id,
+                "test_name": node.get_label() or node.id,
             })
 
     if unresolved:

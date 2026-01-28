@@ -137,7 +137,7 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
                     except ValueError:
                         pass
             hash_val = node.hash or ""
-            lines.append(f"| {node.id} | {node.label} | {file_path} | {hash_val} |")
+            lines.append(f"| {node.id} | {node.get_label()} | {file_path} | {hash_val} |")
 
         lines.append("")
 

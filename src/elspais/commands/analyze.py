@@ -75,7 +75,7 @@ def _print_tree(node: GraphNode, indent: int) -> None:
     prefix = "  " * indent
     status_icon = "[x]" if (node.status or "").lower() == "active" else "[ ]"
     level = node.level or "?"
-    print(f"{prefix}{status_icon} {node.id} ({level}) - {node.label}")
+    print(f"{prefix}{status_icon} {node.id} ({level}) - {node.get_label()}")
 
     # Get child requirements
     children = []
@@ -112,7 +112,7 @@ def _analyze_orphans(graph: TraceGraph, args: argparse.Namespace) -> int:
         print()
         for node in sorted(orphans, key=lambda n: n.id):
             loc = f"{node.source.path}:{node.source.line}" if node.source else "unknown"
-            print(f"  {node.id} ({node.level or '?'}) - {node.label}")
+            print(f"  {node.id} ({node.level or '?'}) - {node.get_label()}")
             print(f"    Location: {loc}")
     else:
         print("No orphaned requirements found.")
@@ -166,6 +166,6 @@ def _analyze_coverage(graph: TraceGraph, args: argparse.Namespace) -> int:
             print()
             print("  Unimplemented PRD requirements:")
             for node in sorted(unimplemented, key=lambda n: n.id):
-                print(f"    {node.id} - {node.label}")
+                print(f"    {node.id} - {node.get_label()}")
 
     return 0

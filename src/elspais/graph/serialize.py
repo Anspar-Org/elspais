@@ -29,7 +29,7 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
     result: dict[str, Any] = {
         "id": node.id,
         "kind": node.kind.name,
-        "label": node.label,
+        "label": node.get_label(),
         "uuid": node.uuid,
         "content": dict(node._content),
     }
@@ -134,7 +134,7 @@ def to_markdown(graph: TraceGraph) -> str:
     for node in requirements:
         req_id = node.id
         level = node.get_field("level", "")
-        title = node.label or ""
+        title = node.get_label() or ""
         status = node.get_field("status", "")
 
         # Get implements from incoming edges (what this node implements)
@@ -196,7 +196,7 @@ def to_csv(graph: TraceGraph) -> str:
         writer.writerow([
             node.id,
             node.get_field("level", ""),
-            node.label,
+            node.get_label(),
             node.get_field("status", ""),
             file_path,
             line,
