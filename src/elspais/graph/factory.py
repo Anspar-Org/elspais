@@ -7,6 +7,7 @@ implementing their own file reading logic.
 
 from __future__ import annotations
 
+from glob import glob
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ def build_graph(
     spec_dirs: list[Path] | None = None,
     config_path: Path | None = None,
     repo_root: Path | None = None,
+    scan_code: bool = True,
+    scan_tests: bool = True,
 ) -> TraceGraph:
     """Build a TraceGraph from spec directories.
 
@@ -35,12 +38,15 @@ def build_graph(
     - Spec directory resolution
     - Parser registration
     - Graph construction
+    - Code and test directory scanning (configurable)
 
     Args:
         config: Pre-loaded config dict (optional).
         spec_dirs: Explicit spec directories (optional).
         config_path: Path to config file (optional).
         repo_root: Repository root for relative paths (defaults to cwd).
+        scan_code: Whether to scan code directories from traceability.scan_patterns.
+        scan_tests: Whether to scan test directories from testing.test_dirs.
 
     Returns:
         Complete TraceGraph with all requirements linked.
@@ -60,13 +66,23 @@ def build_graph(
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
-    # 3. Create parser registry with ALL parsers
+    # 3. Create parser registries
     pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    registry = ParserRegistry()
-    registry.register(RequirementParser(pattern_config))
-    registry.register(JourneyParser())
-    registry.register(CodeParser())
-    registry.register(TestParser())
+
+    # Registry for spec files (all parsers)
+    spec_registry = ParserRegistry()
+    spec_registry.register(RequirementParser(pattern_config))
+    spec_registry.register(JourneyParser())
+    spec_registry.register(CodeParser())
+    spec_registry.register(TestParser())
+
+    # Registry for code files (code parser only)
+    code_registry = ParserRegistry()
+    code_registry.register(CodeParser())
+
+    # Registry for test files (test parser only)
+    test_registry = ParserRegistry()
+    test_registry.register(TestParser())
 
     # 4. Build graph from all spec directories
     builder = GraphBuilder(repo_root=repo_root)
@@ -87,8 +103,44 @@ def build_graph(
             skip_files=skip_files,
         )
 
-        for parsed_content in domain_file.deserialize(registry):
+        for parsed_content in domain_file.deserialize(spec_registry):
             builder.add_parsed_content(parsed_content)
+
+    # 5. Scan code directories from traceability.scan_patterns
+    if scan_code:
+        traceability_config = config.get("traceability", {})
+        scan_patterns = traceability_config.get("scan_patterns", [])
+
+        for pattern in scan_patterns:
+            # Resolve glob pattern relative to repo_root
+            matched_files = glob(str(repo_root / pattern), recursive=True)
+            for file_path in matched_files:
+                path = Path(file_path)
+                if path.is_file():
+                    domain_file = DomainFile(path)
+                    for parsed_content in domain_file.deserialize(code_registry):
+                        builder.add_parsed_content(parsed_content)
+
+    # 6. Scan test directories from testing config
+    if scan_tests:
+        testing_config = config.get("testing", {})
+        if testing_config.get("enabled", False):
+            test_dirs = testing_config.get("test_dirs", [])
+            test_patterns = testing_config.get("patterns", ["*_test.*", "test_*.*"])
+
+            for dir_pattern in test_dirs:
+                # Resolve glob pattern to get directories
+                matched_dirs = glob(str(repo_root / dir_pattern), recursive=True)
+                for dir_path in matched_dirs:
+                    path = Path(dir_path)
+                    if path.is_dir():
+                        domain_file = DomainFile(
+                            path,
+                            patterns=test_patterns,
+                            recursive=True,
+                        )
+                        for parsed_content in domain_file.deserialize(test_registry):
+                            builder.add_parsed_content(parsed_content)
 
     return builder.build()
 
