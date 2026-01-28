@@ -508,6 +508,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
 
     hierarchy = config.get("rules.hierarchy", {})
     types = config.get("patterns.types", {})
+    strict_hierarchy = config.get("validation.strict_hierarchy", False)
 
     # Build level lookup: type_id -> level_name (lowercase)
     level_lookup = {v["id"]: k for k, v in types.items()}
@@ -534,14 +535,25 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                 })
 
     if violations:
-        return HealthCheck(
-            name="spec.hierarchy_levels",
-            passed=False,
-            message=f"{len(violations)} hierarchy level violations",
-            category="spec",
-            severity="warning",
-            details={"violations": violations[:10]},
-        )
+        # Severity controlled by validation.strict_hierarchy config
+        if strict_hierarchy:
+            return HealthCheck(
+                name="spec.hierarchy_levels",
+                passed=False,
+                message=f"{len(violations)} hierarchy level violations",
+                category="spec",
+                severity="warning",
+                details={"violations": violations[:10]},
+            )
+        else:
+            return HealthCheck(
+                name="spec.hierarchy_levels",
+                passed=True,  # Informational when not strict
+                message=f"{len(violations)} hierarchy level deviations (strict_hierarchy=false)",
+                category="spec",
+                severity="info",
+                details={"violations": violations[:10], "hint": "Set validation.strict_hierarchy=true to enforce"},
+            )
 
     return HealthCheck(
         name="spec.hierarchy_levels",
