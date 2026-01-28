@@ -84,10 +84,17 @@ This provides the simplest API while keeping all graph state in one place.
 
 ---
 
-## [ ] MCP Mutator Capabilities
+## [x] MCP Mutator Capabilities
 
 Add mutation operations to the MCP server to allow AI-driven requirement management:
 - Expose TraceGraph mutation methods via MCP tools
 - Enable AI to create, rename, move, and delete requirements
 - Support undo/redo for AI-initiated changes
 - Add safety checks and confirmation prompts for destructive operations
+
+**COMPLETE** - All mutation methods now exposed via MCP tools:
+- Node: `mutate_rename_node`, `mutate_update_title`, `mutate_change_status`, `mutate_add_requirement`, `mutate_delete_requirement`
+- Assertion: `mutate_add_assertion`, `mutate_update_assertion`, `mutate_delete_assertion`, `mutate_rename_assertion`
+- Edge: `mutate_add_edge`, `mutate_change_edge_kind`, `mutate_delete_edge`, `mutate_fix_broken_reference`
+- Undo: `undo_last_mutation`, `undo_to_mutation`, `get_mutation_log`
+- Inspection: `get_orphaned_nodes`, `get_broken_references`

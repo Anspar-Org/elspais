@@ -17,6 +17,7 @@ from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 
 if TYPE_CHECKING:
+    from elspais.graph.mutations import BrokenReference, MutationEntry
     from elspais.mcp.context import WorkspaceContext
 
 
@@ -332,11 +333,55 @@ def _serialize_assertions_with_coverage(node: GraphNode) -> List[Dict[str, Any]]
     return assertions_info
 
 
+def serialize_mutation_entry(entry: "MutationEntry") -> Dict[str, Any]:
+    """
+    Serialize a MutationEntry to a JSON-compatible dict.
+
+    Args:
+        entry: MutationEntry to serialize
+
+    Returns:
+        Dict suitable for JSON serialization
+    """
+    from elspais.graph.mutations import MutationEntry
+
+    return {
+        "id": entry.id,
+        "timestamp": entry.timestamp.isoformat(),
+        "operation": entry.operation,
+        "target_id": entry.target_id,
+        "before_state": entry.before_state,
+        "after_state": entry.after_state,
+        "affects_hash": entry.affects_hash,
+    }
+
+
+def serialize_broken_reference(ref: "BrokenReference") -> Dict[str, Any]:
+    """
+    Serialize a BrokenReference to a JSON-compatible dict.
+
+    Args:
+        ref: BrokenReference to serialize
+
+    Returns:
+        Dict suitable for JSON serialization
+    """
+    from elspais.graph.mutations import BrokenReference
+
+    return {
+        "source_id": ref.source_id,
+        "target_id": ref.target_id,
+        "edge_kind": ref.edge_kind,
+    }
+
+
 __all__ = [
     "Severity",
     "RuleViolation",
     "serialize_assertion",
+    "serialize_broken_reference",
     "serialize_content_rule",
+    "serialize_mutation_entry",
     "serialize_node_full",
     "serialize_requirement",
     "serialize_requirement_summary",

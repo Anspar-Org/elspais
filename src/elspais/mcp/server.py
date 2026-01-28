@@ -18,7 +18,9 @@ except ImportError:
 from elspais.mcp.annotations import AnnotationStore
 from elspais.mcp.context import WorkspaceContext
 from elspais.mcp.serializers import (
+    serialize_broken_reference,
     serialize_content_rule,
+    serialize_mutation_entry,
     serialize_node_full,
     serialize_requirement,
     serialize_requirement_summary,
@@ -148,6 +150,7 @@ Use these tools when working with requirements, specifications, or traceability.
 - Modifying requirement relationships (Implements/Refines)
 - Moving requirements between spec files
 - AI-assisted requirement transformation
+- In-memory graph mutations with undo support
 
 ## Tool Categories:
 
@@ -159,11 +162,33 @@ Use these tools when working with requirements, specifications, or traceability.
 - get_traceability_path() - Full tree from requirement to tests
 - get_coverage_breakdown() - Per-assertion coverage details
 
-### Mutation (modifies spec files):
+### File Mutation (modifies spec files):
 - change_reference_type() - Switch Implements ↔ Refines
 - specialize_reference() - REQ→REQ to REQ→Assertion
 - move_requirement() - Move between files
 - transform_with_ai() - AI-assisted rewrite
+
+### Graph Mutation (in-memory with undo):
+- mutate_rename_node() - Rename requirement ID
+- mutate_update_title() - Change requirement title
+- mutate_change_status() - Change requirement status
+- mutate_add_requirement() - Create new requirement
+- mutate_delete_requirement() - Delete requirement (with confirmation)
+- mutate_add_assertion() - Add assertion to requirement
+- mutate_update_assertion() - Update assertion text
+- mutate_delete_assertion() - Delete assertion with compaction
+- mutate_rename_assertion() - Change assertion label
+- mutate_add_edge() - Add implements/refines relationship
+- mutate_change_edge_kind() - Switch edge type
+- mutate_delete_edge() - Remove relationship
+- mutate_fix_broken_reference() - Redirect broken reference
+
+### Undo Operations:
+- undo_last_mutation() - Undo most recent graph mutation
+- undo_to_mutation() - Batch undo to specific point
+- get_mutation_log() - View mutation history
+- get_orphaned_nodes() - List nodes without parents
+- get_broken_references() - List unresolved references
 
 ## Key Workflows:
 
@@ -173,17 +198,22 @@ Use these tools when working with requirements, specifications, or traceability.
 2. **Find coverage gaps**:
    list_by_criteria(has_gaps=True) → get_coverage_breakdown()
 
-3. **Safely modify**:
-   get_requirement() → [mutation tool] → refresh_graph() → validate()
+3. **Safely modify files**:
+   get_requirement() → [file mutation tool] → refresh_graph() → validate()
 
-4. **AI transformation** (always use git safety):
+4. **Graph mutations with undo**:
+   mutate_*() → [verify changes] → undo_last_mutation() if needed
+
+5. **AI transformation** (always use git safety):
    get_node_as_json() → transform_with_ai(save_branch=True)
 
 ## Safety Notes:
+- Graph mutations are in-memory only - use undo_last_mutation() to reverse
+- File mutations modify spec files - use git safety branches
 - Always use prepare_file_deletion() before delete_spec_file()
 - Use transform_with_ai() with save_branch=True for AI changes
-- Call refresh_graph() after mutation tools
-- restore_from_safety_branch() to undo if needed
+- Call refresh_graph() after file mutation tools
+- restore_from_safety_branch() to undo file changes if needed
 """
 
 
@@ -1831,6 +1861,653 @@ def _register_tools(
             Statistics dict
         """
         return annotation_store.stats()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Graph Mutation Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_rename_node(
+        old_id: str,
+        new_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Rename a requirement node (in-memory graph mutation with undo).
+
+        Updates the node's ID, all edges pointing to/from this node,
+        and assertion IDs if the node is a requirement.
+
+        Args:
+            old_id: Current node ID (e.g., "REQ-p00001")
+            new_id: New node ID (e.g., "REQ-p00002")
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.rename_node(old_id, new_id)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Renamed {old_id} to {new_id}",
+            }
+        except KeyError as e:
+            return {"success": False, "error": str(e)}
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_update_title(
+        node_id: str,
+        new_title: str,
+    ) -> Dict[str, Any]:
+        """
+        Update a requirement's title (in-memory graph mutation with undo).
+
+        Does not affect the requirement hash.
+
+        Args:
+            node_id: The requirement ID (e.g., "REQ-p00001")
+            new_title: The new title for the requirement
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.update_title(node_id, new_title)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Updated title for {node_id}",
+            }
+        except KeyError as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_change_status(
+        node_id: str,
+        new_status: str,
+    ) -> Dict[str, Any]:
+        """
+        Change a requirement's status (in-memory graph mutation with undo).
+
+        Args:
+            node_id: The requirement ID (e.g., "REQ-p00001")
+            new_status: New status value (e.g., "Active", "Draft", "Deprecated")
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.change_status(node_id, new_status)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Changed status of {node_id} to {new_status}",
+            }
+        except KeyError as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_add_requirement(
+        req_id: str,
+        title: str,
+        level: str,
+        status: str = "Draft",
+        parent_id: Optional[str] = None,
+        edge_kind: str = "implements",
+    ) -> Dict[str, Any]:
+        """
+        Add a new requirement node (in-memory graph mutation with undo).
+
+        Creates a node with the specified properties and optionally
+        links it to a parent.
+
+        Args:
+            req_id: The requirement ID (e.g., "REQ-p00001")
+            title: The requirement title
+            level: The requirement level ("PRD", "OPS", "DEV")
+            status: The requirement status (default "Draft")
+            parent_id: Optional parent node ID to link to
+            edge_kind: Edge type for parent link ("implements" or "refines")
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        from elspais.graph.relations import EdgeKind
+
+        graph, _ = ctx.get_graph()
+
+        # Parse edge kind
+        edge_kind_lower = edge_kind.lower()
+        if edge_kind_lower not in ("implements", "refines"):
+            return {
+                "success": False,
+                "error": f"Invalid edge_kind: {edge_kind}. Must be 'implements' or 'refines'",
+            }
+        ek = EdgeKind.IMPLEMENTS if edge_kind_lower == "implements" else EdgeKind.REFINES
+
+        try:
+            entry = graph.add_requirement(
+                req_id=req_id,
+                title=title,
+                level=level,
+                status=status,
+                parent_id=parent_id,
+                edge_kind=ek,
+            )
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Created requirement {req_id}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_delete_requirement(
+        node_id: str,
+        confirm: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Delete a requirement (in-memory graph mutation with undo).
+
+        DESTRUCTIVE: Removes the node from the graph. Children become orphans.
+        Assertion children are deleted with the requirement.
+
+        Args:
+            node_id: The requirement ID to delete
+            confirm: Must be True to actually delete (safety check)
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        if not confirm:
+            return {
+                "success": False,
+                "error": "Set confirm=True to delete the requirement. This is a destructive operation.",
+                "hint": "Use undo_last_mutation() to reverse if needed after deletion.",
+            }
+
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.delete_requirement(node_id)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Deleted requirement {node_id}. Use undo_last_mutation() to reverse.",
+            }
+        except KeyError as e:
+            return {"success": False, "error": str(e)}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Assertion Mutation Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_add_assertion(
+        req_id: str,
+        label: str,
+        text: str,
+    ) -> Dict[str, Any]:
+        """
+        Add an assertion to a requirement (in-memory graph mutation with undo).
+
+        Creates an assertion node, links it as child of the requirement,
+        and recomputes the requirement hash.
+
+        Args:
+            req_id: The parent requirement ID (e.g., "REQ-p00001")
+            label: The assertion label (e.g., "A", "B", "C")
+            text: The assertion text
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.add_assertion(req_id, label, text)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Added assertion {label} to {req_id}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_update_assertion(
+        assertion_id: str,
+        new_text: str,
+    ) -> Dict[str, Any]:
+        """
+        Update assertion text (in-memory graph mutation with undo).
+
+        Recomputes the parent requirement hash.
+
+        Args:
+            assertion_id: The assertion ID (e.g., "REQ-p00001-A")
+            new_text: The new assertion text
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.update_assertion(assertion_id, new_text)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Updated assertion {assertion_id}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_delete_assertion(
+        assertion_id: str,
+        compact: bool = True,
+        confirm: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Delete an assertion with optional compaction (in-memory with undo).
+
+        If compact=True and deleting B from [A, B, C, D]:
+        - C becomes B, D becomes C
+        - All edge references are updated
+        - Parent hash is recomputed
+
+        Args:
+            assertion_id: The assertion ID to delete (e.g., "REQ-p00001-B")
+            compact: If True, renumber subsequent assertions (default True)
+            confirm: Must be True to actually delete (safety check)
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        if not confirm:
+            return {
+                "success": False,
+                "error": "Set confirm=True to delete the assertion. This is a destructive operation.",
+                "hint": "Use undo_last_mutation() to reverse if needed after deletion.",
+            }
+
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.delete_assertion(assertion_id, compact=compact)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Deleted assertion {assertion_id}. Use undo_last_mutation() to reverse.",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_rename_assertion(
+        old_id: str,
+        new_label: str,
+    ) -> Dict[str, Any]:
+        """
+        Rename an assertion label (in-memory graph mutation with undo).
+
+        Updates the assertion node ID, edges with assertion_targets,
+        and recomputes the parent requirement hash.
+
+        Args:
+            old_id: Current assertion ID (e.g., "REQ-p00001-A")
+            new_label: New assertion label (e.g., "D")
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.rename_assertion(old_id, new_label)
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Renamed assertion {old_id} to label {new_label}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Edge Mutation Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_add_edge(
+        source_id: str,
+        target_id: str,
+        edge_kind: str,
+        assertion_targets: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add a new edge/relationship (in-memory graph mutation with undo).
+
+        Creates a relationship from source to target. If target doesn't exist,
+        adds to broken_references instead of creating an edge.
+
+        Args:
+            source_id: The child/source node ID (the one implementing)
+            target_id: The parent/target node ID (the one being implemented)
+            edge_kind: Relationship type ("implements", "refines", "validates")
+            assertion_targets: Optional assertion labels targeted (e.g., ["A", "B"])
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        from elspais.graph.relations import EdgeKind
+
+        graph, _ = ctx.get_graph()
+
+        # Parse edge kind
+        edge_kind_lower = edge_kind.lower()
+        try:
+            ek = EdgeKind(edge_kind_lower)
+        except ValueError:
+            return {
+                "success": False,
+                "error": f"Invalid edge_kind: {edge_kind}. Must be one of: implements, refines, validates, addresses, contains",
+            }
+
+        try:
+            entry = graph.add_edge(source_id, target_id, ek, assertion_targets)
+            broken = entry.after_state.get("broken", False)
+            if broken:
+                return {
+                    "success": True,
+                    "mutation": serialize_mutation_entry(entry),
+                    "message": f"Added broken reference: {source_id} -> {target_id} (target not found)",
+                    "warning": "Target node not found - added as broken reference",
+                }
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Added edge: {source_id} --[{edge_kind}]--> {target_id}",
+            }
+        except KeyError as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_change_edge_kind(
+        source_id: str,
+        target_id: str,
+        new_kind: str,
+    ) -> Dict[str, Any]:
+        """
+        Change edge type (in-memory graph mutation with undo).
+
+        Switches the relationship type between two nodes
+        (e.g., IMPLEMENTS -> REFINES).
+
+        Args:
+            source_id: The child/source node ID
+            target_id: The parent/target node ID
+            new_kind: New edge type ("implements", "refines", etc.)
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        from elspais.graph.relations import EdgeKind
+
+        graph, _ = ctx.get_graph()
+
+        # Parse edge kind
+        new_kind_lower = new_kind.lower()
+        try:
+            ek = EdgeKind(new_kind_lower)
+        except ValueError:
+            return {
+                "success": False,
+                "error": f"Invalid new_kind: {new_kind}. Must be one of: implements, refines, validates, addresses, contains",
+            }
+
+        try:
+            entry = graph.change_edge_kind(source_id, target_id, ek)
+            old_kind = entry.before_state.get("edge_kind", "unknown")
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Changed edge {source_id} -> {target_id} from {old_kind} to {new_kind}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_delete_edge(
+        source_id: str,
+        target_id: str,
+        confirm: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Remove an edge/relationship (in-memory graph mutation with undo).
+
+        Removes the relationship between two nodes. If source has no
+        other parents, it may become an orphan.
+
+        Args:
+            source_id: The child/source node ID
+            target_id: The parent/target node ID
+            confirm: Must be True to actually delete (safety check)
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        if not confirm:
+            return {
+                "success": False,
+                "error": "Set confirm=True to delete the edge. This may create orphan nodes.",
+                "hint": "Use undo_last_mutation() to reverse if needed after deletion.",
+            }
+
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.delete_edge(source_id, target_id)
+            became_orphan = entry.after_state.get("became_orphan", False)
+            if became_orphan:
+                return {
+                    "success": True,
+                    "mutation": serialize_mutation_entry(entry),
+                    "message": f"Deleted edge {source_id} -> {target_id}",
+                    "warning": f"Node {source_id} is now orphaned (no parents)",
+                }
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Deleted edge {source_id} -> {target_id}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def mutate_fix_broken_reference(
+        source_id: str,
+        old_target_id: str,
+        new_target_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Fix a broken reference by redirecting to a new target (with undo).
+
+        Finds a broken reference from source to old_target and redirects
+        it to new_target. If new_target also doesn't exist, the reference
+        remains broken (but with updated target).
+
+        Args:
+            source_id: The source node ID with the broken reference
+            old_target_id: The current (broken) target ID
+            new_target_id: The new target ID to point to
+
+        Returns:
+            MutationEntry with id, operation, before_state, after_state
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entry = graph.fix_broken_reference(source_id, old_target_id, new_target_id)
+            fixed = entry.after_state.get("fixed", False)
+            still_broken = entry.after_state.get("still_broken", False)
+
+            if fixed:
+                return {
+                    "success": True,
+                    "mutation": serialize_mutation_entry(entry),
+                    "message": f"Fixed reference: {source_id} now points to {new_target_id}",
+                }
+            elif still_broken:
+                return {
+                    "success": True,
+                    "mutation": serialize_mutation_entry(entry),
+                    "message": f"Redirected broken reference to {new_target_id}",
+                    "warning": f"Reference still broken - target {new_target_id} not found",
+                }
+            return {
+                "success": True,
+                "mutation": serialize_mutation_entry(entry),
+                "message": f"Updated reference from {old_target_id} to {new_target_id}",
+            }
+        except (KeyError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Undo and Inspection Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def undo_last_mutation() -> Dict[str, Any]:
+        """
+        Undo the most recent graph mutation.
+
+        Reverses the last mutation using its before_state and removes
+        it from the mutation log.
+
+        Returns:
+            The undone MutationEntry, or error if log is empty
+        """
+        graph, _ = ctx.get_graph()
+
+        entry = graph.undo_last()
+        if entry is None:
+            return {
+                "success": False,
+                "error": "No mutations to undo",
+            }
+
+        return {
+            "success": True,
+            "undone": serialize_mutation_entry(entry),
+            "message": f"Undone: {entry.operation}({entry.target_id})",
+        }
+
+    @mcp.tool()
+    def undo_to_mutation(mutation_id: str) -> Dict[str, Any]:
+        """
+        Undo all mutations back to (and including) a specific mutation.
+
+        Batch undo for reverting multiple operations at once.
+
+        Args:
+            mutation_id: The mutation ID to undo back to
+
+        Returns:
+            List of undone MutationEntry instances
+        """
+        graph, _ = ctx.get_graph()
+
+        try:
+            entries = graph.undo_to(mutation_id)
+            return {
+                "success": True,
+                "count": len(entries),
+                "undone": [serialize_mutation_entry(e) for e in entries],
+                "message": f"Undone {len(entries)} mutations",
+            }
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+
+    @mcp.tool()
+    def get_mutation_log(limit: int = 50) -> Dict[str, Any]:
+        """
+        Get the mutation history for the current graph.
+
+        Args:
+            limit: Maximum number of entries to return (default 50)
+
+        Returns:
+            List of MutationEntry instances in chronological order
+        """
+        graph, _ = ctx.get_graph()
+
+        entries = list(graph.mutation_log.iter_entries())
+        total = len(entries)
+
+        # Return most recent entries up to limit
+        if len(entries) > limit:
+            entries = entries[-limit:]
+
+        return {
+            "total": total,
+            "returned": len(entries),
+            "entries": [serialize_mutation_entry(e) for e in entries],
+        }
+
+    @mcp.tool()
+    def get_orphaned_nodes() -> Dict[str, Any]:
+        """
+        Get all orphaned nodes in the graph.
+
+        Orphans are nodes without parents that aren't roots.
+        These typically indicate broken relationships.
+
+        Returns:
+            List of orphaned node IDs with basic info
+        """
+        graph, _ = ctx.get_graph()
+
+        orphans = []
+        for node in graph.orphaned_nodes():
+            orphans.append({
+                "id": node.id,
+                "kind": node.kind.value,
+                "label": node.get_label(),
+            })
+
+        return {
+            "count": len(orphans),
+            "orphans": orphans,
+        }
+
+    @mcp.tool()
+    def get_broken_references() -> Dict[str, Any]:
+        """
+        Get all broken references in the graph.
+
+        Broken references are links to non-existent targets,
+        typically from typos or missing requirements.
+
+        Returns:
+            List of BrokenReference instances
+        """
+        graph, _ = ctx.get_graph()
+
+        refs = graph.broken_references()
+        return {
+            "count": len(refs),
+            "references": [serialize_broken_reference(r) for r in refs],
+        }
 
 
 def _analyze_hierarchy(requirements: Dict[str, Any]) -> Dict[str, Any]:

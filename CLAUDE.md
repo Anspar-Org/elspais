@@ -117,6 +117,16 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **`fix_broken_reference(source_id, old_target_id, new_target_id)`**: Redirects a broken reference to a new target. If new target also doesn't exist, reference remains broken with updated target.
     - All edge mutations maintain invariants: `_orphaned_ids` updated for orphan status changes, `_broken_references` updated when edges to non-existent targets are added/removed.
 
+23. **MCP Mutator Tools** (`elspais[mcp]`): The MCP server exposes TraceGraph mutations for AI-driven requirement management:
+    - **Node Mutations**: `mutate_rename_node()`, `mutate_update_title()`, `mutate_change_status()`, `mutate_add_requirement()`, `mutate_delete_requirement(confirm=True)`
+    - **Assertion Mutations**: `mutate_add_assertion()`, `mutate_update_assertion()`, `mutate_delete_assertion(confirm=True)`, `mutate_rename_assertion()`
+    - **Edge Mutations**: `mutate_add_edge()`, `mutate_change_edge_kind()`, `mutate_delete_edge(confirm=True)`, `mutate_fix_broken_reference()`
+    - **Undo Operations**: `undo_last_mutation()`, `undo_to_mutation(mutation_id)`, `get_mutation_log(limit)`
+    - **Inspection**: `get_orphaned_nodes()`, `get_broken_references()`
+    - **Safety**: Destructive operations (`delete_*`) require `confirm=True` parameter to prevent accidental data loss.
+    - **Responses**: All mutations return `{"success": bool, "mutation": MutationEntry, "message": str}` where `MutationEntry` includes `id`, `operation`, `target_id`, `before_state`, `after_state`.
+    - **In-Memory**: Graph mutations are in-memory only; use file mutation tools (`change_reference_type()`, `move_requirement()`, etc.) to persist changes to spec files.
+
 
 **Multi-Language Comment Support:**
 
