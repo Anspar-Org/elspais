@@ -75,3 +75,20 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 - `src/elspais/graph/mutations.py`: Added MutationEntry, MutationLog
 - `src/elspais/graph/builder.py`: Added mutation infrastructure and undo methods to TraceGraph
 - `src/elspais/graph/__init__.py`: Export MutationEntry, MutationLog
+
+---
+
+## Phase 3: Node Mutations (Completed 2026-01-28)
+
+- [x] `rename_node(old_id, new_id)` - Renames node and assertion children, updates index
+- [x] `update_title(node_id, new_title)` - Updates requirement title
+- [x] `change_status(node_id, new_status)` - Changes requirement status
+- [x] `add_requirement(req_id, title, level, status, parent_id, edge_kind)` - Creates new requirement
+- [x] `delete_requirement(node_id, compact_assertions)` - Deletes requirement, preserves for undo
+
+- [x] Tests: 36 new tests in `tests/core/test_node_mutations.py`
+
+**Files Modified:**
+- `src/elspais/graph/GraphNode.py`: Added `set_id()`, `remove_child()` methods
+- `src/elspais/graph/builder.py`: Added 5 node mutation methods to TraceGraph
+- `CLAUDE.md`: Added Node Mutation API documentation (item 20)
