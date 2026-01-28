@@ -107,3 +107,18 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 **Files Modified:**
 - `src/elspais/graph/builder.py`: Added 4 assertion mutation methods + `_recompute_requirement_hash()`
 - `CLAUDE.md`: Added Assertion Mutation API documentation (item 21)
+
+---
+
+## Phase 5: Edge Mutations (Completed 2026-01-28)
+
+- [x] `add_edge(source_id, target_id, edge_kind, assertion_targets)` - Creates edge or broken ref
+- [x] `change_edge_kind(source_id, target_id, new_kind)` - Changes IMPLEMENTS ↔ REFINES
+- [x] `delete_edge(source_id, target_id)` - Removes edge, updates orphan tracking
+- [x] `fix_broken_reference(source_id, old_target, new_target)` - Repairs broken refs
+
+- [x] Tests: 38 new tests in `tests/core/test_edge_mutations.py`
+
+**Files Modified:**
+- `src/elspais/graph/builder.py`: Added 4 edge mutation methods with full undo support
+- `CLAUDE.md`: Added Edge Mutation API documentation (item 22)
