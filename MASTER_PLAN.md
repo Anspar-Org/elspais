@@ -39,9 +39,9 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
   - Fixed: `--report` now uses `choices=["minimal", "standard", "full"]` for tab completion
   - The `{minimal,standard,full}` is now shown in help and enables shell autocomplete
 
-- [ ] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
-  - Currently shows duplicate entries if REQ A implements multiple assertions in REQ B
-  - Should collapse to single relationship with assertion badges
+- [x] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
+  - Fixed: Aggregate assertion targets per child before building tree rows
+  - Now shows single entry with combined badges [A][B][C] instead of duplicates
 
 ---
 

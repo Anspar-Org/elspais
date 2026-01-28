@@ -79,3 +79,11 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
   - **Result**: Help now shows `--report {minimal,standard,full}` and shell autocomplete works
   - **Completed**: 2026-01-28
   - **Commit**: [CUR-514] fix(cli): Add choices to --report for autocomplete
+
+### [x] trace --view: Simplify assertion display
+  - **Issue**: Children implementing multiple assertions appeared multiple times in tree
+  - **Fix**: Aggregate assertion targets per child using dict before building rows
+    - Changed edge iteration to collect assertions per child_id
+    - Convert set to sorted list for display [A][B][C]
+  - **Completed**: 2026-01-28
+  - **Commit**: [CUR-514] fix(html): Aggregate assertion badges to prevent duplicates

@@ -408,25 +408,33 @@ class HTMLGenerator:
             rows.append(row)
 
             # Traverse children - requirements first, then code/tests
-            children_to_visit: list[tuple[GraphNode, list[str] | None]] = []
+            # First, aggregate all assertion targets per child to avoid duplicates
+            child_assertions: dict[str, tuple[GraphNode, set[str]]] = {}
+            children_without_assertions: list[GraphNode] = []
 
             for edge in node.iter_outgoing_edges():
                 child = edge.target
                 if child.kind == NodeKind.REQUIREMENT:
-                    # Check specificity: if child implements both REQ-XXX and REQ-XXX-A,
-                    # only show under the assertion-specific link
                     if edge.assertion_targets:
-                        # This is an assertion-specific implementation
-                        children_to_visit.append((child, edge.assertion_targets))
+                        # Aggregate assertion targets for this child
+                        if child.id not in child_assertions:
+                            child_assertions[child.id] = (child, set())
+                        child_assertions[child.id][1].update(edge.assertion_targets)
                     else:
-                        # Check if there's also an assertion-specific edge
-                        has_specific = False
-                        for other_edge in node.iter_outgoing_edges():
-                            if other_edge.target.id == child.id and other_edge.assertion_targets:
-                                has_specific = True
-                                break
-                        if not has_specific:
-                            children_to_visit.append((child, None))
+                        # Track children without assertion-specific edges
+                        if child.id not in child_assertions:
+                            children_without_assertions.append(child)
+
+            # Build children_to_visit list: assertion-specific children first
+            children_to_visit: list[tuple[GraphNode, list[str] | None]] = []
+            for child_id, (child, assertions) in child_assertions.items():
+                # Convert set to sorted list
+                children_to_visit.append((child, sorted(assertions)))
+
+            # Add children without assertion targets (only if they don't have assertion-specific edges)
+            for child in children_without_assertions:
+                if child.id not in child_assertions:
+                    children_to_visit.append((child, None))
 
             # Add code and test children
             for child in node.iter_children():
