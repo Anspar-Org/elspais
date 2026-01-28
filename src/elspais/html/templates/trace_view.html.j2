@@ -56,6 +56,18 @@ body {
     border-radius: 4px;
     font-size: 0.875rem;
     font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    user-select: none;
+}
+
+.stat-badge:hover {
+    opacity: 0.85;
+    transform: scale(1.02);
+}
+
+.stat-badge.active {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.5);
 }
 
 .stat-badge.prd { background: #212529; color: white; }
@@ -66,6 +78,11 @@ body {
     background: white;
     color: #dc3545;
     border: 1px solid #dc3545;
+}
+.stat-badge.associated {
+    background: white;
+    color: #6f42c1;
+    border: 1px solid #6f42c1;
 }
 
 .header-meta {
@@ -226,6 +243,54 @@ body {
 .tab.active {
     color: #0d6efd;
     border-bottom-color: #0d6efd;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Journey Cards */
+.journey-list {
+    display: grid;
+    gap: 16px;
+    padding: 16px 0;
+}
+
+.journey-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.journey-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.journey-card .journey-id {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 8px;
+}
+
+.journey-card .journey-description {
+    font-size: 0.875rem;
+    color: #333;
+}
+
+.no-journeys {
+    text-align: center;
+    padding: 48px;
+    color: #6c757d;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -603,19 +668,23 @@ body {
     <h1 class="header-title">Requirements Traceability</h1>
 
     <div class="header-stats">
-        <span class="stat-badge prd">PRD: {{ stats.prd_count }}</span>
-        <span class="stat-badge ops">OPS: {{ stats.ops_count }}</span>
-        <span class="stat-badge dev">DEV: {{ stats.dev_count }}</span>
+        <span class="stat-badge prd" id="badge-prd" onclick="toggleLevelFilter('PRD')" title="Click to filter PRD only">PRD: {{ stats.prd_count }}</span>
+        <span class="stat-badge ops" id="badge-ops" onclick="toggleLevelFilter('OPS')" title="Click to filter OPS only">OPS: {{ stats.ops_count }}</span>
+        <span class="stat-badge dev" id="badge-dev" onclick="toggleLevelFilter('DEV')" title="Click to filter DEV only">DEV: {{ stats.dev_count }}</span>
         <span style="color: #adb5bd;">|</span>
         <span class="stat-badge core">CORE: {{ stats.total_count }}</span>
         <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge files">Files: {{ stats.file_count }}</span>
+        <span class="stat-badge files" id="badge-files" onclick="toggleFilter('files')" title="Click to show/hide file nodes">Files: {{ stats.file_count }}</span>
+        <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
     </div>
 
     <div class="header-meta">
         <span class="version-badge">v{{ version }}</span>
         <button class="legend-btn" onclick="toggleLegend()">
             <span>ℹ</span> Legend
+        </button>
+        <button class="legend-btn" onclick="clearAllCookies()" title="Clear saved preferences">
+            <span>🍪</span> Reset
         </button>
     </div>
 </header>
@@ -644,11 +713,11 @@ body {
             <span>🌿 Leaf Only</span>
         </label>
         <label class="toggle-item">
-            <input type="checkbox" id="toggle-deprecated" checked onchange="applyFilters()">
+            <input type="checkbox" id="toggle-deprecated" onchange="applyFilters()">
             <span>Include deprecated</span>
         </label>
         <label class="toggle-item">
-            <input type="checkbox" id="toggle-roadmap" checked onchange="applyFilters()">
+            <input type="checkbox" id="toggle-roadmap" onchange="applyFilters()">
             <span>Include roadmap</span>
         </label>
         <label class="toggle-item">
@@ -680,9 +749,11 @@ body {
      ═══════════════════════════════════════════════════════════════════════════ -->
 
 <main class="main-content">
-    <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
+    <!-- Requirements Tab Content -->
+    <div class="tab-content active" id="content-requirements">
+        <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
 
-    <div class="table-container">
+        <div class="table-container">
         <table class="trace-table" id="trace-table">
             <thead>
                 <tr>
@@ -747,6 +818,7 @@ body {
                     data-is-uncommitted="{{ 'true' if row.is_uncommitted else 'false' }}"
                     data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
                     data-is-code="{{ 'true' if row.is_code else 'false' }}"
+                    data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
                     data-has-children="{{ 'true' if row.has_children else 'false' }}">
                     <td class="col-id">
                         <div class="tree-cell">
@@ -800,6 +872,30 @@ body {
                 {% endfor %}
             </tbody>
         </table>
+        </div>
+    </div>
+
+    <!-- User Journeys Tab Content -->
+    <div class="tab-content" id="content-journeys">
+        <h2 class="section-title">User Journeys</h2>
+        {% if journeys %}
+        <div class="journey-list">
+            {% for journey in journeys %}
+            <div class="journey-card">
+                <div class="journey-id">{{ journey.id }}</div>
+                <h3>{{ journey.title }}</h3>
+                {% if journey.description %}
+                <div class="journey-description">{{ journey.description }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-journeys">
+            <p>No user journeys found in specification files.</p>
+            <p style="font-size: 0.875rem; margin-top: 8px;">User journeys are defined with <code>## UJ-xxx: Title</code> headers in spec files.</p>
+        </div>
+        {% endif %}
     </div>
 </main>
 
@@ -905,12 +1001,135 @@ const state = {
     viewMode: 'hierarchical',
     activeFilters: {
         uncommitted: false,
-        changed: false
+        changed: false,
+        files: false,
+        associated: false,
+        levelPrd: false,
+        levelOps: false,
+        levelDev: false
     },
     collapsedNodes: new Set(),
     totalCount: {{ stats.total_count }},
+    activeTab: 'requirements',
     treeData: JSON.parse(document.getElementById('tree-data').textContent)
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cookie Persistence
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COOKIE_NAME = 'elspais_trace_view_state';
+const COOKIE_DAYS = 30;
+
+function saveStateToCookie() {
+    const stateToSave = {
+        viewMode: state.viewMode,
+        activeFilters: state.activeFilters,
+        toggleLeaf: document.getElementById('toggle-leaf').checked,
+        toggleDeprecated: document.getElementById('toggle-deprecated').checked,
+        toggleRoadmap: document.getElementById('toggle-roadmap').checked,
+        toggleCode: document.getElementById('toggle-code').checked,
+        filterLevel: document.getElementById('filter-level').value,
+        filterStatus: document.getElementById('filter-status').value,
+        filterCov: document.getElementById('filter-cov').value,
+        filterTopic: document.getElementById('filter-topic').value,
+        activeTab: state.activeTab
+    };
+    const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
+    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateToSave))}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function loadStateFromCookie() {
+    const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
+    if (!match) return null;
+    try {
+        return JSON.parse(decodeURIComponent(match[2]));
+    } catch {
+        return null;
+    }
+}
+
+function restoreState() {
+    const saved = loadStateFromCookie();
+    if (!saved) return;
+
+    // Restore view mode
+    if (saved.viewMode) {
+        state.viewMode = saved.viewMode;
+        document.querySelectorAll('[data-view]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === saved.viewMode);
+        });
+        document.getElementById('view-mode-label').textContent =
+            saved.viewMode === 'flat' ? 'Flat View' : 'Hierarchical View';
+    }
+
+    // Restore active filters
+    if (saved.activeFilters) {
+        Object.assign(state.activeFilters, saved.activeFilters);
+        Object.keys(state.activeFilters).forEach(key => {
+            const btn = document.getElementById('btn-' + key);
+            if (btn) btn.classList.toggle('active', state.activeFilters[key]);
+        });
+        // Update level badges
+        document.getElementById('badge-prd')?.classList.toggle('active', state.activeFilters.levelPrd);
+        document.getElementById('badge-ops')?.classList.toggle('active', state.activeFilters.levelOps);
+        document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
+        document.getElementById('badge-files')?.classList.toggle('active', state.activeFilters.files);
+        document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
+    }
+
+    // Restore checkboxes
+    if (saved.toggleLeaf !== undefined) document.getElementById('toggle-leaf').checked = saved.toggleLeaf;
+    if (saved.toggleDeprecated !== undefined) document.getElementById('toggle-deprecated').checked = saved.toggleDeprecated;
+    if (saved.toggleRoadmap !== undefined) document.getElementById('toggle-roadmap').checked = saved.toggleRoadmap;
+    if (saved.toggleCode !== undefined) document.getElementById('toggle-code').checked = saved.toggleCode;
+
+    // Restore dropdowns
+    if (saved.filterLevel) document.getElementById('filter-level').value = saved.filterLevel;
+    if (saved.filterStatus) document.getElementById('filter-status').value = saved.filterStatus;
+    if (saved.filterCov) document.getElementById('filter-cov').value = saved.filterCov;
+    if (saved.filterTopic) document.getElementById('filter-topic').value = saved.filterTopic;
+
+    // Restore tab
+    if (saved.activeTab) {
+        state.activeTab = saved.activeTab;
+        switchTab(saved.activeTab, false);
+    }
+}
+
+function clearAllCookies() {
+    document.cookie = `${COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    // Reset to defaults
+    state.viewMode = 'hierarchical';
+    state.activeFilters = {
+        uncommitted: false, changed: false, files: false, associated: false,
+        levelPrd: false, levelOps: false, levelDev: false
+    };
+    state.activeTab = 'requirements';
+
+    // Reset UI
+    document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === 'hierarchical');
+    });
+    document.querySelectorAll('.stat-badge').forEach(badge => badge.classList.remove('active'));
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        if (!btn.dataset.view) btn.classList.remove('active');
+    });
+    document.getElementById('toggle-leaf').checked = false;
+    document.getElementById('toggle-deprecated').checked = false;
+    document.getElementById('toggle-roadmap').checked = false;
+    document.getElementById('toggle-code').checked = false;
+    document.getElementById('filter-id').value = '';
+    document.getElementById('filter-title').value = '';
+    document.getElementById('filter-level').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-cov').value = '';
+    document.getElementById('filter-topic').value = '';
+
+    switchTab('requirements', false);
+    collapseAll();
+    alert('Preferences cleared! Page reset to defaults.');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // View Mode
@@ -939,18 +1158,49 @@ function toggleFilter(filter) {
     state.activeFilters[filter] = !state.activeFilters[filter];
 
     const btn = document.getElementById('btn-' + filter);
-    btn.classList.toggle('active', state.activeFilters[filter]);
+    if (btn) btn.classList.toggle('active', state.activeFilters[filter]);
+
+    // Also update badges for files/associated
+    const badge = document.getElementById('badge-' + filter);
+    if (badge) badge.classList.toggle('active', state.activeFilters[filter]);
 
     applyFilters();
+    saveStateToCookie();
+}
+
+function toggleLevelFilter(level) {
+    const key = 'level' + level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+    state.activeFilters[key] = !state.activeFilters[key];
+
+    // Update badge visual
+    const badge = document.getElementById('badge-' + level.toLowerCase());
+    if (badge) badge.classList.toggle('active', state.activeFilters[key]);
+
+    // Also update the dropdown to match (if only one level selected)
+    const activeLevels = ['levelPrd', 'levelOps', 'levelDev'].filter(k => state.activeFilters[k]);
+    if (activeLevels.length === 1) {
+        const levelMap = { levelPrd: 'PRD', levelOps: 'OPS', levelDev: 'DEV' };
+        document.getElementById('filter-level').value = levelMap[activeLevels[0]];
+    } else if (activeLevels.length === 0) {
+        document.getElementById('filter-level').value = '';
+    }
+
+    applyFilters();
+    saveStateToCookie();
 }
 
 function clearFilters() {
     // Reset all filters
-    state.activeFilters.uncommitted = false;
-    state.activeFilters.changed = false;
+    state.activeFilters = {
+        uncommitted: false, changed: false, files: false, associated: false,
+        levelPrd: false, levelOps: false, levelDev: false
+    };
 
-    document.getElementById('btn-uncommitted').classList.remove('active');
-    document.getElementById('btn-changed').classList.remove('active');
+    // Remove active class from buttons and badges
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        if (!btn.dataset.view) btn.classList.remove('active');
+    });
+    document.querySelectorAll('.stat-badge').forEach(badge => badge.classList.remove('active'));
 
     document.getElementById('filter-id').value = '';
     document.getElementById('filter-title').value = '';
@@ -960,11 +1210,12 @@ function clearFilters() {
     document.getElementById('filter-topic').value = '';
 
     document.getElementById('toggle-leaf').checked = false;
-    document.getElementById('toggle-deprecated').checked = true;
-    document.getElementById('toggle-roadmap').checked = true;
+    document.getElementById('toggle-deprecated').checked = false;
+    document.getElementById('toggle-roadmap').checked = false;
     document.getElementById('toggle-code').checked = false;
 
     applyFilters();
+    saveStateToCookie();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -985,6 +1236,11 @@ function applyFilters() {
     const includeRoadmap = document.getElementById('toggle-roadmap').checked;
     const showCode = document.getElementById('toggle-code').checked;
 
+    // Check if any level badge filters are active
+    const levelBadgeFiltersActive = state.activeFilters.levelPrd ||
+                                     state.activeFilters.levelOps ||
+                                     state.activeFilters.levelDev;
+
     let visibleCount = 0;
 
     rows.forEach(row => {
@@ -999,6 +1255,7 @@ function applyFilters() {
         const isUncommitted = row.dataset.isUncommitted === 'true';
         const isRoadmap = row.dataset.isRoadmap === 'true';
         const isCode = row.dataset.isCode === 'true';
+        const isAssociated = row.dataset.isAssociated === 'true';
         const depth = parseInt(row.dataset.depth);
         const parentId = row.dataset.parent;
 
@@ -1013,11 +1270,33 @@ function applyFilters() {
         if (filterIdValue && !id.includes(filterIdValue)) visible = false;
         if (filterTitleValue && !title.includes(filterTitleValue)) visible = false;
 
-        // Dropdown filters
-        if (filterLevelValue && level !== filterLevelValue) visible = false;
+        // Dropdown filters (level dropdown is separate from badge filters)
+        if (filterLevelValue && !levelBadgeFiltersActive && level !== filterLevelValue) visible = false;
         if (filterStatusValue && status !== filterStatusValue) visible = false;
         if (filterCovValue && coverage !== filterCovValue) visible = false;
         if (filterTopicValue && topic !== filterTopicValue) visible = false;
+
+        // Level badge filters (OR logic - show if any selected level matches)
+        if (levelBadgeFiltersActive && !isCode) {
+            const matchesPrd = state.activeFilters.levelPrd && level === 'PRD';
+            const matchesOps = state.activeFilters.levelOps && level === 'OPS';
+            const matchesDev = state.activeFilters.levelDev && level === 'DEV';
+            if (!matchesPrd && !matchesOps && !matchesDev) {
+                visible = false;
+            }
+        }
+
+        // Associated filter (when active, only show associated rows)
+        if (state.activeFilters.associated && !isAssociated) {
+            visible = false;
+        }
+
+        // Files filter (when NOT active, hide code nodes in flat view)
+        // When files badge is active, show code nodes regardless of showCode toggle
+        if (state.activeFilters.files && isCode) {
+            // Files filter active - show code rows
+            visible = true;
+        }
 
         // Toggle filters
         if (leafOnly && !isLeaf && !isCode) visible = false;
@@ -1058,6 +1337,7 @@ function applyFilters() {
     });
 
     updateCounter(visibleCount);
+    saveStateToCookie();
 }
 
 function isParentCollapsed(parentId) {
@@ -1125,13 +1405,26 @@ function collapseAll() {
 // Tabs
 // ─────────────────────────────────────────────────────────────────────────────
 
-function switchTab(tabName) {
+function switchTab(tabName, save = true) {
+    state.activeTab = tabName;
+
+    // Update tab buttons
     document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.tab === tabName);
     });
 
-    // TODO: Implement tab content switching when journeys are added
-    console.log('Switched to tab:', tabName);
+    // Switch tab content visibility
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    const activeContent = document.getElementById('content-' + tabName);
+    if (activeContent) {
+        activeContent.classList.add('active');
+    }
+
+    if (save) {
+        saveStateToCookie();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1168,6 +1461,13 @@ document.addEventListener('keydown', function(e) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Start with tree collapsed (default state)
+    collapseAll();
+
+    // Restore saved state from cookie if available
+    restoreState();
+
+    // Apply filters (this will also save state)
     applyFilters();
 });
 </script>

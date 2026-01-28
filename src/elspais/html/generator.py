@@ -37,6 +37,16 @@ class TreeRow:
     is_code: bool
     has_children: bool
     has_failures: bool
+    is_associated: bool  # From sponsor/associated repository
+
+
+@dataclass
+class JourneyItem:
+    """Represents a user journey for display."""
+
+    id: str
+    title: str
+    description: str
 
 
 @dataclass
@@ -48,6 +58,8 @@ class ViewStats:
     dev_count: int = 0
     total_count: int = 0
     file_count: int = 0
+    associated_count: int = 0
+    journey_count: int = 0
 
 
 class HTMLGenerator:
@@ -104,14 +116,19 @@ class HTMLGenerator:
         # Build data structures
         stats = self._compute_stats()
         rows = self._build_tree_rows()
+        journeys = self._collect_journeys()
         statuses = self._collect_unique_values("status")
         topics = self._collect_unique_values("topic")
         tree_data = self._build_tree_data() if embed_content else {}
+
+        # Update journey count in stats
+        stats.journey_count = len(journeys)
 
         # Render template
         html_content = template.render(
             stats=stats,
             rows=rows,
+            journeys=journeys,
             statuses=sorted(statuses),
             topics=sorted(topics),
             tree_data=tree_data,
@@ -161,6 +178,28 @@ class HTMLGenerator:
                 annotate_git_state(node, git_info)
                 annotate_display_info(node)
 
+    def _is_associated(self, node: GraphNode) -> bool:
+        """Check if a node is from an associated/sponsor repository.
+
+        Associated requirements come from sponsor repos, identified by:
+        - Path containing 'sponsor' or 'associated'
+        - Path outside the main spec/ directory structure
+        - Or marked with an associated field
+        """
+        if not node.source:
+            return False
+
+        path = node.source.path.lower()
+        # Check for common associated repo patterns
+        if "sponsor" in path or "associated" in path:
+            return True
+
+        # Check if node has associated field set
+        if node.get_field("associated", False):
+            return True
+
+        return False
+
     def _compute_stats(self) -> ViewStats:
         """Compute statistics for the header."""
         from elspais.graph import NodeKind
@@ -178,6 +217,10 @@ class HTMLGenerator:
                 stats.ops_count += 1
             elif level == "DEV":
                 stats.dev_count += 1
+
+            # Count associated requirements
+            if self._is_associated(node):
+                stats.associated_count += 1
 
             if node.source:
                 files.add(node.source.path)
@@ -342,6 +385,7 @@ class HTMLGenerator:
                 is_code=is_code,
                 has_children=has_req_children(node) or has_code_children(node),
                 has_failures=has_failures,
+                is_associated=self._is_associated(node) if not is_code else False,
             )
 
             # Fix parent_id to reference actual row id
@@ -439,6 +483,31 @@ class HTMLGenerator:
                 },
             }
         return data
+
+    def _collect_journeys(self) -> list[JourneyItem]:
+        """Collect all user journey nodes for the journeys tab."""
+        from elspais.graph import NodeKind
+
+        journeys: list[JourneyItem] = []
+
+        for node in self.graph.nodes_by_kind(NodeKind.USER_JOURNEY):
+            # Extract description from body or other fields
+            description = node.get_field("body", "") or node.get_field("description", "")
+            if not description and node.label:
+                # Use label as title, look for body content
+                description = ""
+
+            journeys.append(
+                JourneyItem(
+                    id=node.id,
+                    title=node.label or node.id,
+                    description=description,
+                )
+            )
+
+        # Sort by ID for consistent ordering
+        journeys.sort(key=lambda j: j.id)
+        return journeys
 
 
 __all__ = ["HTMLGenerator"]
