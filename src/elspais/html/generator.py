@@ -380,7 +380,7 @@ class HTMLGenerator:
             row = TreeRow(
                 id=f"{node.id}_{depth}_{parent_id or 'root'}",  # Unique key for multi-parent
                 display_id=node.id,
-                title=node.label or "",
+                title=node.get_label() or "",
                 level=(node.level or "").upper() if not is_impl_node else "",
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
@@ -503,7 +503,7 @@ class HTMLGenerator:
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             data[node.id] = {
                 "id": node.id,
-                "label": node.label,
+                "label": node.get_label(),
                 "uuid": node.uuid,
                 "level": node.level,
                 "status": node.status,
@@ -525,7 +525,7 @@ class HTMLGenerator:
         for node in self.graph.nodes_by_kind(NodeKind.USER_JOURNEY):
             # Extract description from body or other fields
             description = node.get_field("body", "") or node.get_field("description", "")
-            if not description and node.label:
+            if not description and node.get_label():
                 # Use label as title, look for body content
                 description = ""
 
@@ -547,7 +547,7 @@ class HTMLGenerator:
             journeys.append(
                 JourneyItem(
                     id=node.id,
-                    title=node.label or node.id,
+                    title=node.get_label() or node.id,
                     description=description,
                     actor=actor,
                     goal=goal,

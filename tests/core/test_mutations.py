@@ -317,7 +317,7 @@ class TestUndoUpdateTitle:
         graph = builder.build()
 
         node = graph.find_by_id("REQ-p00001")
-        assert node.label == "Original Title"
+        assert node.get_label() == "Original Title"
 
         # Simulate title update
         entry = MutationEntry(
@@ -326,14 +326,14 @@ class TestUndoUpdateTitle:
             before_state={"title": "Original Title"},
             after_state={"title": "New Title"},
         )
-        node.label = "New Title"
+        node.set_label("New Title")
         graph._mutation_log.append(entry)
 
-        assert node.label == "New Title"
+        assert node.get_label() == "New Title"
 
         # Undo
         graph.undo_last()
-        assert node.label == "Original Title"
+        assert node.get_label() == "Original Title"
 
 
 class TestUndoTo:
@@ -350,7 +350,7 @@ class TestUndoTo:
         # Make multiple title changes
         entries = []
         for i in range(3):
-            old_title = node.label
+            old_title = node.get_label()
             new_title = f"Title{i+2}"
             entry = MutationEntry(
                 operation="update_title",
@@ -358,15 +358,15 @@ class TestUndoTo:
                 before_state={"title": old_title},
                 after_state={"title": new_title},
             )
-            node.label = new_title
+            node.set_label(new_title)
             graph._mutation_log.append(entry)
             entries.append(entry)
 
-        assert node.label == "Title4"
+        assert node.get_label() == "Title4"
         assert len(graph.mutation_log) == 3
 
         # Undo back to the first mutation
         undone = graph.undo_to(entries[0].id)
         assert len(undone) == 3
-        assert node.label == "Title1"
+        assert node.get_label() == "Title1"
         assert len(graph.mutation_log) == 0

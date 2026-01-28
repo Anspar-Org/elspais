@@ -187,7 +187,7 @@ class TestBuilderContentTypes:
         node = graph.find_by_id("UJ-001")
         assert node is not None
         assert node.kind == NodeKind.USER_JOURNEY
-        assert node.label == "Login Flow"
+        assert node.get_label() == "Login Flow"
 
     def test_build_creates_code_ref_nodes(self):
         """Builder creates CODE nodes from code_ref content."""

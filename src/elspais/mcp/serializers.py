@@ -63,7 +63,7 @@ def serialize_requirement(node: GraphNode) -> Dict[str, Any]:
 
     return {
         "id": node.id,
-        "title": node.label,
+        "title": node.get_label(),
         "level": node.level,
         "status": node.status,
         "body": node.get_field("body", ""),
@@ -98,7 +98,7 @@ def serialize_requirement_summary(node: GraphNode) -> Dict[str, Any]:
 
     return {
         "id": node.id,
-        "title": node.label,
+        "title": node.get_label(),
         "level": node.level,
         "status": node.status,
         "implements": implements,
@@ -118,7 +118,7 @@ def serialize_assertion(node: GraphNode) -> Dict[str, Any]:
         Dict suitable for JSON serialization
     """
     return {
-        "label": node.label,
+        "label": node.get_label(),
         "text": node.get_field("text", ""),
         "is_placeholder": node.get_field("is_placeholder", False),
     }
@@ -187,7 +187,7 @@ def serialize_node_full(
     """
     result: Dict[str, Any] = {
         "id": node.id,
-        "title": node.label,
+        "title": node.get_label(),
         "level": node.level,
         "status": node.status,
         "type_code": node.get_field("type_code", ""),
@@ -310,7 +310,7 @@ def _serialize_assertions_with_coverage(node: GraphNode) -> List[Dict[str, Any]]
             continue
 
         info: Dict[str, Any] = {
-            "label": child.label,
+            "label": child.get_label(),
             "text": child.get_field("text", ""),
             "is_placeholder": child.get_field("is_placeholder", False),
         }

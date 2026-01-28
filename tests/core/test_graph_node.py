@@ -75,7 +75,7 @@ class TestGraphNode:
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         assert node.id == "REQ-p00001"
         assert node.kind == NodeKind.REQUIREMENT
-        assert node.label == ""  # Default empty
+        assert node.get_label() == ""  # Default empty
         assert node.source is None
         assert node.child_count() == 0
         assert node.parent_count() == 0
@@ -88,7 +88,7 @@ class TestGraphNode:
             kind=NodeKind.REQUIREMENT,
             label="User Authentication",
         )
-        assert node.label == "User Authentication"
+        assert node.get_label() == "User Authentication"
 
     def test_create_with_source(self):
         source = SourceLocation(path="spec/prd.md", line=10)
@@ -116,7 +116,7 @@ class TestGraphNode:
         assert node is not None
         assert node.get_field("status") == "Active"
         # Title is stored in label, not content
-        assert node.label == "Auth"
+        assert node.get_label() == "Auth"
 
     def test_add_child(self):
         parent = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -244,7 +244,7 @@ class TestGraphNodeTraversal:
 
         root.add_child(child)
 
-        found = list(root.find(lambda n: "Auth" in n.label))
+        found = list(root.find(lambda n: "Auth" in n.get_label()))
         assert len(found) == 2  # Both contain "Auth"
 
 

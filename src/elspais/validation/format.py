@@ -150,9 +150,9 @@ def validate_requirement_format(
         assertions_without_shall = []
         for child in node.iter_children():
             if child.kind == NodeKind.ASSERTION:
-                assertion_text = child.get_field("text", "") or child.label
+                assertion_text = child.get_field("text", "") or child.get_label()
                 if "shall" not in assertion_text.lower():
-                    assertions_without_shall.append(child.label)
+                    assertions_without_shall.append(child.get_label())
 
         if assertions_without_shall:
             violations.append(

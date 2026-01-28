@@ -56,7 +56,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
         if child.kind == NodeKind.ASSERTION:
             assertion_info = {
                 "id": child.id,
-                "label": child.label,
+                "label": child.get_label(),
                 "covered": False,
                 "coverage_source": None,
                 "implementing_code": [],
@@ -81,7 +81,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
             # Get implementing code (direct children of kind CODE)
             for code_child in child.iter_children():
                 if code_child.kind == NodeKind.CODE:
-                    code_info = {"id": code_child.id, "label": code_child.label}
+                    code_info = {"id": code_child.id, "label": code_child.get_label()}
                     if code_child.source:
                         code_info["file"] = code_child.source.path
                         code_info["line"] = code_child.source.line
@@ -92,7 +92,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
                 if test_child.kind == NodeKind.TEST:
                     test_info = {
                         "id": test_child.id,
-                        "label": test_child.label,
+                        "label": test_child.get_label(),
                         "status": None,
                     }
                     if test_child.source:
@@ -117,7 +117,7 @@ def _build_coverage_breakdown(ctx: "WorkspaceContext", req_id: str) -> Dict[str,
 
     return {
         "id": req_id,
-        "label": node.label,
+        "label": node.get_label(),
         "assertions": assertions,
         "gaps": gaps,
         "summary": {
@@ -432,7 +432,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             result = {
                 "id": n.id,
                 "kind": n.kind.value,
-                "label": n.label,
+                "label": n.get_label(),
             }
 
             if n.source:
@@ -519,7 +519,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
             ancestor_info = {
                 "id": ancestor.id,
                 "kind": ancestor.kind.value,
-                "label": ancestor.label,
+                "label": ancestor.get_label(),
                 "depth": ancestor.depth,
             }
             if ancestor.source:
@@ -565,7 +565,7 @@ def _register_resources(mcp: "FastMCP", ctx: WorkspaceContext) -> None:
                 child_info = {
                     "id": child.id,
                     "kind": child.kind.value,
-                    "label": child.label,
+                    "label": child.get_label(),
                     "parent": n.id,
                 }
                 if child.source:
@@ -862,7 +862,7 @@ def _register_tools(
         return {
             "id": req_id,
             "kind": node.kind.value,
-            "label": node.label,
+            "label": node.get_label(),
             "depth": node.depth,
             "ancestors": ancestors,
             "children": {
@@ -909,7 +909,7 @@ def _register_tools(
             result = {
                 "id": n.id,
                 "kind": n.kind.value,
-                "label": n.label,
+                "label": n.get_label(),
             }
 
             # Add source location if available
@@ -1147,7 +1147,7 @@ def _register_tools(
                 if child.kind == NodeKind.REQUIREMENT:
                     implementer = {
                         "id": child.id,
-                        "label": child.label,
+                        "label": child.get_label(),
                     }
                     if child.source:
                         implementer["source"] = {

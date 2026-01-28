@@ -158,7 +158,8 @@ class WorkspaceContext:
                     match = True
 
             if search_field in ("all", "title"):
-                if node.label and pattern.search(node.label):
+                label = node.get_label()
+                if label and pattern.search(label):
                     match = True
 
             if search_field in ("all", "body"):

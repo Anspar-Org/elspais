@@ -20,6 +20,12 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
   - Fixed initialization order to check for saved state before applying defaults
   - All GUI state now persists: filters, toggles, dropdowns, tabs, and tree state
 
+- [x] GraphNode.label encapsulation incomplete
+  - Fixed: Refactored all `.label` usages to `get_label()` and `.label =` to `set_label()`
+  - Updated: mcp/server.py (11), mcp/serializers.py (5), mcp/context.py (1), html/generator.py (4), validation/format.py (2)
+  - Updated test files: test_builder.py, test_mutations.py, test_graph_node.py
+  - All 494 tests pass
+
 ---
 
 ## Quick Wins
@@ -66,6 +72,15 @@ This provides the simplest API while keeping all graph state in one place.
 ---
 
 ---
+
+---
+
+## [x] Quick Fix: Encapsulate `label` attribute
+
+**COMPLETE** - All files now use accessor methods.
+
+- [x] `GraphNode._label` renamed, `get_label()`/`set_label()` methods added
+- [x] Refactored ~25 usages across 8 files to use accessor methods
 
 ---
 
