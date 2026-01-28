@@ -277,6 +277,275 @@ A. The implementation SHALL follow the spec.
         assert '"REQ-p00001"' in content
 
 
+class TestTraceReportPresets:
+    """Tests for --report preset functionality."""
+
+    @pytest.fixture
+    def temp_spec_dir(self, tmp_path: Path) -> Path:
+        """Create a temporary spec directory with requirements."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text("""# REQ-p00001: Parent Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A parent requirement.
+
+## Assertions
+
+A. The system SHALL provide a feature.
+B. The system SHALL be reliable.
+
+*End* *Parent Requirement* | **Hash**: abcd1234
+
+---
+
+# REQ-d00001: Child Requirement
+
+**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00001
+
+**Purpose:** A child implementation.
+
+## Assertions
+
+A. The implementation SHALL follow the spec.
+
+*End* *Child Requirement* | **Hash**: efgh5678
+""")
+        return spec_dir
+
+    def test_report_minimal_has_fewer_columns(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --report minimal produces fewer columns."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            output=str(tmp_path / "minimal.csv"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="minimal",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = (tmp_path / "minimal.csv").read_text()
+        # Minimal should have: id, title, status (no level, no implements)
+        assert "id,title,status" in content
+        assert "level" not in content.split("\n")[0]
+        assert "implements" not in content.split("\n")[0]
+
+    def test_report_standard_has_default_columns(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --report standard produces default columns."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            output=str(tmp_path / "standard.csv"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="standard",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = (tmp_path / "standard.csv").read_text()
+        # Standard should have: id, title, level, status, implements
+        header = content.split("\n")[0]
+        assert "id" in header
+        assert "title" in header
+        assert "level" in header
+        assert "status" in header
+        assert "implements" in header
+
+    def test_report_full_has_all_columns(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --report full produces all columns including assertions."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            output=str(tmp_path / "full.csv"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="full",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = (tmp_path / "full.csv").read_text()
+        header = content.split("\n")[0]
+        # Full should have all columns including assertions
+        assert "id" in header
+        assert "title" in header
+        assert "level" in header
+        assert "status" in header
+        assert "implements" in header
+        assert "hash" in header
+        assert "file" in header
+        assert "assertions" in header
+
+    def test_report_full_json_includes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --report full with JSON format includes assertions."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="json",
+            output=str(tmp_path / "full.json"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="full",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = (tmp_path / "full.json").read_text()
+        data = json.loads(content)
+        assert isinstance(data, list)
+
+        # Find REQ-p00001 and verify it has assertions
+        parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
+        assert parent is not None
+        assert "assertions" in parent
+        assert len(parent["assertions"]) == 2
+
+    def test_report_minimal_json_excludes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --report minimal with JSON format excludes assertions."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="json",
+            output=str(tmp_path / "minimal.json"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="minimal",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = (tmp_path / "minimal.json").read_text()
+        data = json.loads(content)
+        assert isinstance(data, list)
+
+        # Minimal should not include assertions
+        parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
+        assert parent is not None
+        assert "assertions" not in parent
+
+    def test_report_invalid_preset_returns_error(self, temp_spec_dir: Path, capsys):
+        """Test invalid --report preset returns error."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="markdown",
+            output=None,
+            quiet=False,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="nonexistent",
+        )
+
+        result = trace.run(args)
+        assert result == 1
+
+        captured = capsys.readouterr()
+        assert "Unknown report preset" in captured.err
+        assert "minimal" in captured.err  # Should list available presets
+
+    def test_report_default_is_standard(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test that no --report defaults to standard."""
+        from elspais.commands import trace
+
+        # Run without --report
+        args_no_report = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            output=str(tmp_path / "default.csv"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report=None,
+        )
+
+        result1 = trace.run(args_no_report)
+        assert result1 == 0
+
+        # Run with explicit --report standard
+        args_standard = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            output=str(tmp_path / "standard.csv"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            report="standard",
+        )
+
+        result2 = trace.run(args_standard)
+        assert result2 == 0
+
+        # Both should produce the same headers
+        default_header = (tmp_path / "default.csv").read_text().split("\n")[0]
+        standard_header = (tmp_path / "standard.csv").read_text().split("\n")[0]
+        assert default_header == standard_header
+
+
 class TestTraceAdvancedFeaturesNotImplemented:
     """Tests that advanced features show appropriate errors."""
 

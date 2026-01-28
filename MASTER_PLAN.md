@@ -1,241 +1,397 @@
-# MASTER_PLAN.md
+# MASTER_PLAN.md - elspais Enhancement Queue
 
-This file contains a prioritized queue of enhancement phases for elspais. Follow the workflow in CLAUDE.md for implementation.
-
----
-
-## Phase 1: Trace View Improvements
-**Status:** [x] Complete
-
-**Goal:** Enhance the `elspais trace --view` HTML output with better assertion support, sorting, and filter UX.
-
-**Test Repository:** `~/cure-hht/hht_diary-worktrees/fda-specs/`
-
-### 1.1 Assertion-Level Requirements Support
-**Tasks:**
-- [x] Validate that assertion-level IDs parse correctly
-- [x] Verify `Implements: REQ-xxx-A-B-C` multi-assertion syntax expands properly
-- [x] Confirm coverage rollup works for explicit assertion references
-- [x] Test hierarchy display shows assertion badges correctly
-- [x] Ensure traceability paths include assertion-level detail
-- [x] Document any issues found and fix them (fixed assertion linking to use parent REQ)
-
-**Acceptance Criteria:**
-- Running `elspais validate` on the fda-specs repo produces no errors related to assertions
-- `elspais trace --view` displays assertion references correctly
-- Coverage metrics accurately reflect assertion-level implementation status
-
-### 1.2 HTML View Child Sorting
-**Current Behavior:** Children appear in undefined/insertion order.
-
-**Desired Behavior:**
-1. Assertion children (A, B, C, ...) sorted alphabetically ascending
-2. REQ children follow, sorted by ID
-
-**Tasks:**
-- [x] Identify where child ordering is determined in trace view generation
-- [x] Implement sorting logic: assertions first (ascending), then REQs
-- [x] Update Jinja2 templates if needed (not needed)
-- [x] Add tests for sort order (verified manually with fda-specs)
-
-**Acceptance Criteria:**
-- In HTML view, assertion children (A, B, C) appear before REQ children
-- Within each group, items are sorted alphabetically/numerically
-
-### 1.3 PRD/DEV/OPS Filter Button UX
-**Current Behavior:** Buttons may start "on" with first click toggling off.
-
-**Desired Behavior:**
-1. On page load: all filter buttons are "off" (filled/active state), all levels visible
-2. First click on PRD button: turns filter "on" (hollow/inactive state), PRD nodes hidden
-3. Second click: turns filter "off" again, PRD nodes visible
-
-**Tasks:**
-- [x] Review current filter button implementation
-- [x] Update initial state to "off" (all visible) - was already correct
-- [x] Update click handler: toggle → hide level when "on"
-- [x] Update CSS: "on" = hollow, "off" = filled
-- [x] Test all filter combinations
-
-**Acceptance Criteria:**
-- Fresh page load shows all PRD, DEV, OPS nodes
-- All three filter buttons appear filled/active
-- Clicking PRD makes button hollow and hides PRD nodes
-- Clicking again restores PRD nodes and fills button
+This file contains a prioritized queue of enhancement issues. See CLAUDE.md for workflow.
 
 ---
 
-## Phase 1.5: Quick Improvements
-**Status:** [x] Complete
+## Bugs
 
-**Goal:** Small but impactful usability improvements.
+- [ ] trace --view: Version shows "v1" instead of actual elspais version (e.g., 0.26.0)
+  - Template should pull version from package metadata
+  - Check `pyproject.toml` version and pass to Jinja2 template
 
-### 1.5.1 User Journey Trace View GUI ✓
-- [x] User journeys need a better `trace --view` GUI experience
-- [x] Design improved visualization for journey nodes in HTML output
-- [x] Consider journey-specific filtering or highlighting
+- [ ] trace --view: Files filter toggle doesn't show files in tree hierarchy
+  - Files are not graph nodes, so filter doesn't work as expected
+  - Consider: Replace "Files" with "Tests" filter and show tests in tree instead
 
-**Implementation:**
-- Added `actor` and `goal` fields to `JourneyItem` dataclass
-- Updated `_collect_journeys()` to extract actor/goal from parsed journey data
-- Enhanced journey card layout with structured Actor/Goal metadata section
-- Added search/filter toolbar for journeys (searches ID, title, actor, goal)
-- Improved card styling with hover effects and better visual hierarchy
-- Enhanced empty state with example journey format
+- [ ] trace --view: Assoc (Associated) toggle is broken
+  - Should have same look/operation as PRD/OPS/DEV toggles
+  - Currently makes ALL REQs disappear (even though 16 associated REQs exist in hht_diary)
 
-### 1.5.2 Git Repository Root Detection ✓
-- [x] elspais should check if it is in a git repo
-- [x] Always run as if in the repository root (auto-detect and chdir)
-- [x] Handle edge cases: not in git repo, nested repos, worktrees
+- [ ] trace --view: Core toggle doesn't work
+  - Should filter to show only core requirements
 
-**Implementation:**
-- Added `find_git_root()` to `config/__init__.py` - searches upward for `.git`
-- CLI `main()` auto-detects git root and changes directory before command execution
-- Works with worktrees (`.git` file pointing to gitdir)
-- Silent by default, verbose mode shows "Working from repository root: ..."
-- If not in a git repo, continues silently (warns with `-v`)
-
-**Acceptance Criteria:**
-- ✓ User journeys are clearly visible and navigable in trace view
-- ✓ Journey cards show Actor and Goal metadata when available
-- ✓ Search/filter functionality for journeys
-- ✓ Running `elspais` from any subdirectory works as if run from repo root
-- ✓ Clear warning when not in a git repository (with -v flag)
+- [ ] trace --view: State persistence with cookies
+  - Should save/restore: toggle states (on/off), tree collapse/expand state
+  - Basically capture entire GUI state for session continuity
 
 ---
 
-## Phase 2: Documentation Completeness & Correctness Audit
-**Status:** [x] Complete
+## Quick Wins
 
-**Goal:** Ensure documentation covers ALL command-line options and ALL `.toml` configuration options, and verify that documented behavior matches actual implementation.
+- [x] elspais should check if it is in a git repo and always run as if in the root
+  - Already implemented: `find_git_root()` in `config/__init__.py` (see CLAUDE.md 7b)
 
-**Scope:**
-1. CLI options: Every flag and argument for every subcommand
-2. TOML options: Every configuration key in `elspais.toml` / `pyproject.toml [tool.elspais]`
-3. Correctness: Documented behavior matches implementation
-
-**Files to Audit:**
-- `docs/cli/*.md` - User documentation topics
-- CLI `--help` output for all commands
-- `config/` - Configuration schema and loader
-
-**Tasks:**
-
-### Completeness
-- [x] Generate list of all CLI commands and their options
-- [x] Generate list of all TOML configuration keys
-- [x] Cross-reference against existing docs
-- [x] Document missing CLI options
-- [x] Document missing TOML options
-
-### Correctness
-- [x] Verify documented default values match code defaults
-- [x] Verify documented option descriptions match actual behavior
-- [x] Verify documented examples actually work
-- [x] Check for stale/outdated documentation (removed features, renamed options)
-- [x] Validate TOML key names and types match config loader expectations
-- [x] Run `pytest tests/test_doc_sync.py` to verify sync
-
-**Implementation:**
-- Created `docs/cli/commands.md` - Comprehensive CLI reference for all 16 commands
-- Enhanced `docs/cli/config.md` - Complete TOML configuration reference with all sections
-- Enhanced `docs/cli/validation.md` - Full validate command options and skip patterns
-- Enhanced `docs/cli/traceability.md` - Full trace command options and depth levels
-- Fixed `docs/cli/git.md` - Removed non-existent `--staged` and `--hash` options
-- Added "commands" topic to `docs_loader.py` TOPIC_ORDER
-- Added "commands" choice to CLI docs argument parser
-- Added `test_commands_has_all_commands` test in test_doc_sync.py
-
-**Acceptance Criteria:**
-- ✓ Every CLI option has documentation in `docs/cli/`
-- ✓ Every TOML key has documentation
-- ✓ Documented defaults match implementation defaults
-- ✓ Documented behavior matches actual behavior
-- ✓ No stale documentation for removed/changed features
-- ✓ `test_doc_sync.py` passes (56 tests)
-- ✓ `elspais docs` topics are complete and accurate
+- [ ] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
+  - Currently shows duplicate entries if REQ A implements multiple assertions in REQ B
+  - Should collapse to single relationship with assertion badges
 
 ---
 
-## Phase 3: Health Check Command
-**Status:** [x] Complete
+## User Journeys GUI Improvements
 
-**Goal:** Add `elspais health` command to diagnose configuration and repository issues.
+- [ ] User journeys need a better trace --view GUI
+  - [ ] Group journeys by topic / name / file / actor
+  - [ ] Improve journey card layout and searchability
 
-**Command Structure:**
-```
-elspais health              # Comprehensive check (default)
-elspais health --config     # TOML format and validity only
-elspais health --spec       # spec/ file consistency only
-elspais health --code       # Code reference consistency only
-elspais health --tests      # Test file consistency only
+---
+
+## TraceGraph Detection and Mutation API
+
+### Summary
+Augment `TraceGraph` with:
+1. **Detection** - Orphaned nodes and broken references (captured at build time)
+2. **Mutation API** - Full CRUD operations with undo support and mutation logging
+
+### Key Files
+- `src/elspais/graph/builder.py` - TraceGraph and GraphBuilder classes (mutations added here)
+- `src/elspais/graph/GraphNode.py` - GraphNode class (for understanding structure)
+- `src/elspais/graph/mutations.py` - NEW: MutationEntry, MutationLog, BrokenReference dataclasses
+
+### Design Decision
+**Mutations live on TraceGraph directly** - `graph.rename_node()`, `graph.add_edge()`, etc.
+This provides the simplest API while keeping all graph state in one place.
+
+---
+
+## [ ] Phase 1: Detection (Build-Time Capture)
+
+### 1.1 Orphaned Nodes
+Track nodes that never receive a parent during graph construction.
+
+**GraphBuilder tracking:**
+```python
+# In __init__:
+self._orphan_candidates: set[str] = set()
+
+# When adding any node to self._nodes:
+self._orphan_candidates.add(node_id)
+
+# When linking (child gets a parent) in build():
+self._orphan_candidates.discard(child_id)
 ```
 
-**Checks to Implement:**
+**TraceGraph API:**
+```python
+_orphaned_ids: set[str] = field(default_factory=set, init=False)
 
-### Config Checks (`--config`)
-- [x] TOML syntax validity
-- [x] Required fields present
-- [x] Pattern tokens valid
-- [x] Hierarchy rules consistent
-- [x] File paths exist
+def orphaned_nodes(self) -> Iterator[GraphNode]: ...
+def has_orphans(self) -> bool: ...
+def orphan_count(self) -> int: ...
+```
 
-### Spec Checks (`--spec`)
-- [x] All spec files parseable
-- [x] No duplicate requirement IDs
-- [x] All `Implements:` references resolve
-- [x] All `Refines:` references resolve
-- [x] Hierarchy levels consistent with rules
-- [x] Orphan requirement detection
+### 1.2 Broken References
+Track failed link resolutions during `build()`.
 
-### Code Checks (`--code`)
-- [x] `# Implements:` comments reference valid REQs
-- [x] Code coverage statistics (informational)
+**New dataclass (in mutations.py):**
+```python
+@dataclass
+class BrokenReference:
+    source_id: str        # Node containing the reference
+    target_id: str        # ID that doesn't exist
+    edge_kind: str        # "implements", "refines", or "validates"
+```
 
-### Test Checks (`--tests`)
-- [x] Test files with REQ references are valid
-- [x] JUnit/pytest result files parseable (TEST_RESULT nodes)
-- [x] Test→REQ mappings resolve
-- [x] Test coverage statistics (informational)
+**TraceGraph API:**
+```python
+_broken_references: list[BrokenReference] = field(default_factory=list, init=False)
 
-**Output Format:**
-- ✓ Summary: ✓ passed, ✗ failed, ⚠ warnings
-- ✓ Detailed issues with file:line references
-- ✓ JSON output with `-j` flag
+def broken_references(self) -> list[BrokenReference]: ...
+def has_broken_references(self) -> bool: ...
+```
 
-**Files Created/Modified:**
-- `src/elspais/commands/health.py` - New command implementation (900+ lines)
-- `src/elspais/cli.py` - Register command with parser and dispatch
-- `docs/cli/health.md` - Comprehensive documentation
-- `tests/test_health.py` - 18 unit tests
-
-**Tasks:**
-- [x] Design check result data structure (HealthCheck, HealthReport)
-- [x] Implement config checks (6 checks)
-- [x] Implement spec checks (6 checks)
-- [x] Implement code checks (2 checks)
-- [x] Implement test checks (3 checks)
-- [x] Create CLI command with subcommand flags
-- [x] Add comprehensive output formatting (text + JSON)
-- [x] Write tests for each check category
-- [x] Document command in `docs/cli/health.md`
-- [x] Add "health" to docs loader topics
-
-**Acceptance Criteria:**
-- ✓ `elspais health` runs all checks and reports summary
-- ✓ Each `--flag` runs only that category
-- ✓ Clear, actionable error messages
-- ✓ Exit code 0 for healthy, non-zero for errors
-- ✓ Documentation complete
-- ✓ 455 tests pass
+**Verification:**
+```bash
+pytest tests/ && python -c "
+from elspais.graph.factory import build_graph
+graph = build_graph()
+print(f'Orphans: {graph.orphan_count()}')
+print(f'Broken refs: {len(graph.broken_references())}')
+"
+```
 
 ---
 
-## Notes
+## [ ] Phase 2: Mutation Infrastructure
 
-**Priority Order:** Phases are ordered by estimated impact and dependency:
-1. Phase 1 consolidates all trace view improvements (core visual output)
-2. Phase 2 ensures users can learn the tool
-3. Phase 3 adds developer experience tooling
+### 2.1 Mutation Log
+All mutations append to a persistent log for auditing and undo.
 
-**Commit Discipline:** Create one commit per phase with `[CUR-514]` prefix.
+```python
+@dataclass
+class MutationEntry:
+    """Single mutation operation record."""
+    id: str                    # Unique mutation ID (uuid4)
+    timestamp: datetime        # When mutation occurred
+    operation: str             # Operation type (e.g., "rename_node", "add_edge")
+    target_id: str             # Primary target of mutation
+    before_state: dict[str, Any]   # State before mutation (for undo)
+    after_state: dict[str, Any]    # State after mutation
+    affects_hash: bool         # Whether this mutation affects content hash
+
+class MutationLog:
+    """Append-only mutation history."""
+    _entries: list[MutationEntry]
+
+    def append(self, entry: MutationEntry) -> None: ...
+    def iter_entries(self) -> Iterator[MutationEntry]: ...
+    def undo_last(self) -> MutationEntry | None: ...
+    def undo_to(self, mutation_id: str) -> list[MutationEntry]: ...
+```
+
+### 2.2 Deleted Nodes Tracking
+Deleted nodes become orphans in a special "deleted" list for delta reporting.
+
+```python
+_deleted_nodes: list[GraphNode] = field(default_factory=list, init=False)
+
+def deleted_nodes(self) -> list[GraphNode]: ...
+def has_deletions(self) -> bool: ...
+```
+
+### 2.3 Hash Recomputation Rules
+| Operation | Affects Hash |
+|-----------|-------------|
+| Rename node ID | No |
+| Update title | No |
+| Update assertion text | **Yes** |
+| Add/delete assertion | **Yes** |
+| Change status | No |
+| Add/change/delete edge | No |
+
+### 2.4 Undo Implementation
+```python
+def undo_mutation(self, entry: MutationEntry) -> None:
+    """Reverse a mutation using its before_state."""
+    # Dispatch based on entry.operation
+    # Restore node/edge state from entry.before_state
+    # Recalculate orphans/broken refs
+    # DO NOT log undo as new mutation (or mark as "undo" type)
+```
+
+**Verification:**
+```bash
+pytest tests/test_mutations.py
+```
+
+---
+
+## [ ] Phase 3: Node Mutations
+
+### 3.1 Rename Node
+Change a requirement's ID while maintaining all edges.
+
+```python
+def rename_node(self, old_id: str, new_id: str) -> MutationEntry:
+    """Rename a node (e.g., REQ-p00001 → REQ-p00002).
+
+    - Updates node.id
+    - Updates all edges pointing to/from this node
+    - Updates assertion IDs if requirement (REQ-p00001-A → REQ-p00002-A)
+    - Logs mutation with before/after state
+    """
+```
+
+### 3.2 Update Title
+```python
+def update_title(self, node_id: str, new_title: str) -> MutationEntry:
+    """Update requirement title. Does not affect hash."""
+```
+
+### 3.3 Change Status
+```python
+def change_status(self, node_id: str, new_status: str) -> MutationEntry:
+    """Change requirement status (e.g., Draft → Active)."""
+```
+
+### 3.4 Add Requirement
+```python
+def add_requirement(
+    self,
+    req_id: str,
+    title: str,
+    level: str,
+    status: str = "Draft",
+    parent_id: str | None = None,
+    edge_kind: EdgeKind = EdgeKind.IMPLEMENTS,
+) -> MutationEntry:
+    """Add a new requirement node.
+
+    - Creates node with specified properties
+    - Optionally links to parent
+    - Computes initial hash (empty body = specific hash)
+    """
+```
+
+### 3.5 Delete Requirement
+```python
+def delete_requirement(self, node_id: str, compact_assertions: bool = True) -> MutationEntry:
+    """Delete a requirement.
+
+    - Removes from _index
+    - Moves to _deleted_nodes for delta tracking
+    - Removes all edges to/from this node
+    - Children become orphans (added to _orphaned_ids)
+    - If compact_assertions=True, sibling assertions are renumbered
+    """
+```
+
+**Verification:**
+```bash
+pytest tests/test_node_mutations.py
+```
+
+---
+
+## [ ] Phase 4: Assertion Mutations
+
+### 4.1 Rename Assertion
+```python
+def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
+    """Rename assertion label (e.g., REQ-p00001-A → REQ-p00001-D).
+
+    - Updates assertion node ID
+    - Updates edges with assertion_targets
+    - Recomputes parent requirement hash
+    """
+```
+
+### 4.2 Update Assertion Text
+```python
+def update_assertion(self, assertion_id: str, new_text: str) -> MutationEntry:
+    """Update assertion text. Recomputes parent hash."""
+```
+
+### 4.3 Add Assertion
+```python
+def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
+    """Add assertion to requirement.
+
+    - Creates assertion node
+    - Links as child of requirement
+    - Recomputes requirement hash
+    """
+```
+
+### 4.4 Delete Assertion
+```python
+def delete_assertion(self, assertion_id: str, compact: bool = True) -> MutationEntry:
+    """Delete assertion with optional compaction.
+
+    If compact=True and deleting B from [A, B, C, D]:
+    - C → B, D → C
+    - Updates all edges referencing C, D
+    - Recomputes parent hash
+    """
+```
+
+**Verification:**
+```bash
+pytest tests/test_assertion_mutations.py
+```
+
+---
+
+## [ ] Phase 5: Edge Mutations
+
+### 5.1 Add Edge
+```python
+def add_edge(
+    self,
+    source_id: str,
+    target_id: str,
+    edge_kind: EdgeKind,
+    assertion_targets: list[str] | None = None,
+) -> MutationEntry:
+    """Add a new edge (reference).
+
+    - Validates both nodes exist
+    - If target doesn't exist, adds to _broken_references instead
+    - Updates _orphaned_ids (source may no longer be orphan)
+    """
+```
+
+### 5.2 Change Edge Kind
+```python
+def change_edge_kind(
+    self,
+    source_id: str,
+    target_id: str,
+    new_kind: EdgeKind,
+) -> MutationEntry:
+    """Change edge type (e.g., IMPLEMENTS → REFINES)."""
+```
+
+### 5.3 Delete Edge
+```python
+def delete_edge(self, source_id: str, target_id: str) -> MutationEntry:
+    """Remove an edge.
+
+    - Source may become orphan (add to _orphaned_ids)
+    """
+```
+
+### 5.4 Fix Broken Reference
+```python
+def fix_broken_reference(
+    self,
+    source_id: str,
+    old_target_id: str,
+    new_target_id: str,
+) -> MutationEntry:
+    """Fix a broken reference by changing its target.
+
+    - Removes from _broken_references
+    - Creates valid edge to new_target_id
+    - If new_target_id also doesn't exist, remains broken
+    """
+```
+
+**Verification:**
+```bash
+pytest tests/test_edge_mutations.py
+```
+
+---
+
+## Invariant Maintenance
+
+Every mutation must:
+1. **Log** - Append MutationEntry with before/after state
+2. **Orphans** - Update `_orphaned_ids` if parent relationships change
+3. **Broken refs** - Update `_broken_references` if edges are added/removed
+4. **Hash** - Recompute if assertion text changes
+5. **Index** - Keep `_index` consistent with actual nodes
+
+---
+
+## Integration Test
+
+```bash
+cd /path/to/hht_diary && python -c "
+from elspais.graph.factory import build_graph
+graph = build_graph()
+
+# Detection
+print(f'Orphans: {graph.orphan_count()}')
+print(f'Broken refs: {len(graph.broken_references())}')
+
+# Mutation
+entry = graph.rename_node('REQ-p00001', 'REQ-p00099')
+print(f'Renamed: {entry.before_state} -> {entry.after_state}')
+
+# Undo
+graph.undo_mutation(entry)
+assert graph.find_by_id('REQ-p00001') is not None
+"
+```
