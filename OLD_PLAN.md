@@ -46,3 +46,13 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
     - Integrated with restoreState() for cookie persistence
   - **Completed**: 2026-01-27
   - **Commit**: [CUR-514] fix(html): Fix Assoc toggle and add Core toggle
+
+### [x] trace --view: State persistence with cookies
+  - **Issue**: Tree collapse/expand state was not persisted - users lost their tree state on page refresh
+  - **Fix**:
+    - Added `collapsedNodes` array to saveStateToCookie() (Set → Array for JSON serialization)
+    - Added restoration logic in restoreState() (Array → Set, plus toggle button visual updates)
+    - Fixed initialization order: check for saved state before applying defaults (collapseAll)
+    - Added collapsedNodes.clear() to clearAllCookies() reset
+  - **Completed**: 2026-01-28
+  - **Commit**: [CUR-514] fix(html): Add tree collapse/expand state persistence

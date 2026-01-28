@@ -15,9 +15,10 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
   - Clicking Core badge now hides core (non-associated) requirements
   - Added CSS active state styling for consistency
 
-- [ ] trace --view: State persistence with cookies
-  - Should save/restore: toggle states (on/off), tree collapse/expand state
-  - Basically capture entire GUI state for session continuity
+- [x] trace --view: State persistence with cookies
+  - Fixed: Now saves/restores tree collapse/expand state via collapsedNodes array in cookie
+  - Fixed initialization order to check for saved state before applying defaults
+  - All GUI state now persists: filters, toggles, dropdowns, tabs, and tree state
 
 ---
 

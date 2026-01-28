@@ -7,6 +7,7 @@ All notable changes to elspais will be documented in this file.
 ### Fixed
 - **trace --view**: Fixed Assoc (Associated) toggle - now uses HIDE semantic consistent with PRD/OPS/DEV badges
 - **trace --view**: Fixed Core toggle - clicking now hides core (non-associated) requirements with proper styling
+- **trace --view**: Added tree collapse/expand state persistence via cookies - tree state now survives page refresh
 - **trace --report**: Implemented report presets that were previously ignored
   - `--report minimal`: ID, Title, Status only (quick overview)
   - `--report standard`: ID, Title, Level, Status, Implements (default)

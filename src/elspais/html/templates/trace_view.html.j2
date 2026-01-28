@@ -1176,6 +1176,7 @@ function saveStateToCookie() {
     const stateToSave = {
         viewMode: state.viewMode,
         activeFilters: state.activeFilters,
+        collapsedNodes: Array.from(state.collapsedNodes),  // Convert Set to Array for JSON
         toggleLeaf: document.getElementById('toggle-leaf').checked,
         toggleDeprecated: document.getElementById('toggle-deprecated').checked,
         toggleRoadmap: document.getElementById('toggle-roadmap').checked,
@@ -1247,6 +1248,22 @@ function restoreState() {
         state.activeTab = saved.activeTab;
         switchTab(saved.activeTab, false);
     }
+
+    // Restore collapsed nodes (tree expand/collapse state)
+    if (saved.collapsedNodes && Array.isArray(saved.collapsedNodes)) {
+        state.collapsedNodes = new Set(saved.collapsedNodes);
+        // Update toggle button visuals
+        document.querySelectorAll('.tree-toggle').forEach(toggle => {
+            const nodeId = toggle.dataset.nodeId;
+            if (state.collapsedNodes.has(nodeId)) {
+                toggle.classList.remove('expanded');
+                toggle.classList.add('collapsed');
+            } else if (!toggle.classList.contains('leaf')) {
+                toggle.classList.remove('collapsed');
+                toggle.classList.add('expanded');
+            }
+        });
+    }
 }
 
 function clearAllCookies() {
@@ -1257,6 +1274,7 @@ function clearAllCookies() {
         uncommitted: false, changed: false, tests: false, associated: false, core: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
+    state.collapsedNodes.clear();
     state.activeTab = 'requirements';
 
     // Reset UI
@@ -1644,11 +1662,16 @@ document.addEventListener('keydown', function(e) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Start with tree collapsed (default state)
-    collapseAll();
+    // Check if there's saved state to restore
+    const hasSavedState = loadStateFromCookie();
 
-    // Restore saved state from cookie if available
-    restoreState();
+    if (hasSavedState) {
+        // Restore saved state from cookie (includes collapsed nodes)
+        restoreState();
+    } else {
+        // No saved state - start with tree collapsed (default state)
+        collapseAll();
+    }
 
     // Apply filters (this will also save state)
     applyFilters();
