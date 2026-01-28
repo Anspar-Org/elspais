@@ -268,10 +268,18 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
 
     issues = []
 
+    # Known non-level keys in rules.hierarchy (config options, not level definitions)
+    non_level_keys = {"allowed_implements", "allow_circular", "allow_orphans", "max_depth", "allowed"}
+
     for level, allowed_parents in hierarchy.items():
+        # Skip known config options that aren't level definitions
+        if level in non_level_keys:
+            continue
+
         # Check level exists in types
         if level not in types:
             issues.append(f"Rule for '{level}' but type not defined")
+            continue
 
         # Handle non-list allowed_parents
         if not isinstance(allowed_parents, list):
