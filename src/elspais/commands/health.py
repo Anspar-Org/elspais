@@ -246,12 +246,37 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     hierarchy = config.get("rules.hierarchy", {})
     types = config.get("patterns.types", {})
 
+    # Handle non-dict hierarchy (e.g., hierarchy = false)
+    if not isinstance(hierarchy, dict):
+        return HealthCheck(
+            name="config.hierarchy_rules",
+            passed=False,
+            message=f"rules.hierarchy must be a dict, got {type(hierarchy).__name__}",
+            category="config",
+            severity="warning",
+        )
+
+    # Handle non-dict types
+    if not isinstance(types, dict):
+        return HealthCheck(
+            name="config.hierarchy_rules",
+            passed=False,
+            message=f"patterns.types must be a dict, got {type(types).__name__}",
+            category="config",
+            severity="warning",
+        )
+
     issues = []
 
     for level, allowed_parents in hierarchy.items():
         # Check level exists in types
         if level not in types:
             issues.append(f"Rule for '{level}' but type not defined")
+
+        # Handle non-list allowed_parents
+        if not isinstance(allowed_parents, list):
+            issues.append(f"Hierarchy rule for '{level}' must be a list, got {type(allowed_parents).__name__}")
+            continue
 
         # Check allowed parents exist
         for parent in allowed_parents:
@@ -279,6 +304,17 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
 def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCheck:
     """Check that configured directories exist."""
     spec_dirs = config.get("spec.directories", ["spec"])
+
+    # Handle non-list spec_dirs
+    if not isinstance(spec_dirs, list):
+        return HealthCheck(
+            name="config.paths_exist",
+            passed=False,
+            message=f"spec.directories must be a list, got {type(spec_dirs).__name__}",
+            category="config",
+            severity="warning",
+        )
+
     missing = []
     found = []
 
