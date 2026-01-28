@@ -45,12 +45,6 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 
 ---
 
-## User Journeys GUI Improvements
-
-- [ ] User journeys need a better trace --view GUI
-  - [ ] Group journeys by topic / name / file / actor
-  - [ ] Improve journey card layout and searchability
-
 ---
 
 ## TraceGraph Detection and Mutation API

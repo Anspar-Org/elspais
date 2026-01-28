@@ -52,6 +52,8 @@ class JourneyItem:
     description: str
     actor: str | None = None
     goal: str | None = None
+    descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
+    file: str = ""  # Source file path
 
 
 @dataclass
@@ -515,6 +517,7 @@ class HTMLGenerator:
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""
+        import re
         from elspais.graph import NodeKind
 
         journeys: list[JourneyItem] = []
@@ -530,6 +533,17 @@ class HTMLGenerator:
             actor = node.get_field("actor")
             goal = node.get_field("goal")
 
+            # Extract descriptor from journey ID: JNY-{descriptor}-{number}
+            descriptor = ""
+            match = re.match(r"JNY-(.+)-\d+$", node.id)
+            if match:
+                descriptor = match.group(1)
+
+            # Extract file from source path
+            file = ""
+            if node.source:
+                file = Path(node.source.path).name
+
             journeys.append(
                 JourneyItem(
                     id=node.id,
@@ -537,6 +551,8 @@ class HTMLGenerator:
                     description=description,
                     actor=actor,
                     goal=goal,
+                    descriptor=descriptor,
+                    file=file,
                 )
             )
 

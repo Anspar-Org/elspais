@@ -387,6 +387,130 @@ body {
     color: #6c757d;
 }
 
+/* Journey Grouping */
+.journey-group-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.journey-group-controls label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.journey-group-controls select {
+    padding: 6px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    background: white;
+    cursor: pointer;
+}
+
+.journey-group-controls select:focus {
+    outline: none;
+    border-color: #4299e1;
+}
+
+.journey-group {
+    margin-bottom: 24px;
+}
+
+.journey-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(to right, #e9ecef, #f8f9fa);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.journey-group-header:hover {
+    background: linear-gradient(to right, #dee2e6, #e9ecef);
+}
+
+.journey-group-header .expand-icon {
+    font-size: 0.75rem;
+    color: #6c757d;
+    transition: transform 0.2s;
+    width: 16px;
+}
+
+.journey-group.collapsed .expand-icon {
+    transform: rotate(-90deg);
+}
+
+.journey-group-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    flex: 1;
+}
+
+.journey-group-count {
+    font-size: 0.75rem;
+    color: #6c757d;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.journey-group-cards {
+    display: grid;
+    gap: 12px;
+    padding-left: 0;
+}
+
+.journey-group.collapsed .journey-group-cards {
+    display: none;
+}
+
+/* Compact card variant for grouped view */
+.journey-card.compact {
+    padding: 14px 16px;
+}
+
+.journey-card.compact .journey-card-header {
+    margin-bottom: 8px;
+}
+
+.journey-card.compact h3 {
+    font-size: 1rem;
+}
+
+.journey-card.compact .journey-description {
+    font-size: 0.8rem;
+    max-height: 80px;
+    overflow: hidden;
+    position: relative;
+}
+
+.journey-card.compact .journey-description::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, white);
+}
+
+.journey-card.compact.expanded .journey-description {
+    max-height: none;
+}
+
+.journey-card.compact.expanded .journey-description::after {
+    display: none;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Main Content
    ───────────────────────────────────────────────────────────────────────────── */
@@ -993,6 +1117,15 @@ body {
             <div class="journey-search">
                 <input type="text" id="journey-search" placeholder="Search journeys by ID, title, actor, or goal..." oninput="filterJourneys()">
             </div>
+            <div class="journey-group-controls">
+                <label for="journey-group-by">Group by:</label>
+                <select id="journey-group-by" onchange="regroupJourneys()">
+                    <option value="none">None</option>
+                    <option value="descriptor">Descriptor</option>
+                    <option value="actor">Actor</option>
+                    <option value="file">File</option>
+                </select>
+            </div>
             <div class="journey-count">
                 <span id="journey-visible-count">{{ journeys|length }}</span> of {{ journeys|length }} journeys
             </div>
@@ -1003,13 +1136,21 @@ body {
                  data-id="{{ journey.id|lower }}"
                  data-title="{{ journey.title|lower }}"
                  data-actor="{{ (journey.actor or '')|lower }}"
-                 data-goal="{{ (journey.goal or '')|lower }}">
+                 data-goal="{{ (journey.goal or '')|lower }}"
+                 data-descriptor="{{ journey.descriptor|lower }}"
+                 data-file="{{ journey.file|lower }}">
                 <div class="journey-card-header">
                     <span class="journey-id">{{ journey.id }}</span>
                     <h3>{{ journey.title }}</h3>
                 </div>
-                {% if journey.actor or journey.goal %}
+                {% if journey.actor or journey.goal or journey.descriptor or journey.file %}
                 <div class="journey-meta">
+                    {% if journey.descriptor %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Topic</span>
+                        <span class="journey-meta-value">{{ journey.descriptor }}</span>
+                    </div>
+                    {% endif %}
                     {% if journey.actor %}
                     <div class="journey-meta-item">
                         <span class="journey-meta-label">Actor</span>
@@ -1020,6 +1161,12 @@ body {
                     <div class="journey-meta-item">
                         <span class="journey-meta-label">Goal</span>
                         <span class="journey-meta-value">{{ journey.goal }}</span>
+                    </div>
+                    {% endif %}
+                    {% if journey.file %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Source</span>
+                        <span class="journey-meta-value">{{ journey.file }}</span>
                     </div>
                     {% endif %}
                 </div>
@@ -1173,6 +1320,9 @@ const COOKIE_NAME = 'elspais_trace_view_state';
 const COOKIE_DAYS = 30;
 
 function saveStateToCookie() {
+    const journeyGroupBy = document.getElementById('journey-group-by');
+    const journeySearch = document.getElementById('journey-search');
+
     const stateToSave = {
         viewMode: state.viewMode,
         activeFilters: state.activeFilters,
@@ -1185,7 +1335,11 @@ function saveStateToCookie() {
         filterStatus: document.getElementById('filter-status').value,
         filterCov: document.getElementById('filter-cov').value,
         filterTopic: document.getElementById('filter-topic').value,
-        activeTab: state.activeTab
+        activeTab: state.activeTab,
+        // Journey state
+        journeyGroupBy: journeyGroupBy ? journeyGroupBy.value : 'none',
+        journeySearch: journeySearch ? journeySearch.value : '',
+        collapsedJourneyGroups: Array.from(collapsedJourneyGroups)
     };
     const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
     document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateToSave))}; expires=${expires}; path=/; SameSite=Lax`;
@@ -1263,6 +1417,23 @@ function restoreState() {
                 toggle.classList.add('expanded');
             }
         });
+    }
+
+    // Restore journey state
+    if (saved.collapsedJourneyGroups && Array.isArray(saved.collapsedJourneyGroups)) {
+        collapsedJourneyGroups = new Set(saved.collapsedJourneyGroups);
+    }
+    if (saved.journeySearch) {
+        const journeySearch = document.getElementById('journey-search');
+        if (journeySearch) journeySearch.value = saved.journeySearch;
+    }
+    if (saved.journeyGroupBy) {
+        const journeyGroupBy = document.getElementById('journey-group-by');
+        if (journeyGroupBy) {
+            journeyGroupBy.value = saved.journeyGroupBy;
+            // Apply grouping after DOM is ready
+            setTimeout(() => regroupJourneys(), 0);
+        }
     }
 }
 
@@ -1591,16 +1762,22 @@ function switchTab(tabName, save = true) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Journey Filtering
+// Journey Filtering and Grouping
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Store original card order for ungrouping
+let originalJourneyCards = null;
+let collapsedJourneyGroups = new Set();
 
 function filterJourneys() {
     const searchInput = document.getElementById('journey-search');
     const query = searchInput.value.toLowerCase().trim();
-    const cards = document.querySelectorAll('.journey-card');
+
+    // Filter both ungrouped cards and cards within groups
+    const allCards = document.querySelectorAll('.journey-card');
     let visibleCount = 0;
 
-    cards.forEach(card => {
+    allCards.forEach(card => {
         if (!query) {
             card.classList.remove('hidden');
             visibleCount++;
@@ -1611,21 +1788,154 @@ function filterJourneys() {
         const title = card.dataset.title || '';
         const actor = card.dataset.actor || '';
         const goal = card.dataset.goal || '';
+        const descriptor = card.dataset.descriptor || '';
+        const file = card.dataset.file || '';
 
         const matches = id.includes(query) ||
                         title.includes(query) ||
                         actor.includes(query) ||
-                        goal.includes(query);
+                        goal.includes(query) ||
+                        descriptor.includes(query) ||
+                        file.includes(query);
 
         card.classList.toggle('hidden', !matches);
         if (matches) visibleCount++;
     });
+
+    // Update group counts if grouped
+    updateGroupCounts();
 
     // Update visible count
     const countEl = document.getElementById('journey-visible-count');
     if (countEl) {
         countEl.textContent = visibleCount;
     }
+
+    saveStateToCookie();
+}
+
+function updateGroupCounts() {
+    const groups = document.querySelectorAll('.journey-group');
+    groups.forEach(group => {
+        const visibleCards = group.querySelectorAll('.journey-card:not(.hidden)');
+        const countEl = group.querySelector('.journey-group-count');
+        if (countEl) {
+            countEl.textContent = visibleCards.length;
+        }
+        // Hide group if no visible cards
+        group.style.display = visibleCards.length === 0 ? 'none' : '';
+    });
+}
+
+function regroupJourneys() {
+    const groupBy = document.getElementById('journey-group-by').value;
+    const journeyList = document.getElementById('journey-list');
+
+    // Store original cards on first grouping
+    if (!originalJourneyCards) {
+        originalJourneyCards = Array.from(journeyList.querySelectorAll('.journey-card'));
+    }
+
+    // Clear current content
+    journeyList.innerHTML = '';
+
+    if (groupBy === 'none') {
+        // Restore ungrouped view
+        originalJourneyCards.forEach(card => {
+            card.classList.remove('compact');
+            journeyList.appendChild(card);
+        });
+    } else {
+        // Group cards by selected attribute
+        const groups = new Map();
+
+        originalJourneyCards.forEach(card => {
+            let key = card.dataset[groupBy] || '(none)';
+            // Capitalize first letter
+            if (key !== '(none)') {
+                key = key.charAt(0).toUpperCase() + key.slice(1);
+            }
+
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key).push(card);
+        });
+
+        // Sort groups alphabetically, but put (none) last
+        const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+            if (a === '(none)') return 1;
+            if (b === '(none)') return -1;
+            return a.localeCompare(b);
+        });
+
+        // Create group elements
+        sortedKeys.forEach(key => {
+            const cards = groups.get(key);
+            const groupEl = document.createElement('div');
+            groupEl.className = 'journey-group';
+            groupEl.dataset.groupKey = key.toLowerCase();
+
+            // Check if this group was previously collapsed
+            if (collapsedJourneyGroups.has(key.toLowerCase())) {
+                groupEl.classList.add('collapsed');
+            }
+
+            const header = document.createElement('div');
+            header.className = 'journey-group-header';
+            header.onclick = () => toggleJourneyGroup(groupEl);
+            header.innerHTML = `
+                <span class="expand-icon">▼</span>
+                <h4>${key}</h4>
+                <span class="journey-group-count">${cards.length}</span>
+            `;
+
+            const cardsContainer = document.createElement('div');
+            cardsContainer.className = 'journey-group-cards';
+
+            cards.forEach(card => {
+                card.classList.add('compact');
+                cardsContainer.appendChild(card);
+            });
+
+            groupEl.appendChild(header);
+            groupEl.appendChild(cardsContainer);
+            journeyList.appendChild(groupEl);
+        });
+    }
+
+    // Re-apply search filter
+    filterJourneys();
+    saveStateToCookie();
+}
+
+function toggleJourneyGroup(groupEl) {
+    groupEl.classList.toggle('collapsed');
+    const key = groupEl.dataset.groupKey;
+
+    if (groupEl.classList.contains('collapsed')) {
+        collapsedJourneyGroups.add(key);
+    } else {
+        collapsedJourneyGroups.delete(key);
+    }
+
+    saveStateToCookie();
+}
+
+function expandAllJourneyGroups() {
+    document.querySelectorAll('.journey-group').forEach(group => {
+        group.classList.remove('collapsed');
+    });
+    collapsedJourneyGroups.clear();
+    saveStateToCookie();
+}
+
+function collapseAllJourneyGroups() {
+    document.querySelectorAll('.journey-group').forEach(group => {
+        group.classList.add('collapsed');
+        collapsedJourneyGroups.add(group.dataset.groupKey);
+    });
+    saveStateToCookie();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
