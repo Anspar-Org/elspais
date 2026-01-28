@@ -122,3 +122,26 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 **Files Modified:**
 - `src/elspais/graph/builder.py`: Added 4 edge mutation methods with full undo support
 - `CLAUDE.md`: Added Edge Mutation API documentation (item 22)
+
+---
+
+## MCP Mutator Capabilities (Completed 2026-01-28)
+
+Added 19 MCP tools for AI-driven requirement management:
+
+**Node Tools (5):** `mutate_rename_node`, `mutate_update_title`, `mutate_change_status`, `mutate_add_requirement`, `mutate_delete_requirement`
+
+**Assertion Tools (4):** `mutate_add_assertion`, `mutate_update_assertion`, `mutate_delete_assertion`, `mutate_rename_assertion`
+
+**Edge Tools (4):** `mutate_add_edge`, `mutate_change_edge_kind`, `mutate_delete_edge`, `mutate_fix_broken_reference`
+
+**Undo/Inspection Tools (5):** `undo_last_mutation`, `undo_to_mutation`, `get_mutation_log`, `get_orphaned_nodes`, `get_broken_references`
+
+**Safety Features:**
+- Destructive operations require `confirm=True`
+- All mutations return MutationEntry with ID for undo support
+
+**Files Modified:**
+- `src/elspais/mcp/server.py`: Added 19 MCP tools (~650 lines)
+- `src/elspais/mcp/serializers.py`: Added mutation/broken ref serializers
+- `CLAUDE.md`: Added MCP Mutator Tools documentation (item 23)
