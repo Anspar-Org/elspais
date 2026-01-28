@@ -41,15 +41,17 @@ Examples:
   elspais hash update           # Update all requirement hashes
   elspais changed               # Show uncommitted spec changes
   elspais analyze hierarchy     # Show requirement hierarchy tree
-  elspais config show           # View current configuration
-  elspais init                  # Create .elspais.toml configuration
-  elspais example               # Quick format reference
+
+Configuration:
+  elspais init                  # Create .elspais.toml in current directory
+  elspais config path           # Show config file location
+  elspais config show           # View all settings
+  elspais config --help         # Configuration guide with examples
 
 Documentation:
-  Format examples: elspais example (quick reference)
-  Full spec:       elspais example --full (displays spec/requirements-spec.md)
-  Configuration:   docs/configuration.md
-  Init example:    elspais init --template (creates example requirement)
+  elspais example               # Quick requirement format reference
+  elspais example --full        # Full specification document
+  elspais completion            # Shell tab-completion setup
 
 For detailed command help: elspais <command> --help
         """,
@@ -442,6 +444,39 @@ JSON batch format:
     config_parser = subparsers.add_parser(
         "config",
         help="View and modify configuration (show, get, set, ...)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Configuration File:
+  elspais looks for .elspais.toml in the current directory or parent directories.
+  Create one with: elspais init
+
+  Location: elspais config path
+  View all: elspais config show
+
+Quick Start (.elspais.toml):
+  [project]
+  name = "my-project"
+  spec_dir = "spec"              # Where requirement files live
+
+  [patterns]
+  prefix = "REQ"                 # Requirement ID prefix
+  separator = "-"                # ID separator (REQ-p00001)
+
+  [rules]
+  strict_mode = false            # Strict implements semantics
+
+  [rules.hierarchy]
+  allowed = ["dev -> ops, prd", "ops -> prd"]
+
+Common Commands:
+  elspais config show            # View current config
+  elspais config get patterns.prefix
+  elspais config set project.name "MyApp"
+  elspais config path            # Show config file location
+
+Full Documentation:
+  See docs/configuration.md for all options.
+""",
     )
     config_subparsers = config_parser.add_subparsers(dest="config_action")
 
