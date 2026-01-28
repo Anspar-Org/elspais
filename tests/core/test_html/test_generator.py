@@ -102,6 +102,27 @@ class TestHTMLGeneratorBasic:
 
         assert "<style>" in result or "css" in result.lower()
 
+    def test_generate_includes_package_version(self, sample_graph):
+        """Includes actual elspais package version, not hardcoded 'v1'."""
+        from elspais import __version__
+
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate()
+
+        # Should contain the actual version (e.g., "0.27.0"), not just "v1"
+        assert f"v{__version__}" in result
+        # Verify it's not the old hardcoded value
+        assert 'class="version-badge">v1<' not in result
+
+    def test_version_can_be_overridden(self, sample_graph):
+        """Custom version can be passed to generator."""
+        generator = HTMLGenerator(sample_graph, version="99.99.99")
+
+        result = generator.generate()
+
+        assert "v99.99.99" in result
+
 
 class TestHTMLGeneratorEmbedContent:
     """Tests for embedded content mode."""

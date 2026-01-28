@@ -6,10 +6,6 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 
 ## Bugs
 
-- [ ] trace --view: Version shows "v1" instead of actual elspais version (e.g., 0.26.0)
-  - Template should pull version from package metadata
-  - Check `pyproject.toml` version and pass to Jinja2 template
-
 - [ ] trace --view: Files filter toggle doesn't show files in tree hierarchy
   - Files are not graph nodes, so filter doesn't work as expected
   - Consider: Replace "Files" with "Tests" filter and show tests in tree instead

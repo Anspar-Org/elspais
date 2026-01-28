@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais import __version__
+
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
     from elspais.graph.GraphNode import GraphNode
@@ -76,18 +78,18 @@ class HTMLGenerator:
 
     Args:
         graph: The TraceGraph containing all requirement data.
-        version: Version string for display (elspais version).
+        version: Version string for display (defaults to elspais package version).
     """
 
     def __init__(
         self,
         graph: TraceGraph,
         base_path: str = "",
-        version: int | str = 1,
+        version: str | None = None,
     ) -> None:
         self.graph = graph
         self.base_path = base_path
-        self.version = version
+        self.version = version if version is not None else __version__
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
