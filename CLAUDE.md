@@ -22,6 +22,8 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 7. **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files, files changed vs main branch, and moved requirements (by comparing current location to committed state).
 
+7b. **Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.
+
 8. **Conflict Entry Handling**: When duplicate requirement IDs are found (e.g., same ID in spec/ and spec/roadmap/), both are kept: the original with its ID, and the duplicate with a `__conflict` suffix. Conflict entries have `is_conflict=True`, `conflict_with` set to original ID, and `implements=[]` (orphaned).
 
 9. **Refines vs Implements Relationships**: Two distinct relationship types with different coverage semantics:
@@ -58,6 +60,14 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **DAG as Tree**: Nodes can appear under multiple parents for complete traceability
 
 18. **NodeKind.REMAINDER**: Unclaimed file content (not requirements). Previously named TODO, renamed for clarity.
+
+19. **File-Based Documentation** (`elspais docs [topic]`): User documentation loaded from `docs/cli/*.md` files:
+    - **Single Source of Truth**: Markdown files in `docs/cli/` are the canonical docs
+    - **Markdown Renderer**: `utilities/md_renderer.py` converts markdown to ANSI terminal output
+    - **Docs Loader**: `utilities/docs_loader.py` locates and loads topic files
+    - **Topics**: quickstart, format, hierarchy, assertions, traceability, validation, git, config
+    - **Package Inclusion**: `docs/cli/` bundled in wheel via `pyproject.toml` force-include
+    - **TTY Detection**: Colors enabled for terminals, `--plain` for piped output
 
 14. **Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
 

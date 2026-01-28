@@ -65,6 +65,35 @@ This file contains a prioritized queue of enhancement phases for elspais. Follow
 
 ---
 
+## Phase 1.5: Quick Improvements
+**Status:** [ ] Not Started
+
+**Goal:** Small but impactful usability improvements.
+
+### 1.5.1 User Journey Trace View GUI
+- [ ] User journeys need a better `trace --view` GUI experience
+- [ ] Design improved visualization for journey nodes in HTML output
+- [ ] Consider journey-specific filtering or highlighting
+
+### 1.5.2 Git Repository Root Detection ✓
+- [x] elspais should check if it is in a git repo
+- [x] Always run as if in the repository root (auto-detect and chdir)
+- [x] Handle edge cases: not in git repo, nested repos, worktrees
+
+**Implementation:**
+- Added `find_git_root()` to `config/__init__.py` - searches upward for `.git`
+- CLI `main()` auto-detects git root and changes directory before command execution
+- Works with worktrees (`.git` file pointing to gitdir)
+- Silent by default, verbose mode shows "Working from repository root: ..."
+- If not in a git repo, continues silently (warns with `-v`)
+
+**Acceptance Criteria:**
+- User journeys are clearly visible and navigable in trace view
+- ✓ Running `elspais` from any subdirectory works as if run from repo root
+- ✓ Clear warning when not in a git repository (with -v flag)
+
+---
+
 ## Phase 2: Documentation Completeness & Correctness Audit
 **Status:** [ ] Not Started
 

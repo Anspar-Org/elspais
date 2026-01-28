@@ -804,6 +804,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.print_help()
         return 0
 
+    # Auto-detect git repository root and change to it
+    # This ensures elspais works the same from any subdirectory
+    from elspais.config import find_git_root
+    import os
+
+    original_cwd = Path.cwd()
+    git_root = find_git_root(original_cwd)
+
+    if git_root and git_root != original_cwd:
+        os.chdir(git_root)
+        if args.verbose:
+            print(f"Working from repository root: {git_root}", file=sys.stderr)
+    elif not git_root and args.verbose:
+        print("Warning: Not in a git repository", file=sys.stderr)
+
     try:
         # Dispatch to command handlers
         if args.command == "validate":

@@ -112,6 +112,36 @@ def load_config(config_path: Path) -> ConfigLoader:
     return ConfigLoader(merged)
 
 
+def find_git_root(start_path: Path | None = None) -> Path | None:
+    """Find the root directory of a git repository.
+
+    Searches upward from start_path for a .git directory or file (worktree).
+
+    Args:
+        start_path: Directory to start searching from (defaults to cwd).
+
+    Returns:
+        Path to git repository root, or None if not in a git repo.
+    """
+    if start_path is None:
+        start_path = Path.cwd()
+
+    current = start_path.resolve()
+
+    if current.is_file():
+        current = current.parent
+
+    while current != current.parent:
+        git_marker = current / ".git"
+        if git_marker.exists():
+            # Could be a directory (normal repo) or file (worktree)
+            return current
+
+        current = current.parent
+
+    return None
+
+
 def find_config_file(start_path: Path) -> Path | None:
     """Find .elspais.toml configuration file.
 
@@ -428,6 +458,7 @@ __all__ = [
     "ConfigLoader",
     "load_config",
     "find_config_file",
+    "find_git_root",
     "get_config",
     "get_spec_directories",
     "get_code_directories",

@@ -4,7 +4,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from elspais.config import ConfigLoader, load_config, find_config_file
+from elspais.config import ConfigLoader, load_config, find_config_file, find_git_root
 
 
 class TestConfigLoader:
@@ -90,3 +90,55 @@ class TestFindConfigFile:
             found = find_config_file(Path(tmpdir))
 
             assert found is None
+
+
+class TestFindGitRoot:
+    """Tests for find_git_root function."""
+
+    def test_finds_git_root_in_current_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = Path(tmpdir) / ".git"
+            git_dir.mkdir()
+
+            root = find_git_root(Path(tmpdir))
+
+            assert root == Path(tmpdir)
+
+    def test_finds_git_root_from_subdirectory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = Path(tmpdir) / ".git"
+            git_dir.mkdir()
+
+            subdir = Path(tmpdir) / "src" / "deep" / "nested"
+            subdir.mkdir(parents=True)
+
+            root = find_git_root(subdir)
+
+            assert root == Path(tmpdir)
+
+    def test_returns_none_when_not_in_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # No .git directory
+
+            root = find_git_root(Path(tmpdir))
+
+            assert root is None
+
+    def test_handles_git_worktree_file(self):
+        """Git worktrees use a .git file pointing to the actual gitdir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_file = Path(tmpdir) / ".git"
+            # Worktrees have a .git file (not directory) with gitdir pointer
+            git_file.write_text("gitdir: /some/path/.git/worktrees/name")
+
+            root = find_git_root(Path(tmpdir))
+
+            # Should still recognize this as a git root
+            assert root == Path(tmpdir)
+
+    def test_defaults_to_cwd(self):
+        # Should not raise when called without arguments
+        # (will find actual git root of test repo)
+        root = find_git_root()
+        # We're in a git repo, so should find something
+        assert root is not None
