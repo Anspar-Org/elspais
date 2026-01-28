@@ -2,6 +2,17 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.30.0] - 2026-01-28
+
+### Added
+- **Edge Mutation API**: TraceGraph now supports edge (relationship) mutations:
+  - `add_edge(source_id, target_id, edge_kind, assertion_targets)` - Adds new edge, creates BrokenReference if target doesn't exist
+  - `change_edge_kind(source_id, target_id, new_kind)` - Changes edge type (IMPLEMENTS -> REFINES)
+  - `delete_edge(source_id, target_id)` - Removes edge, marks source as orphan if no other parents
+  - `fix_broken_reference(source_id, old_target_id, new_target_id)` - Redirects broken reference to new target
+- **Orphan Management**: Edge mutations automatically update `_orphaned_ids` set when parent relationships change
+- **Broken Reference Tracking**: `add_edge` to non-existent target creates BrokenReference; `fix_broken_reference` can redirect these
+
 ## [0.29.0] - 2026-01-28
 
 ### Added

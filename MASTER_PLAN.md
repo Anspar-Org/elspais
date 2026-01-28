@@ -84,7 +84,7 @@ This provides the simplest API while keeping all graph state in one place.
 
 ---
 
-## [ ] Phase 5: Edge Mutations
+## [x] Phase 5: Edge Mutations
 
 ### 5.1 Add Edge
 ```python

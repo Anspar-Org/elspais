@@ -231,6 +231,8 @@ class TraceGraph:
             self._undo_update_assertion(entry)
         elif op == "rename_assertion":
             self._undo_rename_assertion(entry)
+        elif op == "fix_broken_reference":
+            self._undo_fix_broken_reference(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -284,23 +286,45 @@ class TraceGraph:
         """Undo an add edge operation."""
         source_id = entry.before_state.get("source_id")
         target_id = entry.before_state.get("target_id")
+        was_orphan = entry.before_state.get("was_orphan", False)
+
         if source_id and target_id:
-            source = self._index.get(source_id)
-            target = self._index.get(target_id)
-            if source and target:
-                target.remove_child(source)
+            # Check if this was a broken reference (never created actual edge)
+            if entry.after_state.get("broken"):
+                # Remove from broken references
+                self._broken_references = [
+                    br for br in self._broken_references
+                    if not (br.source_id == source_id and br.target_id == target_id)
+                ]
+            else:
+                # Remove actual edge
+                source = self._index.get(source_id)
+                target = self._index.get(target_id)
+                if source and target:
+                    target.remove_child(source)
+
+            # Restore orphan status
+            if was_orphan and source_id in self._index:
+                self._orphaned_ids.add(source_id)
 
     def _undo_delete_edge(self, entry: MutationEntry) -> None:
         """Undo a delete edge operation (restore the edge)."""
         source_id = entry.before_state.get("source_id")
         target_id = entry.before_state.get("target_id")
         edge_kind_str = entry.before_state.get("edge_kind")
+        assertion_targets = entry.before_state.get("assertion_targets", [])
+        became_orphan = entry.after_state.get("became_orphan", False)
+
         if source_id and target_id and edge_kind_str:
             source = self._index.get(source_id)
             target = self._index.get(target_id)
             if source and target:
                 edge_kind = EdgeKind(edge_kind_str)
-                target.link(source, edge_kind)
+                target.link(source, edge_kind, assertion_targets or None)
+
+                # Remove from orphans if it was marked orphan after deletion
+                if became_orphan:
+                    self._orphaned_ids.discard(source_id)
 
     def _undo_change_edge_kind(self, entry: MutationEntry) -> None:
         """Undo an edge kind change."""
@@ -311,11 +335,48 @@ class TraceGraph:
             source = self._index.get(source_id)
             target = self._index.get(target_id)
             if source and target:
-                # Find and update the edge
+                # Find and update the edge (dataclass field, not _kind)
                 for edge in source.iter_incoming_edges():
                     if edge.source.id == target_id:
-                        edge._kind = EdgeKind(old_kind)
+                        edge.kind = EdgeKind(old_kind)
                         break
+
+    def _undo_fix_broken_reference(self, entry: MutationEntry) -> None:
+        """Undo a fix broken reference operation."""
+        source_id = entry.before_state.get("source_id")
+        old_target_id = entry.before_state.get("old_target_id")
+        new_target_id = entry.after_state.get("new_target_id")
+        edge_kind_str = entry.before_state.get("edge_kind")
+        was_orphan = entry.before_state.get("was_orphan", False)
+
+        if source_id and old_target_id and new_target_id and edge_kind_str:
+            source = self._index.get(source_id)
+
+            # Check if the fix was successful (actual edge created)
+            if entry.after_state.get("fixed"):
+                # Remove the edge that was created
+                new_target = self._index.get(new_target_id)
+                if source and new_target:
+                    new_target.remove_child(source)
+            else:
+                # Remove from broken references (with new target)
+                self._broken_references = [
+                    br for br in self._broken_references
+                    if not (br.source_id == source_id and br.target_id == new_target_id)
+                ]
+
+            # Restore the original broken reference
+            self._broken_references.append(
+                BrokenReference(
+                    source_id=source_id,
+                    target_id=old_target_id,
+                    edge_kind=edge_kind_str,
+                )
+            )
+
+            # Restore orphan status
+            if was_orphan and source_id in self._index:
+                self._orphaned_ids.add(source_id)
 
     def _undo_add_assertion(self, entry: MutationEntry) -> None:
         """Undo an add assertion operation."""
@@ -1054,6 +1115,293 @@ class TraceGraph:
             },
             affects_hash=True,
         )
+
+        self._mutation_log.append(entry)
+        return entry
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Edge Mutation API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def add_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        edge_kind: EdgeKind,
+        assertion_targets: list[str] | None = None,
+    ) -> MutationEntry:
+        """Add a new edge (reference).
+
+        Creates a relationship from source to target. If target doesn't exist,
+        adds to _broken_references instead of creating an edge.
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+            edge_kind: The type of relationship.
+            assertion_targets: Optional assertion labels targeted.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If source_id is not found.
+        """
+        if source_id not in self._index:
+            raise KeyError(f"Source node '{source_id}' not found")
+
+        source = self._index[source_id]
+        target = self._index.get(target_id)
+
+        # Check if source was orphan before
+        was_orphan = source_id in self._orphaned_ids
+
+        entry = MutationEntry(
+            operation="add_edge",
+            target_id=source_id,
+            before_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "was_orphan": was_orphan,
+            },
+            after_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "edge_kind": edge_kind.value,
+                "assertion_targets": assertion_targets or [],
+            },
+        )
+
+        if target:
+            # Create the edge
+            target.link(source, edge_kind, assertion_targets)
+
+            # Source is no longer orphan (it now has a parent)
+            self._orphaned_ids.discard(source_id)
+        else:
+            # Target doesn't exist - record as broken reference
+            self._broken_references.append(
+                BrokenReference(
+                    source_id=source_id,
+                    target_id=target_id,
+                    edge_kind=edge_kind.value,
+                )
+            )
+            entry.after_state["broken"] = True
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def change_edge_kind(
+        self,
+        source_id: str,
+        target_id: str,
+        new_kind: EdgeKind,
+    ) -> MutationEntry:
+        """Change edge type (e.g., IMPLEMENTS -> REFINES).
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+            new_kind: The new edge kind.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If source_id or target_id is not found.
+            ValueError: If no edge exists between source and target.
+        """
+        if source_id not in self._index:
+            raise KeyError(f"Source node '{source_id}' not found")
+        if target_id not in self._index:
+            raise KeyError(f"Target node '{target_id}' not found")
+
+        source = self._index[source_id]
+        target = self._index[target_id]
+
+        # Find the edge from target to source (target is parent, source is child)
+        edge_to_update = None
+        for edge in source.iter_incoming_edges():
+            if edge.source.id == target_id:
+                edge_to_update = edge
+                break
+
+        if edge_to_update is None:
+            raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
+
+        old_kind = edge_to_update.kind
+
+        entry = MutationEntry(
+            operation="change_edge_kind",
+            target_id=source_id,
+            before_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "edge_kind": old_kind.value,
+                "assertion_targets": list(edge_to_update.assertion_targets),
+            },
+            after_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "edge_kind": new_kind.value,
+                "assertion_targets": list(edge_to_update.assertion_targets),
+            },
+        )
+
+        # Update the edge kind directly (dataclass field, not _kind)
+        edge_to_update.kind = new_kind
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_edge(self, source_id: str, target_id: str) -> MutationEntry:
+        """Remove an edge.
+
+        Removes the edge from target to source. If source has no other parents
+        (except roots), it may become an orphan.
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If source_id or target_id is not found.
+            ValueError: If no edge exists between source and target.
+        """
+        if source_id not in self._index:
+            raise KeyError(f"Source node '{source_id}' not found")
+        if target_id not in self._index:
+            raise KeyError(f"Target node '{target_id}' not found")
+
+        source = self._index[source_id]
+        target = self._index[target_id]
+
+        # Find the edge from target to source
+        edge_to_delete = None
+        for edge in source.iter_incoming_edges():
+            if edge.source.id == target_id:
+                edge_to_delete = edge
+                break
+
+        if edge_to_delete is None:
+            raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
+
+        entry = MutationEntry(
+            operation="delete_edge",
+            target_id=source_id,
+            before_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "edge_kind": edge_to_delete.kind.value,
+                "assertion_targets": list(edge_to_delete.assertion_targets),
+            },
+            after_state={
+                "source_id": source_id,
+                "target_id": target_id,
+            },
+        )
+
+        # Remove the edge (parent removes child)
+        target.remove_child(source)
+
+        # Check if source is now orphaned (no parents, not a root)
+        if source.parent_count() == 0 and not self.has_root(source_id):
+            # Only requirements can be orphaned
+            if source.kind == NodeKind.REQUIREMENT:
+                self._orphaned_ids.add(source_id)
+                entry.after_state["became_orphan"] = True
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def fix_broken_reference(
+        self,
+        source_id: str,
+        old_target_id: str,
+        new_target_id: str,
+    ) -> MutationEntry:
+        """Fix a broken reference by changing its target.
+
+        Finds a broken reference from source to old_target and attempts to
+        redirect it to new_target. If new_target also doesn't exist, the
+        reference remains broken (but with updated target).
+
+        Args:
+            source_id: The source node ID with the broken reference.
+            old_target_id: The current (broken) target ID.
+            new_target_id: The new target ID to point to.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If source_id is not found.
+            ValueError: If no broken reference exists from source to old_target.
+        """
+        if source_id not in self._index:
+            raise KeyError(f"Source node '{source_id}' not found")
+
+        # Find the broken reference
+        broken_ref = None
+        broken_ref_index = None
+        for i, br in enumerate(self._broken_references):
+            if br.source_id == source_id and br.target_id == old_target_id:
+                broken_ref = br
+                broken_ref_index = i
+                break
+
+        if broken_ref is None:
+            raise ValueError(
+                f"No broken reference from '{source_id}' to '{old_target_id}'"
+            )
+
+        source = self._index[source_id]
+        new_target = self._index.get(new_target_id)
+        edge_kind = EdgeKind(broken_ref.edge_kind)
+
+        # Check if source was orphan before
+        was_orphan = source_id in self._orphaned_ids
+
+        entry = MutationEntry(
+            operation="fix_broken_reference",
+            target_id=source_id,
+            before_state={
+                "source_id": source_id,
+                "old_target_id": old_target_id,
+                "edge_kind": broken_ref.edge_kind,
+                "was_orphan": was_orphan,
+            },
+            after_state={
+                "source_id": source_id,
+                "new_target_id": new_target_id,
+                "edge_kind": broken_ref.edge_kind,
+            },
+        )
+
+        # Remove the old broken reference
+        self._broken_references.pop(broken_ref_index)
+
+        if new_target:
+            # Create valid edge
+            new_target.link(source, edge_kind)
+
+            # Source is no longer orphan
+            self._orphaned_ids.discard(source_id)
+            entry.after_state["fixed"] = True
+        else:
+            # New target also doesn't exist - remains broken
+            self._broken_references.append(
+                BrokenReference(
+                    source_id=source_id,
+                    target_id=new_target_id,
+                    edge_kind=broken_ref.edge_kind,
+                )
+            )
+            entry.after_state["still_broken"] = True
 
         self._mutation_log.append(entry)
         return entry

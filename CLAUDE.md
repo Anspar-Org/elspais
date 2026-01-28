@@ -110,6 +110,13 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - All assertion mutations set `affects_hash=True` in their `MutationEntry`.
     - Hash recomputation uses `_recompute_requirement_hash()` which concatenates sorted assertion texts.
 
+22. **Edge Mutation API**: TraceGraph provides edge (relationship) mutations:
+    - **`add_edge(source_id, target_id, edge_kind, assertion_targets)`**: Adds a new edge from source to target. If target doesn't exist, creates a `BrokenReference` instead. Removes source from `_orphaned_ids` if it was orphaned.
+    - **`change_edge_kind(source_id, target_id, new_kind)`**: Changes edge type (e.g., `IMPLEMENTS` -> `REFINES`). Preserves `assertion_targets`.
+    - **`delete_edge(source_id, target_id)`**: Removes edge between source and target. Source may become orphan if it has no other parents.
+    - **`fix_broken_reference(source_id, old_target_id, new_target_id)`**: Redirects a broken reference to a new target. If new target also doesn't exist, reference remains broken with updated target.
+    - All edge mutations maintain invariants: `_orphaned_ids` updated for orphan status changes, `_broken_references` updated when edges to non-existent targets are added/removed.
+
 
 **Multi-Language Comment Support:**
 
