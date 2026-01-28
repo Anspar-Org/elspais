@@ -72,3 +72,10 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
     - Kept properly-stubbed features (trace --edit-mode, --review-mode, --server)
   - **Completed**: 2026-01-28
   - **Commit**: [CUR-514] chore(cli): Remove dead code arguments from CLI
+
+### [x] CLI argument consistency
+  - **Issue**: `--report` used `metavar="NAME"` instead of `choices`, so tab completion didn't work
+  - **Fix**: Changed to `choices=["minimal", "standard", "full"]`
+  - **Result**: Help now shows `--report {minimal,standard,full}` and shell autocomplete works
+  - **Completed**: 2026-01-28
+  - **Commit**: [CUR-514] fix(cli): Add choices to --report for autocomplete

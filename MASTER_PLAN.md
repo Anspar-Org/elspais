@@ -34,12 +34,10 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
     - reformat-with-claude: 8 dead args (entire command not implemented - simplified to stub)
   - Kept properly-stubbed features (trace --edit-mode, --review-mode, --server)
 
-- [ ] CLI argument consistency: Standardize argument format
-  - Some CLI options use `--` prefix and some don't (inconsistent)
-  - Decide on a consistent methodology (preferably no `--` for positional/subcommands)
-  - Example: `elspais trace report [tab]` doesn't offer autocomplete options
-  - There are 3 fixed report presets (minimal, standard, full) + potential config-defined option
-  - Add shell completion support for fixed option values
+- [x] CLI argument consistency: Standardize argument format
+  - CLI was already consistent with standard conventions (--flags for options, no -- for subcommands)
+  - Fixed: `--report` now uses `choices=["minimal", "standard", "full"]` for tab completion
+  - The `{minimal,standard,full}` is now shown in help and enables shell autocomplete
 
 - [ ] trace --view: Simplify assertion display to show only REQ A → REQ B relationships
   - Currently shows duplicate entries if REQ A implements multiple assertions in REQ B

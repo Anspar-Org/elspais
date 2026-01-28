@@ -232,8 +232,8 @@ Checks performed:
     )
     trace_parser.add_argument(
         "--report",
-        metavar="NAME",
-        help="Report preset to use (minimal, standard, full, or custom)",
+        choices=["minimal", "standard", "full"],
+        help="Report preset to use (default: standard)",
     )
     # NOTE: --depth removed (dead code - never implemented)
 

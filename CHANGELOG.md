@@ -15,6 +15,7 @@ All notable changes to elspais will be documented in this file.
   - `validate`: --fix, --core-repo, --tests, --no-tests, --mode
   - `trace`: --port, --mode, --sponsor, --graph, --depth
   - `reformat-with-claude`: Simplified to placeholder stub (entire command not yet implemented)
+- **CLI**: `trace --report` now uses `choices` for tab completion - shows `{minimal,standard,full}` in help
   - `--report minimal`: ID, Title, Status only (quick overview)
   - `--report standard`: ID, Title, Level, Status, Implements (default)
   - `--report full`: All fields including Body, Assertions, Hash, Code/Test refs
