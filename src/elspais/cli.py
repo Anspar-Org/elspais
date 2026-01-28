@@ -17,6 +17,7 @@ from elspais.commands import (
     edit,
     example_cmd,
     hash_cmd,
+    health,
     index,
     init,
     reformat_cmd,
@@ -149,6 +150,59 @@ Common rules to skip:
         choices=["core", "combined"],
         default="combined",
         help="Scope: core (this repo only), combined (include sponsor repos)",
+    )
+
+    # health command
+    health_parser = subparsers.add_parser(
+        "health",
+        help="Check repository and configuration health",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais health              # Run all health checks
+  elspais health --config     # Check config only
+  elspais health --spec       # Check spec files only
+  elspais health --code       # Check code references only
+  elspais health --tests      # Check test mappings only
+  elspais health -j           # Output JSON for tooling
+  elspais health -v           # Verbose output with details
+
+Checks performed:
+  CONFIG: TOML syntax, required fields, pattern tokens, hierarchy rules, paths
+  SPEC:   File parsing, duplicate IDs, reference resolution, orphans
+  CODE:   Code→REQ reference validation, coverage statistics
+  TESTS:  Test→REQ mappings, result status, coverage statistics
+""",
+    )
+    health_parser.add_argument(
+        "--config",
+        dest="config_only",
+        action="store_true",
+        help="Run configuration checks only",
+    )
+    health_parser.add_argument(
+        "--spec",
+        dest="spec_only",
+        action="store_true",
+        help="Run spec file checks only",
+    )
+    health_parser.add_argument(
+        "--code",
+        dest="code_only",
+        action="store_true",
+        help="Run code reference checks only",
+    )
+    health_parser.add_argument(
+        "--tests",
+        dest="tests_only",
+        action="store_true",
+        help="Run test mapping checks only",
+    )
+    health_parser.add_argument(
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output as JSON",
     )
 
     # trace command
@@ -670,7 +724,7 @@ Examples:
         nargs="?",
         default="quickstart",
         choices=["quickstart", "format", "hierarchy", "assertions",
-                 "traceability", "validation", "git", "config", "commands", "all"],
+                 "traceability", "validation", "git", "config", "commands", "health", "all"],
         help="Documentation topic (default: quickstart)",
     )
     docs_parser.add_argument(
@@ -823,6 +877,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Dispatch to command handlers
         if args.command == "validate":
             return validate.run(args)
+        elif args.command == "health":
+            return health.run(args)
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "hash":

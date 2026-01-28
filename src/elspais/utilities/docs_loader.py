@@ -24,6 +24,7 @@ TOPIC_ORDER = [
     "git",
     "config",
     "commands",
+    "health",
 ]
 
 
