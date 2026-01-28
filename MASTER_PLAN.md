@@ -84,7 +84,7 @@ This provides the simplest API while keeping all graph state in one place.
 
 ---
 
-## [ ] Phase 4: Assertion Mutations
+## [x] Phase 4: Assertion Mutations
 
 ### 4.1 Rename Assertion
 ```python

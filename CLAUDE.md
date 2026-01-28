@@ -102,6 +102,14 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **Orphans**: `_orphaned_ids` updated when parent relationships change.
     - **Deleted tracking**: `graph.deleted_nodes()` returns nodes removed via `delete_requirement()`.
 
+21. **Assertion Mutation API**: TraceGraph provides assertion-specific mutations:
+    - **`rename_assertion(old_id, new_label)`**: Renames assertion label (e.g., REQ-p00001-A -> REQ-p00001-D). Updates node ID, edges with `assertion_targets`, and recomputes parent hash.
+    - **`update_assertion(assertion_id, new_text)`**: Updates assertion text and recomputes parent hash.
+    - **`add_assertion(req_id, label, text)`**: Creates new assertion node, links to parent requirement, recomputes hash.
+    - **`delete_assertion(assertion_id, compact=True)`**: Deletes assertion. With `compact=True`, renumbers subsequent assertions (C->B, D->C after deleting B) and updates all edges. Recomputes parent hash.
+    - All assertion mutations set `affects_hash=True` in their `MutationEntry`.
+    - Hash recomputation uses `_recompute_requirement_hash()` which concatenates sorted assertion texts.
+
 
 **Multi-Language Comment Support:**
 

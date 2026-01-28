@@ -324,19 +324,53 @@ class TraceGraph:
             node = self._index.pop(assertion_id)
             for parent in list(node.iter_parents()):
                 parent.remove_child(node)
+                # Restore parent hash (even if None)
+                if "parent_hash" in entry.before_state:
+                    parent.set_field("hash", entry.before_state["parent_hash"])
 
     def _undo_delete_assertion(self, entry: MutationEntry) -> None:
         """Undo a delete assertion operation."""
-        # Similar to undo_delete_requirement
+        # First, undo any compaction renames in reverse order
+        renames = entry.before_state.get("renames", [])
+        for rename in reversed(renames):
+            old_id = rename.get("old_id")
+            new_id = rename.get("new_id")
+            old_label = rename.get("old_label")
+            new_label = rename.get("new_label")
+
+            if new_id and new_id in self._index:
+                node = self._index.pop(new_id)
+                node.set_id(old_id)
+                node.set_field("label", old_label)
+                self._index[old_id] = node
+
+                # Update edges back
+                for edge_parent in self._index.values():
+                    for edge in edge_parent.iter_outgoing_edges():
+                        if new_label in edge.assertion_targets:
+                            edge.assertion_targets.remove(new_label)
+                            edge.assertion_targets.append(old_label)
+
+        # Restore the deleted assertion
         node_id = entry.target_id
         for i, node in enumerate(self._deleted_nodes):
             if node.id == node_id:
                 self._deleted_nodes.pop(i)
-                self._index[node_id] = node
+                # Restore original ID and label
+                old_id = entry.before_state.get("id", node_id)
+                old_label = entry.before_state.get("label")
+                node.set_id(old_id)
+                if old_label:
+                    node.set_field("label", old_label)
+                self._index[old_id] = node
                 # Restore parent link
                 parent_id = entry.before_state.get("parent_id")
                 if parent_id and parent_id in self._index:
-                    self._index[parent_id].add_child(node)
+                    parent = self._index[parent_id]
+                    parent.add_child(node)
+                    # Restore parent hash (even if None)
+                    if "parent_hash" in entry.before_state:
+                        parent.set_field("hash", entry.before_state["parent_hash"])
                 break
 
     def _undo_update_assertion(self, entry: MutationEntry) -> None:
@@ -345,15 +379,37 @@ class TraceGraph:
         old_text = entry.before_state.get("text")
         if node_id in self._index and old_text is not None:
             self._index[node_id].set_label(old_text)
+            # Restore parent hash (even if None)
+            parent_id = entry.before_state.get("parent_id")
+            if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
+                self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
     def _undo_rename_assertion(self, entry: MutationEntry) -> None:
         """Undo an assertion rename."""
         old_id = entry.before_state.get("id")
         new_id = entry.after_state.get("id")
+        old_label = entry.before_state.get("label")
+        new_label = entry.after_state.get("label")
+
         if old_id and new_id and new_id in self._index:
             node = self._index.pop(new_id)
             node.set_id(old_id)
+            if old_label:
+                node.set_field("label", old_label)
             self._index[old_id] = node
+
+            # Update edges back
+            if old_label and new_label:
+                for edge_parent in self._index.values():
+                    for edge in edge_parent.iter_outgoing_edges():
+                        if new_label in edge.assertion_targets:
+                            edge.assertion_targets.remove(new_label)
+                            edge.assertion_targets.append(old_label)
+
+            # Restore parent hash (even if None)
+            parent_id = entry.before_state.get("parent_id")
+            if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
+                self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
     # ─────────────────────────────────────────────────────────────────────────
     # Node Mutation API
@@ -652,6 +708,352 @@ class TraceGraph:
                 # Non-assertion children become orphans
                 node.remove_child(child)
                 self._orphaned_ids.add(child.id)
+
+        self._mutation_log.append(entry)
+        return entry
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Assertion Mutation API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
+        """Recompute hash for a requirement based on its assertions.
+
+        The hash is computed from the concatenated assertion texts.
+
+        Args:
+            req_node: The requirement node to recompute hash for.
+
+        Returns:
+            The new hash value.
+        """
+        from elspais.utilities.hasher import calculate_hash
+
+        # Collect assertion texts in label order
+        assertions = []
+        for child in req_node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label()
+                assertions.append((label, text))
+
+        # Sort by label and concatenate
+        assertions.sort(key=lambda x: x[0])
+        body = "\n".join(text for _, text in assertions)
+
+        new_hash = calculate_hash(body)
+        req_node.set_field("hash", new_hash)
+        return new_hash
+
+    def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
+        """Rename assertion label (e.g., REQ-p00001-A -> REQ-p00001-D).
+
+        Updates the assertion node ID, edges with assertion_targets,
+        and recomputes the parent requirement hash.
+
+        Args:
+            old_id: Current assertion ID (e.g., "REQ-p00001-A").
+            new_label: New assertion label (e.g., "D").
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If old_id is not found.
+            ValueError: If the node is not an assertion or new_id exists.
+        """
+        if old_id not in self._index:
+            raise KeyError(f"Assertion '{old_id}' not found")
+
+        node = self._index[old_id]
+        if node.kind != NodeKind.ASSERTION:
+            raise ValueError(f"Node '{old_id}' is not an assertion")
+
+        # Get parent requirement
+        parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parents:
+            raise ValueError(f"Assertion '{old_id}' has no parent requirement")
+        parent = parents[0]
+
+        # Compute new ID
+        old_label = node.get_field("label", "")
+        new_id = f"{parent.id}-{new_label}"
+
+        if new_id in self._index:
+            raise ValueError(f"Assertion '{new_id}' already exists")
+
+        # Record before state
+        old_hash = parent.get_field("hash")
+        entry = MutationEntry(
+            operation="rename_assertion",
+            target_id=old_id,
+            before_state={
+                "id": old_id,
+                "label": old_label,
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+            },
+            after_state={
+                "id": new_id,
+                "label": new_label,
+            },
+            affects_hash=True,
+        )
+
+        # Update assertion node
+        self._index.pop(old_id)
+        node.set_id(new_id)
+        node.set_field("label", new_label)
+        self._index[new_id] = node
+
+        # Update edges with assertion_targets referencing old label
+        for parent_node in self._index.values():
+            for edge in parent_node.iter_outgoing_edges():
+                if old_label in edge.assertion_targets:
+                    edge.assertion_targets.remove(old_label)
+                    edge.assertion_targets.append(new_label)
+
+        # Recompute parent hash
+        self._recompute_requirement_hash(parent)
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def update_assertion(self, assertion_id: str, new_text: str) -> MutationEntry:
+        """Update assertion text.
+
+        Recomputes the parent requirement hash.
+
+        Args:
+            assertion_id: The assertion ID to update.
+            new_text: The new assertion text.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If assertion_id is not found.
+            ValueError: If the node is not an assertion.
+        """
+        if assertion_id not in self._index:
+            raise KeyError(f"Assertion '{assertion_id}' not found")
+
+        node = self._index[assertion_id]
+        if node.kind != NodeKind.ASSERTION:
+            raise ValueError(f"Node '{assertion_id}' is not an assertion")
+
+        # Get parent requirement
+        parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parents:
+            raise ValueError(f"Assertion '{assertion_id}' has no parent requirement")
+        parent = parents[0]
+
+        old_text = node.get_label()
+        old_hash = parent.get_field("hash")
+
+        entry = MutationEntry(
+            operation="update_assertion",
+            target_id=assertion_id,
+            before_state={
+                "text": old_text,
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+            },
+            after_state={
+                "text": new_text,
+            },
+            affects_hash=True,
+        )
+
+        # Update assertion text
+        node.set_label(new_text)
+
+        # Recompute parent hash
+        self._recompute_requirement_hash(parent)
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
+        """Add assertion to requirement.
+
+        Creates an assertion node, links it as child of the requirement,
+        and recomputes the requirement hash.
+
+        Args:
+            req_id: The parent requirement ID.
+            label: The assertion label (e.g., "A", "B").
+            text: The assertion text.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If req_id is not found.
+            ValueError: If req_id is not a requirement or assertion exists.
+        """
+        if req_id not in self._index:
+            raise KeyError(f"Requirement '{req_id}' not found")
+
+        parent = self._index[req_id]
+        if parent.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{req_id}' is not a requirement")
+
+        assertion_id = f"{req_id}-{label}"
+        if assertion_id in self._index:
+            raise ValueError(f"Assertion '{assertion_id}' already exists")
+
+        old_hash = parent.get_field("hash")
+
+        # Create assertion node
+        assertion_node = GraphNode(
+            id=assertion_id,
+            kind=NodeKind.ASSERTION,
+            label=text,
+        )
+        assertion_node._content = {"label": label}
+
+        # Add to index and link to parent
+        self._index[assertion_id] = assertion_node
+        parent.add_child(assertion_node)
+
+        # Recompute parent hash
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="add_assertion",
+            target_id=assertion_id,
+            before_state={
+                "parent_id": req_id,
+                "parent_hash": old_hash,
+            },
+            after_state={
+                "id": assertion_id,
+                "label": label,
+                "text": text,
+                "parent_hash": new_hash,
+            },
+            affects_hash=True,
+        )
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_assertion(
+        self,
+        assertion_id: str,
+        compact: bool = True,
+    ) -> MutationEntry:
+        """Delete assertion with optional compaction.
+
+        If compact=True and deleting B from [A, B, C, D]:
+        - C -> B, D -> C
+        - Updates all edges referencing C, D
+        - Recomputes parent hash
+
+        Args:
+            assertion_id: The assertion ID to delete.
+            compact: If True, renumber subsequent assertions.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If assertion_id is not found.
+            ValueError: If the node is not an assertion.
+        """
+        if assertion_id not in self._index:
+            raise KeyError(f"Assertion '{assertion_id}' not found")
+
+        node = self._index[assertion_id]
+        if node.kind != NodeKind.ASSERTION:
+            raise ValueError(f"Node '{assertion_id}' is not an assertion")
+
+        # Get parent requirement
+        parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parents:
+            raise ValueError(f"Assertion '{assertion_id}' has no parent requirement")
+        parent = parents[0]
+
+        old_label = node.get_field("label", "")
+        old_text = node.get_label()
+        old_hash = parent.get_field("hash")
+
+        # Collect sibling assertions sorted by label
+        siblings = []
+        for child in parent.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                siblings.append((child.get_field("label", ""), child))
+        siblings.sort(key=lambda x: x[0])
+
+        # Track renames for undo (label_before -> label_after)
+        renames: list[dict[str, str]] = []
+
+        # Remove from index first
+        self._index.pop(assertion_id)
+        parent.remove_child(node)
+        self._deleted_nodes.append(node)
+
+        # Remove edges referencing this assertion
+        for parent_node in self._index.values():
+            for edge in parent_node.iter_outgoing_edges():
+                if old_label in edge.assertion_targets:
+                    edge.assertion_targets.remove(old_label)
+
+        # Compact if requested
+        if compact:
+            # Find assertions after the deleted one
+            deleted_found = False
+            for sib_label, sib_node in siblings:
+                if sib_node is node:
+                    deleted_found = True
+                    continue
+                if deleted_found and sib_node.id in self._index:
+                    # This sibling needs to be renamed to previous letter
+                    prev_label = chr(ord(sib_label) - 1)
+                    old_sib_id = sib_node.id
+                    new_sib_id = f"{parent.id}-{prev_label}"
+
+                    renames.append({
+                        "old_id": old_sib_id,
+                        "new_id": new_sib_id,
+                        "old_label": sib_label,
+                        "new_label": prev_label,
+                    })
+
+                    # Update the node
+                    self._index.pop(old_sib_id)
+                    sib_node.set_id(new_sib_id)
+                    sib_node.set_field("label", prev_label)
+                    self._index[new_sib_id] = sib_node
+
+                    # Update edges referencing this assertion
+                    for edge_parent in self._index.values():
+                        for edge in edge_parent.iter_outgoing_edges():
+                            if sib_label in edge.assertion_targets:
+                                edge.assertion_targets.remove(sib_label)
+                                edge.assertion_targets.append(prev_label)
+
+        # Recompute parent hash
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="delete_assertion",
+            target_id=assertion_id,
+            before_state={
+                "id": assertion_id,
+                "label": old_label,
+                "text": old_text,
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+                "compact": compact,
+                "renames": renames,
+            },
+            after_state={
+                "parent_hash": new_hash,
+            },
+            affects_hash=True,
+        )
 
         self._mutation_log.append(entry)
         return entry

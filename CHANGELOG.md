@@ -2,6 +2,17 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.29.0] - 2026-01-28
+
+### Added
+- **Assertion Mutation API**: TraceGraph now supports assertion-specific mutations:
+  - `rename_assertion(old_id, new_label)` - Renames assertion label (e.g., A -> D), updates edges
+  - `update_assertion(assertion_id, new_text)` - Updates assertion text
+  - `add_assertion(req_id, label, text)` - Adds new assertion to requirement
+  - `delete_assertion(assertion_id, compact=True)` - Deletes assertion with optional compaction
+- **Assertion Compaction**: When deleting middle assertion (e.g., B from [A,B,C,D]), subsequent labels shift down (C->B, D->C) and all edge references update automatically
+- **Hash Recomputation**: All assertion mutations recompute parent requirement hash via `_recompute_requirement_hash()`
+
 ## [0.28.0] - 2026-01-28
 
 ### Added
