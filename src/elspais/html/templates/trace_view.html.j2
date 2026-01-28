@@ -83,16 +83,11 @@ body {
 .stat-badge.dev { background: #20c997; color: white; }
 .stat-badge.core { background: #0d6efd; color: white; }
 .stat-badge.tests {
-    /* Tests filter is inverted: active=show, so default (hidden) is hollow */
-    background: transparent;
-    color: #198754;
-    box-shadow: inset 0 0 0 2px #198754;
-}
-.stat-badge.tests.active {
-    /* When active, tests are shown - solid appearance */
     background: #198754;
     color: white;
-    box-shadow: none;
+}
+.stat-badge.tests.active {
+    color: #198754;
 }
 .stat-badge.associated {
     background: #6f42c1;
@@ -1606,11 +1601,11 @@ function applyFilters() {
         const isAssociated = row.dataset.isAssociated === 'true';
         const depth = parseInt(row.dataset.depth);
         const parentId = row.dataset.parent;
-        const isImplNode = isCode || isTest;  // Implementation nodes (code or test)
+        const isImplNode = isCode;  // Code nodes only (tests handled separately)
 
         let visible = true;
 
-        // Code/Test rows visibility - hide implementation nodes by default unless showCode is on
+        // Code rows visibility - hide code nodes by default unless showCode is on
         if (isImplNode && !showCode) {
             visible = false;
         }
@@ -1626,7 +1621,8 @@ function applyFilters() {
         if (filterTopicValue && topic !== filterTopicValue) visible = false;
 
         // Level badge filters (HIDE logic - hide if that level's filter is active)
-        if (!isImplNode) {
+        // Only apply to requirements, not code or test nodes
+        if (!isImplNode && !isTest) {
             if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
             if (state.activeFilters.levelOps && level === 'OPS') visible = false;
             if (state.activeFilters.levelDev && level === 'DEV') visible = false;
@@ -1636,13 +1632,13 @@ function applyFilters() {
             if (state.activeFilters.core && !isAssociated) visible = false;
         }
 
-        // Tests filter - when active, show test rows (overrides showCode toggle)
+        // Tests filter - when active, hide test rows
         if (state.activeFilters.tests && isTest) {
-            visible = true;
+            visible = false;
         }
 
         // Toggle filters
-        if (leafOnly && !isLeaf && !isImplNode) visible = false;
+        if (leafOnly && !isLeaf && !isImplNode && !isTest) visible = false;
         if (!includeDeprecated && status === 'DEPRECATED') visible = false;
         if (!includeRoadmap && isRoadmap) visible = false;
 
@@ -1676,7 +1672,7 @@ function applyFilters() {
         }
 
         row.classList.toggle('hidden', !visible);
-        if (visible && !isImplNode) visibleCount++;  // Only count requirements, not code/test
+        if (visible && !isImplNode && !isTest) visibleCount++;  // Only count requirements, not code/test
     });
 
     updateCounter(visibleCount);
