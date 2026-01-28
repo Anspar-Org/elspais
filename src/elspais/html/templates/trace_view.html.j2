@@ -81,10 +81,10 @@ body {
 .stat-badge.ops { background: #fd7e14; color: white; }
 .stat-badge.dev { background: #20c997; color: white; }
 .stat-badge.core { background: #0d6efd; color: white; }
-.stat-badge.files {
+.stat-badge.tests {
     background: white;
-    color: #dc3545;
-    border: 1px solid #dc3545;
+    color: #198754;
+    border: 1px solid #198754;
 }
 .stat-badge.associated {
     background: white;
@@ -638,6 +638,19 @@ body {
     margin-right: 4px;
 }
 
+.test-row {
+    background: #f0fff4;  /* Light green tint for tests */
+}
+
+.test-row td {
+    font-size: 0.8rem;
+    color: #198754;
+}
+
+.test-icon {
+    margin-right: 4px;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Legend Modal
    ───────────────────────────────────────────────────────────────────────────── */
@@ -767,7 +780,7 @@ body {
         <span style="color: #adb5bd;">|</span>
         <span class="stat-badge core">CORE: {{ stats.total_count }}</span>
         <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge files" id="badge-files" onclick="toggleFilter('files')" title="Click to show/hide file nodes">Files: {{ stats.file_count }}</span>
+        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to show/hide test nodes">Tests: {{ stats.test_count }}</span>
         <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
     </div>
 
@@ -898,7 +911,7 @@ body {
             </thead>
             <tbody id="table-body">
                 {% for row in rows %}
-                <tr class="req-row {{ 'code-row' if row.is_code else '' }}"
+                <tr class="req-row {{ 'code-row' if row.is_code else '' }}{{ 'test-row' if row.is_test else '' }}"
                     data-id="{{ row.id }}"
                     data-parent="{{ row.parent_id or '' }}"
                     data-level="{{ row.level }}"
@@ -911,6 +924,7 @@ body {
                     data-is-uncommitted="{{ 'true' if row.is_uncommitted else 'false' }}"
                     data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
                     data-is-code="{{ 'true' if row.is_code else 'false' }}"
+                    data-is-test="{{ 'true' if row.is_test else 'false' }}"
                     data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
                     data-has-children="{{ 'true' if row.has_children else 'false' }}">
                     <td class="col-id">
@@ -923,6 +937,8 @@ body {
                                     data-node-id="{{ row.id }}"></button>
                             {% if row.is_code %}
                             <span class="code-icon">📄</span>
+                            {% elif row.is_test %}
+                            <span class="test-icon">🧪</span>
                             {% endif %}
                             <a href="#{{ row.id }}" class="req-id">{{ row.display_id | replace('REQ-', '') }}</a>
                             {% if row.assertions %}
@@ -1135,7 +1151,7 @@ const state = {
     activeFilters: {
         uncommitted: false,
         changed: false,
-        files: false,
+        tests: false,
         associated: false,
         levelPrd: false,
         levelOps: false,
@@ -1207,7 +1223,7 @@ function restoreState() {
         document.getElementById('badge-prd')?.classList.toggle('active', state.activeFilters.levelPrd);
         document.getElementById('badge-ops')?.classList.toggle('active', state.activeFilters.levelOps);
         document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
-        document.getElementById('badge-files')?.classList.toggle('active', state.activeFilters.files);
+        document.getElementById('badge-tests')?.classList.toggle('active', state.activeFilters.tests);
         document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
     }
 
@@ -1235,7 +1251,7 @@ function clearAllCookies() {
     // Reset to defaults
     state.viewMode = 'hierarchical';
     state.activeFilters = {
-        uncommitted: false, changed: false, files: false, associated: false,
+        uncommitted: false, changed: false, tests: false, associated: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
     state.activeTab = 'requirements';
@@ -1322,7 +1338,7 @@ function toggleLevelFilter(level) {
 function clearFilters() {
     // Reset all filters
     state.activeFilters = {
-        uncommitted: false, changed: false, files: false, associated: false,
+        uncommitted: false, changed: false, tests: false, associated: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
 
@@ -1385,14 +1401,16 @@ function applyFilters() {
         const isUncommitted = row.dataset.isUncommitted === 'true';
         const isRoadmap = row.dataset.isRoadmap === 'true';
         const isCode = row.dataset.isCode === 'true';
+        const isTest = row.dataset.isTest === 'true';
         const isAssociated = row.dataset.isAssociated === 'true';
         const depth = parseInt(row.dataset.depth);
         const parentId = row.dataset.parent;
+        const isImplNode = isCode || isTest;  // Implementation nodes (code or test)
 
         let visible = true;
 
-        // Code rows visibility
-        if (isCode && !showCode) {
+        // Code/Test rows visibility - hide implementation nodes by default unless showCode is on
+        if (isImplNode && !showCode) {
             visible = false;
         }
 
@@ -1407,7 +1425,7 @@ function applyFilters() {
         if (filterTopicValue && topic !== filterTopicValue) visible = false;
 
         // Level badge filters (HIDE logic - hide if that level's filter is active)
-        if (!isCode) {
+        if (!isImplNode) {
             if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
             if (state.activeFilters.levelOps && level === 'OPS') visible = false;
             if (state.activeFilters.levelDev && level === 'DEV') visible = false;
@@ -1418,15 +1436,13 @@ function applyFilters() {
             visible = false;
         }
 
-        // Files filter (when NOT active, hide code nodes in flat view)
-        // When files badge is active, show code nodes regardless of showCode toggle
-        if (state.activeFilters.files && isCode) {
-            // Files filter active - show code rows
+        // Tests filter - when active, show test rows (overrides showCode toggle)
+        if (state.activeFilters.tests && isTest) {
             visible = true;
         }
 
         // Toggle filters
-        if (leafOnly && !isLeaf && !isCode) visible = false;
+        if (leafOnly && !isLeaf && !isImplNode) visible = false;
         if (!includeDeprecated && status === 'DEPRECATED') visible = false;
         if (!includeRoadmap && isRoadmap) visible = false;
 
@@ -1460,7 +1476,7 @@ function applyFilters() {
         }
 
         row.classList.toggle('hidden', !visible);
-        if (visible && !isCode) visibleCount++;
+        if (visible && !isImplNode) visibleCount++;  // Only count requirements, not code/test
     });
 
     updateCounter(visibleCount);

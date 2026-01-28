@@ -12,6 +12,11 @@ All notable changes to elspais will be documented in this file.
 
 - **trace --view**: Version badge now shows actual elspais version (e.g., "v0.27.0") instead of hardcoded "v1"
 
+- **trace --view**: Replaced confusing "Files" filter with "Tests" filter
+  - Shows TEST nodes in tree hierarchy (with 🧪 icon)
+  - Badge displays count of test nodes instead of file count
+  - Clicking badge shows test rows that validate requirements
+
 ## [0.26.0] - Previous
 
 - Multiline block comment support for code/test references

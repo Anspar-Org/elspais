@@ -20,3 +20,13 @@ This file contains completed enhancement issues moved from MASTER_PLAN.md.
   - **Fix**: Import `__version__` from elspais and use as default
   - **Completed**: 2026-01-27
   - **Commit**: [CUR-514] fix(html): Display actual package version in trace --view
+
+### [x] trace --view: Files filter toggle doesn't show files in tree hierarchy
+  - **Issue**: "Files" filter was confusing - files aren't graph nodes, so it didn't work as expected
+  - **Fix**: Replaced "Files" with "Tests" filter:
+    - Shows TEST nodes in tree hierarchy (with 🧪 icon)
+    - Badge displays count of test nodes instead of file count
+    - Clicking badge shows test rows that validate requirements
+    - Added `is_test` attribute to TreeRow and template
+  - **Completed**: 2026-01-27
+  - **Commit**: [CUR-514] fix(html): Replace Files filter with Tests filter

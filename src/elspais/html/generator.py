@@ -37,6 +37,7 @@ class TreeRow:
     is_uncommitted: bool
     is_roadmap: bool
     is_code: bool
+    is_test: bool  # TEST node for traceability
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
@@ -61,7 +62,7 @@ class ViewStats:
     ops_count: int = 0
     dev_count: int = 0
     total_count: int = 0
-    file_count: int = 0
+    test_count: int = 0  # Number of TEST nodes in the graph
     associated_count: int = 0
     journey_count: int = 0
 
@@ -209,7 +210,6 @@ class HTMLGenerator:
         from elspais.graph import NodeKind
 
         stats = ViewStats()
-        files: set[str] = set()
 
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             stats.total_count += 1
@@ -226,15 +226,10 @@ class HTMLGenerator:
             if self._is_associated(node):
                 stats.associated_count += 1
 
-            if node.source:
-                files.add(node.source.path)
+        # Count TEST nodes (more meaningful than file count)
+        for _ in self.graph.nodes_by_kind(NodeKind.TEST):
+            stats.test_count += 1
 
-        # Count all traced files (code, tests, specs)
-        for node in self.graph.all_nodes():
-            if node.source:
-                files.add(node.source.path)
-
-        stats.file_count = len(files)
         return stats
 
     def _build_tree_rows(self) -> list[TreeRow]:
@@ -349,6 +344,13 @@ class HTMLGenerator:
                     return True
             return False
 
+        def has_test_children(node: GraphNode) -> bool:
+            """Check if node has test children."""
+            for child in node.iter_children():
+                if child.kind == NodeKind.TEST:
+                    return True
+            return False
+
         def traverse(
             node: GraphNode,
             depth: int,
@@ -362,12 +364,14 @@ class HTMLGenerator:
                 return
             visited_at_depth[key] = True
 
-            # Only process requirements and code nodes
-            if node.kind not in (NodeKind.REQUIREMENT, NodeKind.CODE):
+            # Process requirements, code, and test nodes
+            if node.kind not in (NodeKind.REQUIREMENT, NodeKind.CODE, NodeKind.TEST):
                 return
 
             is_code = node.kind == NodeKind.CODE
-            coverage, has_failures = ("none", False) if is_code else compute_coverage(node)
+            is_test = node.kind == NodeKind.TEST
+            is_impl_node = is_code or is_test  # Implementation nodes (code or test)
+            coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
             assertion_letters = get_assertion_letters(node, parent_id) if parent_assertions is None else parent_assertions
 
             # Create row
@@ -375,21 +379,22 @@ class HTMLGenerator:
                 id=f"{node.id}_{depth}_{parent_id or 'root'}",  # Unique key for multi-parent
                 display_id=node.id,
                 title=node.label or "",
-                level=(node.level or "").upper() if not is_code else "",
-                status=(node.status or "").upper() if not is_code else "",
+                level=(node.level or "").upper() if not is_impl_node else "",
+                status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
-                topic=get_topic(node) if not is_code else "",
+                topic=get_topic(node) if not is_impl_node else "",
                 depth=depth,
                 parent_id=f"{parent_id}_{depth - 1}_{rows[-1].parent_id if rows and depth > 0 else 'root'}" if parent_id and depth > 0 else None,
                 assertions=assertion_letters,
-                is_leaf=not has_req_children(node) and not is_code,
+                is_leaf=not has_req_children(node) and not is_impl_node,
                 is_changed=node.get_metric("is_branch_changed", False),
                 is_uncommitted=node.get_metric("is_uncommitted", False) or node.get_metric("is_untracked", False),
                 is_roadmap=is_roadmap(node),
                 is_code=is_code,
-                has_children=has_req_children(node) or has_code_children(node),
+                is_test=is_test,
+                has_children=has_req_children(node) or has_code_children(node) or has_test_children(node),
                 has_failures=has_failures,
-                is_associated=self._is_associated(node) if not is_code else False,
+                is_associated=self._is_associated(node) if not is_impl_node else False,
             )
 
             # Fix parent_id to reference actual row id
@@ -402,7 +407,7 @@ class HTMLGenerator:
 
             rows.append(row)
 
-            # Traverse children - requirements first, then code
+            # Traverse children - requirements first, then code/tests
             children_to_visit: list[tuple[GraphNode, list[str] | None]] = []
 
             for edge in node.iter_outgoing_edges():
@@ -423,9 +428,11 @@ class HTMLGenerator:
                         if not has_specific:
                             children_to_visit.append((child, None))
 
-            # Add code children
+            # Add code and test children
             for child in node.iter_children():
                 if child.kind == NodeKind.CODE:
+                    children_to_visit.append((child, None))
+                elif child.kind == NodeKind.TEST:
                     children_to_visit.append((child, None))
 
             # Sort children: assertion-specific first (by letter), then general (by ID)

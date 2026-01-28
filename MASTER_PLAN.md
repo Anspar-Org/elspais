@@ -6,10 +6,6 @@ This file contains a prioritized queue of enhancement issues. See CLAUDE.md for 
 
 ## Bugs
 
-- [ ] trace --view: Files filter toggle doesn't show files in tree hierarchy
-  - Files are not graph nodes, so filter doesn't work as expected
-  - Consider: Replace "Files" with "Tests" filter and show tests in tree instead
-
 - [ ] trace --view: Assoc (Associated) toggle is broken
   - Should have same look/operation as PRD/OPS/DEV toggles
   - Currently makes ALL REQs disappear (even though 16 associated REQs exist in hht_diary)
