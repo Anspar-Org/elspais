@@ -84,55 +84,6 @@ This provides the simplest API while keeping all graph state in one place.
 
 ---
 
-## [x] Phase 4: Assertion Mutations
-
-### 4.1 Rename Assertion
-```python
-def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
-    """Rename assertion label (e.g., REQ-p00001-A → REQ-p00001-D).
-
-    - Updates assertion node ID
-    - Updates edges with assertion_targets
-    - Recomputes parent requirement hash
-    """
-```
-
-### 4.2 Update Assertion Text
-```python
-def update_assertion(self, assertion_id: str, new_text: str) -> MutationEntry:
-    """Update assertion text. Recomputes parent hash."""
-```
-
-### 4.3 Add Assertion
-```python
-def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
-    """Add assertion to requirement.
-
-    - Creates assertion node
-    - Links as child of requirement
-    - Recomputes requirement hash
-    """
-```
-
-### 4.4 Delete Assertion
-```python
-def delete_assertion(self, assertion_id: str, compact: bool = True) -> MutationEntry:
-    """Delete assertion with optional compaction.
-
-    If compact=True and deleting B from [A, B, C, D]:
-    - C → B, D → C
-    - Updates all edges referencing C, D
-    - Recomputes parent hash
-    """
-```
-
-**Verification:**
-```bash
-pytest tests/test_assertion_mutations.py
-```
-
----
-
 ## [ ] Phase 5: Edge Mutations
 
 ### 5.1 Add Edge

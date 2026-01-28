@@ -92,3 +92,18 @@ This file contains completed phases moved from MASTER_PLAN.md for historical ref
 - `src/elspais/graph/GraphNode.py`: Added `set_id()`, `remove_child()` methods
 - `src/elspais/graph/builder.py`: Added 5 node mutation methods to TraceGraph
 - `CLAUDE.md`: Added Node Mutation API documentation (item 20)
+
+---
+
+## Phase 4: Assertion Mutations (Completed 2026-01-28)
+
+- [x] `rename_assertion(old_id, new_label)` - Renames assertion, updates edges with assertion_targets
+- [x] `update_assertion(assertion_id, new_text)` - Updates text, recomputes parent hash
+- [x] `add_assertion(req_id, label, text)` - Creates new assertion linked to parent
+- [x] `delete_assertion(assertion_id, compact)` - Deletes with optional label compaction
+
+- [x] Tests: 41 new tests in `tests/core/test_assertion_mutations.py`
+
+**Files Modified:**
+- `src/elspais/graph/builder.py`: Added 4 assertion mutation methods + `_recompute_requirement_hash()`
+- `CLAUDE.md`: Added Assertion Mutation API documentation (item 21)
