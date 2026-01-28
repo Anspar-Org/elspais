@@ -97,6 +97,16 @@ class TestDocsContent:
         assert "SHALL" in content, "assertions should explain SHALL"
         assert "SHALL NOT" in content, "assertions should explain SHALL NOT"
 
+    def test_commands_has_all_commands(self):
+        """commands.md should document all CLI commands."""
+        content = load_topic("commands")
+        assert content is not None
+        # Check for key commands
+        for cmd in ["validate", "trace", "hash", "edit", "config", "init"]:
+            assert f"## {cmd}" in content, f"commands should document {cmd}"
+        # Check for global options
+        assert "Global Options" in content, "commands should have global options"
+
     def test_all_topics_concatenation(self):
         """load_all_topics should return all topics concatenated."""
         all_content = load_all_topics()

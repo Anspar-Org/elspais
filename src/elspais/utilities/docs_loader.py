@@ -23,6 +23,7 @@ TOPIC_ORDER = [
     "validation",
     "git",
     "config",
+    "commands",
 ]
 
 

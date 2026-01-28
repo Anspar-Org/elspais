@@ -105,7 +105,7 @@ This file contains a prioritized queue of enhancement phases for elspais. Follow
 ---
 
 ## Phase 2: Documentation Completeness & Correctness Audit
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 **Goal:** Ensure documentation covers ALL command-line options and ALL `.toml` configuration options, and verify that documented behavior matches actual implementation.
 
@@ -122,28 +122,38 @@ This file contains a prioritized queue of enhancement phases for elspais. Follow
 **Tasks:**
 
 ### Completeness
-- [ ] Generate list of all CLI commands and their options
-- [ ] Generate list of all TOML configuration keys
-- [ ] Cross-reference against existing docs
-- [ ] Document missing CLI options
-- [ ] Document missing TOML options
+- [x] Generate list of all CLI commands and their options
+- [x] Generate list of all TOML configuration keys
+- [x] Cross-reference against existing docs
+- [x] Document missing CLI options
+- [x] Document missing TOML options
 
 ### Correctness
-- [ ] Verify documented default values match code defaults
-- [ ] Verify documented option descriptions match actual behavior
-- [ ] Verify documented examples actually work
-- [ ] Check for stale/outdated documentation (removed features, renamed options)
-- [ ] Validate TOML key names and types match config loader expectations
-- [ ] Run `pytest tests/test_doc_sync.py` to verify sync
+- [x] Verify documented default values match code defaults
+- [x] Verify documented option descriptions match actual behavior
+- [x] Verify documented examples actually work
+- [x] Check for stale/outdated documentation (removed features, renamed options)
+- [x] Validate TOML key names and types match config loader expectations
+- [x] Run `pytest tests/test_doc_sync.py` to verify sync
+
+**Implementation:**
+- Created `docs/cli/commands.md` - Comprehensive CLI reference for all 16 commands
+- Enhanced `docs/cli/config.md` - Complete TOML configuration reference with all sections
+- Enhanced `docs/cli/validation.md` - Full validate command options and skip patterns
+- Enhanced `docs/cli/traceability.md` - Full trace command options and depth levels
+- Fixed `docs/cli/git.md` - Removed non-existent `--staged` and `--hash` options
+- Added "commands" topic to `docs_loader.py` TOPIC_ORDER
+- Added "commands" choice to CLI docs argument parser
+- Added `test_commands_has_all_commands` test in test_doc_sync.py
 
 **Acceptance Criteria:**
-- Every CLI option has documentation in `docs/cli/`
-- Every TOML key has documentation
-- Documented defaults match implementation defaults
-- Documented behavior matches actual behavior
-- No stale documentation for removed/changed features
-- `test_doc_sync.py` passes
-- `elspais docs` topics are complete and accurate
+- ✓ Every CLI option has documentation in `docs/cli/`
+- ✓ Every TOML key has documentation
+- ✓ Documented defaults match implementation defaults
+- ✓ Documented behavior matches actual behavior
+- ✓ No stale documentation for removed/changed features
+- ✓ `test_doc_sync.py` passes (56 tests)
+- ✓ `elspais docs` topics are complete and accurate
 
 ---
 

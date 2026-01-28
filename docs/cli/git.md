@@ -2,9 +2,16 @@
 
 ## Detecting Changes
 
-  $ elspais changed            # Show all spec changes
-  $ elspais changed --staged   # Only staged changes
-  $ elspais changed --hash     # Only hash mismatches
+  $ elspais changed              # Show all spec changes
+  $ elspais changed -j           # Output as JSON
+  $ elspais changed -a           # Include non-spec files
+  $ elspais changed --base-branch develop  # Compare to different branch
+
+## Command Options
+
+  `--base-branch BRANCH`  Base branch for comparison (default: main)
+  `-j, --json`            Output as JSON for tooling
+  `-a, --all`             Include all changed files (not just spec)
 
 ## What 'Changed' Detects
 

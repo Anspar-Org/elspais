@@ -670,7 +670,7 @@ Examples:
         nargs="?",
         default="quickstart",
         choices=["quickstart", "format", "hierarchy", "assertions",
-                 "traceability", "validation", "git", "config", "all"],
+                 "traceability", "validation", "git", "config", "commands", "all"],
         help="Documentation topic (default: quickstart)",
     )
     docs_parser.add_argument(
