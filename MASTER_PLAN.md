@@ -66,14 +66,22 @@ This file contains a prioritized queue of enhancement phases for elspais. Follow
 ---
 
 ## Phase 1.5: Quick Improvements
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 **Goal:** Small but impactful usability improvements.
 
-### 1.5.1 User Journey Trace View GUI
-- [ ] User journeys need a better `trace --view` GUI experience
-- [ ] Design improved visualization for journey nodes in HTML output
-- [ ] Consider journey-specific filtering or highlighting
+### 1.5.1 User Journey Trace View GUI ✓
+- [x] User journeys need a better `trace --view` GUI experience
+- [x] Design improved visualization for journey nodes in HTML output
+- [x] Consider journey-specific filtering or highlighting
+
+**Implementation:**
+- Added `actor` and `goal` fields to `JourneyItem` dataclass
+- Updated `_collect_journeys()` to extract actor/goal from parsed journey data
+- Enhanced journey card layout with structured Actor/Goal metadata section
+- Added search/filter toolbar for journeys (searches ID, title, actor, goal)
+- Improved card styling with hover effects and better visual hierarchy
+- Enhanced empty state with example journey format
 
 ### 1.5.2 Git Repository Root Detection ✓
 - [x] elspais should check if it is in a git repo
@@ -88,7 +96,9 @@ This file contains a prioritized queue of enhancement phases for elspais. Follow
 - If not in a git repo, continues silently (warns with `-v`)
 
 **Acceptance Criteria:**
-- User journeys are clearly visible and navigable in trace view
+- ✓ User journeys are clearly visible and navigable in trace view
+- ✓ Journey cards show Actor and Goal metadata when available
+- ✓ Search/filter functionality for journeys
 - ✓ Running `elspais` from any subdirectory works as if run from repo root
 - ✓ Clear warning when not in a git repository (with -v flag)
 

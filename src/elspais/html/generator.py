@@ -47,6 +47,8 @@ class JourneyItem:
     id: str
     title: str
     description: str
+    actor: str | None = None
+    goal: str | None = None
 
 
 @dataclass
@@ -507,11 +509,17 @@ class HTMLGenerator:
                 # Use label as title, look for body content
                 description = ""
 
+            # Extract actor and goal fields from parsed journey data
+            actor = node.get_field("actor")
+            goal = node.get_field("goal")
+
             journeys.append(
                 JourneyItem(
                     id=node.id,
                     title=node.label or node.id,
                     description=description,
+                    actor=actor,
+                    goal=goal,
                 )
             )
 

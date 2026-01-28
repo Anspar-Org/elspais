@@ -58,6 +58,7 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **Lightning Bolt**: ⚡ indicates test failures from TEST_RESULT nodes
     - **Legend Modal**: Explains all icons and indicators
     - **DAG as Tree**: Nodes can appear under multiple parents for complete traceability
+    - **User Journeys Tab**: Separate tab with rich journey cards showing Actor/Goal metadata, searchable
 
 18. **NodeKind.REMAINDER**: Unclaimed file content (not requirements). Previously named TODO, renamed for clarity.
 
