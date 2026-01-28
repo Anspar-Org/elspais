@@ -287,8 +287,29 @@ class GraphBuilder:
             target = self._nodes.get(target_id)
 
             if source and target:
-                # Link target as parent of source (implements relationship)
-                target.link(source, edge_kind)
+                # If target is an assertion, link from its parent requirement
+                # with assertion_targets set, so the child appears under the
+                # parent REQ (not the assertion node) with assertion badges
+                if target.kind == NodeKind.ASSERTION:
+                    # Find the parent requirement of this assertion
+                    parent_reqs = [
+                        p for p in target.iter_parents()
+                        if p.kind == NodeKind.REQUIREMENT
+                    ]
+                    if parent_reqs:
+                        parent_req = parent_reqs[0]
+                        assertion_label = target.get_field("label", "")
+                        parent_req.link(
+                            source,
+                            edge_kind,
+                            assertion_targets=[assertion_label] if assertion_label else None,
+                        )
+                    else:
+                        # Fallback: link directly if no parent found
+                        target.link(source, edge_kind)
+                else:
+                    # Link target as parent of source (implements relationship)
+                    target.link(source, edge_kind)
 
         # Identify roots (nodes with no parents)
         roots = [

@@ -67,7 +67,10 @@ body {
 }
 
 .stat-badge.active {
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.5);
+    /* When filter is active (hiding that level), show hollow/faded appearance */
+    opacity: 0.4;
+    box-shadow: inset 0 0 0 2px currentColor;
+    background: transparent !important;
 }
 
 .stat-badge.prd { background: #212529; color: white; }
@@ -1176,12 +1179,9 @@ function toggleLevelFilter(level) {
     const badge = document.getElementById('badge-' + level.toLowerCase());
     if (badge) badge.classList.toggle('active', state.activeFilters[key]);
 
-    // Also update the dropdown to match (if only one level selected)
-    const activeLevels = ['levelPrd', 'levelOps', 'levelDev'].filter(k => state.activeFilters[k]);
-    if (activeLevels.length === 1) {
-        const levelMap = { levelPrd: 'PRD', levelOps: 'OPS', levelDev: 'DEV' };
-        document.getElementById('filter-level').value = levelMap[activeLevels[0]];
-    } else if (activeLevels.length === 0) {
+    // Clear dropdown when badge filters are used (badges hide, dropdown shows - they conflict)
+    const anyBadgeActive = state.activeFilters.levelPrd || state.activeFilters.levelOps || state.activeFilters.levelDev;
+    if (anyBadgeActive) {
         document.getElementById('filter-level').value = '';
     }
 
@@ -1276,14 +1276,11 @@ function applyFilters() {
         if (filterCovValue && coverage !== filterCovValue) visible = false;
         if (filterTopicValue && topic !== filterTopicValue) visible = false;
 
-        // Level badge filters (OR logic - show if any selected level matches)
-        if (levelBadgeFiltersActive && !isCode) {
-            const matchesPrd = state.activeFilters.levelPrd && level === 'PRD';
-            const matchesOps = state.activeFilters.levelOps && level === 'OPS';
-            const matchesDev = state.activeFilters.levelDev && level === 'DEV';
-            if (!matchesPrd && !matchesOps && !matchesDev) {
-                visible = false;
-            }
+        // Level badge filters (HIDE logic - hide if that level's filter is active)
+        if (!isCode) {
+            if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
+            if (state.activeFilters.levelOps && level === 'OPS') visible = false;
+            if (state.activeFilters.levelDev && level === 'DEV') visible = false;
         }
 
         // Associated filter (when active, only show associated rows)

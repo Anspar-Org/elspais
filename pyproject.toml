@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.25.3"
+version = "0.25.5"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -69,6 +69,10 @@ Changelog = "https://github.com/anspar/elspais/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/elspais"]
+
+# Include CLI documentation files in the wheel
+[tool.hatch.build.targets.wheel.force-include]
+"docs/cli" = "elspais/docs/cli"
 
 # REQ-int-d00001-D: Bundle Jinja2 templates for trace-view
 [tool.hatch.build.targets.wheel.shared-data]

@@ -103,9 +103,19 @@ class TestGraphBuilder:
         graph = builder.build()
 
         ops_req = graph.find_by_id("REQ-o00001")
+        prd_req = graph.find_by_id("REQ-p00001")
 
-        # OPS req should implement assertion A
-        assert "REQ-p00001-A" in parents_string(ops_req)
+        # OPS req should be child of parent REQ (not assertion node)
+        # with assertion_targets indicating which assertions it implements
+        assert "REQ-p00001" in parents_string(ops_req)
+
+        # Verify the edge has assertion_targets set
+        for edge in prd_req.iter_outgoing_edges():
+            if edge.target.id == "REQ-o00001":
+                assert edge.assertion_targets == ["A"]
+                break
+        else:
+            pytest.fail("Expected edge from REQ-p00001 to REQ-o00001 not found")
 
     def test_roots_are_top_level_requirements(self, sample_requirements):
         builder = GraphBuilder()

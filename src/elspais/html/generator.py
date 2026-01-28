@@ -424,8 +424,18 @@ class HTMLGenerator:
                 if child.kind == NodeKind.CODE:
                     children_to_visit.append((child, None))
 
-            # Sort children for consistent ordering
-            children_to_visit.sort(key=lambda x: x[0].id)
+            # Sort children: assertion-specific first (by letter), then general (by ID)
+            # Key: (has_assertions=False sorts before True, assertion_letters, node_id)
+            def sort_key(item: tuple[GraphNode, list[str] | None]) -> tuple:
+                child, assertions = item
+                if assertions:
+                    # Has assertion targets: sort by letters first (A, B, C...)
+                    return (0, sorted(assertions), child.id)
+                else:
+                    # No assertion targets: sort after assertion-specific children
+                    return (1, [], child.id)
+
+            children_to_visit.sort(key=sort_key)
 
             for child, assertions in children_to_visit:
                 traverse(child, depth + 1, node.id, assertions)

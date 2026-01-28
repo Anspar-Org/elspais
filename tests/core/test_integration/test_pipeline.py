@@ -101,10 +101,19 @@ class TestFullPipeline:
 
         # REQ-o00001 implements REQ-p00001-A
         o00001 = graph.find_by_id("REQ-o00001")
-        p00001_A = graph.find_by_id("REQ-p00001-A")
+        p00001 = graph.find_by_id("REQ-p00001")
 
-        # OPS req should have assertion as parent
-        assert o00001.has_parent(p00001_A)
+        # OPS req should have parent requirement (not assertion node)
+        # with assertion_targets indicating which assertions it implements
+        assert o00001.has_parent(p00001)
+
+        # Verify the edge has assertion_targets=['A']
+        for edge in p00001.iter_outgoing_edges():
+            if edge.target.id == "REQ-o00001":
+                assert edge.assertion_targets == ["A"]
+                break
+        else:
+            assert False, "Expected edge from REQ-p00001 to REQ-o00001 not found"
 
     def test_pipeline_identifies_roots(self, integration_spec_dir):
         """Verify root nodes are correctly identified."""
