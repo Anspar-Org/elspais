@@ -76,10 +76,7 @@ dmypy.json
 Thumbs.db
 
 # Generated traceability output
-traceability.html
-traceability.md
-trace.html
-traceability_view.html
+/trace*
 traceability_graph.html
 traceability_graph.md
 traceability_matrix.html
