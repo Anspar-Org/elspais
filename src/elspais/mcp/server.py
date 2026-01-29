@@ -25,6 +25,8 @@ from elspais.graph import NodeKind
 from elspais.graph.annotators import count_by_coverage, count_by_git_status, count_by_level
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Serializers (REQ-d00064)
@@ -84,6 +86,31 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
         "assertions": assertions,
         "children": children,
         "parents": parents,
+    }
+
+
+def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
+    """Serialize a MutationEntry to dict format.
+
+    REQ-o00062-E: Returns MutationEntry for audit trail.
+    """
+    return {
+        "id": entry.id,
+        "operation": entry.operation,
+        "target_id": entry.target_id,
+        "before_state": entry.before_state,
+        "after_state": entry.after_state,
+        "affects_hash": entry.affects_hash,
+        "timestamp": entry.timestamp.isoformat(),
+    }
+
+
+def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
+    """Serialize a BrokenReference to dict format."""
+    return {
+        "source_id": ref.source_id,
+        "target_id": ref.target_id,
+        "edge_kind": str(ref.edge_kind) if hasattr(ref.edge_kind, "value") else ref.edge_kind,
     }
 
 
@@ -322,7 +349,406 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
         "changes": change_metrics,
         "total_nodes": graph.node_count(),
         "orphan_count": graph.orphan_count(),
-        "broken_reference_count": len(list(graph.broken_references())),
+        "broken_reference_count": len(graph.broken_references()),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mutation Tool Functions (REQ-o00062)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_rename_node(graph: TraceGraph, old_id: str, new_id: str) -> dict[str, Any]:
+    """Rename a node.
+
+    REQ-d00065-A: Delegates to graph.rename_node().
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.rename_node(old_id, new_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Renamed {old_id} to {new_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_update_title(graph: TraceGraph, node_id: str, new_title: str) -> dict[str, Any]:
+    """Update requirement title.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.update_title(node_id, new_title)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Updated title of {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_change_status(graph: TraceGraph, node_id: str, new_status: str) -> dict[str, Any]:
+    """Change requirement status.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.change_status(node_id, new_status)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Changed status of {node_id} to {new_status}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_add_requirement(
+    graph: TraceGraph,
+    req_id: str,
+    title: str,
+    level: str,
+    status: str = "Draft",
+    parent_id: str | None = None,
+    edge_kind: str | None = None,
+) -> dict[str, Any]:
+    """Add a new requirement.
+
+    REQ-d00065-B: Delegates to graph.add_requirement().
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        # Convert edge_kind string to EdgeKind enum if provided
+        edge_kind_enum = None
+        if edge_kind:
+            edge_kind_enum = EdgeKind[edge_kind.upper()]
+
+        entry = graph.add_requirement(
+            req_id=req_id,
+            title=title,
+            level=level,
+            status=status,
+            parent_id=parent_id,
+            edge_kind=edge_kind_enum,
+        )
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added requirement {req_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_requirement(
+    graph: TraceGraph, node_id: str, confirm: bool = False
+) -> dict[str, Any]:
+    """Delete a requirement.
+
+    REQ-d00065-C: Calls graph.delete_requirement() only if confirm=True.
+    REQ-o00062-F: Requires confirm=True for destructive operations.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    if not confirm:
+        return {
+            "success": False,
+            "error": "Destructive operation requires confirm=True",
+        }
+
+    try:
+        entry = graph.delete_requirement(node_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted requirement {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Assertion Mutation Functions (REQ-o00062-B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_add_assertion(graph: TraceGraph, req_id: str, label: str, text: str) -> dict[str, Any]:
+    """Add assertion to requirement.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.add_assertion(req_id, label, text)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added assertion {req_id}-{label}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_update_assertion(graph: TraceGraph, assertion_id: str, new_text: str) -> dict[str, Any]:
+    """Update assertion text.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.update_assertion(assertion_id, new_text)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Updated assertion {assertion_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_assertion(
+    graph: TraceGraph,
+    assertion_id: str,
+    compact: bool = True,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Delete assertion.
+
+    REQ-o00062-F: Requires confirm=True for destructive operations.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    if not confirm:
+        return {
+            "success": False,
+            "error": "Destructive operation requires confirm=True",
+        }
+
+    try:
+        entry = graph.delete_assertion(assertion_id, compact=compact)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted assertion {assertion_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_rename_assertion(graph: TraceGraph, old_id: str, new_label: str) -> dict[str, Any]:
+    """Rename assertion label.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.rename_assertion(old_id, new_label)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Renamed assertion {old_id} to new label {new_label}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Edge Mutation Functions (REQ-o00062-C)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_add_edge(
+    graph: TraceGraph,
+    source_id: str,
+    target_id: str,
+    edge_kind: str,
+    assertion_targets: list[str] | None = None,
+) -> dict[str, Any]:
+    """Add an edge between nodes.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        edge_kind_enum = EdgeKind[edge_kind.upper()]
+        entry = graph.add_edge(
+            source_id=source_id,
+            target_id=target_id,
+            edge_kind=edge_kind_enum,
+            assertion_targets=assertion_targets,
+        )
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added edge {source_id} --[{edge_kind}]--> {target_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_change_edge_kind(
+    graph: TraceGraph,
+    source_id: str,
+    target_id: str,
+    new_kind: str,
+) -> dict[str, Any]:
+    """Change edge type.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        new_kind_enum = EdgeKind[new_kind.upper()]
+        entry = graph.change_edge_kind(source_id, target_id, new_kind_enum)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Changed edge {source_id} -> {target_id} to {new_kind}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_edge(
+    graph: TraceGraph,
+    source_id: str,
+    target_id: str,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Delete an edge.
+
+    REQ-o00062-F: Requires confirm=True for destructive operations.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    if not confirm:
+        return {
+            "success": False,
+            "error": "Destructive operation requires confirm=True",
+        }
+
+    try:
+        entry = graph.delete_edge(source_id, target_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted edge {source_id} -> {target_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_fix_broken_reference(
+    graph: TraceGraph,
+    source_id: str,
+    old_target_id: str,
+    new_target_id: str,
+) -> dict[str, Any]:
+    """Fix a broken reference by redirecting to a valid target.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.fix_broken_reference(source_id, old_target_id, new_target_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Fixed reference {source_id}: {old_target_id} -> {new_target_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Undo Operations (REQ-o00062-G)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _undo_last_mutation(graph: TraceGraph) -> dict[str, Any]:
+    """Undo the most recent mutation.
+
+    REQ-o00062-G: Reverses mutations using graph.undo_last().
+    """
+    entry = graph.undo_last()
+    if entry is None:
+        return {"success": False, "error": "No mutations to undo"}
+
+    return {
+        "success": True,
+        "mutation": _serialize_mutation_entry(entry),
+        "message": f"Undid {entry.operation} on {entry.target_id}",
+    }
+
+
+def _undo_to_mutation(graph: TraceGraph, mutation_id: str) -> dict[str, Any]:
+    """Undo all mutations back to a specific point.
+
+    REQ-o00062-G: Reverses mutations using graph.undo_to().
+    """
+    try:
+        entries = graph.undo_to(mutation_id)
+        return {
+            "success": True,
+            "mutations_undone": len(entries),
+            "mutations": [_serialize_mutation_entry(e) for e in entries],
+            "message": f"Undid {len(entries)} mutations",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
+    """Get mutation history.
+
+    Returns the most recent mutations from the log.
+    """
+    mutations = []
+    for entry in graph.mutation_log.iter_entries():
+        mutations.append(_serialize_mutation_entry(entry))
+        if len(mutations) >= limit:
+            break
+
+    return {
+        "mutations": mutations,
+        "count": len(mutations),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inspection Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
+    """Get all orphaned nodes (nodes with no parents).
+
+    Returns nodes that have been orphaned due to edge deletions.
+    """
+    orphans = []
+    for node in graph.orphaned_nodes():
+        if node.kind == NodeKind.REQUIREMENT:
+            orphans.append(_serialize_requirement_summary(node))
+
+    return {
+        "orphans": orphans,
+        "count": len(orphans),
+    }
+
+
+def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
+    """Get all broken references.
+
+    Returns edges that point to non-existent nodes.
+    """
+    refs = [_serialize_broken_reference(ref) for ref in graph.broken_references()]
+
+    return {
+        "broken_references": refs,
+        "count": len(refs),
     }
 
 
@@ -333,7 +759,7 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
 MCP_SERVER_INSTRUCTIONS = """\
 elspais MCP Server - AI-Driven Requirements Management
 
-This server provides tools to navigate and analyze a requirements traceability graph.
+This server provides tools to navigate, analyze, and mutate a requirements traceability graph.
 The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
@@ -361,6 +787,32 @@ The graph is the single source of truth - all tools read directly from it.
 - `get_workspace_info()` - Repo path, project name, configuration
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
 
+### Node Mutations (in-memory)
+- `mutate_rename_node(old_id, new_id)` - Rename requirement
+- `mutate_update_title(node_id, new_title)` - Change title
+- `mutate_change_status(node_id, new_status)` - Change status
+- `mutate_add_requirement(req_id, title, level, ...)` - Create requirement
+- `mutate_delete_requirement(node_id, confirm=True)` - Delete requirement (requires confirm)
+
+### Assertion Mutations (in-memory)
+- `mutate_add_assertion(req_id, label, text)` - Add assertion
+- `mutate_update_assertion(assertion_id, new_text)` - Update text
+- `mutate_delete_assertion(assertion_id, confirm=True)` - Delete (requires confirm)
+- `mutate_rename_assertion(old_id, new_label)` - Rename label
+
+### Edge Mutations (in-memory)
+- `mutate_add_edge(source_id, target_id, edge_kind)` - Add relationship
+- `mutate_change_edge_kind(source_id, target_id, new_kind)` - Change type
+- `mutate_delete_edge(source_id, target_id, confirm=True)` - Delete (requires confirm)
+- `mutate_fix_broken_reference(source_id, old_target, new_target)` - Fix broken ref
+
+### Undo & Inspection
+- `undo_last_mutation()` - Undo most recent mutation
+- `undo_to_mutation(mutation_id)` - Undo back to specific point
+- `get_mutation_log(limit=50)` - View mutation history
+- `get_orphaned_nodes()` - List orphaned nodes
+- `get_broken_references()` - List broken references
+
 ## Requirement Levels
 
 Requirements follow a three-tier hierarchy:
@@ -373,6 +825,17 @@ Children implement parents: DEV -> OPS -> PRD
 **Note:** The exact ID syntax (prefixes, patterns) and hierarchy rules are
 configurable per project via `.elspais.toml`. Use `get_workspace_info()` to
 see the current project's configuration including the ID prefix and pattern.
+
+## Important: In-Memory vs File Mutations
+
+Mutation tools modify the **in-memory graph only**. Changes are NOT persisted
+to spec files automatically. This allows you to:
+1. Draft changes and review them
+2. Use undo to revert mistakes
+3. Refresh the graph to discard all changes
+
+To persist changes, use `refresh_graph()` to reload from files (discarding
+in-memory changes) or use file-based editing tools (coming soon).
 
 ## Common Patterns
 
@@ -387,6 +850,12 @@ see the current project's configuration including the ID prefix and pattern.
 **Checking project health:**
 1. get_graph_status() for orphans/broken refs
 2. get_project_summary() for coverage gaps
+
+**Drafting requirement changes:**
+1. mutate_add_requirement() to create draft
+2. mutate_add_assertion() to add assertions
+3. get_mutation_log() to review changes
+4. undo_last_mutation() if needed
 
 **After editing spec files:**
 1. refresh_graph() to rebuild
@@ -527,6 +996,289 @@ def create_server(
             Project summary with counts, coverage, and change metrics.
         """
         return _get_project_summary(_state["graph"], _state["working_dir"])
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Node Mutation Tools (REQ-o00062-A)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
+        """Rename a requirement node.
+
+        Updates the node's ID and all references to it.
+
+        Args:
+            old_id: Current node ID.
+            new_id: New node ID.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_rename_node(_state["graph"], old_id, new_id)
+
+    @mcp.tool()
+    def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
+        """Update a requirement's title.
+
+        Does not affect the content hash.
+
+        Args:
+            node_id: The requirement ID.
+            new_title: New title text.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_update_title(_state["graph"], node_id, new_title)
+
+    @mcp.tool()
+    def mutate_change_status(node_id: str, new_status: str) -> dict[str, Any]:
+        """Change a requirement's status.
+
+        Args:
+            node_id: The requirement ID.
+            new_status: New status (e.g., 'Active', 'Draft', 'Deprecated').
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_change_status(_state["graph"], node_id, new_status)
+
+    @mcp.tool()
+    def mutate_add_requirement(
+        req_id: str,
+        title: str,
+        level: str,
+        status: str = "Draft",
+        parent_id: str | None = None,
+        edge_kind: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new requirement.
+
+        Args:
+            req_id: ID for the new requirement.
+            title: Requirement title.
+            level: Level (PRD, OPS, DEV).
+            status: Initial status (default 'Draft').
+            parent_id: Optional parent requirement to link to.
+            edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_add_requirement(
+            _state["graph"], req_id, title, level, status, parent_id, edge_kind
+        )
+
+    @mcp.tool()
+    def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
+        """Delete a requirement.
+
+        DESTRUCTIVE: Requires confirm=True to execute.
+
+        Args:
+            node_id: The requirement ID to delete.
+            confirm: Must be True to confirm deletion.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_delete_requirement(_state["graph"], node_id, confirm)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Assertion Mutation Tools (REQ-o00062-B)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
+        """Add an assertion to a requirement.
+
+        Args:
+            req_id: Parent requirement ID.
+            label: Assertion label (e.g., 'A', 'B', 'C').
+            text: Assertion text (SHALL statement).
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_add_assertion(_state["graph"], req_id, label, text)
+
+    @mcp.tool()
+    def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
+        """Update an assertion's text.
+
+        Recomputes the parent requirement's hash.
+
+        Args:
+            assertion_id: The assertion ID (e.g., 'REQ-p00001-A').
+            new_text: New assertion text.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
+
+    @mcp.tool()
+    def mutate_delete_assertion(
+        assertion_id: str, compact: bool = True, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Delete an assertion.
+
+        DESTRUCTIVE: Requires confirm=True to execute.
+
+        Args:
+            assertion_id: The assertion ID to delete.
+            compact: If True, renumber subsequent assertions.
+            confirm: Must be True to confirm deletion.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
+
+    @mcp.tool()
+    def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
+        """Rename an assertion's label.
+
+        Args:
+            old_id: Current assertion ID (e.g., 'REQ-p00001-A').
+            new_label: New label (e.g., 'X').
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_rename_assertion(_state["graph"], old_id, new_label)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Edge Mutation Tools (REQ-o00062-C)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_add_edge(
+        source_id: str,
+        target_id: str,
+        edge_kind: str,
+        assertion_targets: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Add an edge between nodes.
+
+        Args:
+            source_id: Child node ID.
+            target_id: Parent node ID.
+            edge_kind: Relationship type ('IMPLEMENTS' or 'REFINES').
+            assertion_targets: Optional list of assertion IDs to target.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_add_edge(_state["graph"], source_id, target_id, edge_kind, assertion_targets)
+
+    @mcp.tool()
+    def mutate_change_edge_kind(source_id: str, target_id: str, new_kind: str) -> dict[str, Any]:
+        """Change an edge's relationship type.
+
+        Args:
+            source_id: Child node ID.
+            target_id: Parent node ID.
+            new_kind: New relationship type ('IMPLEMENTS' or 'REFINES').
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
+
+    @mcp.tool()
+    def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
+        """Delete an edge between nodes.
+
+        DESTRUCTIVE: Requires confirm=True to execute.
+
+        Args:
+            source_id: Child node ID.
+            target_id: Parent node ID.
+            confirm: Must be True to confirm deletion.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
+
+    @mcp.tool()
+    def mutate_fix_broken_reference(
+        source_id: str, old_target_id: str, new_target_id: str
+    ) -> dict[str, Any]:
+        """Fix a broken reference by redirecting to a valid target.
+
+        Args:
+            source_id: Node with the broken reference.
+            old_target_id: Invalid target ID.
+            new_target_id: Valid target ID to redirect to.
+
+        Returns:
+            Success status and mutation entry for undo.
+        """
+        return _mutate_fix_broken_reference(
+            _state["graph"], source_id, old_target_id, new_target_id
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Undo & Inspection Tools (REQ-o00062-G)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def undo_last_mutation() -> dict[str, Any]:
+        """Undo the most recent mutation.
+
+        Returns:
+            Success status and the mutation that was undone.
+        """
+        return _undo_last_mutation(_state["graph"])
+
+    @mcp.tool()
+    def undo_to_mutation(mutation_id: str) -> dict[str, Any]:
+        """Undo all mutations back to a specific point.
+
+        Args:
+            mutation_id: ID of the mutation to undo back to (inclusive).
+
+        Returns:
+            Success status and list of mutations undone.
+        """
+        return _undo_to_mutation(_state["graph"], mutation_id)
+
+    @mcp.tool()
+    def get_mutation_log(limit: int = 50) -> dict[str, Any]:
+        """Get mutation history.
+
+        Args:
+            limit: Maximum number of mutations to return.
+
+        Returns:
+            List of recent mutations.
+        """
+        return _get_mutation_log(_state["graph"], limit)
+
+    @mcp.tool()
+    def get_orphaned_nodes() -> dict[str, Any]:
+        """Get all orphaned nodes.
+
+        Returns nodes that have no parent relationships.
+
+        Returns:
+            List of orphaned nodes with summaries.
+        """
+        return _get_orphaned_nodes(_state["graph"])
+
+    @mcp.tool()
+    def get_broken_references() -> dict[str, Any]:
+        """Get all broken references.
+
+        Returns edges that point to non-existent nodes.
+
+        Returns:
+            List of broken references.
+        """
+        return _get_broken_references(_state["graph"])
 
     return mcp
 

@@ -2,9 +2,30 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.38.0] - 2026-01-28
+
+### Added
+
+- **MCP Graph Mutation Tools (Phase 3.2)**: Complete in-memory graph mutation API for AI agents:
+  - **Node mutations**: `mutate_rename_node()`, `mutate_update_title()`, `mutate_change_status()`, `mutate_add_requirement()`, `mutate_delete_requirement()`
+  - **Assertion mutations**: `mutate_add_assertion()`, `mutate_update_assertion()`, `mutate_delete_assertion()`, `mutate_rename_assertion()`
+  - **Edge mutations**: `mutate_add_edge()`, `mutate_change_edge_kind()`, `mutate_delete_edge()`, `mutate_fix_broken_reference()`
+  - **Undo operations**: `undo_last_mutation()`, `undo_to_mutation()`, `get_mutation_log()`
+  - **Inspection tools**: `get_orphaned_nodes()`, `get_broken_references()`
+  - All destructive operations require `confirm=True` for safety (REQ-o00062-F)
+  - All mutations return `MutationEntry` for audit trail (REQ-o00062-E)
+  - Pure delegation pattern - MCP layer only validates params and calls TraceGraph methods (REQ-d00065)
+
+### Technical
+
+- Implements REQ-o00062: MCP Graph Mutation Tools (17 new tools)
+- Implements REQ-d00065: Mutation Tool Delegation pattern
+- 39 new mutation tests, 68 total MCP tests
+
 ## [0.37.0] - 2026-01-28
 
 ### Added
+
 - **MCP Server Documentation (Phase 2.2)**: Comprehensive documentation for AI agents and users:
   - `docs/cli/mcp.md` - User-facing documentation for the MCP server with all tool descriptions
   - MCP server `instructions` parameter for AI agents with quick start guide and usage patterns
@@ -12,11 +33,13 @@ All notable changes to elspais will be documented in this file.
   - Updated docs topic list to include mcp topic (11 topics total)
 
 ### Technical
+
 - 4 new documentation tests (64 total doc sync tests, 93 total MCP + doc tests)
 
 ## [0.36.0] - 2026-01-28
 
 ### Added
+
 - **MCP Workspace Context Tools (Phase 2.1)**: New tools for workspace and project information:
   - `get_workspace_info()` - Returns repo path, project name, and configuration summary
   - `get_project_summary()` - Returns requirement counts by level, coverage statistics, and change metrics
@@ -25,11 +48,13 @@ All notable changes to elspais will be documented in this file.
   - 10 new tests for workspace tools (29 total MCP tests)
 
 ### Technical
+
 - Implements REQ-o00061: MCP Workspace Context Tools
 
 ## [0.35.0] - 2026-01-28
 
 ### Added
+
 - **MCP Server Core Tools (Phase 1)**: Minimal MCP server implementation with graph-as-single-source-of-truth:
   - `get_graph_status()` - Node counts, root count, detection flags
   - `refresh_graph(full)` - Force graph rebuild from spec files
@@ -41,12 +66,14 @@ All notable changes to elspais will be documented in this file.
   - 19 tests verifying proper graph API usage
 
 ### Technical
+
 - Implements REQ-o00060: MCP Core Query Tools
 - Implements REQ-d00060-65: Tool implementations and serializers
 
 ## [0.34.1] - 2026-01-28
 
 ### Added
+
 - **MCP Server Specification**: Created `spec/08-mcp-server.md` defining the MCP server architecture:
   - PRD-level: REQ-p00060 - MCP Server for AI-Driven Requirements Management
   - OPS-level: REQ-o00060 (Core Query), REQ-o00061 (Workspace Context), REQ-o00062 (Graph Mutations), REQ-o00063 (File Mutations)
@@ -57,6 +84,7 @@ All notable changes to elspais will be documented in this file.
 ## [0.31.0] - 2026-01-28
 
 ### Added
+
 - **MCP Mutator Tools**: The MCP server now exposes TraceGraph mutation methods for AI-driven requirement management:
   - **Node Mutations**: `mutate_rename_node()`, `mutate_update_title()`, `mutate_change_status()`, `mutate_add_requirement()`, `mutate_delete_requirement(confirm=True)`
   - **Assertion Mutations**: `mutate_add_assertion()`, `mutate_update_assertion()`, `mutate_delete_assertion(confirm=True)`, `mutate_rename_assertion()`
@@ -69,6 +97,7 @@ All notable changes to elspais will be documented in this file.
 ## [0.30.0] - 2026-01-28
 
 ### Added
+
 - **Edge Mutation API**: TraceGraph now supports edge (relationship) mutations:
   - `add_edge(source_id, target_id, edge_kind, assertion_targets)` - Adds new edge, creates BrokenReference if target doesn't exist
   - `change_edge_kind(source_id, target_id, new_kind)` - Changes edge type (IMPLEMENTS -> REFINES)
@@ -80,6 +109,7 @@ All notable changes to elspais will be documented in this file.
 ## [0.29.0] - 2026-01-28
 
 ### Added
+
 - **Assertion Mutation API**: TraceGraph now supports assertion-specific mutations:
   - `rename_assertion(old_id, new_label)` - Renames assertion label (e.g., A -> D), updates edges
   - `update_assertion(assertion_id, new_text)` - Updates assertion text
@@ -91,6 +121,7 @@ All notable changes to elspais will be documented in this file.
 ## [0.28.0] - 2026-01-28
 
 ### Added
+
 - **Node Mutation API**: TraceGraph now supports CRUD operations with full undo:
   - `rename_node(old_id, new_id)` - Renames node and its assertion children
   - `update_title(node_id, new_title)` - Updates requirement title
@@ -105,13 +136,15 @@ All notable changes to elspais will be documented in this file.
 ## [0.27.0] - 2026-01-27
 
 ### Fixed
+
 - **trace --view**: Fixed Assoc (Associated) toggle - now uses HIDE semantic consistent with PRD/OPS/DEV badges
 - **trace --view**: Fixed Core toggle - clicking now hides core (non-associated) requirements with proper styling
 - **trace --view**: Added tree collapse/expand state persistence via cookies - tree state now survives page refresh
-- **trace --view**: Children implementing multiple assertions now show single row with combined badges [A][B][C]
+- **trace --view**: Children implementing multiple assertions now show single row with combined badges `[A][B][C]`
 - **trace --report**: Implemented report presets that were previously ignored
 
 ### Changed
+
 - **CLI**: Removed 19 dead arguments that were defined but never implemented:
   - `validate`: --fix, --core-repo, --tests, --no-tests, --mode
   - `trace`: --port, --mode, --sponsor, --graph, --depth

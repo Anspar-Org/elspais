@@ -126,12 +126,12 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 - [ ] Add `move_requirement()`
 - [ ] Add `transform_with_ai()`
 
-### 3.2 In-Memory Mutations with Undo
+### 3.2 In-Memory Mutations with Undo ✅
 
-- [ ] Node mutations: rename, update_title, change_status, add, delete
-- [ ] Assertion mutations: add, update, delete, rename
-- [ ] Edge mutations: add, change_kind, delete, fix_broken
-- [ ] Undo: undo_last, undo_to, get_mutation_log
+- [x] Node mutations: rename, update_title, change_status, add, delete
+- [x] Assertion mutations: add, update, delete, rename
+- [x] Edge mutations: add, change_kind, delete, fix_broken
+- [x] Undo: undo_last, undo_to, get_mutation_log
 
 ---
 
