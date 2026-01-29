@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.3] - 2026-01-29
+
+### Changed
+
+- **CodeParser refactored to use shared reference config** (`graph/parsers/code.py`):
+  - Now accepts optional `PatternConfig` and `ReferenceResolver` in constructor
+  - Patterns built dynamically per-file using `reference_config.py` infrastructure
+  - Removed hardcoded class-level regex patterns (`IMPLEMENTS_PATTERN`, `VALIDATES_PATTERN`, etc.)
+  - Preserves full multi-line block parsing capability
+  - Backward compatible - works without config (uses defaults)
+  - 20 new tests covering custom configs, separators, case sensitivity, and block styles
+
 ## [0.43.2] - 2026-01-29
 
 ### Added

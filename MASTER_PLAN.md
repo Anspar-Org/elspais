@@ -1,110 +1,73 @@
-# MASTER PLAN - Phase 2: Pattern Builder Implementation
+# MASTER PLAN - Phase 3: CodeParser Refactor
 
 ## Goal
 
-Create the unified reference config module with dataclasses and pattern builder functions that will be shared by all parsers.
+Refactor CodeParser to use the shared reference config infrastructure. Remove hardcoded patterns. **Preserve multi-line block parsing capability.**
 
 ## Phase Details
 
-### New File: `src/elspais/utilities/reference_config.py`
-
-Create this file with:
-
-#### 1. Dataclasses
+### Current CodeParser Patterns to Remove
 
 ```python
-@dataclass
-class ReferenceConfig:
-    """Configuration for reference pattern matching.
-    Used by all parsers: TestParser, CodeParser, JUnitXMLParser, PytestJSONParser
-    """
-    separators: List[str] = field(default_factory=lambda: ["-", "_"])
-    case_sensitive: bool = False
-    prefix_optional: bool = False
-    comment_styles: List[str] = field(default_factory=lambda: ["#", "//", "--"])
-    keywords: Dict[str, List[str]] = field(default_factory=lambda: {
-        "implements": ["Implements", "IMPLEMENTS"],
-        "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
-        "refines": ["Refines", "REFINES"],
-    })
-
-@dataclass
-class ReferenceOverride:
-    """Override rule for specific file types or directories."""
-    match: str  # Glob pattern (*.py, tests/legacy/**)
-    separators: Optional[List[str]] = None
-    case_sensitive: Optional[bool] = None
-    prefix_optional: Optional[bool] = None
-    comment_styles: Optional[List[str]] = None
-    keywords: Optional[Dict[str, List[str]]] = None
-
-    def applies_to(self, file_path: Path, base_path: Path) -> bool:
-        """Check if this override applies to the given file."""
+# REMOVE THESE CLASS CONSTANTS:
+IMPLEMENTS_PATTERN = re.compile(
+    r"(?:#|//|--)\s*Implements:\s*(?P<refs>[A-Z]+-[A-Za-z0-9-]+...)"
+)
+VALIDATES_PATTERN = re.compile(...)
 ```
 
-#### 2. ReferenceResolver Class
+### New CodeParser Structure
 
 ```python
-class ReferenceResolver:
-    """Resolves which reference config to use for a given file.
-    This is the SINGLE entry point for all parsers.
-    """
-    def __init__(self, defaults: ReferenceConfig, overrides: List[ReferenceOverride]):
-        ...
+class CodeParser:
+    """Parser for code references (Implements:, Refines:, Validates:)."""
 
-    def resolve(self, file_path: Path, base_path: Path) -> ReferenceConfig:
-        """Return merged config for file (defaults + matching overrides)."""
+    priority = 70
+
+    def __init__(
+        self,
+        pattern_config: PatternConfig,
+        reference_resolver: ReferenceResolver,
+    ) -> None:
+        self.pattern_config = pattern_config
+        self.reference_resolver = reference_resolver
+
+    def claim_and_parse(
+        self,
+        lines: list[tuple[int, str]],
+        context: ParseContext,
+    ) -> Iterator[ParsedContent]:
+        # Get file-specific config
+        ref_config = self.reference_resolver.resolve(
+            context.source_path, context.repo_root
+        )
+
+        # Build patterns for this file
+        implements_pattern = build_comment_pattern(
+            self.pattern_config, ref_config, "implements"
+        )
+        block_header_pattern = build_block_header_pattern(
+            ref_config, "implements"
+        )
+
+        # ... parsing logic using ref_config
 ```
 
-#### 3. Pattern Builder Functions
+### Files to Modify
 
-```python
-def build_id_pattern(
-    pattern_config: PatternConfig,
-    ref_config: ReferenceConfig,
-    include_assertion: bool = True,
-) -> re.Pattern:
-    """Build regex pattern for matching requirement IDs."""
-
-def build_comment_pattern(
-    pattern_config: PatternConfig,
-    ref_config: ReferenceConfig,
-    keyword_type: str = "implements",
-) -> re.Pattern:
-    """Build pattern for matching reference comments."""
-
-def build_block_header_pattern(
-    ref_config: ReferenceConfig,
-    keyword_type: str = "implements",
-) -> re.Pattern:
-    """Build pattern for multi-line block headers."""
-
-def extract_ids_from_text(
-    text: str,
-    pattern_config: PatternConfig,
-    ref_config: ReferenceConfig,
-) -> List[str]:
-    """Extract all requirement/assertion IDs from text."""
-
-def normalize_extracted_id(match: re.Match, pattern_config: PatternConfig) -> str:
-    """Normalize extracted ID to canonical format."""
-```
-
-### Files to Create
-
-| File | Purpose |
+| File | Changes |
 |------|---------|
-| `src/elspais/utilities/reference_config.py` | **NEW**: All config classes and pattern builders |
+| `src/elspais/graph/parsers/code.py` | **MAJOR**: Use shared reference config |
 
 ### Implementation Steps
 
-- [x] 1. Create new file with imports and dataclasses
-- [x] 2. Implement `ReferenceOverride.applies_to()` with glob matching
-- [x] 3. Implement `ReferenceResolver.resolve()` with override merging
-- [x] 4. Implement `build_id_pattern()` using PatternConfig + ReferenceConfig
-- [x] 5. Implement `build_comment_pattern()` for single-line comments
-- [x] 6. Implement `build_block_header_pattern()` for multi-line blocks
-- [x] 7. Implement `extract_ids_from_text()` and `normalize_extracted_id()`
-- [x] 8. Add unit tests for each function (40 tests)
+- [x] 1. Add `__init__` accepting `PatternConfig` and `ReferenceResolver`
+- [x] 2. Remove class-level IMPLEMENTS_PATTERN, VALIDATES_PATTERN constants
+- [x] 3. Update `claim_and_parse()` to get file-specific config via resolver
+- [x] 4. Use `build_comment_pattern()` for single-line detection
+- [x] 5. Use `build_block_header_pattern()` for multi-line block detection
+- [x] 6. Use `build_block_ref_pattern()` for block reference matching
+- [x] 7. **CRITICAL**: Preserve multi-line block parsing (`_is_empty_comment()` helper)
+- [x] 8. Add 20 comprehensive tests (all 24 total tests pass)
 
-## Phase 2 ✓ COMPLETE
+## Phase 3 ✓ COMPLETE
