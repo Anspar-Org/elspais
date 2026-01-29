@@ -39,7 +39,6 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 - [ ] Update CHANGELOG.md with new version entry
 - [ ] Bump version in pyproject.toml
 - [ ] Update CLAUDE.md if architecture changed
-- [ ] Update MASTER_PLAN.md progress tracking table
 
 ### 4. Quality & Commit
 
