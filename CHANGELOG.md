@@ -1,0 +1,265 @@
+# Changelog
+
+All notable changes to elspais will be documented in this file.
+
+## [0.42.0] - 2026-01-29
+
+### Added
+
+- **MCP Test Coverage Tools (Phase 6)**: New tools for analyzing test-requirement relationships:
+  - `get_test_coverage(req_id)` - Returns TEST nodes that reference a requirement:
+    - Lists test_nodes with their file and name
+    - Lists result_nodes with pass/fail status
+    - Identifies covered and uncovered assertions
+    - Calculates coverage percentage
+  - `get_uncovered_assertions(req_id=None)` - Finds assertions lacking test coverage:
+    - When req_id is None, scans all requirements
+    - Returns assertion id, text, label, and parent requirement context
+    - Results sorted by parent requirement ID
+  - `find_assertions_by_keywords(keywords, match_all=True)` - Searches assertion text:
+    - Complements `find_by_keywords()` which searches requirement titles
+    - Supports AND (match_all=True) and OR (match_all=False) logic
+    - Case-insensitive matching
+
+### Specification
+
+- Added requirements to `spec/08-mcp-server.md`:
+  - REQ-o00064: MCP Test Coverage Analysis Tools (OPS level)
+  - REQ-d00066: Test Coverage Tool Implementation
+  - REQ-d00067: Uncovered Assertions Tool Implementation
+  - REQ-d00068: Assertion Keyword Search Tool Implementation
+
+### Technical
+
+- 14 new tests in `tests/mcp/test_mcp_coverage.py` with REQ-assertion naming pattern
+- All coverage tools use iterator-only graph API per REQ-p00050-B
+
+## [0.41.0] - 2026-01-29
+
+### Added
+
+- **MCP Dogfooding (Phase 5)**: Validated MCP server utility by improving test traceability:
+  - Added 5 new tests with REQ-assertion naming pattern (e.g., `test_REQ_d00050_E_idempotent`)
+  - Tests for REQ-d00050-E (annotator idempotency) and REQ-d00051-F (no duplicate iteration)
+  - TEST nodes now automatically link to requirements via name pattern matching
+
+### Documentation
+
+- `docs/phase5-dogfooding-report.md`: Comprehensive dogfooding analysis with:
+  - Test-requirement mapping table for `tests/core/test_annotators.py`
+  - MCP tool ergonomic issues and suggested improvements
+  - Before/after traceability metrics verification
+
+### Technical
+
+- Graph node count increased from 346 to 398 after test improvements
+- TEST nodes: 36 → 75, TEST_RESULT nodes: 17 → 30
+
+## [0.40.0] - 2026-01-29
+
+### Added
+
+- **Keyword Extraction & Search (Phase 4)**: Automatic keyword extraction and search for requirements:
+  - `extract_keywords(text)` - Extract meaningful keywords from text, filtering stopwords
+  - `annotate_keywords(graph)` - Annotate all requirements with keywords from title and assertions
+  - `find_by_keywords(graph, keywords)` - Find requirements matching keywords (AND/OR logic)
+  - `collect_all_keywords(graph)` - Get all unique keywords in the graph
+  - Keywords stored in `node.get_field("keywords")` as list of lowercase strings
+
+- **MCP Keyword Search Tools**: New MCP tools for keyword-based requirement discovery:
+  - `find_by_keywords(keywords, match_all)` - Search by keywords with AND/OR matching
+  - `get_all_keywords()` - List all available keywords for discovery
+  - Enhanced `search()` to support `field="keywords"` for keyword searches
+
+### Technical
+
+- 29 new keyword tests (19 annotator + 10 MCP)
+- STOPWORDS constant with 100+ common words filtered from keywords
+
+## [0.39.0] - 2026-01-29
+
+### Added
+
+- **MCP File Mutation Tools (Phase 3.1)**: File-based mutation API for AI agents to modify spec files on disk:
+  - `change_reference_type(req_id, target_id, new_type, save_branch)` - Change Implements/Refines relationships
+  - `move_requirement(req_id, target_file, save_branch)` - Relocate requirements between spec files
+  - `restore_from_safety_branch(branch_name)` - Revert file changes from safety branch
+  - `list_safety_branches()` - List available safety branches for rollback
+  - Auto-refresh graph after file mutations (REQ-o00063-F)
+  - Optional `save_branch=True` creates timestamped safety branch before modification
+
+- **Git Safety Branch Utilities**: New utilities in `utilities/git.py` for file mutation safety:
+  - `create_safety_branch(repo_root, req_id)` - Create timestamped safety branch
+  - `list_safety_branches(repo_root)` - List all `safety/*` branches
+  - `get_current_branch(repo_root)` - Get current branch name
+  - `restore_from_safety_branch(repo_root, branch_name)` - Restore spec/ from branch
+  - `delete_safety_branch(repo_root, branch_name)` - Remove safety branch
+
+### Technical
+
+- Implements REQ-o00063: MCP File Mutation Tools (4 new tools)
+- 14 new file mutation tests, 82 total MCP tests
+
+## [0.38.0] - 2026-01-28
+
+### Added
+
+- **MCP Graph Mutation Tools (Phase 3.2)**: Complete in-memory graph mutation API for AI agents:
+  - **Node mutations**: `mutate_rename_node()`, `mutate_update_title()`, `mutate_change_status()`, `mutate_add_requirement()`, `mutate_delete_requirement()`
+  - **Assertion mutations**: `mutate_add_assertion()`, `mutate_update_assertion()`, `mutate_delete_assertion()`, `mutate_rename_assertion()`
+  - **Edge mutations**: `mutate_add_edge()`, `mutate_change_edge_kind()`, `mutate_delete_edge()`, `mutate_fix_broken_reference()`
+  - **Undo operations**: `undo_last_mutation()`, `undo_to_mutation()`, `get_mutation_log()`
+  - **Inspection tools**: `get_orphaned_nodes()`, `get_broken_references()`
+  - All destructive operations require `confirm=True` for safety (REQ-o00062-F)
+  - All mutations return `MutationEntry` for audit trail (REQ-o00062-E)
+  - Pure delegation pattern - MCP layer only validates params and calls TraceGraph methods (REQ-d00065)
+
+### Technical
+
+- Implements REQ-o00062: MCP Graph Mutation Tools (17 new tools)
+- Implements REQ-d00065: Mutation Tool Delegation pattern
+- 39 new mutation tests, 68 total MCP tests
+
+## [0.37.0] - 2026-01-28
+
+### Added
+
+- **MCP Server Documentation (Phase 2.2)**: Comprehensive documentation for AI agents and users:
+  - `docs/cli/mcp.md` - User-facing documentation for the MCP server with all tool descriptions
+  - MCP server `instructions` parameter for AI agents with quick start guide and usage patterns
+  - New `elspais docs mcp` command to view MCP documentation from CLI
+  - Updated docs topic list to include mcp topic (11 topics total)
+
+### Technical
+
+- 4 new documentation tests (64 total doc sync tests, 93 total MCP + doc tests)
+
+## [0.36.0] - 2026-01-28
+
+### Added
+
+- **MCP Workspace Context Tools (Phase 2.1)**: New tools for workspace and project information:
+  - `get_workspace_info()` - Returns repo path, project name, and configuration summary
+  - `get_project_summary()` - Returns requirement counts by level, coverage statistics, and change metrics
+  - Uses `count_by_level()` from annotators module per REQ-o00061-C
+  - Reads config from unified config system per REQ-o00061-D
+  - 10 new tests for workspace tools (29 total MCP tests)
+
+### Technical
+
+- Implements REQ-o00061: MCP Workspace Context Tools
+
+## [0.35.0] - 2026-01-28
+
+### Added
+
+- **MCP Server Core Tools (Phase 1)**: Minimal MCP server implementation with graph-as-single-source-of-truth:
+  - `get_graph_status()` - Node counts, root count, detection flags
+  - `refresh_graph(full)` - Force graph rebuild from spec files
+  - `search(query, field, regex)` - Search requirements by ID, title, or content
+  - `get_requirement(req_id)` - Full requirement details with assertions
+  - `get_hierarchy(req_id)` - Ancestors and children navigation
+  - All tools consume TraceGraph directly via iterator-only API (REQ-p00060-B)
+  - Serializers read from `node.get_field()` and `node.get_label()`
+  - 19 tests verifying proper graph API usage
+
+### Technical
+
+- Implements REQ-o00060: MCP Core Query Tools
+- Implements REQ-d00060-65: Tool implementations and serializers
+
+## [0.34.1] - 2026-01-28
+
+### Added
+
+- **MCP Server Specification**: Created `spec/08-mcp-server.md` defining the MCP server architecture:
+  - PRD-level: REQ-p00060 - MCP Server for AI-Driven Requirements Management
+  - OPS-level: REQ-o00060 (Core Query), REQ-o00061 (Workspace Context), REQ-o00062 (Graph Mutations), REQ-o00063 (File Mutations)
+  - DEV-level: REQ-d00060-65 (Tool implementations, serializers, mutation delegation)
+- **Graph-as-Source-of-Truth**: MCP spec enforces REQ-p00050-B - all tools consume TraceGraph directly without intermediate data structures
+- **Architecture Diagram**: Spec includes diagram showing MCP server layer consuming TraceGraph via iterator and mutation APIs
+
+## [0.31.0] - 2026-01-28
+
+### Added
+
+- **MCP Mutator Tools**: The MCP server now exposes TraceGraph mutation methods for AI-driven requirement management:
+  - **Node Mutations**: `mutate_rename_node()`, `mutate_update_title()`, `mutate_change_status()`, `mutate_add_requirement()`, `mutate_delete_requirement(confirm=True)`
+  - **Assertion Mutations**: `mutate_add_assertion()`, `mutate_update_assertion()`, `mutate_delete_assertion(confirm=True)`, `mutate_rename_assertion()`
+  - **Edge Mutations**: `mutate_add_edge()`, `mutate_change_edge_kind()`, `mutate_delete_edge(confirm=True)`, `mutate_fix_broken_reference()`
+  - **Undo Operations**: `undo_last_mutation()` and `undo_to_mutation(mutation_id)` for reverting graph changes
+  - **Inspection Tools**: `get_mutation_log(limit)`, `get_orphaned_nodes()`, `get_broken_references()` for graph state inspection
+- **Safety Checks**: Destructive mutation operations (`mutate_delete_*`) require explicit `confirm=True` parameter to prevent accidental data loss
+- **Mutation Serialization**: New `serialize_mutation_entry()` and `serialize_broken_reference()` functions in MCP serializers
+
+## [0.30.0] - 2026-01-28
+
+### Added
+
+- **Edge Mutation API**: TraceGraph now supports edge (relationship) mutations:
+  - `add_edge(source_id, target_id, edge_kind, assertion_targets)` - Adds new edge, creates BrokenReference if target doesn't exist
+  - `change_edge_kind(source_id, target_id, new_kind)` - Changes edge type (IMPLEMENTS -> REFINES)
+  - `delete_edge(source_id, target_id)` - Removes edge, marks source as orphan if no other parents
+  - `fix_broken_reference(source_id, old_target_id, new_target_id)` - Redirects broken reference to new target
+- **Orphan Management**: Edge mutations automatically update `_orphaned_ids` set when parent relationships change
+- **Broken Reference Tracking**: `add_edge` to non-existent target creates BrokenReference; `fix_broken_reference` can redirect these
+
+## [0.29.0] - 2026-01-28
+
+### Added
+
+- **Assertion Mutation API**: TraceGraph now supports assertion-specific mutations:
+  - `rename_assertion(old_id, new_label)` - Renames assertion label (e.g., A -> D), updates edges
+  - `update_assertion(assertion_id, new_text)` - Updates assertion text
+  - `add_assertion(req_id, label, text)` - Adds new assertion to requirement
+  - `delete_assertion(assertion_id, compact=True)` - Deletes assertion with optional compaction
+- **Assertion Compaction**: When deleting middle assertion (e.g., B from [A,B,C,D]), subsequent labels shift down (C->B, D->C) and all edge references update automatically
+- **Hash Recomputation**: All assertion mutations recompute parent requirement hash via `_recompute_requirement_hash()`
+
+## [0.28.0] - 2026-01-28
+
+### Added
+
+- **Node Mutation API**: TraceGraph now supports CRUD operations with full undo:
+  - `rename_node(old_id, new_id)` - Renames node and its assertion children
+  - `update_title(node_id, new_title)` - Updates requirement title
+  - `change_status(node_id, new_status)` - Changes requirement status
+  - `add_requirement(...)` - Creates new requirement with optional parent link
+  - `delete_requirement(node_id)` - Deletes requirement, tracks in `_deleted_nodes`
+- **Mutation Logging**: All mutations log `MutationEntry` to `graph.mutation_log` for audit
+- **Undo Support**: `graph.undo_last()` and `graph.undo_to(mutation_id)` for reverting changes
+- **GraphNode.set_id()**: Mutable node IDs for rename operations
+- **GraphNode.remove_child()**: Removes child node with bidirectional link cleanup
+
+## [0.27.0] - 2026-01-27
+
+### Fixed
+
+- **trace --view**: Fixed Assoc (Associated) toggle - now uses HIDE semantic consistent with PRD/OPS/DEV badges
+- **trace --view**: Fixed Core toggle - clicking now hides core (non-associated) requirements with proper styling
+- **trace --view**: Added tree collapse/expand state persistence via cookies - tree state now survives page refresh
+- **trace --view**: Children implementing multiple assertions now show single row with combined badges `[A][B][C]`
+- **trace --report**: Implemented report presets that were previously ignored
+
+### Changed
+
+- **CLI**: Removed 19 dead arguments that were defined but never implemented:
+  - `validate`: --fix, --core-repo, --tests, --no-tests, --mode
+  - `trace`: --port, --mode, --sponsor, --graph, --depth
+  - `reformat-with-claude`: Simplified to placeholder stub (entire command not yet implemented)
+- **CLI**: `trace --report` now uses `choices` for tab completion - shows `{minimal,standard,full}` in help
+  - `--report minimal`: ID, Title, Status only (quick overview)
+  - `--report standard`: ID, Title, Level, Status, Implements (default)
+  - `--report full`: All fields including Body, Assertions, Hash, Code/Test refs
+
+- **trace --view**: Version badge now shows actual elspais version (e.g., "v0.27.0") instead of hardcoded "v1"
+
+- **trace --view**: Replaced confusing "Files" filter with "Tests" filter
+  - Shows TEST nodes in tree hierarchy (with 🧪 icon)
+  - Badge displays count of test nodes instead of file count
+  - Clicking badge shows test rows that validate requirements
+
+## [0.26.0] - Previous
+
+- Multiline block comment support for code/test references
+- Various bug fixes and improvements

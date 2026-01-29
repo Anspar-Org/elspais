@@ -1,0 +1,25 @@
+{
+  // Line length: Disabled because modern viewers wrap dynamically.
+  // Hard breaks at 80 chars create awkward formatting in rendered output.
+  "MD013": false,
+
+  // Duplicate headings: Disabled because changelogs naturally repeat
+  // section headings (### Added, ### Fixed, ### Changed) per version.
+  "MD024": false,
+
+  // Multiple H1 headings: Disabled because requirement spec files use
+  // # for each requirement ID which is intentional.
+  "MD025": false,
+
+  // Ordered list prefix: Disabled because CLAUDE.md uses semantic numbering
+  // (8, 9, 10, etc.) for stable references even when items are added/removed.
+  "MD029": false,
+
+  // Emphasis as heading: Disabled because *italics* are sometimes used
+  // intentionally for stylistic sub-sections, not as heading replacements.
+  "MD036": false,
+
+  // Table column style: Disabled because pipe spacing style is a preference
+  // and does not affect rendering or readability.
+  "MD060": false
+}
