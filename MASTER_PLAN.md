@@ -26,6 +26,18 @@ When adding or completing a phase in this file, verify ALL steps are followed:
 > (blank lines around headings/lists, etc.) before committing. The hooks exist to
 > maintain code quality.
 
+**Sub-Agent Delegation:** The following chores should be delegated to sub-agents
+(can be passed as a group of parallel tasks when appropriate):
+
+- Update CHANGELOG.md with new version entry
+- Bump version in pyproject.toml
+- Update CLAUDE.md if architecture changed
+- Fix markdown lint errors in modified files
+- Update MASTER_PLAN.md progress tracking table
+
+This keeps the main agent focused on core implementation while sub-agents handle
+mechanical documentation tasks.
+
 **Phase Completion Checklist** (copy into each phase when completing):
 
 ```markdown
