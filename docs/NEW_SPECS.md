@@ -35,6 +35,7 @@ Fixed regex pattern to capture:
 | File | Status | Tests | Matched | Proposed |
 |------|--------|-------|---------|----------|
 | `tests/core/test_assertion_mutations.py` | ✅ Analyzed | 41 | 41 | 0 |
+| `tests/core/test_edge_mutations.py` | ✅ Analyzed | 38 | 38 | 0 |
 | `tests/conftest.py` | ⏳ Pending | - | - | - |
 
 #### test_assertion_mutations.py Analysis
@@ -44,6 +45,14 @@ All 41 tests map to existing requirements:
 - **REQ-o00062-B** (Assertion Mutations): 35 tests - add, update, delete, rename operations
 - **REQ-o00062-E** (Mutation Audit Trail): Tests verify MutationEntry logging
 - **REQ-o00062-G** (Undo Operations): 11 tests - undo reversal functionality
+
+#### test_edge_mutations.py Analysis
+
+All 38 tests map to existing requirements:
+
+- **REQ-o00062-C** (Edge Mutations): 38 tests - add_edge, change_edge_kind, delete_edge, fix_broken_reference
+- **REQ-o00062-E** (Mutation Audit Trail): Tests verify MutationEntry logging
+- **REQ-o00062-G** (Undo Operations): 14 tests - undo reversal functionality
 | `tests/test_doc_sync.py` | ⏳ Pending | - | - | - |
 | `tests/test_edit.py` | ⏳ Pending | - | - | - |
 | `tests/test_example_cmd.py` | ⏳ Pending | - | - | - |
