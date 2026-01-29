@@ -1,6 +1,6 @@
-# MASTER PLAN: MCP Server Implementation
+# MASTER PLAN
 
-> **Principles:** Follow `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
+> **Principles:** Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 
 ## Overview
 
@@ -8,7 +8,7 @@
 
 ---
 
-## Workflow Steps (Reset After Each Phase)
+## Workflow Steps
 
 **Structure:** `For each Phase → Do each Workflow Step → Clear checkboxes → Next Phase`
 
@@ -17,18 +17,31 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 ### 1. Core Implementation
 
 - [ ] **SPEC**: Verify or create requirement in `spec/` (for code features)
+  - [ ] Search for existing specs related to work
+  - [ ] Create/update spec with assertions if needed
+  - [ ] Note assertion IDs (e.g., REQ-xxx-A) for TEST phase
 - [ ] **TEST**: Write tests BEFORE implementation - TDD (for code features)
+  - [ ] Search for existing tests
+  - [ ] Include assertion refs in test names (e.g., `test_REQ_xxx_A_validates_input`)
+  - [ ] Tests should FAIL until IMPL phase
 - [ ] **IMPL**: Implement the feature
 - [ ] **DEBUG**: Run tests, verify all pass
 
-### 2. Documentation Chores (delegate to sub-agents in parallel)
+### 2. Review (use sub-agent)
+
+- [ ] **REVIEW**: Have sub-agent evaluate implementation
+  - [ ] Using existing APIs appropriately?
+  - [ ] Complies with spec requirements?
+  - [ ] No unnecessary complexity?
+
+### 3. Documentation Chores (delegate to sub-agents in parallel)
 
 - [ ] Update CHANGELOG.md with new version entry
 - [ ] Bump version in pyproject.toml
 - [ ] Update CLAUDE.md if architecture changed
 - [ ] Update MASTER_PLAN.md progress tracking table
 
-### 3. Quality & Commit
+### 4. Quality & Commit
 
 - [ ] **LINT**: Fix ALL lint errors (ruff, black, markdownlint)
 - [ ] **COMMIT**: Git commit with `[TICKET]` prefix
@@ -36,10 +49,10 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 > ⚠️ **DO NOT use `--no-verify`** to skip pre-commit hooks. Fix markdown lint
 > errors (blank lines around headings/lists) before committing.
 
-### 4. Phase Complete
+### 5. Phase Complete
 
-- [ ] Mark phase complete in Progress Tracking table below
-- [ ] **CLEAR**: Reset all checkboxes above to `[ ]` for next phase
+- [ ] Mark phase complete below
+- [ ] **CLEAR**: Reset all checkboxes in Workflow Steps above to `[ ]` for next phase
 
 ---
 
@@ -141,28 +154,3 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 - [ ] Add keyword search to `search()` tool
 - [ ] Add `find_by_keywords(keywords)` tool
 - [ ] Support keyword-based requirement/assertion discovery
-
----
-
-## Progress Tracking
-
-| Phase | Status | Notes |
-|-------|--------|-------|
-| 0.1 Create MCP Spec | [x] Complete | spec/08-mcp-server.md created |
-| 0.2 Core Tool Reqs | [x] Complete | REQ-o00060 defines core tools |
-| 0.3 New Feature Reqs | [x] Complete | REQ-o00061 workspace, keywords deferred to Phase 4 |
-| 0.4 Update INDEX | [x] Complete | 12 new requirements indexed |
-| 1 Core Server | [x] Complete | 5 core tools, 19 passing tests |
-| 2.1 Workspace Tools | [x] Complete | get_workspace_info(), get_project_summary(), 10 tests |
-| 2.2 MCP Docs | [x] Complete | docs/cli/mcp.md, server instructions |
-| 3.1 File Mutators | [ ] Not Started | |
-| 3.2 In-Memory Mutations | [ ] Not Started | |
-| 4.1 Keyword Extractor | [ ] Not Started | |
-| 4.2 Trace View Keywords | [ ] Not Started | |
-| 4.3 MCP Keywords | [ ] Not Started | |
-
----
-
-## Current Session Notes
-
-*Add notes here as work progresses*
