@@ -2,6 +2,19 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.36.0] - 2026-01-28
+
+### Added
+- **MCP Workspace Context Tools (Phase 2.1)**: New tools for workspace and project information:
+  - `get_workspace_info()` - Returns repo path, project name, and configuration summary
+  - `get_project_summary()` - Returns requirement counts by level, coverage statistics, and change metrics
+  - Uses `count_by_level()` from annotators module per REQ-o00061-C
+  - Reads config from unified config system per REQ-o00061-D
+  - 10 new tests for workspace tools (29 total MCP tests)
+
+### Technical
+- Implements REQ-o00061: MCP Workspace Context Tools
+
 ## [0.35.0] - 2026-01-28
 
 ### Added

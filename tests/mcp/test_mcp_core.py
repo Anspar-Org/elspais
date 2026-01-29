@@ -10,13 +10,13 @@ Tests REQ-o00060: MCP Core Query Tools
 All tests verify the iterator-only graph API is used correctly.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from elspais.graph import NodeKind, GraphNode
+import pytest
+
+from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -83,6 +83,7 @@ def sample_graph():
 
     # Link the hierarchy: PRD <- OPS <- DEV
     from elspais.graph.relations import EdgeKind
+
     prd_node.link(ops_node, EdgeKind.IMPLEMENTS)
     ops_node.link(dev_node, EdgeKind.IMPLEMENTS)
 
@@ -105,6 +106,7 @@ def mcp_server(sample_graph):
     pytest.importorskip("mcp")
 
     from elspais.mcp.server import create_server
+
     return create_server(sample_graph)
 
 
@@ -360,10 +362,9 @@ class TestGetHierarchy:
     def test_REQ_d00063_E_handles_multiple_parents(self, sample_graph):
         """REQ-d00063-E: Handles DAG structure with multiple parents."""
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_hierarchy
-
         # Add a second parent to the OPS node
         from elspais.graph.relations import EdgeKind
+        from elspais.mcp.server import _get_hierarchy
 
         prd2 = GraphNode(
             id="REQ-p00002",
@@ -420,3 +421,170 @@ class TestRefreshGraph:
             result, _ = _refresh_graph(Path("/test/repo"), full=True)
 
             assert result["success"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_workspace_info() - REQ-o00061-A
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetWorkspaceInfo:
+    """Tests for get_workspace_info() tool."""
+
+    def test_REQ_o00061_A_returns_repo_path(self, tmp_path):
+        """REQ-o00061-A: Returns repository path."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "repo_path" in result
+        assert result["repo_path"] == str(tmp_path)
+
+    def test_REQ_o00061_A_returns_project_name(self, tmp_path):
+        """REQ-o00061-A: Returns project name from directory if not in config."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "project_name" in result
+        # Falls back to directory name when no config
+        assert result["project_name"] == tmp_path.name
+
+    def test_REQ_o00061_A_returns_config_summary(self, tmp_path):
+        """REQ-o00061-A: Returns configuration summary."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "config_summary" in result
+        summary = result["config_summary"]
+        assert "prefix" in summary
+        assert "spec_directories" in summary
+        assert "testing_enabled" in summary
+
+    def test_REQ_o00061_D_reads_from_config_file(self, tmp_path):
+        """REQ-o00061-D: Reads configuration from unified config system."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        # Create a config file
+        config_content = """
+[project]
+name = "TestProject"
+type = "core"
+
+[patterns]
+prefix = "TST"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+
+        result = _get_workspace_info(tmp_path)
+
+        assert result["project_name"] == "TestProject"
+        assert result["config_file"] == str(config_file)
+        assert result["config_summary"]["prefix"] == "TST"
+        assert result["config_summary"]["project_type"] == "core"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_project_summary() - REQ-o00061-B
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetProjectSummary:
+    """Tests for get_project_summary() tool."""
+
+    def test_REQ_o00061_B_returns_requirements_by_level(self, sample_graph):
+        """REQ-o00061-B: Returns requirement counts by level."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_project_summary
+
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        assert "requirements_by_level" in result
+        level_counts = result["requirements_by_level"]
+
+        # Check active/all structure from count_by_level
+        assert "active" in level_counts
+        assert "all" in level_counts
+
+        # Our sample_graph has 1 PRD, 1 OPS, 1 DEV
+        assert level_counts["all"]["PRD"] == 1
+        assert level_counts["all"]["OPS"] == 1
+        assert level_counts["all"]["DEV"] == 1
+
+    def test_REQ_o00061_B_returns_coverage_stats(self, sample_graph):
+        """REQ-o00061-B: Returns coverage statistics."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_project_summary
+
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        assert "coverage" in result
+        coverage = result["coverage"]
+        assert "total" in coverage
+        assert "full_coverage" in coverage
+        assert "partial_coverage" in coverage
+        assert "no_coverage" in coverage
+
+    def test_REQ_o00061_B_returns_change_metrics(self, sample_graph):
+        """REQ-o00061-B: Returns change metrics."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_project_summary
+
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        assert "changes" in result
+        changes = result["changes"]
+        assert "uncommitted" in changes
+        assert "branch_changed" in changes
+
+    def test_REQ_o00061_C_uses_count_by_level(self, sample_graph):
+        """REQ-o00061-C: Uses count_by_level() from annotators module."""
+        pytest.importorskip("mcp")
+        # Verify the output matches count_by_level format
+        from elspais.graph.annotators import count_by_level
+        from elspais.mcp.server import _get_project_summary
+
+        expected_counts = count_by_level(sample_graph)
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        assert result["requirements_by_level"] == expected_counts
+
+    def test_returns_orphan_and_broken_counts(self, sample_graph):
+        """Returns orphan and broken reference counts."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_project_summary
+
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        assert "orphan_count" in result
+        assert "broken_reference_count" in result
+        assert "total_nodes" in result
+
+    def test_coverage_with_annotated_nodes(self, sample_graph):
+        """Coverage stats work with annotated coverage metrics."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_project_summary
+
+        # Annotate some nodes with coverage
+        prd_node = sample_graph.find_by_id("REQ-p00001")
+        prd_node.set_metric("coverage_pct", 100)
+
+        ops_node = sample_graph.find_by_id("REQ-o00001")
+        ops_node.set_metric("coverage_pct", 50)
+
+        dev_node = sample_graph.find_by_id("REQ-d00001")
+        dev_node.set_metric("coverage_pct", 0)
+
+        result = _get_project_summary(sample_graph, Path("/test/repo"))
+
+        coverage = result["coverage"]
+        assert coverage["total"] == 3
+        assert coverage["full_coverage"] == 1  # PRD at 100%
+        assert coverage["partial_coverage"] == 1  # OPS at 50%
+        assert coverage["no_coverage"] == 1  # DEV at 0%

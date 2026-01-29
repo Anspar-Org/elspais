@@ -20,10 +20,11 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
+from elspais.config import find_config_file, get_config
 from elspais.graph import NodeKind
+from elspais.graph.annotators import count_by_level
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Serializers (REQ-d00064)
@@ -255,6 +256,108 @@ def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Workspace Context Tools (REQ-o00061)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _get_workspace_info(working_dir: Path) -> dict[str, Any]:
+    """Get workspace information.
+
+    REQ-o00061-A: Returns repository path, project name, and configuration summary.
+    REQ-o00061-D: Reads configuration from unified config system.
+
+    Args:
+        working_dir: The repository root directory.
+
+    Returns:
+        Workspace information dict.
+    """
+    config = get_config(start_path=working_dir, quiet=True)
+
+    # Get project name from config, fallback to directory name
+    project_name = config.get("project", {}).get("name")
+    if not project_name:
+        project_name = working_dir.name
+
+    # Build configuration summary
+    config_summary = {
+        "prefix": config.get("patterns", {}).get("prefix", "REQ"),
+        "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
+        "testing_enabled": config.get("testing", {}).get("enabled", False),
+        "project_type": config.get("project", {}).get("type"),
+    }
+
+    # Check if config file exists
+    config_file = find_config_file(working_dir)
+
+    return {
+        "repo_path": str(working_dir),
+        "project_name": project_name,
+        "config_file": str(config_file) if config_file else None,
+        "config_summary": config_summary,
+    }
+
+
+def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]:
+    """Get project summary statistics.
+
+    REQ-o00061-B: Returns requirement counts by level, coverage statistics, and change metrics.
+    REQ-o00061-C: Uses graph aggregate functions from annotators module.
+
+    Args:
+        graph: The TraceGraph to analyze.
+        working_dir: The repository root directory.
+
+    Returns:
+        Project summary dict.
+    """
+    # Use count_by_level() from annotators (REQ-o00061-C)
+    level_counts = count_by_level(graph)
+
+    # Coverage statistics
+    coverage_stats = {
+        "total": 0,
+        "full_coverage": 0,
+        "partial_coverage": 0,
+        "no_coverage": 0,
+    }
+
+    # Change metrics
+    change_metrics = {
+        "uncommitted": 0,
+        "branch_changed": 0,
+    }
+
+    # Iterate requirements once for coverage and change stats
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        coverage_stats["total"] += 1
+
+        # Coverage from metrics
+        coverage_pct = node.get_metric("coverage_pct", 0)
+        if coverage_pct >= 100:
+            coverage_stats["full_coverage"] += 1
+        elif coverage_pct > 0:
+            coverage_stats["partial_coverage"] += 1
+        else:
+            coverage_stats["no_coverage"] += 1
+
+        # Git change metrics
+        if node.get_metric("is_uncommitted", False):
+            change_metrics["uncommitted"] += 1
+        if node.get_metric("is_branch_changed", False):
+            change_metrics["branch_changed"] += 1
+
+    return {
+        "requirements_by_level": level_counts,
+        "coverage": coverage_stats,
+        "changes": change_metrics,
+        "total_nodes": graph.node_count(),
+        "orphan_count": len(list(graph.orphaned_nodes())),
+        "broken_reference_count": len(list(graph.broken_references())),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP Server Factory
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -262,7 +365,7 @@ def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
 def create_server(
     graph: TraceGraph | None = None,
     working_dir: Path | None = None,
-) -> "FastMCP":
+) -> FastMCP:
     """Create the MCP server with all tools registered.
 
     Args:
@@ -273,9 +376,7 @@ def create_server(
         FastMCP server instance.
     """
     if not MCP_AVAILABLE:
-        raise ImportError(
-            "MCP dependencies not installed. Install with: pip install elspais[mcp]"
-        )
+        raise ImportError("MCP dependencies not installed. Install with: pip install elspais[mcp]")
 
     # Initialize working directory
     if working_dir is None:
@@ -361,6 +462,34 @@ def create_server(
             Ancestors (walking up to roots) and direct children.
         """
         return _get_hierarchy(_state["graph"], req_id)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Workspace Context Tools (REQ-o00061)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def get_workspace_info() -> dict[str, Any]:
+        """Get information about the current workspace.
+
+        Returns repository path, project name, and configuration summary.
+        Use this to understand what project you're working with.
+
+        Returns:
+            Workspace information including repo path, project name, and config.
+        """
+        return _get_workspace_info(_state["working_dir"])
+
+    @mcp.tool()
+    def get_project_summary() -> dict[str, Any]:
+        """Get summary statistics for the project.
+
+        Returns requirement counts by level (PRD/OPS/DEV), coverage statistics,
+        and change metrics (uncommitted, branch changed).
+
+        Returns:
+            Project summary with counts, coverage, and change metrics.
+        """
+        return _get_project_summary(_state["graph"], _state["working_dir"])
 
     return mcp
 

@@ -49,12 +49,12 @@
 
 ---
 
-## Phase 2: MCP Docs & Repo Context
+## Phase 2: MCP Docs & Repo Context ✅
 
 ### 2.1 Workspace Info Tools
-- [ ] Add `get_workspace_info()` - "What repo am I serving?"
+- [x] Add `get_workspace_info()` - "What repo am I serving?"
   - Returns: repo path, project name, config summary
-- [ ] Add `get_project_summary()` - "Serve info about this repo"
+- [x] Add `get_project_summary()` - "Serve info about this repo"
   - Returns: requirement counts by level, coverage stats, recent changes
 
 ### 2.2 MCP Documentation
@@ -107,7 +107,7 @@
 | 0.3 New Feature Reqs | [x] Complete | REQ-o00061 workspace, keywords deferred to Phase 4 |
 | 0.4 Update INDEX | [x] Complete | 12 new requirements indexed |
 | 1 Core Server | [x] Complete | 5 core tools, 19 passing tests |
-| 2.1 Workspace Tools | [ ] Not Started | |
+| 2.1 Workspace Tools | [x] Complete | get_workspace_info(), get_project_summary(), 10 tests |
 | 2.2 MCP Docs | [ ] Not Started | |
 | 3.1 File Mutators | [ ] Not Started | |
 | 3.2 In-Memory Mutations | [ ] Not Started | |
