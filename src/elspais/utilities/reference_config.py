@@ -369,13 +369,16 @@ def build_id_pattern(
     assertion_pattern = ""
     if include_assertion:
         # Assertion labels are typically uppercase letters, possibly multiple
+        # IMPORTANT: Add negative lookahead (?![a-z]) to prevent matching
+        # lowercase letters that are part of longer words.
+        # e.g., test_REQ_p00001_login should NOT capture "l" as assertion
         assertion_label = pattern_config.get_assertion_label_pattern()
         if assertion_label:
-            # Make assertion optional with separator
-            assertion_pattern = rf"(?:{sep_pattern}(?P<assertion>{assertion_label}))?"
+            # Make assertion optional with separator, with negative lookahead
+            assertion_pattern = rf"(?:{sep_pattern}(?P<assertion>{assertion_label})(?![a-z]))?"
         else:
-            # Default: single uppercase letter
-            assertion_pattern = rf"(?:{sep_pattern}(?P<assertion>[A-Z]))?"
+            # Default: single uppercase letter, with negative lookahead
+            assertion_pattern = rf"(?:{sep_pattern}(?P<assertion>[A-Z])(?![a-z]))?"
 
     # Build the full pattern
     if ref_config.prefix_optional:

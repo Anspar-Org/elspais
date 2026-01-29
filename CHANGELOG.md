@@ -2,6 +2,23 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.4] - 2026-01-29
+
+### Changed
+
+- **TestParser, JUnitXMLParser, PytestJSONParser refactored** to use shared reference config:
+  - All three parsers now accept optional `PatternConfig` and `ReferenceResolver`
+  - Removed hardcoded regex patterns from all parsers
+  - TestParser: Custom comment pattern for `# Tests REQ-xxx` syntax (no colon)
+  - Result parsers: Use `extract_ids_from_text()` from reference_config.py
+  - Backward compatible - all work without explicit config
+
+### Fixed
+
+- **Assertion matching negative lookahead**: Added `(?![a-z])` in `build_id_pattern()` to prevent
+  matching lowercase letters as assertion suffixes (e.g., `test_REQ_p00001_login` no longer
+  captures "l" as an assertion)
+
 ## [0.43.3] - 2026-01-29
 
 ### Changed
