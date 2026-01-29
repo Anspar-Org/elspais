@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.34.1] - 2026-01-28
+
+### Added
+- **MCP Server Specification**: Created `spec/08-mcp-server.md` defining the MCP server architecture:
+  - PRD-level: REQ-p00060 - MCP Server for AI-Driven Requirements Management
+  - OPS-level: REQ-o00060 (Core Query), REQ-o00061 (Workspace Context), REQ-o00062 (Graph Mutations), REQ-o00063 (File Mutations)
+  - DEV-level: REQ-d00060-65 (Tool implementations, serializers, mutation delegation)
+- **Graph-as-Source-of-Truth**: MCP spec enforces REQ-p00050-B - all tools consume TraceGraph directly without intermediate data structures
+- **Architecture Diagram**: Spec includes diagram showing MCP server layer consuming TraceGraph via iterator and mutation APIs
+
 ## [0.31.0] - 2026-01-28
 
 ### Added

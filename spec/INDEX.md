@@ -17,6 +17,7 @@
 | REQ-p00011 | Review Package Lifecycle | prd-elspais.md | 0949cebc |
 | REQ-p00012 | Review Backend Services | prd-elspais.md | 7a95a46c |
 | REQ-p00050 | Unified Graph Architecture | 07-graph-architecture.md | 9b676750 |
+| REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md | ________ |
 
 ## Operations Requirements (OPS)
 
@@ -24,6 +25,10 @@
 |---|---|---|---|
 | REQ-o00050 | Graph Builder as Single Entry Point | 07-graph-architecture.md | 8c915ec8 |
 | REQ-o00051 | Composable Annotation Design | 07-graph-architecture.md | 34b6b863 |
+| REQ-o00060 | MCP Core Query Tools | 08-mcp-server.md | ________ |
+| REQ-o00061 | MCP Workspace Context Tools | 08-mcp-server.md | ________ |
+| REQ-o00062 | MCP Graph Mutation Tools | 08-mcp-server.md | ________ |
+| REQ-o00063 | MCP File Mutation Tools | 08-mcp-server.md | ________ |
 
 ## Development Requirements (DEV)
 
@@ -47,6 +52,12 @@
 | REQ-d00053 | No Duplicate Library Functions | 07-graph-architecture.md | ea7c0e46 |
 | REQ-d00054 | Annotation Pipeline Pattern | 07-graph-architecture.md | 033cf765 |
 | REQ-d00055 | Node Metrics as Extension Point | 07-graph-architecture.md | 060eb40d |
+| REQ-d00060 | Graph Status Tool Implementation | 08-mcp-server.md | ________ |
+| REQ-d00061 | Requirement Search Tool Implementation | 08-mcp-server.md | ________ |
+| REQ-d00062 | Requirement Detail Tool Implementation | 08-mcp-server.md | ________ |
+| REQ-d00063 | Hierarchy Navigation Tool Implementation | 08-mcp-server.md | ________ |
+| REQ-d00064 | Serializer Functions | 08-mcp-server.md | ________ |
+| REQ-d00065 | Mutation Tool Delegation | 08-mcp-server.md | ________ |
 
 ## Other Requirements
 
