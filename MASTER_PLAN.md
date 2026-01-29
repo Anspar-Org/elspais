@@ -1,6 +1,7 @@
 # MASTER PLAN: MCP Server Implementation
 
 > **Workflow:** Follow `~/.claude/refactor-workflow.md` for each phase (SPEC → TEST → IMPL → DEBUG → COMMIT)
+> **Principles:** Follow `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 
 ## Overview
 
