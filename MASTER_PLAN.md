@@ -55,6 +55,44 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 
 ---
 
+## Refactor Workflow
+
+Use this workflow when restructuring existing code without changing behavior.
+
+### 1. Understand Current State
+
+- [ ] **EXPLORE**: Map the code being refactored
+  - [ ] Identify all files/functions affected
+  - [ ] Document current behavior and contracts
+  - [ ] List existing tests that cover the code
+- [ ] **BASELINE**: Ensure tests pass before changes
+  - [ ] Run full test suite
+  - [ ] Note any flaky or slow tests
+
+### 2. Incremental Refactor
+
+- [ ] **SMALL STEPS**: Make one change at a time
+  - [ ] Each step should be independently testable
+  - [ ] Run tests after each step
+  - [ ] Commit working states frequently
+- [ ] **PRESERVE BEHAVIOR**: No functional changes
+  - [ ] Same inputs → same outputs
+  - [ ] Same error handling
+  - [ ] Same side effects
+
+### 3. Verification
+
+- [ ] **TEST**: All original tests still pass
+- [ ] **REVIEW**: Have sub-agent verify no behavior change
+- [ ] **LINT**: Fix all lint errors
+
+### 4. Commit
+
+- [ ] **COMMIT**: Use `refactor:` or `chore:` prefix
+- [ ] **CLEAR**: Reset checkboxes for next refactor
+
+---
+
 ## Phase 0: MCP Specification ✅
 
 ### 0.1 Create MCP Spec File
@@ -158,3 +196,27 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 - [x] Add keyword search to `search()` tool (field="keywords")
 - [x] Add `find_by_keywords(keywords)` tool
 - [x] Add `get_all_keywords()` tool for keyword discovery
+
+---
+
+## Phase 5: MCP Dogfooding
+
+**Goal**: Validate the MCP server's utility by using it to improve test traceability in this codebase.
+
+### 5.1 Improve Test Traceability
+
+- [ ] Tests that validate requirements should reference assertion IDs in their names
+- [ ] Test names should follow pattern: `test_REQ_xxx_A_describes_behavior`
+- [ ] TEST_RESULT nodes should link to requirements in trace view
+
+### 5.2 Document MCP Gaps
+
+- [ ] Identify any missing tools needed during the dogfooding process
+- [ ] Note any API ergonomic issues or confusing tool behaviors
+- [ ] Create issues for MCP enhancements discovered
+
+### 5.3 Verify Traceability Improvement
+
+- [ ] Trace view shows test coverage for requirements
+- [ ] Coverage metrics reflect test validation
+- [ ] Documentation captures lessons learned
