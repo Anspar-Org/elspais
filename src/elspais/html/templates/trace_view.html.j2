@@ -82,6 +82,13 @@ body {
 .stat-badge.ops { background: #fd7e14; color: white; }
 .stat-badge.dev { background: #20c997; color: white; }
 .stat-badge.core { background: #0d6efd; color: white; }
+.stat-badge.code {
+    background: #6c757d;
+    color: white;
+}
+.stat-badge.code.active {
+    color: #6c757d;
+}
 .stat-badge.tests {
     background: #198754;
     color: white;
@@ -89,12 +96,30 @@ body {
 .stat-badge.tests.active {
     color: #198754;
 }
+.stat-badge.results {
+    background: #6610f2;
+    color: white;
+}
+.stat-badge.results.active {
+    color: #6610f2;
+}
 .stat-badge.associated {
     background: #6f42c1;
     color: white;
 }
 .stat-badge.associated.active {
     color: #6f42c1;
+}
+
+.assertion-summary {
+    font-size: 0.85em;
+    color: #6c757d;
+    padding: 4px 0;
+    border-top: 1px solid #dee2e6;
+    margin-top: 8px;
+}
+.assertion-summary strong {
+    color: #212529;
 }
 
 .header-meta {
@@ -789,6 +814,83 @@ body {
     margin-right: 4px;
 }
 
+/* Test Result Rows */
+.result-row {
+    background: #f8f9fa;
+}
+
+.result-row td {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.result-row.passed {
+    background: #d1e7dd;
+}
+
+.result-row.passed td {
+    color: #0f5132;
+}
+
+.result-row.failed {
+    background: #f8d7da;
+}
+
+.result-row.failed td {
+    color: #842029;
+}
+
+.result-row.error {
+    background: #fff3cd;
+}
+
+.result-row.error td {
+    color: #664d03;
+}
+
+.result-row.skipped {
+    background: #e2e3e5;
+}
+
+.result-row.skipped td {
+    color: #41464b;
+}
+
+.result-icon {
+    margin-right: 4px;
+}
+
+.result-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.result-badge.passed {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.result-badge.failed {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.result-badge.error {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.result-badge.skipped {
+    background: #e2e3e5;
+    color: #41464b;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Legend Modal
    ───────────────────────────────────────────────────────────────────────────── */
@@ -918,8 +1020,19 @@ body {
         <span style="color: #adb5bd;">|</span>
         <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
         <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">🧪 {{ stats.test_count }}</span>
+        <span class="stat-badge code" id="badge-code" onclick="toggleFilter('code')" title="Click to hide code nodes">Code: {{ stats.code_count }}</span>
+        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">Tests: {{ stats.test_count }}</span>
+        {% if stats.test_result_count > 0 %}
+        <span class="stat-badge results" id="badge-results" onclick="toggleFilter('results')" title="Click to show test results">Results: {{ stats.test_passed_count }}✓ {{ stats.test_failed_count }}✗</span>
+        {% endif %}
         <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
+    </div>
+
+    <div class="assertion-summary">
+        Assertions: <strong>{{ stats.assertion_count }}</strong> unique |
+        Implemented: <strong>{{ stats.assertions_implemented }}</strong> |
+        Tested: <strong>{{ stats.assertions_tested }}</strong> |
+        Validated: <strong>{{ stats.assertions_validated }}</strong>
     </div>
 
     <div class="header-meta">
@@ -1049,7 +1162,7 @@ body {
             </thead>
             <tbody id="table-body">
                 {% for row in rows %}
-                <tr class="req-row {{ 'code-row' if row.is_code else '' }}{{ 'test-row' if row.is_test else '' }}"
+                <tr class="req-row {{ 'code-row' if row.is_code else '' }}{{ 'test-row' if row.is_test else '' }}{{ 'result-row ' + row.result_status if row.is_test_result else '' }}"
                     data-id="{{ row.id }}"
                     data-parent="{{ row.parent_id or '' }}"
                     data-level="{{ row.level }}"
@@ -1063,6 +1176,8 @@ body {
                     data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
                     data-is-code="{{ 'true' if row.is_code else 'false' }}"
                     data-is-test="{{ 'true' if row.is_test else 'false' }}"
+                    data-is-test-result="{{ 'true' if row.is_test_result else 'false' }}"
+                    data-result-status="{{ row.result_status }}"
                     data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
                     data-has-children="{{ 'true' if row.has_children else 'false' }}"
                     data-source-file="{{ row.source_file }}"
@@ -1079,6 +1194,8 @@ body {
                             <span class="code-icon">📄</span>
                             {% elif row.is_test %}
                             <span class="test-icon">🧪</span>
+                            {% elif row.is_test_result %}
+                            <span class="result-icon">{% if row.result_status == 'passed' %}✅{% elif row.result_status in ['failed', 'failure'] %}❌{% elif row.result_status == 'error' %}⚠️{% elif row.result_status == 'skipped' %}⏭️{% else %}📋{% endif %}</span>
                             {% endif %}
                             {% if row.source_file %}
                             <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="req-id" title="Open in VS Code: {{ row.source_file }}:{{ row.source_line }}">{{ row.display_id | replace('REQ-', '') }}</a>
@@ -1095,7 +1212,14 @@ body {
                         </div>
                     </td>
                     <td class="col-title">
-                        {% if (row.is_test or row.is_code) and row.source_file %}
+                        {% if row.is_test_result %}
+                        {% if row.source_file %}
+                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
+                        {% else %}
+                        {{ row.title }}
+                        {% endif %}
+                        <span class="result-badge {{ row.result_status }}">{{ row.result_status }}</span>
+                        {% elif (row.is_test or row.is_code) and row.source_file %}
                         <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
                         {% else %}
                         {{ row.title }}
@@ -1324,7 +1448,9 @@ const state = {
     activeFilters: {
         uncommitted: false,
         changed: false,
+        code: false,
         tests: false,
+        results: false,
         associated: false,
         core: false,
         levelPrd: false,
@@ -1405,7 +1531,9 @@ function restoreState() {
         document.getElementById('badge-prd')?.classList.toggle('active', state.activeFilters.levelPrd);
         document.getElementById('badge-ops')?.classList.toggle('active', state.activeFilters.levelOps);
         document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
+        document.getElementById('badge-code')?.classList.toggle('active', state.activeFilters.code);
         document.getElementById('badge-tests')?.classList.toggle('active', state.activeFilters.tests);
+        document.getElementById('badge-results')?.classList.toggle('active', state.activeFilters.results);
         document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
         document.getElementById('badge-core')?.classList.toggle('active', state.activeFilters.core);
     }
@@ -1467,7 +1595,7 @@ function clearAllCookies() {
     // Reset to defaults
     state.viewMode = 'hierarchical';
     state.activeFilters = {
-        uncommitted: false, changed: false, tests: false, associated: false, core: false,
+        uncommitted: false, changed: false, code: false, tests: false, results: false, associated: false, core: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
     state.collapsedNodes.clear();
@@ -1555,7 +1683,7 @@ function toggleLevelFilter(level) {
 function clearFilters() {
     // Reset all filters
     state.activeFilters = {
-        uncommitted: false, changed: false, tests: false, associated: false, core: false,
+        uncommitted: false, changed: false, code: false, tests: false, results: false, associated: false, core: false,
         levelPrd: false, levelOps: false, levelDev: false
     };
 
@@ -1619,20 +1747,26 @@ function applyFilters() {
         const isRoadmap = row.dataset.isRoadmap === 'true';
         const isCode = row.dataset.isCode === 'true';
         const isTest = row.dataset.isTest === 'true';
+        const isTestResult = row.dataset.isTestResult === 'true';
         const isAssociated = row.dataset.isAssociated === 'true';
         const depth = parseInt(row.dataset.depth);
         const parentId = row.dataset.parent;
-        const isImplNode = isCode || isTest;  // Implementation nodes (code or test)
+        const isImplNode = isCode || isTest || isTestResult;  // Implementation/evidence nodes
 
         let visible = true;
 
-        // Code rows visibility - hide code nodes by default unless showCode checkbox is on
-        if (isCode && !showCode) {
+        // Code badge filter - HIDE logic: code visible by default, hide when badge is active
+        if (isCode && state.activeFilters.code) {
             visible = false;
         }
 
         // Tests badge filter - HIDE logic: tests visible by default, hide when badge is active
         if (isTest && state.activeFilters.tests) {
+            visible = false;
+        }
+
+        // Results badge filter - SHOW logic: results hidden by default, show when badge is active
+        if (isTestResult && !state.activeFilters.results) {
             visible = false;
         }
 

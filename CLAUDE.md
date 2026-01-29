@@ -140,11 +140,13 @@ elspais is a zero-dependency Python requirements validation and traceability too
 
 ## Workflow
 
-- **ALWAYS** update the version in `pyproject.toml` before pushing to remote
+- **ALWAYS** update the version in `pyproject.toml` before each commit
 - **ALWAYS** update `CHANGELOG.md` with new features
 - **ALWAYS** use a sub-agent to update the `docs/` files and --help cli commands
 - **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit
 - **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation
+- **ALWAYS** use a sub-agent to write tests
+- **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
 
 ## Master Plan Workflow
 

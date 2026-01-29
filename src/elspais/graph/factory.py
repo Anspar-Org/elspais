@@ -19,6 +19,7 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import PatternConfig
 
@@ -207,6 +208,52 @@ def build_graph(
                         )
                         for parsed_content in domain_file.deserialize(test_registry):
                             builder.add_parsed_content(parsed_content)
+
+            # 6b. Scan test result files (JUnit XML, pytest JSON)
+            result_files = testing_config.get("result_files", [])
+            if result_files:
+                # Create parsers for result files (these have a different interface)
+                junit_parser = JUnitXMLParser()
+                pytest_parser = PytestJSONParser()
+
+                for file_pattern in result_files:
+                    # Resolve glob pattern relative to repo_root
+                    matched_files = glob(str(repo_root / file_pattern), recursive=True)
+                    for file_path in matched_files:
+                        path = Path(file_path)
+                        if path.is_file():
+                            content = path.read_text(encoding="utf-8")
+                            source_path = str(path)
+
+                            # Choose parser based on file extension
+                            results = []
+                            if path.suffix.lower() == ".xml":
+                                results = junit_parser.parse(content, source_path)
+                            elif path.suffix.lower() == ".json":
+                                results = pytest_parser.parse(content, source_path)
+
+                            # Convert results to ParsedContent for the builder
+                            for result in results:
+                                from elspais.graph.deserializer import (
+                                    DomainContext,
+                                    ParsedContentWithContext,
+                                )
+
+                                ctx = DomainContext(
+                                    source_type="file",
+                                    source_id=source_path,
+                                    metadata={"path": path},
+                                )
+
+                                parsed_content = ParsedContentWithContext(
+                                    content_type="test_result",
+                                    start_line=1,
+                                    end_line=1,
+                                    raw_text="",
+                                    parsed_data=result,
+                                    source_context=ctx,
+                                )
+                                builder.add_parsed_content(parsed_content)
 
     return builder.build()
 

@@ -7,6 +7,9 @@ Exports:
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
 - BrokenReference: Reference to non-existent target (detection)
+- CoverageSource: Enum for coverage origin type
+- CoverageContribution: Single coverage claim on an assertion
+- RollupMetrics: Aggregated coverage metrics for a requirement
 
 Note: TraceGraph is in elspais.graph.builder (use graph.factory.build_graph() to construct)
 """
@@ -18,6 +21,8 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.relations import Edge, EdgeKind
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
+from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
+from elspais.graph.annotators import annotate_coverage
 
 __all__ = [
     "NodeKind",
@@ -28,4 +33,8 @@ __all__ = [
     "BrokenReference",
     "MutationEntry",
     "MutationLog",
+    "CoverageSource",
+    "CoverageContribution",
+    "RollupMetrics",
+    "annotate_coverage",
 ]

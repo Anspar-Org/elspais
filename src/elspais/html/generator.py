@@ -38,11 +38,13 @@ class TreeRow:
     is_roadmap: bool
     is_code: bool
     is_test: bool  # TEST node for traceability
+    is_test_result: bool  # TEST_RESULT node (test execution result)
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
     source_file: str = ""  # Relative path to source file
     source_line: int = 0  # Line number in source file
+    result_status: str = ""  # For TEST_RESULT: passed/failed/error/skipped
 
 
 @dataclass
@@ -66,9 +68,18 @@ class ViewStats:
     ops_count: int = 0
     dev_count: int = 0
     total_count: int = 0
-    test_count: int = 0  # Number of TEST nodes in the graph
+    code_count: int = 0  # Number of unique CODE nodes in the graph
+    test_count: int = 0  # Number of unique TEST nodes in the graph
+    test_result_count: int = 0  # Number of TEST_RESULT nodes
+    test_passed_count: int = 0  # Number of passed TEST_RESULT nodes
+    test_failed_count: int = 0  # Number of failed TEST_RESULT nodes
     associated_count: int = 0
     journey_count: int = 0
+    # Assertion-level metrics
+    assertion_count: int = 0  # Total unique assertions
+    assertions_implemented: int = 0  # Assertions with CODE coverage
+    assertions_tested: int = 0  # Assertions with TEST coverage
+    assertions_validated: int = 0  # Assertions with passing TEST_RESULTs
 
 
 class HTMLGenerator:
@@ -121,6 +132,9 @@ class HTMLGenerator:
 
         # Apply git annotations to all nodes
         self._annotate_git_state()
+
+        # Compute coverage metrics for all requirements
+        self._annotate_coverage()
 
         # Build data structures
         stats = self._compute_stats()
@@ -188,14 +202,32 @@ class HTMLGenerator:
                 annotate_git_state(node, git_info)
                 annotate_display_info(node)
 
+    def _annotate_coverage(self) -> None:
+        """Compute coverage metrics for all requirement nodes.
+
+        Uses the centralized annotate_coverage() function to compute
+        RollupMetrics for each requirement, which are then stored in
+        node._metrics for use by stats computation and row building.
+        """
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(self.graph)
+
     def _is_associated(self, node: GraphNode) -> bool:
         """Check if a node is from an associated/sponsor repository.
 
         Associated requirements come from sponsor repos, identified by:
+        - ID containing associated prefix (e.g., REQ-CAL-p00001)
         - Path containing 'sponsor' or 'associated'
-        - Path outside the main spec/ directory structure
+        - Path outside the base_path (different repo)
         - Or marked with an associated field
         """
+        # Check if ID has associated prefix pattern (e.g., REQ-CAL-p00001)
+        # Associated IDs have format: PREFIX-ASSOC-type where ASSOC is 2-4 uppercase letters
+        import re
+        if re.match(r'^REQ-[A-Z]{2,4}-[a-z]', node.id):
+            return True
+
         if not node.source:
             return False
 
@@ -204,6 +236,17 @@ class HTMLGenerator:
         if "sponsor" in path or "associated" in path:
             return True
 
+        # Check if path is outside base_path (different repo)
+        if self.base_path:
+            try:
+                # If the source path doesn't start with base_path, it's from a different repo
+                source_path = Path(node.source.path).resolve()
+                base = Path(self.base_path).resolve()
+                if not str(source_path).startswith(str(base)):
+                    return True
+            except (ValueError, OSError):
+                pass
+
         # Check if node has associated field set
         if node.get_field("associated", False):
             return True
@@ -211,8 +254,13 @@ class HTMLGenerator:
         return False
 
     def _compute_stats(self) -> ViewStats:
-        """Compute statistics for the header."""
+        """Compute statistics for the header.
+
+        Uses pre-computed RollupMetrics from annotate_coverage() for all
+        assertion-level coverage stats. No ad-hoc calculation.
+        """
         from elspais.graph import NodeKind
+        from elspais.graph.metrics import RollupMetrics
 
         stats = ViewStats()
 
@@ -231,9 +279,30 @@ class HTMLGenerator:
             if self._is_associated(node):
                 stats.associated_count += 1
 
-        # Count TEST nodes (more meaningful than file count)
+            # Aggregate all assertion metrics from pre-computed RollupMetrics
+            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+            if rollup:
+                stats.assertion_count += rollup.total_assertions
+                stats.assertions_implemented += rollup.covered_assertions
+                stats.assertions_tested += rollup.direct_tested
+                stats.assertions_validated += rollup.validated
+
+        # Count CODE nodes
+        for _ in self.graph.nodes_by_kind(NodeKind.CODE):
+            stats.code_count += 1
+
+        # Count TEST nodes
         for _ in self.graph.nodes_by_kind(NodeKind.TEST):
             stats.test_count += 1
+
+        # Count TEST_RESULT nodes
+        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+            stats.test_result_count += 1
+            status = (node.get_field("status", "") or "").lower()
+            if status in ("passed", "pass", "success"):
+                stats.test_passed_count += 1
+            elif status in ("failed", "fail", "failure", "error"):
+                stats.test_failed_count += 1
 
         return stats
 
@@ -270,19 +339,19 @@ class HTMLGenerator:
             return "roadmap" in node.source.path.lower()
 
         def compute_coverage(node: GraphNode) -> tuple[str, bool]:
-            """Compute coverage status and failure flag for a requirement.
+            """Get coverage status and failure flag from pre-computed metrics.
+
+            Uses RollupMetrics computed by annotate_coverage().
 
             Returns:
                 Tuple of (coverage_status, has_failures)
                 coverage_status: "none", "partial", or "full"
             """
-            # Get assertions for this requirement
-            assertions: list[GraphNode] = []
-            for child in node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    assertions.append(child)
+            from elspais.graph.metrics import RollupMetrics
 
-            if not assertions:
+            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+
+            if not rollup or rollup.total_assertions == 0:
                 # No assertions - check if any code references the req directly
                 has_code = False
                 for child in node.iter_children():
@@ -291,38 +360,13 @@ class HTMLGenerator:
                         break
                 return ("full" if has_code else "none", False)
 
-            # Count assertions with code implementations
-            covered_count = 0
-            has_failures = False
-
-            for assertion in assertions:
-                has_impl = False
-                for impl in assertion.iter_children():
-                    if impl.kind == NodeKind.CODE:
-                        has_impl = True
-                    elif impl.kind == NodeKind.TEST_RESULT:
-                        # Check for failures
-                        result_status = impl.get_field("status", "")
-                        if result_status.lower() in ("failed", "error", "failure"):
-                            has_failures = True
-                if has_impl:
-                    covered_count += 1
-
-            # Also check tests for failures
-            for child in node.iter_children():
-                if child.kind == NodeKind.TEST:
-                    for result in child.iter_children():
-                        if result.kind == NodeKind.TEST_RESULT:
-                            result_status = result.get_field("status", "")
-                            if result_status.lower() in ("failed", "error", "failure"):
-                                has_failures = True
-
-            if covered_count == 0:
-                return ("none", has_failures)
-            elif covered_count < len(assertions):
-                return ("partial", has_failures)
+            # Use pre-computed coverage percentage
+            if rollup.coverage_pct == 0:
+                return ("none", rollup.has_failures)
+            elif rollup.coverage_pct < 100:
+                return ("partial", rollup.has_failures)
             else:
-                return ("full", has_failures)
+                return ("full", rollup.has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""
@@ -356,6 +400,13 @@ class HTMLGenerator:
                     return True
             return False
 
+        def has_test_result_children(node: GraphNode) -> bool:
+            """Check if node has test result children."""
+            for child in node.iter_children():
+                if child.kind == NodeKind.TEST_RESULT:
+                    return True
+            return False
+
         def traverse(
             node: GraphNode,
             depth: int,
@@ -369,19 +420,36 @@ class HTMLGenerator:
                 return
             visited_at_depth[key] = True
 
-            # Process requirements, code, and test nodes
-            if node.kind not in (NodeKind.REQUIREMENT, NodeKind.CODE, NodeKind.TEST):
+            # Process requirements, code, test, and test_result nodes
+            if node.kind not in (NodeKind.REQUIREMENT, NodeKind.CODE, NodeKind.TEST, NodeKind.TEST_RESULT):
                 return
 
             is_code = node.kind == NodeKind.CODE
             is_test = node.kind == NodeKind.TEST
-            is_impl_node = is_code or is_test  # Implementation nodes (code or test)
+            is_test_result = node.kind == NodeKind.TEST_RESULT
+            is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
             coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
             assertion_letters = get_assertion_letters(node, parent_id) if parent_assertions is None else parent_assertions
 
             # Get source location
             source_file = node.source.path if node.source else ""
             source_line = node.source.line if node.source else 0
+
+            # Get result status for TEST_RESULT nodes
+            result_status = ""
+            if is_test_result:
+                result_status = (node.get_field("status", "") or "").lower()
+
+            # Determine has_children based on node kind
+            if is_test:
+                # TEST nodes can have TEST_RESULT children
+                node_has_children = has_test_result_children(node)
+            elif is_test_result:
+                # TEST_RESULT nodes don't have children
+                node_has_children = False
+            else:
+                # REQ and CODE nodes
+                node_has_children = has_req_children(node) or has_code_children(node) or has_test_children(node)
 
             # Create row
             row = TreeRow(
@@ -401,11 +469,13 @@ class HTMLGenerator:
                 is_roadmap=is_roadmap(node),
                 is_code=is_code,
                 is_test=is_test,
-                has_children=has_req_children(node) or has_code_children(node) or has_test_children(node),
+                is_test_result=is_test_result,
+                has_children=node_has_children,
                 has_failures=has_failures,
                 is_associated=self._is_associated(node) if not is_impl_node else False,
                 source_file=source_file,
                 source_line=source_line,
+                result_status=result_status,
             )
 
             # Fix parent_id to reference actual row id
@@ -447,11 +517,14 @@ class HTMLGenerator:
                 if child.id not in child_assertions:
                     children_to_visit.append((child, None))
 
-            # Add code and test children
+            # Add code, test, and test_result children
             for child in node.iter_children():
                 if child.kind == NodeKind.CODE:
                     children_to_visit.append((child, None))
                 elif child.kind == NodeKind.TEST:
+                    children_to_visit.append((child, None))
+                elif child.kind == NodeKind.TEST_RESULT:
+                    # TEST_RESULT children of TEST nodes
                     children_to_visit.append((child, None))
 
             # Sort children: assertion-specific first (by letter), then general (by ID)
@@ -474,6 +547,55 @@ class HTMLGenerator:
         for root in self.graph.iter_roots():
             if root.kind == NodeKind.REQUIREMENT:
                 traverse(root, 0, None)
+
+        # Add orphan TEST_RESULT nodes (those without TEST parents)
+        # These appear as root-level items in the tree
+        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+            # Skip if already visited (has a TEST parent)
+            if node.parent_count() > 0:
+                continue
+
+            source_file = node.source.path if node.source else ""
+            source_line = node.source.line if node.source else 0
+            result_status = (node.get_field("status", "") or "").lower()
+
+            # Create a short display ID from test name
+            test_name = node.get_field("name", "") or ""
+            classname = node.get_field("classname", "") or ""
+            # Use just test name as display ID, or extract from classname
+            if test_name:
+                display_id = test_name
+            elif classname:
+                display_id = classname.split(".")[-1]
+            else:
+                display_id = node.id.split("::")[-1] if "::" in node.id else node.id[-30:]
+
+            row = TreeRow(
+                id=f"{node.id}_0_root",
+                display_id=display_id,
+                title=node.get_label() or "",
+                level="",
+                status="",
+                coverage="none",
+                topic="",
+                depth=0,
+                parent_id=None,
+                assertions=[],
+                is_leaf=True,
+                is_changed=False,
+                is_uncommitted=False,
+                is_roadmap=False,
+                is_code=False,
+                is_test=False,
+                is_test_result=True,
+                has_children=False,
+                has_failures=result_status in ("failed", "fail", "failure", "error"),
+                is_associated=False,
+                source_file=source_file,
+                source_line=source_line,
+                result_status=result_status,
+            )
+            rows.append(row)
 
         return rows
 

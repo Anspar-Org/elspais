@@ -302,6 +302,153 @@ def get_implementation_status(node: GraphNode) -> str:
         return "Unimplemented"
 
 
+def annotate_coverage(graph: TraceGraph) -> None:
+    """Compute and store coverage metrics for all requirement nodes.
+
+    This function traverses the graph once to compute RollupMetrics for
+    each REQUIREMENT node. Metrics are stored in node._metrics as:
+    - "rollup_metrics": The full RollupMetrics object
+    - "coverage_pct": Coverage percentage (for convenience)
+
+    Coverage is determined by outgoing edges from REQUIREMENT nodes:
+    - The builder links TEST/CODE/REQ as children of the parent REQ
+    - Edges have assertion_targets when they target specific assertions
+    - VALIDATES to TEST with assertion_targets → DIRECT coverage
+    - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
+    - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
+    - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
+
+    REFINES edges do NOT contribute to coverage (EdgeKind.contributes_to_coverage()).
+
+    Test-specific metrics:
+    - direct_tested: Assertions with TEST nodes (not CODE)
+    - validated: Assertions with passing TEST_RESULTs
+    - has_failures: Any TEST_RESULT is failed/error
+
+    Args:
+        graph: The TraceGraph to annotate.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.metrics import (
+        CoverageContribution,
+        CoverageSource,
+        RollupMetrics,
+    )
+    from elspais.graph.relations import EdgeKind
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        metrics = RollupMetrics()
+
+        # Collect assertion children
+        assertion_labels: list[str] = []
+
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                if label:
+                    assertion_labels.append(label)
+
+        metrics.total_assertions = len(assertion_labels)
+
+        # Track TEST-specific metrics
+        tested_labels: set[str] = set()  # Assertions with TEST coverage
+        validated_labels: set[str] = set()  # Assertions with passing tests
+        has_failures = False
+        test_nodes_for_result_lookup: list[tuple[GraphNode, list[str] | None]] = []
+
+        # Check outgoing edges from this requirement
+        # The builder links TEST/CODE/REQ as children of parent REQ with assertion_targets
+        for edge in node.iter_outgoing_edges():
+            if not edge.kind.contributes_to_coverage():
+                # REFINES doesn't count
+                continue
+
+            target_node = edge.target
+            target_kind = target_node.kind
+
+            if target_kind == NodeKind.TEST:
+                # TEST validates assertion(s) → DIRECT coverage
+                if edge.assertion_targets:
+                    for label in edge.assertion_targets:
+                        if label in assertion_labels:
+                            metrics.add_contribution(
+                                CoverageContribution(
+                                    source_id=target_node.id,
+                                    source_type=CoverageSource.DIRECT,
+                                    assertion_label=label,
+                                )
+                            )
+                            tested_labels.add(label)
+
+                # Track this TEST node for result lookup later
+                test_nodes_for_result_lookup.append((target_node, edge.assertion_targets))
+
+            elif target_kind == NodeKind.CODE:
+                # CODE implements assertion(s) → DIRECT coverage
+                if edge.assertion_targets:
+                    for label in edge.assertion_targets:
+                        if label in assertion_labels:
+                            metrics.add_contribution(
+                                CoverageContribution(
+                                    source_id=target_node.id,
+                                    source_type=CoverageSource.DIRECT,
+                                    assertion_label=label,
+                                )
+                            )
+
+            elif target_kind == NodeKind.REQUIREMENT:
+                # Child REQ implements this REQ
+                if edge.assertion_targets:
+                    # Explicit: REQ implements specific assertions
+                    for label in edge.assertion_targets:
+                        if label in assertion_labels:
+                            metrics.add_contribution(
+                                CoverageContribution(
+                                    source_id=target_node.id,
+                                    source_type=CoverageSource.EXPLICIT,
+                                    assertion_label=label,
+                                )
+                            )
+                else:
+                    # Inferred: REQ implements parent REQ (all assertions)
+                    for label in assertion_labels:
+                        metrics.add_contribution(
+                            CoverageContribution(
+                                source_id=target_node.id,
+                                source_type=CoverageSource.INFERRED,
+                                assertion_label=label,
+                            )
+                        )
+
+        # Process TEST children to find TEST_RESULT nodes
+        for test_node, assertion_targets in test_nodes_for_result_lookup:
+            for result in test_node.iter_children():
+                if result.kind == NodeKind.TEST_RESULT:
+                    status = (result.get_field("status", "") or "").lower()
+                    if status in ("passed", "pass", "success"):
+                        # Mark assertions as validated by passing tests
+                        for label in assertion_targets or []:
+                            if label in assertion_labels:
+                                validated_labels.add(label)
+                    elif status in ("failed", "fail", "failure", "error"):
+                        has_failures = True
+
+        # Set test-specific metrics before finalize
+        metrics.direct_tested = len(tested_labels)
+        metrics.validated = len(validated_labels)
+        metrics.has_failures = has_failures
+
+        # Finalize metrics (computes aggregate coverage counts)
+        metrics.finalize()
+
+        # Store in node metrics
+        node.set_metric("rollup_metrics", metrics)
+        node.set_metric("coverage_pct", metrics.coverage_pct)
+
+
 __all__ = [
     "annotate_git_state",
     "annotate_display_info",
@@ -311,4 +458,5 @@ __all__ = [
     "count_implementation_files",
     "collect_topics",
     "get_implementation_status",
+    "annotate_coverage",
 ]
