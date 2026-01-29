@@ -222,3 +222,35 @@ Use this workflow when restructuring existing code without changing behavior.
 - [x] Documentation captures lessons learned
 
 **Report**: See `docs/phase5-dogfooding-report.md` for detailed findings.
+
+---
+
+## Phase 6: Test Coverage Tools
+
+**Goal**: Add MCP tools for analyzing test-requirement relationships, discovered as high-priority gaps during dogfooding.
+
+### 6.1 Specification
+
+- [ ] Add requirements to `spec/08-mcp-server.md` for coverage tools
+- [ ] Define tool signatures and return types
+
+### 6.2 Implement `get_test_coverage()`
+
+- [ ] Create tool: `get_test_coverage(req_id: str) -> dict`
+- [ ] Returns TEST nodes that reference the requirement
+- [ ] Returns TEST_RESULT nodes for those tests
+- [ ] Identifies assertion coverage gaps (assertions with no tests)
+- [ ] Add tests with REQ-assertion naming pattern
+
+### 6.3 Implement `get_uncovered_assertions()`
+
+- [ ] Create tool: `get_uncovered_assertions(req_id: str = None) -> list`
+- [ ] When `req_id` is None, scan all requirements
+- [ ] Return assertions that have no TEST node references
+- [ ] Include parent requirement context in results
+- [ ] Add tests with REQ-assertion naming pattern
+
+### 6.4 Documentation
+
+- [ ] Update MCP server help/instructions
+- [ ] Add usage examples to dogfooding report
