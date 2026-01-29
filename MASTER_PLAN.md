@@ -141,9 +141,10 @@ Use this workflow when restructuring existing code without changing behavior.
 
 ### 7.1 Analyze Current State
 
-- [ ] Run `get_uncovered_assertions()` to get full gap list
-- [ ] Generate initial coverage report: assertions covered vs total
-- [ ] Create `docs/NEW_SPECS.md` to track proposed requirements
+- [x] Run `get_uncovered_assertions()` to get full gap list
+- [x] Generate initial coverage report: assertions covered vs total
+- [x] Create `docs/NEW_SPECS.md` to track proposed requirements
+- [x] **BUG FIX**: TestParser regex now captures assertion suffixes (e.g., `_A` in `test_REQ_xxx_A_...`)
 
 ### 7.2 Test File Analysis (Subagent Loop)
 

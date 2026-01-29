@@ -2,6 +2,20 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.0] - 2026-01-29
+
+### Fixed
+
+- **TestParser regex bug**: Fixed assertion-level test references not being captured.
+  - Tests named `test_REQ_d00060_A_description` now correctly validate assertion `REQ-d00060-A`
+  - Supports multi-assertion syntax: `test_REQ_d00060_A_B_description` → validates `REQ-d00060-A-B`
+  - Coverage percentage now correctly reflects assertion-level test coverage
+
+### Added
+
+- New tests for assertion-level reference parsing in `test_test_parser.py`
+- Created `docs/NEW_SPECS.md` for tracking proposed requirements during coverage analysis
+
 ## [0.42.0] - 2026-01-29
 
 ### Added
