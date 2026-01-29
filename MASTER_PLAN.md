@@ -39,18 +39,18 @@
 ## Phase 1: Core MCP Server
 
 ### 1.1 Remove Existing MCP Code
-- [ ] Delete all files in `src/elspais/mcp/`
-- [ ] Verify no imports break elsewhere
+- [x] Delete all files in `src/elspais/mcp/`
+- [x] Verify no imports break elsewhere
 
 ### 1.2 Create Minimal MCP Server
-- [ ] Create `src/elspais/mcp/__init__.py` with MCP_AVAILABLE check
-- [ ] Create `src/elspais/mcp/__main__.py` entry point
-- [ ] Create `src/elspais/mcp/server.py` with core tools:
-  - [ ] `get_graph_status()` - Is graph stale, node counts
-  - [ ] `refresh_graph(full)` - Force rebuild
-  - [ ] `search(query, field, regex)` - Search requirements
-  - [ ] `get_requirement(req_id)` - Single requirement details
-  - [ ] `get_hierarchy(req_id)` - Ancestors/children
+- [x] Create `src/elspais/mcp/__init__.py` with MCP_AVAILABLE check
+- [x] Create `src/elspais/mcp/__main__.py` entry point
+- [x] Create `src/elspais/mcp/server.py` with core tools:
+  - [x] `get_graph_status()` - Is graph stale, node counts
+  - [x] `refresh_graph(full)` - Force rebuild
+  - [x] `search(query, field, regex)` - Search requirements
+  - [x] `get_requirement(req_id)` - Single requirement details
+  - [x] `get_hierarchy(req_id)` - Ancestors/children
 
 ---
 
@@ -111,8 +111,8 @@
 | 0.2 Core Tool Reqs | [x] Complete | REQ-o00060 defines core tools |
 | 0.3 New Feature Reqs | [x] Complete | REQ-o00061 workspace, keywords deferred to Phase 4 |
 | 0.4 Update INDEX | [x] Complete | 12 new requirements indexed |
-| 1.1 Remove MCP | [ ] Not Started | |
-| 1.2 Core Server | [ ] Not Started | |
+| 1.1 Remove MCP | [x] Complete | Removed 9 old files, clean slate |
+| 1.2 Core Server | [x] Complete | 5 core tools, 19 passing tests |
 | 2.1 Workspace Tools | [ ] Not Started | |
 | 2.2 MCP Docs | [ ] Not Started | |
 | 3.1 File Mutators | [ ] Not Started | |

@@ -1,0 +1,422 @@
+"""Tests for MCP core tools.
+
+Tests REQ-o00060: MCP Core Query Tools
+- get_graph_status()
+- refresh_graph()
+- search()
+- get_requirement()
+- get_hierarchy()
+
+All tests verify the iterator-only graph API is used correctly.
+"""
+
+import pytest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from elspais.graph import NodeKind, GraphNode
+from elspais.graph.builder import TraceGraph
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fixtures
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def sample_graph():
+    """Create a sample TraceGraph for testing."""
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+
+    # Create PRD requirement with assertions
+    prd_node = GraphNode(
+        id="REQ-p00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Platform Security",
+    )
+    prd_node._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "abc12345",
+    }
+
+    # Add assertions
+    assertion_a = GraphNode(
+        id="REQ-p00001-A",
+        kind=NodeKind.ASSERTION,
+        label="SHALL encrypt all data at rest",
+    )
+    assertion_a._content = {"label": "A"}
+    prd_node.add_child(assertion_a)
+
+    assertion_b = GraphNode(
+        id="REQ-p00001-B",
+        kind=NodeKind.ASSERTION,
+        label="SHALL use TLS 1.3 for transit",
+    )
+    assertion_b._content = {"label": "B"}
+    prd_node.add_child(assertion_b)
+
+    # Create OPS requirement that implements PRD
+    ops_node = GraphNode(
+        id="REQ-o00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Database Encryption",
+    )
+    ops_node._content = {
+        "level": "OPS",
+        "status": "Active",
+        "hash": "def67890",
+    }
+
+    # Create DEV requirement that implements OPS
+    dev_node = GraphNode(
+        id="REQ-d00001",
+        kind=NodeKind.REQUIREMENT,
+        label="AES-256 Implementation",
+    )
+    dev_node._content = {
+        "level": "DEV",
+        "status": "Draft",
+        "hash": "ghi11111",
+    }
+
+    # Link the hierarchy: PRD <- OPS <- DEV
+    from elspais.graph.relations import EdgeKind
+    prd_node.link(ops_node, EdgeKind.IMPLEMENTS)
+    ops_node.link(dev_node, EdgeKind.IMPLEMENTS)
+
+    # Build graph
+    graph._roots = [prd_node]
+    graph._index = {
+        "REQ-p00001": prd_node,
+        "REQ-p00001-A": assertion_a,
+        "REQ-p00001-B": assertion_b,
+        "REQ-o00001": ops_node,
+        "REQ-d00001": dev_node,
+    }
+
+    return graph
+
+
+@pytest.fixture
+def mcp_server(sample_graph):
+    """Create MCP server with sample graph."""
+    pytest.importorskip("mcp")
+
+    from elspais.mcp.server import create_server
+    return create_server(sample_graph)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_graph_status() - REQ-d00060
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetGraphStatus:
+    """Tests for get_graph_status() tool."""
+
+    def test_REQ_d00060_A_returns_node_counts_by_kind(self, sample_graph):
+        """REQ-d00060-A: Returns node_counts using graph.nodes_by_kind()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_graph_status
+
+        result = _get_graph_status(sample_graph)
+
+        assert "node_counts" in result
+        counts = result["node_counts"]
+        assert counts.get("requirement") == 3
+        assert counts.get("assertion") == 2
+
+    def test_REQ_d00060_D_returns_root_count(self, sample_graph):
+        """REQ-d00060-D: Returns root_count using graph.root_count()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_graph_status
+
+        result = _get_graph_status(sample_graph)
+
+        assert "root_count" in result
+        assert result["root_count"] == 1
+
+    def test_REQ_d00060_E_no_full_graph_iteration(self, sample_graph):
+        """REQ-d00060-E: Does not iterate full graph for counts."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_graph_status
+
+        # Patch all_nodes to track if called
+        original_all_nodes = sample_graph.all_nodes
+        all_nodes_called = []
+
+        def tracked_all_nodes(*args, **kwargs):
+            all_nodes_called.append(True)
+            return original_all_nodes(*args, **kwargs)
+
+        sample_graph.all_nodes = tracked_all_nodes
+
+        _get_graph_status(sample_graph)
+
+        # all_nodes should not be called for status
+        assert len(all_nodes_called) == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: search() - REQ-d00061
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSearch:
+    """Tests for search() tool."""
+
+    def test_REQ_d00061_A_iterates_nodes_by_kind(self, sample_graph):
+        """REQ-d00061-A: Iterates graph.nodes_by_kind(REQUIREMENT)."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _search
+
+        results = _search(sample_graph, query="Security")
+
+        # Should find REQ-p00001 "Platform Security"
+        assert len(results) >= 1
+        assert any(r["id"] == "REQ-p00001" for r in results)
+
+    def test_REQ_d00061_B_field_parameter_id(self, sample_graph):
+        """REQ-d00061-B: Supports field='id' for ID search."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _search
+
+        results = _search(sample_graph, query="p00001", field="id")
+
+        assert len(results) == 1
+        assert results[0]["id"] == "REQ-p00001"
+
+    def test_REQ_d00061_B_field_parameter_title(self, sample_graph):
+        """REQ-d00061-B: Supports field='title' for title search."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _search
+
+        results = _search(sample_graph, query="Database", field="title")
+
+        assert len(results) == 1
+        assert results[0]["id"] == "REQ-o00001"
+
+    def test_REQ_d00061_C_regex_search(self, sample_graph):
+        """REQ-d00061-C: Supports regex=True for regex matching."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _search
+
+        results = _search(sample_graph, query="REQ-[pd]00001", field="id", regex=True)
+
+        # Should match REQ-p00001 and REQ-d00001
+        assert len(results) == 2
+        ids = {r["id"] for r in results}
+        assert "REQ-p00001" in ids
+        assert "REQ-d00001" in ids
+
+    def test_REQ_d00061_D_returns_summaries(self, sample_graph):
+        """REQ-d00061-D: Returns requirement summaries, not full objects."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _search
+
+        results = _search(sample_graph, query="Security")
+
+        assert len(results) >= 1
+        result = results[0]
+        # Should have summary fields
+        assert "id" in result
+        assert "title" in result
+        assert "level" in result
+        assert "status" in result
+        # Should NOT have full details like body
+        assert "body" not in result
+        assert "assertions" not in result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_requirement() - REQ-d00062
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetRequirement:
+    """Tests for get_requirement() tool."""
+
+    def test_REQ_d00062_A_uses_find_by_id(self, sample_graph):
+        """REQ-d00062-A: Uses graph.find_by_id() for O(1) lookup."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        # Patch find_by_id to track calls
+        original_find = sample_graph.find_by_id
+        find_calls = []
+
+        def tracked_find(req_id):
+            find_calls.append(req_id)
+            return original_find(req_id)
+
+        sample_graph.find_by_id = tracked_find
+
+        _get_requirement(sample_graph, "REQ-p00001")
+
+        assert "REQ-p00001" in find_calls
+
+    def test_REQ_d00062_B_returns_node_fields(self, sample_graph):
+        """REQ-d00062-B: Returns id, title, level, status, hash."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(sample_graph, "REQ-p00001")
+
+        assert result["id"] == "REQ-p00001"
+        assert result["title"] == "Platform Security"
+        assert result["level"] == "PRD"
+        assert result["status"] == "Active"
+        assert result["hash"] == "abc12345"
+
+    def test_REQ_d00062_C_returns_assertions(self, sample_graph):
+        """REQ-d00062-C: Returns assertions from iter_children()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(sample_graph, "REQ-p00001")
+
+        assert "assertions" in result
+        assertions = result["assertions"]
+        assert len(assertions) == 2
+
+        labels = {a["label"] for a in assertions}
+        assert "A" in labels
+        assert "B" in labels
+
+    def test_REQ_d00062_D_returns_relationships(self, sample_graph):
+        """REQ-d00062-D: Returns relationships from iter_outgoing_edges()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(sample_graph, "REQ-p00001")
+
+        assert "children" in result
+        # PRD should have OPS as child
+        assert any(c["id"] == "REQ-o00001" for c in result["children"])
+
+    def test_REQ_d00062_F_returns_error_for_missing(self, sample_graph):
+        """REQ-d00062-F: Returns error for non-existent requirements."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(sample_graph, "REQ-NONEXISTENT")
+
+        assert "error" in result
+        assert "not found" in result["error"].lower()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_hierarchy() - REQ-d00063
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetHierarchy:
+    """Tests for get_hierarchy() tool."""
+
+    def test_REQ_d00063_A_returns_ancestors(self, sample_graph):
+        """REQ-d00063-A: Returns ancestors by walking iter_parents()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_hierarchy
+
+        result = _get_hierarchy(sample_graph, "REQ-d00001")
+
+        assert "ancestors" in result
+        ancestors = result["ancestors"]
+        # DEV -> OPS -> PRD (two ancestors)
+        ancestor_ids = [a["id"] for a in ancestors]
+        assert "REQ-o00001" in ancestor_ids
+        assert "REQ-p00001" in ancestor_ids
+
+    def test_REQ_d00063_B_returns_children(self, sample_graph):
+        """REQ-d00063-B: Returns children from iter_children()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_hierarchy
+
+        result = _get_hierarchy(sample_graph, "REQ-p00001")
+
+        assert "children" in result
+        children = result["children"]
+        # PRD has OPS as child, plus assertions
+        child_ids = [c["id"] for c in children]
+        assert "REQ-o00001" in child_ids
+
+    def test_REQ_d00063_D_returns_summaries(self, sample_graph):
+        """REQ-d00063-D: Returns node summaries (id, title, level)."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_hierarchy
+
+        result = _get_hierarchy(sample_graph, "REQ-o00001")
+
+        # Check ancestors have summary format
+        for ancestor in result.get("ancestors", []):
+            assert "id" in ancestor
+            assert "title" in ancestor
+            assert "level" in ancestor
+            # Should NOT have full details
+            assert "assertions" not in ancestor
+
+    def test_REQ_d00063_E_handles_multiple_parents(self, sample_graph):
+        """REQ-d00063-E: Handles DAG structure with multiple parents."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_hierarchy
+
+        # Add a second parent to the OPS node
+        from elspais.graph.relations import EdgeKind
+
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Platform Compliance",
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "zzz99999"}
+        sample_graph._index["REQ-p00002"] = prd2
+        sample_graph._roots.append(prd2)
+
+        # Link OPS to second PRD as well
+        ops_node = sample_graph.find_by_id("REQ-o00001")
+        prd2.link(ops_node, EdgeKind.IMPLEMENTS)
+
+        result = _get_hierarchy(sample_graph, "REQ-o00001")
+
+        # Should have two ancestors (both PRD nodes)
+        ancestors = result["ancestors"]
+        ancestor_ids = [a["id"] for a in ancestors]
+        assert "REQ-p00001" in ancestor_ids
+        assert "REQ-p00002" in ancestor_ids
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: refresh_graph() - REQ-o00060-B
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestRefreshGraph:
+    """Tests for refresh_graph() tool."""
+
+    def test_refresh_rebuilds_graph(self, sample_graph):
+        """Refresh should rebuild the graph from spec files."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _refresh_graph
+
+        # This is a functional test - verify refresh returns a valid graph
+        with patch("elspais.mcp.server.build_graph") as mock_build:
+            mock_build.return_value = sample_graph
+
+            result, new_graph = _refresh_graph(Path("/test/repo"))
+
+            mock_build.assert_called_once()
+            assert result["success"] is True
+
+    def test_refresh_full_clears_caches(self, sample_graph):
+        """Refresh with full=True should clear all caches."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _refresh_graph
+
+        with patch("elspais.mcp.server.build_graph") as mock_build:
+            mock_build.return_value = sample_graph
+
+            result, _ = _refresh_graph(Path("/test/repo"), full=True)
+
+            assert result["success"] is True

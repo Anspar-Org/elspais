@@ -2,6 +2,21 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.35.0] - 2026-01-28
+
+### Changed
+- **MCP Server Rewrite (Phase 1)**: Complete rewrite of the MCP server from scratch:
+  - Removed old MCP implementation (9 files) that had data duplication issues
+  - Created new minimal implementation with graph-as-single-source-of-truth
+  - 5 core tools: `get_graph_status()`, `refresh_graph()`, `search()`, `get_requirement()`, `get_hierarchy()`
+  - All tools consume TraceGraph directly via iterator-only API (REQ-p00060-B)
+  - New serializers that read from `node.get_field()` and `node.get_label()`
+  - 19 new tests verifying the iterator-only graph API is used correctly
+
+### Technical
+- Implements REQ-o00060: MCP Core Query Tools
+- Implements REQ-d00060-65: Tool implementations and serializers
+
 ## [0.34.1] - 2026-01-28
 
 ### Added
