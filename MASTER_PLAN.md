@@ -262,3 +262,74 @@ Use this workflow when restructuring existing code without changing behavior.
 
 - [ ] Update MCP server help/instructions
 - [ ] Add usage examples to dogfooding report
+
+---
+
+## Phase 7: Comprehensive Assertion Coverage
+
+**Goal**: Achieve full test-requirement traceability. Every test should reference an assertion. Every code module should trace to a requirement. Use Phase 6 tools to systematically close coverage gaps.
+
+### 7.1 Analyze Current State
+
+- [ ] Run `get_uncovered_assertions()` to get full gap list
+- [ ] Generate initial coverage report: assertions covered vs total
+- [ ] Create `docs/NEW_SPECS.md` to track proposed requirements
+
+### 7.2 Test File Analysis (Subagent Loop)
+
+For each test file in `tests/`:
+
+- [ ] Use subagent to analyze test file purpose
+- [ ] Match tests to existing requirements using `find_assertions_by_keywords()`
+- [ ] Identify tests that validate undocumented behavior
+- [ ] For unmatched tests, either:
+  - Rename test to reference existing assertion, OR
+  - Add proposed requirement to `NEW_SPECS.md`
+
+**Subagent Instructions:**
+
+> Analyze this test file. For each test function:
+>
+> 1. What behavior does it validate?
+> 2. Search for matching assertions using keywords from the test
+> 3. If match found: propose test rename to `test_REQ_xxx_A_description`
+> 4. If no match: propose new requirement for NEW_SPECS.md
+>
+> Goal: No test without a requirement link.
+
+### 7.3 Code Module Analysis (Subagent Loop)
+
+For each source file in `src/elspais/`:
+
+- [ ] Use subagent to analyze module purpose
+- [ ] Match to existing requirements
+- [ ] For unmatched modules, add proposed requirement to `NEW_SPECS.md`
+
+**Subagent Instructions:**
+
+> Analyze this source module. What requirements does it implement?
+>
+> 1. List the main functions/classes and their purposes
+> 2. Search for matching requirements using `find_by_keywords()`
+> 3. If no requirement exists: propose one for NEW_SPECS.md
+>
+> Goal: No code without a requirement.
+
+### 7.4 Propose New Requirements
+
+- [ ] Review `NEW_SPECS.md` for proposed requirements
+- [ ] Group by topic/module
+- [ ] Prioritize: Active code > Draft features > Future ideas
+- [ ] Format as proper requirement specs with assertions
+
+### 7.5 Implement Coverage Improvements
+
+- [ ] Rename tests to reference assertions (batch by file)
+- [ ] Add approved requirements from NEW_SPECS.md to `spec/`
+- [ ] Re-run coverage analysis to verify improvement
+
+### 7.6 Final Verification
+
+- [ ] Target: >80% assertion coverage (from current 14%)
+- [ ] Target: All active code modules have requirements
+- [ ] Document lessons learned in dogfooding report
