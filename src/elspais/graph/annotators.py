@@ -511,6 +511,291 @@ def annotate_coverage(graph: TraceGraph) -> None:
         node.set_metric("coverage_pct", metrics.coverage_pct)
 
 
+# =============================================================================
+# Keyword Extraction (Phase 4)
+# =============================================================================
+# These functions extract and search keywords from requirement text.
+# Keywords are stored in node._content["keywords"] as a list of strings.
+
+
+# Common stopwords that should be filtered from keywords
+STOPWORDS = frozenset(
+    [
+        # Articles and determiners
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        # Pronouns
+        "i",
+        "you",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "me",
+        "him",
+        "her",
+        "us",
+        "them",
+        # Prepositions
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "up",
+        "about",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        # Conjunctions
+        "and",
+        "or",
+        "but",
+        "nor",
+        "so",
+        "yet",
+        "both",
+        "either",
+        "neither",
+        # Auxiliary verbs
+        "is",
+        "am",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "having",
+        "do",
+        "does",
+        "did",
+        "doing",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        # Common verbs
+        "get",
+        "got",
+        "make",
+        "made",
+        "let",
+        # Normative keywords (not useful for search)
+        "shall",
+        "must",
+        "required",
+        "not",
+        # Other common words
+        "if",
+        "when",
+        "where",
+        "how",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "all",
+        "each",
+        "every",
+        "any",
+        "some",
+        "no",
+        "none",
+        "other",
+        "such",
+        "only",
+        "own",
+        "same",
+        "than",
+        "too",
+        "very",
+    ]
+)
+
+
+def extract_keywords(text: str) -> list[str]:
+    """Extract keywords from text.
+
+    Extracts meaningful words by:
+    - Lowercasing all text
+    - Removing punctuation (except hyphens within words)
+    - Filtering stopwords
+    - Filtering words shorter than 3 characters
+    - Deduplicating results
+
+    Args:
+        text: Input text to extract keywords from.
+
+    Returns:
+        List of unique keywords in lowercase.
+    """
+    import re
+
+    if not text:
+        return []
+
+    # Lowercase and split into words
+    text = text.lower()
+
+    # Replace punctuation (except hyphens between letters) with spaces
+    # Keep alphanumeric and hyphens
+    text = re.sub(r"[^\w\s-]", " ", text)
+
+    # Split on whitespace
+    words = text.split()
+
+    # Filter and deduplicate
+    seen: set[str] = set()
+    keywords: list[str] = []
+
+    for word in words:
+        # Strip leading/trailing hyphens
+        word = word.strip("-")
+
+        # Skip short words
+        if len(word) < 3:
+            continue
+
+        # Skip stopwords
+        if word in STOPWORDS:
+            continue
+
+        # Deduplicate
+        if word not in seen:
+            seen.add(word)
+            keywords.append(word)
+
+    return keywords
+
+
+def annotate_keywords(graph: TraceGraph) -> None:
+    """Extract and store keywords for all requirement nodes.
+
+    Keywords are extracted from:
+    - Requirement title (node.get_label())
+    - Assertion text (from child ASSERTION nodes)
+
+    Keywords are stored in node._content["keywords"] as a list.
+
+    Args:
+        graph: The TraceGraph to annotate.
+    """
+    from elspais.graph import NodeKind
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        all_text_parts: list[str] = []
+
+        # Add title
+        title = node.get_label()
+        if title:
+            all_text_parts.append(title)
+
+        # Add assertion text from children
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                assertion_text = child.get_label()
+                if assertion_text:
+                    all_text_parts.append(assertion_text)
+
+        # Extract keywords from combined text
+        combined_text = " ".join(all_text_parts)
+        keywords = extract_keywords(combined_text)
+
+        # Store in node content
+        node.set_field("keywords", keywords)
+
+
+def find_by_keywords(
+    graph: TraceGraph,
+    keywords: list[str],
+    match_all: bool = True,
+) -> list[GraphNode]:
+    """Find requirement nodes containing specified keywords.
+
+    Args:
+        graph: The TraceGraph to search.
+        keywords: List of keywords to search for.
+        match_all: If True, node must contain ALL keywords (AND).
+                   If False, node must contain ANY keyword (OR).
+
+    Returns:
+        List of matching GraphNode objects.
+    """
+    from elspais.graph import NodeKind
+
+    # Normalize search keywords to lowercase
+    search_keywords = {k.lower() for k in keywords}
+
+    results: list[GraphNode] = []
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        node_keywords = set(node.get_field("keywords", []))
+
+        if match_all:
+            # All keywords must be present
+            if search_keywords.issubset(node_keywords):
+                results.append(node)
+        else:
+            # Any keyword must be present
+            if search_keywords & node_keywords:
+                results.append(node)
+
+    return results
+
+
+def collect_all_keywords(graph: TraceGraph) -> list[str]:
+    """Collect all unique keywords from annotated requirements.
+
+    Args:
+        graph: The TraceGraph to scan.
+
+    Returns:
+        Sorted list of all unique keywords across all requirements.
+    """
+    from elspais.graph import NodeKind
+
+    all_keywords: set[str] = set()
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        node_keywords = node.get_field("keywords", [])
+        all_keywords.update(node_keywords)
+
+    return sorted(all_keywords)
+
+
 __all__ = [
     "annotate_git_state",
     "annotate_display_info",
@@ -523,4 +808,10 @@ __all__ = [
     "collect_topics",
     "get_implementation_status",
     "annotate_coverage",
+    # Keyword extraction (Phase 4)
+    "STOPWORDS",
+    "extract_keywords",
+    "annotate_keywords",
+    "find_by_keywords",
+    "collect_all_keywords",
 ]

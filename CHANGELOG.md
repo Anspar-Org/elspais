@@ -2,6 +2,27 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.40.0] - 2026-01-29
+
+### Added
+
+- **Keyword Extraction & Search (Phase 4)**: Automatic keyword extraction and search for requirements:
+  - `extract_keywords(text)` - Extract meaningful keywords from text, filtering stopwords
+  - `annotate_keywords(graph)` - Annotate all requirements with keywords from title and assertions
+  - `find_by_keywords(graph, keywords)` - Find requirements matching keywords (AND/OR logic)
+  - `collect_all_keywords(graph)` - Get all unique keywords in the graph
+  - Keywords stored in `node.get_field("keywords")` as list of lowercase strings
+
+- **MCP Keyword Search Tools**: New MCP tools for keyword-based requirement discovery:
+  - `find_by_keywords(keywords, match_all)` - Search by keywords with AND/OR matching
+  - `get_all_keywords()` - List all available keywords for discovery
+  - Enhanced `search()` to support `field="keywords"` for keyword searches
+
+### Technical
+
+- 29 new keyword tests (19 annotator + 10 MCP)
+- STOPWORDS constant with 100+ common words filtered from keywords
+
 ## [0.39.0] - 2026-01-29
 
 ### Added

@@ -138,21 +138,23 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 
 ---
 
-## Phase 4: Keyword Extraction
+## Phase 4: Keyword Extraction ✅
 
-### 4.1 Add Keyword Extractor to Parsing
+### 4.1 Add Keyword Extractor to Parsing ✅
 
-- [ ] Extract keywords from requirement body/title
-- [ ] Extract keywords from assertion text
-- [ ] Store as field: `node.get_field("keywords")`
+- [x] Extract keywords from requirement body/title
+- [x] Extract keywords from assertion text
+- [x] Store as field: `node.get_field("keywords")`
+- [x] Filter stopwords and common terms
+- [x] Normalize to lowercase, deduplicate
 
 ### 4.2 Integrate with Trace View
 
-- [ ] Add keyword filtering to `graph --trace`
-- [ ] Filter by keywords in HTML trace view
+- [ ] Add keyword filtering to `graph --trace` (deferred)
+- [ ] Filter by keywords in HTML trace view (deferred)
 
-### 4.3 Integrate with MCP
+### 4.3 Integrate with MCP ✅
 
-- [ ] Add keyword search to `search()` tool
-- [ ] Add `find_by_keywords(keywords)` tool
-- [ ] Support keyword-based requirement/assertion discovery
+- [x] Add keyword search to `search()` tool (field="keywords")
+- [x] Add `find_by_keywords(keywords)` tool
+- [x] Add `get_all_keywords()` tool for keyword discovery

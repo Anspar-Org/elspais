@@ -178,7 +178,7 @@ def _search(
     """Search requirements.
 
     REQ-d00061-A: Iterates graph.nodes_by_kind(REQUIREMENT).
-    REQ-d00061-B: Supports field parameter (id, title, body, all).
+    REQ-d00061-B: Supports field parameter (id, title, body, keywords, all).
     REQ-d00061-C: Supports regex=True for regex matching.
     REQ-d00061-D: Returns serialized requirement summaries.
     REQ-d00061-E: Limits results to prevent unbounded sizes.
@@ -214,6 +214,19 @@ def _search(
             else:
                 if query_lower in title.lower():
                     match = True
+
+        if not match and field in ("keywords", "all"):
+            # Search in keywords field
+            keywords = node.get_field("keywords", [])
+            for keyword in keywords:
+                if regex:
+                    if pattern.search(keyword):
+                        match = True
+                        break
+                else:
+                    if query_lower in keyword.lower():
+                        match = True
+                        break
 
         if match:
             results.append(_serialize_requirement_summary(node))
@@ -749,6 +762,59 @@ def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
     return {
         "broken_references": refs,
         "count": len(refs),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Keyword Search Tools (Phase 4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _find_by_keywords(
+    graph: TraceGraph,
+    keywords: list[str],
+    match_all: bool = True,
+) -> dict[str, Any]:
+    """Find requirements containing specified keywords.
+
+    Args:
+        graph: The TraceGraph to search.
+        keywords: List of keywords to search for.
+        match_all: If True, node must contain ALL keywords (AND).
+                   If False, node must contain ANY keyword (OR).
+
+    Returns:
+        Dict with 'success', 'results', and 'count'.
+    """
+    from elspais.graph.annotators import find_by_keywords
+
+    nodes = find_by_keywords(graph, keywords, match_all)
+    results = [_serialize_requirement_summary(node) for node in nodes]
+
+    return {
+        "success": True,
+        "results": results,
+        "count": len(results),
+    }
+
+
+def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
+    """Get all unique keywords from the graph.
+
+    Args:
+        graph: The TraceGraph to scan.
+
+    Returns:
+        Dict with 'success', 'keywords', and 'count'.
+    """
+    from elspais.graph.annotators import collect_all_keywords
+
+    keywords = collect_all_keywords(graph)
+
+    return {
+        "success": True,
+        "keywords": keywords,
+        "count": len(keywords),
     }
 
 
@@ -1506,6 +1572,41 @@ def create_server(
             List of broken references.
         """
         return _get_broken_references(_state["graph"])
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Keyword Search Tools (Phase 4)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def find_by_keywords(
+        keywords: list[str],
+        match_all: bool = True,
+    ) -> dict[str, Any]:
+        """Find requirements containing specified keywords.
+
+        Keywords are extracted from requirement titles and assertion text.
+
+        Args:
+            keywords: List of keywords to search for.
+            match_all: If True, requirement must contain ALL keywords (AND).
+                       If False, requirement must contain ANY keyword (OR).
+
+        Returns:
+            List of matching requirements with their summaries.
+        """
+        return _find_by_keywords(_state["graph"], keywords, match_all)
+
+    @mcp.tool()
+    def get_all_keywords() -> dict[str, Any]:
+        """Get all unique keywords from the graph.
+
+        Keywords are extracted from requirement titles and assertion text.
+        Use this to discover available keywords for filtering.
+
+        Returns:
+            Sorted list of all unique keywords and total count.
+        """
+        return _get_all_keywords(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
     # File Mutation Tools (REQ-o00063)
