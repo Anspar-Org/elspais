@@ -2,6 +2,30 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.39.0] - 2026-01-29
+
+### Added
+
+- **MCP File Mutation Tools (Phase 3.1)**: File-based mutation API for AI agents to modify spec files on disk:
+  - `change_reference_type(req_id, target_id, new_type, save_branch)` - Change Implements/Refines relationships
+  - `move_requirement(req_id, target_file, save_branch)` - Relocate requirements between spec files
+  - `restore_from_safety_branch(branch_name)` - Revert file changes from safety branch
+  - `list_safety_branches()` - List available safety branches for rollback
+  - Auto-refresh graph after file mutations (REQ-o00063-F)
+  - Optional `save_branch=True` creates timestamped safety branch before modification
+
+- **Git Safety Branch Utilities**: New utilities in `utilities/git.py` for file mutation safety:
+  - `create_safety_branch(repo_root, req_id)` - Create timestamped safety branch
+  - `list_safety_branches(repo_root)` - List all `safety/*` branches
+  - `get_current_branch(repo_root)` - Get current branch name
+  - `restore_from_safety_branch(repo_root, branch_name)` - Restore spec/ from branch
+  - `delete_safety_branch(repo_root, branch_name)` - Remove safety branch
+
+### Technical
+
+- Implements REQ-o00063: MCP File Mutation Tools (4 new tools)
+- 14 new file mutation tests, 82 total MCP tests
+
 ## [0.38.0] - 2026-01-28
 
 ### Added

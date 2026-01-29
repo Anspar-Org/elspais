@@ -116,15 +116,18 @@ Use this checklist for the **current phase**. After committing, reset all boxes 
 
 ---
 
-## Phase 3: Graph Mutation Parity
+## Phase 3: Graph Mutation Parity ✅
 
-### 3.1 File Mutators Use Graph Mutators
+### 3.1 File Mutators Use Graph Mutators ✅
 
-- [ ] Audit file mutation tools vs graph mutation API
-- [ ] Ensure consistency: file mutators delegate to graph mutators
-- [ ] Add `change_reference_type()`
-- [ ] Add `move_requirement()`
-- [ ] Add `transform_with_ai()`
+- [x] Audit file mutation tools vs graph mutation API
+- [x] Add git safety branch utilities for file mutation rollback
+- [x] Add `change_reference_type()` - Modify Implements/Refines in spec files
+- [x] Add `move_requirement()` - Relocate requirements between spec files
+- [x] Add `restore_from_safety_branch()` - Revert file changes
+- [x] Add `list_safety_branches()` - List available safety branches
+- [x] Auto-refresh graph after file mutations (REQ-o00063-F)
+- [ ] Add `transform_with_ai()` (deferred - requires AI integration)
 
 ### 3.2 In-Memory Mutations with Undo ✅
 

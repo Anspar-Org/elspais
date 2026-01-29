@@ -753,6 +753,226 @@ def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# File Mutation Tools (REQ-o00063)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _change_reference_type(
+    repo_root: Path,
+    req_id: str,
+    target_id: str,
+    new_type: str,
+    save_branch: bool = False,
+) -> dict[str, Any]:
+    """Change a reference type in a spec file (Implements -> Refines or vice versa).
+
+    REQ-o00063-A: Modify Implements/Refines relationships in spec files.
+
+    Args:
+        repo_root: Repository root path.
+        req_id: ID of the requirement to modify.
+        target_id: ID of the target requirement being referenced.
+        new_type: New reference type ('IMPLEMENTS' or 'REFINES').
+        save_branch: If True, create a safety branch before modifying.
+
+    Returns:
+        Success status and optional safety_branch name.
+    """
+    from elspais.utilities.git import create_safety_branch
+
+    # Normalize type
+    new_type_lower = new_type.lower()
+    if new_type_lower not in ("implements", "refines"):
+        return {"success": False, "error": f"Invalid reference type: {new_type}"}
+
+    # Find the spec file containing req_id
+    spec_dir = repo_root / "spec"
+    if not spec_dir.exists():
+        return {"success": False, "error": "spec/ directory not found"}
+
+    # Search for the requirement in spec files
+    target_file = None
+    for md_file in spec_dir.rglob("*.md"):
+        content = md_file.read_text(encoding="utf-8")
+        if f"## {req_id}:" in content or f"### {req_id}:" in content:
+            target_file = md_file
+            break
+
+    if target_file is None:
+        return {"success": False, "error": f"Requirement {req_id} not found in spec files"}
+
+    content = target_file.read_text(encoding="utf-8")
+
+    # Create safety branch if requested
+    safety_branch = None
+    if save_branch:
+        branch_result = create_safety_branch(repo_root, req_id)
+        if not branch_result["success"]:
+            error_msg = branch_result.get("error", "Failed to create safety branch")
+            return {"success": False, "error": error_msg}
+        safety_branch = branch_result["branch_name"]
+
+    # Find and replace the reference pattern
+    # Match patterns like: **Implements**: REQ-p00001 or **Refines**: REQ-p00001
+    old_patterns = [
+        f"**Implements**: {target_id}",
+        f"**Refines**: {target_id}",
+        f"Implements: {target_id}",
+        f"Refines: {target_id}",
+    ]
+
+    # Capitalize for display
+    new_type_display = new_type_lower.capitalize()
+    new_text = f"**{new_type_display}**: {target_id}"
+
+    modified = False
+    for pattern in old_patterns:
+        if pattern in content:
+            content = content.replace(pattern, new_text)
+            modified = True
+            break
+
+    if not modified:
+        return {"success": False, "error": f"Reference to {target_id} not found in {req_id}"}
+
+    # Write the modified content
+    target_file.write_text(content, encoding="utf-8")
+
+    result: dict[str, Any] = {"success": True}
+    if safety_branch:
+        result["safety_branch"] = safety_branch
+
+    return result
+
+
+def _move_requirement(
+    repo_root: Path,
+    req_id: str,
+    target_file: str,
+    save_branch: bool = False,
+) -> dict[str, Any]:
+    """Move a requirement from one spec file to another.
+
+    REQ-o00063-B: Relocate a requirement between spec files.
+
+    Args:
+        repo_root: Repository root path.
+        req_id: ID of the requirement to move.
+        target_file: Relative path to the target file.
+        save_branch: If True, create a safety branch before modifying.
+
+    Returns:
+        Success status and optional safety_branch name.
+    """
+    from elspais.utilities.git import create_safety_branch
+
+    spec_dir = repo_root / "spec"
+    if not spec_dir.exists():
+        return {"success": False, "error": "spec/ directory not found"}
+
+    target_path = repo_root / target_file
+    if not target_path.exists():
+        return {"success": False, "error": f"Target file {target_file} not found"}
+
+    # Find the source file containing req_id
+    source_file = None
+    for md_file in spec_dir.rglob("*.md"):
+        content = md_file.read_text(encoding="utf-8")
+        if f"## {req_id}:" in content or f"### {req_id}:" in content:
+            source_file = md_file
+            break
+
+    if source_file is None:
+        return {"success": False, "error": f"Requirement {req_id} not found in spec files"}
+
+    if source_file == target_path:
+        return {"success": False, "error": "Source and target files are the same"}
+
+    # Create safety branch if requested
+    safety_branch = None
+    if save_branch:
+        branch_result = create_safety_branch(repo_root, req_id)
+        if not branch_result["success"]:
+            error_msg = branch_result.get("error", "Failed to create safety branch")
+            return {"success": False, "error": error_msg}
+        safety_branch = branch_result["branch_name"]
+
+    # Extract the requirement block from source
+    source_content = source_file.read_text(encoding="utf-8")
+
+    # Find the requirement block (from header to *End* marker or next ## header)
+    # Pattern: ## REQ-xxx: Title ... *End* *Title* | **Hash**: xxx
+    header_pattern = re.compile(
+        rf"(^##+ {re.escape(req_id)}:.*?(?:\*End\*.*?(?:\*\*Hash\*\*:.*?\n|$)|(?=^##+ REQ-)))",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    match = header_pattern.search(source_content)
+    if not match:
+        return {"success": False, "error": f"Could not parse requirement block for {req_id}"}
+
+    req_block = match.group(1)
+
+    # Remove from source
+    new_source_content = source_content[: match.start()] + source_content[match.end() :]
+    # Clean up multiple consecutive blank lines
+    new_source_content = re.sub(r"\n{3,}", "\n\n", new_source_content)
+
+    # Append to target
+    target_content = target_path.read_text(encoding="utf-8")
+    if not target_content.endswith("\n\n"):
+        if not target_content.endswith("\n"):
+            target_content += "\n"
+        target_content += "\n"
+    target_content += "---\n\n" + req_block
+
+    # Write both files
+    source_file.write_text(new_source_content, encoding="utf-8")
+    target_path.write_text(target_content, encoding="utf-8")
+
+    result: dict[str, Any] = {"success": True}
+    if safety_branch:
+        result["safety_branch"] = safety_branch
+
+    return result
+
+
+def _restore_from_safety_branch(
+    repo_root: Path,
+    branch_name: str,
+) -> dict[str, Any]:
+    """Restore spec files from a safety branch.
+
+    REQ-o00063-E: Revert file changes from a safety branch.
+
+    Args:
+        repo_root: Repository root path.
+        branch_name: Name of the safety branch to restore from.
+
+    Returns:
+        Success status.
+    """
+    from elspais.utilities.git import restore_from_safety_branch
+
+    return restore_from_safety_branch(repo_root, branch_name)
+
+
+def _list_safety_branches_impl(repo_root: Path) -> dict[str, Any]:
+    """List all safety branches.
+
+    Args:
+        repo_root: Repository root path.
+
+    Returns:
+        List of safety branch names.
+    """
+    from elspais.utilities.git import list_safety_branches
+
+    branches = list_safety_branches(repo_root)
+    return {"branches": branches, "count": len(branches)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP Server Instructions
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -834,8 +1054,15 @@ to spec files automatically. This allows you to:
 2. Use undo to revert mistakes
 3. Refresh the graph to discard all changes
 
-To persist changes, use `refresh_graph()` to reload from files (discarding
-in-memory changes) or use file-based editing tools (coming soon).
+To persist changes, use the file mutation tools:
+
+### File Mutations (persistent)
+- `change_reference_type(req_id, target_id, new_type, save_branch)` - Change Implements/Refines
+- `move_requirement(req_id, target_file, save_branch)` - Move requirement to different file
+- `restore_from_safety_branch(branch_name)` - Revert file changes
+- `list_safety_branches()` - List available safety branches
+
+Use `save_branch=True` to create a safety branch before modifications, allowing rollback.
 
 ## Common Patterns
 
@@ -1279,6 +1506,96 @@ def create_server(
             List of broken references.
         """
         return _get_broken_references(_state["graph"])
+
+    # ─────────────────────────────────────────────────────────────────────
+    # File Mutation Tools (REQ-o00063)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def change_reference_type(
+        req_id: str,
+        target_id: str,
+        new_type: str,
+        save_branch: bool = False,
+    ) -> dict[str, Any]:
+        """Change a reference type in a spec file.
+
+        Modifies Implements/Refines relationships in spec files on disk.
+        Optionally creates a safety branch for rollback.
+
+        Args:
+            req_id: ID of the requirement to modify.
+            target_id: ID of the target requirement being referenced.
+            new_type: New reference type ('IMPLEMENTS' or 'REFINES').
+            save_branch: If True, create a safety branch before modifying.
+
+        Returns:
+            Success status and optional safety_branch name.
+        """
+        result = _change_reference_type(
+            _state["working_dir"], req_id, target_id, new_type, save_branch
+        )
+        # REQ-o00063-F: Refresh graph after file mutations
+        if result.get("success"):
+            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            _state["graph"] = new_graph
+        return result
+
+    @mcp.tool()
+    def move_requirement(
+        req_id: str,
+        target_file: str,
+        save_branch: bool = False,
+    ) -> dict[str, Any]:
+        """Move a requirement to a different spec file.
+
+        Relocates a requirement from its current file to the target file.
+        Optionally creates a safety branch for rollback.
+
+        Args:
+            req_id: ID of the requirement to move.
+            target_file: Relative path to the target file (e.g., 'spec/other.md').
+            save_branch: If True, create a safety branch before modifying.
+
+        Returns:
+            Success status and optional safety_branch name.
+        """
+        result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
+        # REQ-o00063-F: Refresh graph after file mutations
+        if result.get("success"):
+            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            _state["graph"] = new_graph
+        return result
+
+    @mcp.tool()
+    def restore_from_safety_branch(branch_name: str) -> dict[str, Any]:
+        """Restore spec files from a safety branch.
+
+        Reverts file changes by restoring from a previously created safety branch.
+
+        Args:
+            branch_name: Name of the safety branch to restore from.
+
+        Returns:
+            Success status and list of files restored.
+        """
+        result = _restore_from_safety_branch(_state["working_dir"], branch_name)
+        # REQ-o00063-F: Refresh graph after file mutations
+        if result.get("success"):
+            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            _state["graph"] = new_graph
+        return result
+
+    @mcp.tool()
+    def list_safety_branches() -> dict[str, Any]:
+        """List all safety branches.
+
+        Returns available safety branches that can be used with restore_from_safety_branch.
+
+        Returns:
+            List of branch names and count.
+        """
+        return _list_safety_branches_impl(_state["working_dir"])
 
     return mcp
 

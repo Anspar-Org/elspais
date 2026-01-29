@@ -14,7 +14,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any
 
 
 @dataclass
@@ -28,18 +28,18 @@ class GitChangeInfo:
         committed_req_locations: REQ ID -> file path mapping from committed state (HEAD).
     """
 
-    modified_files: Set[str] = field(default_factory=set)
-    untracked_files: Set[str] = field(default_factory=set)
-    branch_changed_files: Set[str] = field(default_factory=set)
-    committed_req_locations: Dict[str, str] = field(default_factory=dict)
+    modified_files: set[str] = field(default_factory=set)
+    untracked_files: set[str] = field(default_factory=set)
+    branch_changed_files: set[str] = field(default_factory=set)
+    committed_req_locations: dict[str, str] = field(default_factory=dict)
 
     @property
-    def all_changed_files(self) -> Set[str]:
+    def all_changed_files(self) -> set[str]:
         """Get all files with any kind of change."""
         return self.modified_files | self.untracked_files | self.branch_changed_files
 
     @property
-    def uncommitted_files(self) -> Set[str]:
+    def uncommitted_files(self) -> set[str]:
         """Get all files with uncommitted changes (modified or untracked)."""
         return self.modified_files | self.untracked_files
 
@@ -59,7 +59,7 @@ class MovedRequirement:
     new_path: str
 
 
-def get_repo_root(start_path: Optional[Path] = None) -> Optional[Path]:
+def get_repo_root(start_path: Path | None = None) -> Path | None:
     """Find the git repository root.
 
     Args:
@@ -81,7 +81,7 @@ def get_repo_root(start_path: Optional[Path] = None) -> Optional[Path]:
         return None
 
 
-def get_modified_files(repo_root: Path) -> Tuple[Set[str], Set[str]]:
+def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
     """Get sets of modified and untracked files according to git status.
 
     Args:
@@ -100,8 +100,8 @@ def get_modified_files(repo_root: Path) -> Tuple[Set[str], Set[str]]:
             text=True,
             check=True,
         )
-        modified_files: Set[str] = set()
-        untracked_files: Set[str] = set()
+        modified_files: set[str] = set()
+        untracked_files: set[str] = set()
 
         for line in result.stdout.split("\n"):
             if line and len(line) >= 3:
@@ -125,7 +125,7 @@ def get_modified_files(repo_root: Path) -> Tuple[Set[str], Set[str]]:
         return set(), set()
 
 
-def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> Set[str]:
+def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str]:
     """Get set of files changed between current branch and base branch.
 
     Args:
@@ -145,7 +145,7 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> Set[str
                 text=True,
                 check=True,
             )
-            changed_files: Set[str] = set()
+            changed_files: set[str] = set()
             for line in result.stdout.split("\n"):
                 if line.strip():
                     changed_files.add(line.strip())
@@ -161,8 +161,8 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> Set[str
 def get_committed_req_locations(
     repo_root: Path,
     spec_dir: str = "spec",
-    exclude_files: Optional[List[str]] = None,
-) -> Dict[str, str]:
+    exclude_files: list[str] | None = None,
+) -> dict[str, str]:
     """Get REQ ID -> file path mapping from committed state (HEAD).
 
     This allows detection of moved requirements by comparing current location
@@ -179,7 +179,7 @@ def get_committed_req_locations(
     if exclude_files is None:
         exclude_files = ["INDEX.md", "README.md", "requirements-format.md"]
 
-    req_locations: Dict[str, str] = {}
+    req_locations: dict[str, str] = {}
     # Pattern matches REQ headers with optional associated prefix
     req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
 
@@ -228,8 +228,8 @@ def get_committed_req_locations(
 def get_current_req_locations(
     repo_root: Path,
     spec_dir: str = "spec",
-    exclude_files: Optional[List[str]] = None,
-) -> Dict[str, str]:
+    exclude_files: list[str] | None = None,
+) -> dict[str, str]:
     """Get REQ ID -> file path mapping from current working directory.
 
     Args:
@@ -243,7 +243,7 @@ def get_current_req_locations(
     if exclude_files is None:
         exclude_files = ["INDEX.md", "README.md", "requirements-format.md"]
 
-    req_locations: Dict[str, str] = {}
+    req_locations: dict[str, str] = {}
     req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
 
     spec_path = repo_root / spec_dir
@@ -269,9 +269,9 @@ def get_current_req_locations(
 
 
 def detect_moved_requirements(
-    committed_locations: Dict[str, str],
-    current_locations: Dict[str, str],
-) -> List[MovedRequirement]:
+    committed_locations: dict[str, str],
+    current_locations: dict[str, str],
+) -> list[MovedRequirement]:
     """Detect requirements that have been moved between files.
 
     Args:
@@ -297,7 +297,7 @@ def detect_moved_requirements(
 
 
 def get_git_changes(
-    repo_root: Optional[Path] = None,
+    repo_root: Path | None = None,
     spec_dir: str = "spec",
     base_branch: str = "main",
 ) -> GitChangeInfo:
@@ -334,7 +334,7 @@ def get_git_changes(
     )
 
 
-def filter_spec_files(files: Set[str], spec_dir: str = "spec") -> Set[str]:
+def filter_spec_files(files: set[str], spec_dir: str = "spec") -> set[str]:
     """Filter a set of files to only include spec directory files.
 
     Args:
@@ -348,6 +348,192 @@ def filter_spec_files(files: Set[str], spec_dir: str = "spec") -> Set[str]:
     return {f for f in files if f.startswith(prefix) and f.endswith(".md")}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Safety Branch Utilities (REQ-o00063)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def get_current_branch(repo_root: Path) -> str | None:
+    """Get the name of the current git branch.
+
+    Args:
+        repo_root: Path to repository root
+
+    Returns:
+        Branch name, or None if not on a branch (detached HEAD)
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        branch = result.stdout.strip()
+        return branch if branch != "HEAD" else None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def create_safety_branch(
+    repo_root: Path,
+    req_id: str,
+) -> dict[str, Any]:
+    """Create a safety branch with timestamped name before file mutations.
+
+    Safety branches allow reverting file mutations by preserving the pre-mutation
+    state of spec files.
+
+    Args:
+        repo_root: Path to repository root
+        req_id: Requirement ID being modified (used in branch name)
+
+    Returns:
+        Dict with 'success', 'branch_name', and optional 'error'
+    """
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    branch_name = f"safety/{req_id}-{timestamp}"
+
+    try:
+        # Create the branch at current HEAD
+        subprocess.run(
+            ["git", "branch", branch_name],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {"success": True, "branch_name": branch_name}
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to create branch: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+
+def list_safety_branches(repo_root: Path) -> list[str]:
+    """List all safety branches in the repository.
+
+    Args:
+        repo_root: Path to repository root
+
+    Returns:
+        List of branch names starting with 'safety/'
+    """
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--list", "safety/*"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        branches = []
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                # Remove leading '* ' or '  ' from branch name
+                branch = line.strip().lstrip("* ")
+                if branch:
+                    branches.append(branch)
+        return branches
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+
+
+def restore_from_safety_branch(
+    repo_root: Path,
+    branch_name: str,
+    spec_dir: str = "spec",
+) -> dict[str, Any]:
+    """Restore spec files from a safety branch.
+
+    This checks out the spec directory from the safety branch, effectively
+    reverting any file mutations made after the safety branch was created.
+
+    Args:
+        repo_root: Path to repository root
+        branch_name: Name of the safety branch to restore from
+        spec_dir: Spec directory relative to repo root
+
+    Returns:
+        Dict with 'success', 'files_restored', and optional 'error'
+    """
+    # Verify branch exists
+    branches = list_safety_branches(repo_root)
+    if branch_name not in branches:
+        return {"success": False, "error": f"Branch '{branch_name}' not found"}
+
+    try:
+        # Checkout spec directory from safety branch
+        subprocess.run(
+            ["git", "checkout", branch_name, "--", f"{spec_dir}/"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Get list of restored files
+        status_result = subprocess.run(
+            ["git", "diff", "--name-only", "--cached"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        files_restored = [
+            f for f in status_result.stdout.strip().split("\n") if f.startswith(spec_dir)
+        ]
+
+        # Reset staging area (we only want working directory changes)
+        subprocess.run(
+            ["git", "reset", "HEAD", f"{spec_dir}/"],
+            cwd=repo_root,
+            capture_output=True,
+            check=True,
+        )
+
+        return {"success": True, "files_restored": files_restored}
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to restore: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+
+def delete_safety_branch(
+    repo_root: Path,
+    branch_name: str,
+) -> dict[str, Any]:
+    """Delete a safety branch.
+
+    Args:
+        repo_root: Path to repository root
+        branch_name: Name of the branch to delete
+
+    Returns:
+        Dict with 'success' and optional 'error'
+    """
+    # Only allow deleting safety branches
+    if not branch_name.startswith("safety/"):
+        return {"success": False, "error": "Can only delete safety/ branches"}
+
+    try:
+        subprocess.run(
+            ["git", "branch", "-D", branch_name],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {"success": True}
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to delete branch: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -359,4 +545,10 @@ __all__ = [
     "detect_moved_requirements",
     "get_git_changes",
     "filter_spec_files",
+    # Safety branch utilities (REQ-o00063)
+    "get_current_branch",
+    "create_safety_branch",
+    "list_safety_branches",
+    "restore_from_safety_branch",
+    "delete_safety_branch",
 ]
