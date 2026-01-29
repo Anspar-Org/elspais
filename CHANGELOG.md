@@ -2,6 +2,27 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.41.0] - 2026-01-29
+
+### Added
+
+- **MCP Dogfooding (Phase 5)**: Validated MCP server utility by improving test traceability:
+  - Added 5 new tests with REQ-assertion naming pattern (e.g., `test_REQ_d00050_E_idempotent`)
+  - Tests for REQ-d00050-E (annotator idempotency) and REQ-d00051-F (no duplicate iteration)
+  - TEST nodes now automatically link to requirements via name pattern matching
+
+### Documentation
+
+- `docs/phase5-dogfooding-report.md`: Comprehensive dogfooding analysis with:
+  - Test-requirement mapping table for `tests/core/test_annotators.py`
+  - MCP tool ergonomic issues and suggested improvements
+  - Before/after traceability metrics verification
+
+### Technical
+
+- Graph node count increased from 346 to 398 after test improvements
+- TEST nodes: 36 → 75, TEST_RESULT nodes: 17 → 30
+
 ## [0.40.0] - 2026-01-29
 
 ### Added

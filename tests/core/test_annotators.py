@@ -1,26 +1,51 @@
 """Tests for Graph Annotators."""
 
-import pytest
-
 from elspais.graph import NodeKind
-from elspais.graph.GraphNode import GraphNode, SourceLocation
-from elspais.graph.builder import GraphBuilder, TraceGraph
-from elspais.utilities.git import GitChangeInfo
 from elspais.graph.annotators import (
-    annotate_git_state,
     annotate_display_info,
+    annotate_git_state,
     annotate_implementation_files,
+    collect_topics,
     count_by_level,
     count_by_repo,
     count_implementation_files,
-    collect_topics,
     get_implementation_status,
 )
+from elspais.graph.GraphNode import GraphNode, SourceLocation
+from elspais.utilities.git import GitChangeInfo
 from tests.core.graph_test_helpers import build_graph, make_requirement
 
 
 class TestAnnotateGitState:
     """Tests for annotate_git_state function."""
+
+    def test_REQ_d00050_E_git_state_is_idempotent(self):
+        """REQ-d00050-E: Annotator functions SHALL be idempotent."""
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            source=SourceLocation(path="spec/prd.md", line=1),
+        )
+        git_info = GitChangeInfo(
+            modified_files={"spec/prd.md"},
+            branch_changed_files={"spec/prd.md"},
+        )
+
+        # First call
+        annotate_git_state(node, git_info)
+        first_uncommitted = node.get_metric("is_uncommitted")
+        first_modified = node.get_metric("is_modified")
+        first_branch_changed = node.get_metric("is_branch_changed")
+
+        # Second call - should produce same results
+        annotate_git_state(node, git_info)
+        second_uncommitted = node.get_metric("is_uncommitted")
+        second_modified = node.get_metric("is_modified")
+        second_branch_changed = node.get_metric("is_branch_changed")
+
+        assert first_uncommitted == second_uncommitted
+        assert first_modified == second_modified
+        assert first_branch_changed == second_branch_changed
 
     def test_annotates_uncommitted(self):
         """Marks node as uncommitted when file is modified."""
@@ -136,6 +161,31 @@ class TestAnnotateGitState:
 
 class TestAnnotateDisplayInfo:
     """Tests for annotate_display_info function."""
+
+    def test_REQ_d00050_E_display_info_is_idempotent(self):
+        """REQ-d00050-E: Annotator functions SHALL be idempotent."""
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            source=SourceLocation(path="spec/roadmap/future.md", line=1),
+        )
+        node.set_field("repo_prefix", "CAL")
+
+        # First call
+        annotate_display_info(node)
+        first_roadmap = node.get_metric("is_roadmap")
+        first_prefix = node.get_metric("repo_prefix")
+        first_filename = node.get_metric("display_filename")
+
+        # Second call - should produce same results
+        annotate_display_info(node)
+        second_roadmap = node.get_metric("is_roadmap")
+        second_prefix = node.get_metric("repo_prefix")
+        second_filename = node.get_metric("display_filename")
+
+        assert first_roadmap == second_roadmap
+        assert first_prefix == second_prefix
+        assert first_filename == second_filename
 
     def test_annotates_roadmap(self):
         """Marks node as roadmap when in roadmap directory."""
@@ -378,3 +428,54 @@ class TestGetImplementationStatus:
         status = get_implementation_status(node)
 
         assert status == "Partial"
+
+
+class TestAggregateIterationBehavior:
+    """Tests for REQ-d00051-F: Aggregate functions iteration behavior."""
+
+    def test_REQ_d00051_F_count_by_level_uses_all_nodes(self):
+        """REQ-d00051-F: count_by_level SHALL NOT duplicate iteration."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD", status="Active"),
+            make_requirement("REQ-o00001", level="OPS", status="Active"),
+            make_requirement("REQ-d00001", level="DEV", status="Active"),
+        )
+
+        # Call multiple times - should always return same result
+        counts1 = count_by_level(graph)
+        counts2 = count_by_level(graph)
+
+        assert counts1 == counts2
+        # Total should match node count (3 requirements)
+        total = sum(counts1["all"].values())
+        assert total == 3
+
+    def test_REQ_d00051_F_count_by_repo_uses_all_nodes(self):
+        """REQ-d00051-F: count_by_repo SHALL NOT duplicate iteration."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", status="Active"),
+            make_requirement("REQ-p00002", status="Active"),
+        )
+        # Set metrics for all nodes
+        for node in graph.all_nodes():
+            if node.kind == NodeKind.REQUIREMENT:
+                node.set_metric("repo_prefix", "CORE")
+
+        counts1 = count_by_repo(graph)
+        counts2 = count_by_repo(graph)
+
+        assert counts1 == counts2
+
+    def test_REQ_d00051_F_collect_topics_uses_all_nodes(self):
+        """REQ-d00051-F: collect_topics SHALL NOT duplicate iteration."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", source_path="spec/prd-auth.md"),
+            make_requirement("REQ-p00002", source_path="spec/prd-billing.md"),
+        )
+
+        topics1 = collect_topics(graph)
+        topics2 = collect_topics(graph)
+
+        assert topics1 == topics2
+        # Should have exactly 2 unique topics
+        assert len(topics1) == 2
