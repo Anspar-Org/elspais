@@ -1,17 +1,16 @@
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.
-The graph provides the iterator (graph.all_nodes()), and the caller
-applies annotators to nodes as needed.
+The graph provides iterators (graph.all_nodes(), graph.nodes_by_kind()),
+and the caller applies annotators to nodes as needed.
 
 Usage:
     from elspais.graph.annotators import annotate_git_state, annotate_display_info
     from elspais.graph import NodeKind
 
-    for node in graph.all_nodes():
-        if node.kind == NodeKind.REQUIREMENT:
-            annotate_git_state(node, git_info)
-            annotate_display_info(node)
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        annotate_git_state(node, git_info)
+        annotate_display_info(node)
 """
 
 from __future__ import annotations
@@ -197,9 +196,7 @@ def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
         "active": {"PRD": 0, "OPS": 0, "DEV": 0},
         "all": {"PRD": 0, "OPS": 0, "DEV": 0},
     }
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         level = node.get_field("level", "")
         status = node.get_field("status", "Active")
         if level:
@@ -223,9 +220,7 @@ def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
 
     repo_counts: dict[str, dict[str, int]] = {}
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         prefix = node.get_metric("repo_prefix", "CORE")
         status = node.get_field("status", "Active")
@@ -252,9 +247,7 @@ def count_implementation_files(graph: TraceGraph) -> int:
     from elspais.graph import NodeKind
 
     total = 0
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         impl_files = node.get_metric("implementation_files", [])
         total += len(impl_files)
     return total
@@ -272,9 +265,7 @@ def collect_topics(graph: TraceGraph) -> list[str]:
     from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node.source and node.source.path:
             stem = Path(node.source.path).stem
             topic = stem.split("-", 1)[1] if "-" in stem else stem
@@ -320,9 +311,7 @@ def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
         "no_coverage": 0,
     }
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         counts["total"] += 1
         coverage_pct = node.get_metric("coverage_pct", 0)
@@ -353,9 +342,7 @@ def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
         "branch_changed": 0,
     }
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         if node.get_metric("is_uncommitted", False):
             counts["uncommitted"] += 1
@@ -398,9 +385,7 @@ def annotate_coverage(graph: TraceGraph) -> None:
         RollupMetrics,
     )
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         metrics = RollupMetrics()
 
@@ -706,9 +691,7 @@ def annotate_keywords(graph: TraceGraph) -> None:
     """
     from elspais.graph import NodeKind
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         all_text_parts: list[str] = []
 
@@ -755,9 +738,7 @@ def find_by_keywords(
 
     results: list[GraphNode] = []
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         node_keywords = set(node.get_field("keywords", []))
 
@@ -786,9 +767,7 @@ def collect_all_keywords(graph: TraceGraph) -> list[str]:
 
     all_keywords: set[str] = set()
 
-    for node in graph._index.values():
-        if node.kind != NodeKind.REQUIREMENT:
-            continue
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         node_keywords = node.get_field("keywords", [])
         all_keywords.update(node_keywords)

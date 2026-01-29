@@ -81,14 +81,11 @@ def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
         Dict with nodes, roots, and metadata.
     """
 
-    # Serialize all nodes
+    # Serialize all nodes and count by kind in single pass
     nodes = {}
-    for node in graph._index.values():
-        nodes[node.id] = serialize_node(node)
-
-    # Count by kind
     kind_counts: dict[str, int] = {}
-    for node in graph._index.values():
+    for node in graph.all_nodes():
+        nodes[node.id] = serialize_node(node)
         kind_name = node.kind.name
         kind_counts[kind_name] = kind_counts.get(kind_name, 0) + 1
 

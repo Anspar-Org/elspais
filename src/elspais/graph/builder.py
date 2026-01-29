@@ -64,14 +64,22 @@ class TraceGraph:
         """
         return self._index.get(node_id)
 
-    def all_nodes(self, order: str = "pre") -> Iterator[GraphNode]:
-        """Iterate all nodes in graph.
+    def all_nodes(self) -> Iterator[GraphNode]:
+        """Iterate ALL nodes in graph, including orphans.
+
+        Yields:
+            All GraphNode instances in the graph.
+        """
+        yield from self._index.values()
+
+    def all_connected_nodes(self, order: str = "pre") -> Iterator[GraphNode]:
+        """Iterate nodes reachable from roots (excludes orphans).
 
         Args:
             order: Traversal order ("pre", "post", "level").
 
         Yields:
-            All GraphNode instances in the graph.
+            GraphNode instances reachable from root nodes.
         """
         for root in self._roots:
             yield from root.walk(order)
