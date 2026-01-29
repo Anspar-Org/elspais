@@ -10,9 +10,19 @@ File mutations persist changes to spec files on disk and must:
 - Call refresh_graph() after file mutations (REQ-o00063-F)
 """
 
+import os
 import subprocess
 
 import pytest
+
+
+def _clean_git_env() -> dict[str, str]:
+    """Return environment with GIT_DIR/GIT_WORK_TREE removed for test isolation."""
+    env = os.environ.copy()
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    return env
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -22,17 +32,22 @@ import pytest
 @pytest.fixture
 def git_repo(tmp_path):
     """Create a temporary git repository with spec files."""
+    # Use clean env to prevent GIT_DIR from affecting temp repo
+    env = _clean_git_env()
+
     # Initialize git repo
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "init"], cwd=tmp_path, env=env, capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,
+        env=env,
         capture_output=True,
         check=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
         cwd=tmp_path,
+        env=env,
         capture_output=True,
         check=True,
     )
@@ -84,10 +99,11 @@ Child of REQ-p00001.
     )
 
     # Commit initial state
-    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
         cwd=tmp_path,
+        env=env,
         capture_output=True,
         check=True,
     )
@@ -118,6 +134,7 @@ class TestGitSafetyBranch:
         branches = subprocess.run(
             ["git", "branch", "-a"],
             cwd=git_repo,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,

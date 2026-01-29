@@ -10,11 +10,24 @@ enabling detection of:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+def _clean_git_env() -> dict[str, str]:
+    """Return environment with GIT_DIR/GIT_WORK_TREE removed.
+
+    Use when running git commands with explicit cwd to prevent
+    inherited git context from overriding the provided path.
+    """
+    env = os.environ.copy()
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    return env
 
 
 @dataclass
@@ -72,6 +85,7 @@ def get_repo_root(start_path: Path | None = None) -> Path | None:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             cwd=start_path or Path.cwd(),
+            env=_clean_git_env() if start_path else None,
             capture_output=True,
             text=True,
             check=True,
@@ -96,6 +110,7 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
         result = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=all"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -141,6 +156,7 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str
             result = subprocess.run(
                 ["git", "diff", "--name-only", f"{branch_ref}...HEAD"],
                 cwd=repo_root,
+                env=_clean_git_env(),
                 capture_output=True,
                 text=True,
                 check=True,
@@ -188,6 +204,7 @@ def get_committed_req_locations(
         result = subprocess.run(
             ["git", "ls-tree", "-r", "--name-only", "HEAD", f"{spec_dir}/"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -204,6 +221,7 @@ def get_committed_req_locations(
                 content_result = subprocess.run(
                     ["git", "show", f"HEAD:{file_path}"],
                     cwd=repo_root,
+                    env=_clean_git_env(),
                     capture_output=True,
                     text=True,
                     check=True,
@@ -366,6 +384,7 @@ def get_current_branch(repo_root: Path) -> str | None:
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -402,6 +421,7 @@ def create_safety_branch(
         subprocess.run(
             ["git", "branch", branch_name],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -426,6 +446,7 @@ def list_safety_branches(repo_root: Path) -> list[str]:
         result = subprocess.run(
             ["git", "branch", "--list", "safety/*"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -470,6 +491,7 @@ def restore_from_safety_branch(
         subprocess.run(
             ["git", "checkout", branch_name, "--", f"{spec_dir}/"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -479,6 +501,7 @@ def restore_from_safety_branch(
         status_result = subprocess.run(
             ["git", "diff", "--name-only", "--cached"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -491,6 +514,7 @@ def restore_from_safety_branch(
         subprocess.run(
             ["git", "reset", "HEAD", f"{spec_dir}/"],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             check=True,
         )
@@ -523,6 +547,7 @@ def delete_safety_branch(
         subprocess.run(
             ["git", "branch", "-D", branch_name],
             cwd=repo_root,
+            env=_clean_git_env(),
             capture_output=True,
             text=True,
             check=True,
