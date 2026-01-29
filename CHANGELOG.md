@@ -2,6 +2,23 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.2] - 2026-01-29
+
+### Added
+
+- **Reference Pattern Builder Module** (`utilities/reference_config.py`): New module for unified pattern building
+  - `ReferenceConfig` dataclass: Configuration for reference pattern matching (separators, case sensitivity, etc.)
+  - `ReferenceOverride` dataclass: File-type/directory-based override rules with glob matching
+  - `ReferenceResolver` class: Single entry point for parsers to get merged configuration
+  - Pattern builder functions:
+    - `build_id_pattern()`: Build regex for requirement IDs with configurable separators
+    - `build_comment_pattern()`: Build regex for `# Implements:` style comments
+    - `build_block_header_pattern()`: Build regex for multi-line block headers
+    - `build_block_ref_pattern()`: Build regex for block reference lines
+    - `extract_ids_from_text()`: Extract all requirement IDs from text
+    - `normalize_extracted_id()`: Normalize IDs to canonical format
+  - 40 comprehensive unit tests in `tests/core/test_reference_config.py`
+
 ## [0.43.1] - 2026-01-29
 
 ### Added

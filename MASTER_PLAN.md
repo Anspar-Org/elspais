@@ -1,65 +1,110 @@
-# Unified References Configuration
+# MASTER PLAN - Phase 2: Pattern Builder Implementation
 
 ## Goal
 
-Add unified `[references]` configuration section to support configurable reference parsing across all parser types (CodeParser, TestParser, JUnitXMLParser, PytestJSONParser) with file-type and directory-based overrides.
+Create the unified reference config module with dataclasses and pattern builder functions that will be shared by all parsers.
 
-### Configuration Structure
+## Phase Details
 
-All reference parsing (tests, code, results) shares the same configuration structure under a new `[references]` section:
+### New File: `src/elspais/utilities/reference_config.py`
 
-```toml
-# Unified reference pattern configuration
-# Used by: TestParser, CodeParser, JUnitXMLParser, PytestJSONParser
+Create this file with:
 
-[references]
-# Default pattern options (applied to all files unless overridden)
-[references.defaults]
-separators = ["-", "_"]           # Separator characters to accept
-case_sensitive = false            # Case-insensitive matching
-prefix_optional = false           # Prefix (e.g., "REQ") required
-comment_styles = ["#", "//", "--"]  # Recognized comment markers
+#### 1. Dataclasses
 
-# Keywords for different reference types
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
-refines = ["Refines", "REFINES"]
+```python
+@dataclass
+class ReferenceConfig:
+    """Configuration for reference pattern matching.
+    Used by all parsers: TestParser, CodeParser, JUnitXMLParser, PytestJSONParser
+    """
+    separators: List[str] = field(default_factory=lambda: ["-", "_"])
+    case_sensitive: bool = False
+    prefix_optional: bool = False
+    comment_styles: List[str] = field(default_factory=lambda: ["#", "//", "--"])
+    keywords: Dict[str, List[str]] = field(default_factory=lambda: {
+        "implements": ["Implements", "IMPLEMENTS"],
+        "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
+        "refines": ["Refines", "REFINES"],
+    })
 
-# File-type specific overrides
-[[references.overrides]]
-match = "*.py"
-separators = ["_"]                # Python uses underscores
-keywords.validates = ["Tests", "Validates"]
+@dataclass
+class ReferenceOverride:
+    """Override rule for specific file types or directories."""
+    match: str  # Glob pattern (*.py, tests/legacy/**)
+    separators: Optional[List[str]] = None
+    case_sensitive: Optional[bool] = None
+    prefix_optional: Optional[bool] = None
+    comment_styles: Optional[List[str]] = None
+    keywords: Optional[Dict[str, List[str]]] = None
 
-[[references.overrides]]
-match = "*.java"
-separators = ["_"]
-comment_styles = ["//"]           # Java uses // comments
-
-[[references.overrides]]
-match = "*.go"
-separators = ["_"]
-case_sensitive = true             # Go is case-sensitive
-comment_styles = ["//"]
-
-[[references.overrides]]
-match = "*.sql"
-separators = ["-"]
-comment_styles = ["--"]           # SQL uses -- comments
-
-[[references.overrides]]
-match = "tests/legacy/**"
-prefix_optional = true            # Legacy tests don't have REQ- prefix
+    def applies_to(self, file_path: Path, base_path: Path) -> bool:
+        """Check if this override applies to the given file."""
 ```
 
-### Files to Modify
+#### 2. ReferenceResolver Class
 
-| File | Changes |
+```python
+class ReferenceResolver:
+    """Resolves which reference config to use for a given file.
+    This is the SINGLE entry point for all parsers.
+    """
+    def __init__(self, defaults: ReferenceConfig, overrides: List[ReferenceOverride]):
+        ...
+
+    def resolve(self, file_path: Path, base_path: Path) -> ReferenceConfig:
+        """Return merged config for file (defaults + matching overrides)."""
+```
+
+#### 3. Pattern Builder Functions
+
+```python
+def build_id_pattern(
+    pattern_config: PatternConfig,
+    ref_config: ReferenceConfig,
+    include_assertion: bool = True,
+) -> re.Pattern:
+    """Build regex pattern for matching requirement IDs."""
+
+def build_comment_pattern(
+    pattern_config: PatternConfig,
+    ref_config: ReferenceConfig,
+    keyword_type: str = "implements",
+) -> re.Pattern:
+    """Build pattern for matching reference comments."""
+
+def build_block_header_pattern(
+    ref_config: ReferenceConfig,
+    keyword_type: str = "implements",
+) -> re.Pattern:
+    """Build pattern for multi-line block headers."""
+
+def extract_ids_from_text(
+    text: str,
+    pattern_config: PatternConfig,
+    ref_config: ReferenceConfig,
+) -> List[str]:
+    """Extract all requirement/assertion IDs from text."""
+
+def normalize_extracted_id(match: re.Match, pattern_config: PatternConfig) -> str:
+    """Normalize extracted ID to canonical format."""
+```
+
+### Files to Create
+
+| File | Purpose |
 |------|---------|
-| `src/elspais/config/__init__.py` | Add `references` section to DEFAULT_CONFIG |
+| `src/elspais/utilities/reference_config.py` | **NEW**: All config classes and pattern builders |
 
-## Phase 1 ✓
+### Implementation Steps
 
-- [x] 1.1 Add `references` key to DEFAULT_CONFIG with defaults and empty overrides
-- [x] 1.2 Ensure config merging works correctly for nested structures
+- [x] 1. Create new file with imports and dataclasses
+- [x] 2. Implement `ReferenceOverride.applies_to()` with glob matching
+- [x] 3. Implement `ReferenceResolver.resolve()` with override merging
+- [x] 4. Implement `build_id_pattern()` using PatternConfig + ReferenceConfig
+- [x] 5. Implement `build_comment_pattern()` for single-line comments
+- [x] 6. Implement `build_block_header_pattern()` for multi-line blocks
+- [x] 7. Implement `extract_ids_from_text()` and `normalize_extracted_id()`
+- [x] 8. Add unit tests for each function (40 tests)
+
+## Phase 2 ✓ COMPLETE
