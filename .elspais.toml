@@ -1,0 +1,37 @@
+# elspais configuration for elspais project itself
+[project]
+name = "elspais"
+version = "0.1.0"
+
+[directories]
+spec = ["spec"]
+code = ["src"]
+
+[spec]
+skip_dirs = ["roadmap"]
+
+[patterns]
+prefix = "REQ"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+operations = { id = "o", level = 2 }
+development = { id = "d", level = 3 }
+integration = { id = "int-d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py", "*_test.py"]
+reference_keyword = "Validates"
+result_files = ["test-results.xml"]

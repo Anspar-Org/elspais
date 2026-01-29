@@ -1,0 +1,24 @@
+# Configuration for missing hash test
+[project]
+name = "missing-hash-test"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", level = 1 }
+dev = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[rules.format]
+require_hash = true
+require_assertions = true

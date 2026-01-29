@@ -1,0 +1,45 @@
+# Associated repository configuration
+# References core repository for cross-repo validation
+
+[project]
+name = "associated-callisto"
+type = "associated"
+
+[associated]
+prefix = "CAL"
+id_range = [1, 99999]
+
+[core]
+path = "../hht-like"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{associated}{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", name = "Product Requirement", level = 1 }
+ops = { id = "o", name = "Operations Requirement", level = 2 }
+dev = { id = "d", name = "Development Requirement", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.associated]
+enabled = true
+position = "after_prefix"
+format = "uppercase"
+length = 3
+separator = "-"
+
+[rules.hierarchy]
+cross_repo_implements = true
+allowed_implements = [
+    "dev -> ops, prd",
+    "ops -> prd",
+    "prd -> prd",
+]

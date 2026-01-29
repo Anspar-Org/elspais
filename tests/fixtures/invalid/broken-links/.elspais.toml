@@ -1,0 +1,24 @@
+# Configuration for broken links test
+[project]
+name = "broken-links-test"
+type = "core"
+
+[directories]
+spec = "spec"
+
+[patterns]
+id_template = "{prefix}-{type}{id}"
+prefix = "REQ"
+
+[patterns.types]
+prd = { id = "p", level = 1 }
+dev = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[rules.hierarchy]
+allowed_implements = ["dev -> prd"]
+allow_orphans = false
