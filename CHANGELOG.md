@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.1] - 2026-01-29
+
+### Added
+
+- **Unified `[references]` configuration**: New config section for configurable reference parsing
+  - `references.defaults.separators`: Separator characters for requirement IDs (default: `["-", "_"]`)
+  - `references.defaults.case_sensitive`: Case sensitivity for matching (default: `false`)
+  - `references.defaults.prefix_optional`: Whether REQ prefix is required (default: `false`)
+  - `references.defaults.comment_styles`: Recognized comment markers (default: `["#", "//", "--"]`)
+  - `references.defaults.keywords`: Keywords for implements/validates/refines references
+  - `references.overrides`: File-type specific override patterns (empty by default)
+
 ## [0.43.0] - 2026-01-29
 
 ### Fixed

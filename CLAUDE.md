@@ -11,7 +11,6 @@ elspais is a zero-dependency Python requirements validation and traceability too
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: there is ONE config data struct and one modular system for CRUD operations.
 **IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
-**IMPORTANT**: **DO NOT** consult git history for context. It will only give you bad ideas.
 
 1. **Zero Dependencies**: Uses only Python 3.9+ stdlib. Custom TOML parser in `config/loader.py`.
 
@@ -133,6 +132,14 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **`get_uncovered_assertions(req_id=None)`**: Finds assertions lacking test coverage. When `req_id` is None, scans all requirements. Returns assertion id, text, label, and parent requirement context.
     - **`find_assertions_by_keywords(keywords, match_all=True)`**: Searches assertion text for keyword matches. Complements `find_by_keywords()` which searches requirement titles.
 
+25. **Unified References Configuration** (`[references]`): Configurable reference parsing for all parser types:
+    - **`defaults.separators`**: Separator characters for requirement IDs (default: `["-", "_"]`)
+    - **`defaults.case_sensitive`**: Case sensitivity for matching (default: `false`)
+    - **`defaults.prefix_optional`**: Whether REQ prefix is required (default: `false`)
+    - **`defaults.comment_styles`**: Recognized comment markers (default: `["#", "//", "--"]`)
+    - **`defaults.keywords`**: Keywords for `implements`/`validates`/`refines` references
+    - **`overrides`**: File-type specific overrides with `match` patterns (e.g., `*.py`, `tests/legacy/**`)
+
 **Multi-Language Comment Support:**
 
 | Language | Comment Style | Marker Example |
@@ -148,28 +155,13 @@ elspais is a zero-dependency Python requirements validation and traceability too
 - **ALWAYS** update the version in `pyproject.toml` before each commit
 - **ALWAYS** update `CHANGELOG.md` with new features
 - **ALWAYS** use a sub-agent to update the `docs/` files and --help cli commands
-- **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit
 - **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation
 - **ALWAYS** use a sub-agent to write tests
 - **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
 
 ## Master Plan Workflow
 
-**IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
-
-The `MASTER_PLAN.md` file contains a prioritized queue of enhancement issues. Follow this workflow:
-
-1. **Read MASTER_PLAN.md** - Find the first phase with `[ ]` (incomplete) status
-2. **Refine the plan** - Use sub-agents to:
-   - Explore relevant code files
-   - Understand the current implementation
-   - Create a detailed implementation plan
-3. **Implement** - Write the code and tests
-4. **Verify** - Run `pytest` to ensure all tests pass
-5. **Mark complete** - Change `[ ]` to `[x]` in MASTER_PLAN.md
-6. **Commit after each phase** - Create a git commit with `[CUR-514]` prefix immediately after completing each phase. Do not batch multiple phases into one commit.
-7. **Clear context** - Suggest `/clear` to the user to free context
-8. **Resume** - After clear, read MASTER_PLAN.md and continue with next phase
+**IMPORTANT**: After `/clear` or at the start of a new session, check `WORKFLOW_STATE.md` for queued issues.
 
 **Commit Discipline**: Each phase should result in exactly one commit. This ensures:
 
