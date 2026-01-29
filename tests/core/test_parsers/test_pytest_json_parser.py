@@ -176,6 +176,26 @@ class TestPytestJSONParserReqExtraction:
 
         assert "REQ-p00001-A" in results[0]["validates"]
 
+    def test_generates_test_id(self):
+        """Generates stable test_id from classname and name."""
+        json_content = '''
+{
+  "tests": [
+    {
+      "nodeid": "tests/test_auth.py::TestLogin::test_user_can_login",
+      "outcome": "passed",
+      "duration": 0.1
+    }
+  ]
+}
+'''
+        parser = PytestJSONParser()
+
+        results = parser.parse(json_content, "results.json")
+
+        # test_id is derived from classname (file path) and name (class::method)
+        assert results[0]["test_id"] == "test:tests/test_auth.py::TestLogin::test_user_can_login"
+
 
 class TestPytestJSONParserEdgeCases:
     """Edge case tests for PytestJSONParser."""

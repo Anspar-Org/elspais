@@ -124,6 +124,31 @@ class TestJUnitXMLParserReqExtraction:
 
         assert "REQ-p00001-A" in results[0]["validates"]
 
+    def test_generates_test_id(self):
+        """Generates stable test_id from classname and name."""
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Test" tests="1">
+  <testcase classname="tests.test_auth.TestLogin" name="test_user_can_login" time="0.1"/>
+</testsuite>'''
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results.xml")
+
+        assert results[0]["test_id"] == "test:tests.test_auth.TestLogin::test_user_can_login"
+
+    def test_generates_test_id_without_classname(self):
+        """Generates test_id even without classname."""
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Test" tests="1">
+  <testcase name="test_something" time="0.1"/>
+</testsuite>'''
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results.xml")
+
+        # Without classname, format is "test::test_name"
+        assert results[0]["test_id"] == "test::test_something"
+
 
 class TestJUnitXMLParserEdgeCases:
     """Edge case tests for JUnitXMLParser."""

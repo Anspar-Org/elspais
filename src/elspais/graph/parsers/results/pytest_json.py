@@ -123,6 +123,9 @@ class PytestJSONParser:
         # Extract requirement references
         validates = self._extract_req_ids(f"{classname} {name}")
 
+        # Generate stable TEST node ID from classname and name
+        test_id = f"test:{classname}::{name}" if classname else f"test::{name}"
+
         return {
             "id": f"{source_path}::{nodeid}",
             "name": name,
@@ -132,6 +135,7 @@ class PytestJSONParser:
             "message": message,
             "validates": validates,
             "source_path": source_path,
+            "test_id": test_id,
         }
 
     def _parse_simple_test(
@@ -172,6 +176,9 @@ class PytestJSONParser:
 
         validates = self._extract_req_ids(f"{classname} {name}")
 
+        # Generate stable TEST node ID from classname and name
+        test_id = f"test:{classname}::{name}" if classname else f"test::{name}"
+
         return {
             "id": f"{source_path}:{classname}::{name}",
             "name": name,
@@ -181,6 +188,7 @@ class PytestJSONParser:
             "message": message,
             "validates": validates,
             "source_path": source_path,
+            "test_id": test_id,
         }
 
     def _extract_req_ids(self, text: str) -> list[str]:

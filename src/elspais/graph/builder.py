@@ -1529,6 +1529,11 @@ class GraphBuilder:
                     id=code_id,
                     kind=NodeKind.CODE,
                     label=f"Code at {source_id}:{content.start_line}",
+                    source=SourceLocation(
+                        path=source_id,
+                        line=content.start_line,
+                        end_line=content.end_line,
+                    ),
                 )
                 self._nodes[code_id] = node
 
@@ -1547,22 +1552,64 @@ class GraphBuilder:
                     id=test_id,
                     kind=NodeKind.TEST,
                     label=f"Test at {source_id}:{content.start_line}",
+                    source=SourceLocation(
+                        path=source_id,
+                        line=content.start_line,
+                        end_line=content.end_line,
+                    ),
                 )
                 self._nodes[test_id] = node
 
             self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
 
     def _add_test_result(self, content: ParsedContent) -> None:
-        """Add a test result node."""
+        """Add a test result node.
+
+        If the result has a test_id, auto-creates a TEST node if needed.
+        If validates list is present (extracted from test name), creates
+        VALIDATES edges from TEST to requirements/assertions.
+        """
         data = content.parsed_data
         result_id = data["id"]
+        test_id = data.get("test_id")  # e.g., "test:classname::test_name"
+        validates = data.get("validates", [])  # REQs extracted from test name
         source_ctx = getattr(content, "source_context", None)
         source_path = source_ctx.source_id if source_ctx else ""
+
+        # Create a readable label from test name and class
+        test_name = data.get("name", "")
+        classname = data.get("classname", "")
+        # Extract just the class name from dotted path (e.g., "TestGraphBuilder" from "tests.core.test_builder.TestGraphBuilder")
+        short_class = classname.split(".")[-1] if classname else ""
+        label = f"{short_class}::{test_name}" if short_class else test_name
+
+        # Auto-create TEST node if test_id provided and doesn't exist yet
+        if test_id and test_id not in self._nodes:
+            test_node = GraphNode(
+                id=test_id,
+                kind=NodeKind.TEST,
+                label=label,
+                source=SourceLocation(
+                    path=source_path,
+                    line=content.start_line,
+                    end_line=content.end_line,
+                ),
+            )
+            test_node._content = {
+                "classname": classname,
+                "name": test_name,
+                "from_results": True,  # Indicates this TEST was auto-created
+            }
+            self._nodes[test_id] = test_node
+
+            # Queue VALIDATES edges from TEST → REQ/Assertion based on validates list
+            for req_id in validates:
+                self._pending_links.append((test_id, req_id, EdgeKind.VALIDATES))
 
         node = GraphNode(
             id=result_id,
             kind=NodeKind.TEST_RESULT,
-            label=f"{data.get('status', 'unknown')}: {result_id}",
+            label=label,
             source=SourceLocation(
                 path=source_path,
                 line=content.start_line,
@@ -1571,10 +1618,17 @@ class GraphBuilder:
         )
         node._content = {
             "status": data.get("status"),
-            "test_id": data.get("test_id"),
+            "test_id": test_id,
             "duration": data.get("duration"),
+            "name": test_name,
+            "classname": classname,
+            "message": data.get("message"),
         }
         self._nodes[result_id] = node
+
+        # Queue edge to parent TEST node if test_id is provided
+        if test_id:
+            self._pending_links.append((result_id, test_id, EdgeKind.CONTAINS))
 
     def _add_remainder(self, content: ParsedContent) -> None:
         """Add a remainder/unclaimed content node."""

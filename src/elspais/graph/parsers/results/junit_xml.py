@@ -86,6 +86,10 @@ class JUnitXMLParser:
                 # Extract requirement references from test name or classname
                 validates = self._extract_req_ids(f"{classname} {name}")
 
+                # Generate stable TEST node ID from classname and name
+                # This allows multiple results to link to the same logical test
+                test_id = f"test:{classname}::{name}" if classname else f"test::{name}"
+
                 result = {
                     "id": f"{source_path}:{classname}::{name}",
                     "name": name,
@@ -95,6 +99,7 @@ class JUnitXMLParser:
                     "message": message[:200] if message else None,
                     "validates": validates,
                     "source_path": source_path,
+                    "test_id": test_id,
                 }
 
                 results.append(result)

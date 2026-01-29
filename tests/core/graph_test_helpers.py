@@ -196,6 +196,9 @@ def make_test_result(
     source_path: str = "results/test_results.xml",
     start_line: int = 1,
     end_line: int = 1,
+    validates: list[str] | None = None,
+    name: str = "",
+    classname: str = "",
 ) -> ParsedContent:
     """Factory for creating test result content.
 
@@ -207,6 +210,9 @@ def make_test_result(
         source_path: Path to results file
         start_line: Start line in results file
         end_line: End line in results file
+        validates: List of REQ IDs this test validates (extracted from name)
+        name: Test function name
+        classname: Test class/module name
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
@@ -221,6 +227,9 @@ def make_test_result(
             "status": status,
             "test_id": test_id,
             "duration": duration,
+            "validates": validates or [],
+            "name": name,
+            "classname": classname,
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)
