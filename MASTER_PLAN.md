@@ -9,6 +9,32 @@
 
 ---
 
+## Workflow Checklist (Required for Each Phase)
+
+When adding or completing a phase in this file, verify ALL steps are followed:
+
+| Step | Action | Required |
+|------|--------|----------|
+| **SPEC** | Verify or create requirement in `spec/` | ✅ For code features |
+| **TEST** | Write tests BEFORE implementation (TDD) | ✅ For code features |
+| **IMPL** | Implement the feature | ✅ Always |
+| **DEBUG** | Run tests, verify all pass | ✅ Always |
+| **COMMIT** | Git commit with `[TICKET]` prefix | ✅ Always |
+
+**Phase Completion Checklist** (copy into each phase when completing):
+
+```markdown
+- [ ] Spec requirement exists or verified
+- [ ] Tests written/updated and passing
+- [ ] Implementation complete
+- [ ] All related tests pass (`pytest tests/relevant/`)
+- [ ] CHANGELOG.md updated
+- [ ] Version bumped in pyproject.toml
+- [ ] Committed with ticket prefix
+```
+
+---
+
 ## Phase 0: MCP Specification ✅
 
 ### 0.1 Create MCP Spec File
@@ -59,8 +85,19 @@
   - Returns: requirement counts by level, coverage stats, recent changes
 
 ### 2.2 MCP Documentation
-- [ ] Add comprehensive help/docs to MCP server instructions
-- [ ] Document all available tools and their parameters
+
+- [x] Add comprehensive help/docs to MCP server instructions
+- [x] Document all available tools and their parameters
+
+**Completion Checklist:**
+
+- [x] Spec requirement exists or verified (docs only, no spec needed)
+- [x] Tests written/updated and passing (64 doc sync tests)
+- [x] Implementation complete (docs/cli/mcp.md, server instructions)
+- [x] All related tests pass (93 total MCP + doc tests)
+- [x] CHANGELOG.md updated (v0.37.0)
+- [x] Version bumped in pyproject.toml (0.37.0)
+- [x] Committed with ticket prefix ([CUR-514])
 
 ---
 
@@ -109,7 +146,7 @@
 | 0.4 Update INDEX | [x] Complete | 12 new requirements indexed |
 | 1 Core Server | [x] Complete | 5 core tools, 19 passing tests |
 | 2.1 Workspace Tools | [x] Complete | get_workspace_info(), get_project_summary(), 10 tests |
-| 2.2 MCP Docs | [ ] Not Started | |
+| 2.2 MCP Docs | [x] Complete | docs/cli/mcp.md, server instructions |
 | 3.1 File Mutators | [ ] Not Started | |
 | 3.2 In-Memory Mutations | [ ] Not Started | |
 | 4.1 Keyword Extractor | [ ] Not Started | |

@@ -327,6 +327,74 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MCP Server Instructions
+# ─────────────────────────────────────────────────────────────────────────────
+
+MCP_SERVER_INSTRUCTIONS = """\
+elspais MCP Server - AI-Driven Requirements Management
+
+This server provides tools to navigate and analyze a requirements traceability graph.
+The graph is the single source of truth - all tools read directly from it.
+
+## Quick Start
+
+1. `get_workspace_info()` - Understand what project you're working with
+2. `get_project_summary()` - Get overview statistics and health metrics
+3. `search(query)` - Find requirements by keyword
+4. `get_requirement(req_id)` - Get full details including assertions
+5. `get_hierarchy(req_id)` - Navigate parent/child relationships
+
+## Tools Overview
+
+### Graph Status & Control
+- `get_graph_status()` - Node counts, orphan/broken reference flags
+- `refresh_graph(full=False)` - Rebuild after spec file changes
+
+### Search & Navigation
+- `search(query, field="all", regex=False, limit=50)` - Find requirements
+  - field: "id", "title", "body", or "all"
+  - regex: treat query as regex pattern
+- `get_requirement(req_id)` - Full details with assertions and relationships
+- `get_hierarchy(req_id)` - Ancestors (to roots) and direct children
+
+### Workspace Context
+- `get_workspace_info()` - Repo path, project name, configuration
+- `get_project_summary()` - Counts by level, coverage stats, change metrics
+
+## Requirement Levels
+
+Requirements follow a three-tier hierarchy:
+- **PRD** (Product): High-level product requirements
+- **OPS** (Operations): Operational/process requirements
+- **DEV** (Development): Technical implementation requirements
+
+Children implement parents: DEV -> OPS -> PRD
+
+**Note:** The exact ID syntax (prefixes, patterns) and hierarchy rules are
+configurable per project via `.elspais.toml`. Use `get_workspace_info()` to
+see the current project's configuration including the ID prefix and pattern.
+
+## Common Patterns
+
+**Understanding a requirement:**
+1. get_requirement("REQ-p00001") for details and assertions
+2. get_hierarchy("REQ-p00001") to see where it fits
+
+**Finding related requirements:**
+1. search("authentication") to find by keyword
+2. get_hierarchy() on results to navigate relationships
+
+**Checking project health:**
+1. get_graph_status() for orphans/broken refs
+2. get_project_summary() for coverage gaps
+
+**After editing spec files:**
+1. refresh_graph() to rebuild
+2. get_graph_status() to verify health
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP Server Factory
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -355,8 +423,8 @@ def create_server(
     if graph is None:
         graph = build_graph(repo_root=working_dir)
 
-    # Create server
-    mcp = FastMCP("elspais")
+    # Create server with instructions for AI agents (REQ-d00065)
+    mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools
     _state = {"graph": graph, "working_dir": working_dir}

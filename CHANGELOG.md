@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.37.0] - 2026-01-28
+
+### Added
+- **MCP Server Documentation (Phase 2.2)**: Comprehensive documentation for AI agents and users:
+  - `docs/cli/mcp.md` - User-facing documentation for the MCP server with all tool descriptions
+  - MCP server `instructions` parameter for AI agents with quick start guide and usage patterns
+  - New `elspais docs mcp` command to view MCP documentation from CLI
+  - Updated docs topic list to include mcp topic (11 topics total)
+
+### Technical
+- 4 new documentation tests (64 total doc sync tests, 93 total MCP + doc tests)
+
 ## [0.36.0] - 2026-01-28
 
 ### Added

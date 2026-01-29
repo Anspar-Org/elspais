@@ -80,7 +80,7 @@ elspais is a zero-dependency Python requirements validation and traceability too
     - **Single Source of Truth**: Markdown files in `docs/cli/` are the canonical docs
     - **Markdown Renderer**: `utilities/md_renderer.py` converts markdown to ANSI terminal output
     - **Docs Loader**: `utilities/docs_loader.py` locates and loads topic files
-    - **Topics**: quickstart, format, hierarchy, assertions, traceability, validation, git, config
+    - **Topics**: quickstart, format, hierarchy, assertions, traceability, validation, git, config, commands, health, mcp
     - **Package Inclusion**: `docs/cli/` bundled in wheel via `pyproject.toml` force-include
     - **TTY Detection**: Colors enabled for terminals, `--plain` for piped output
 

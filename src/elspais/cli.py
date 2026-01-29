@@ -617,6 +617,7 @@ Available Topics:
   validation   Running validation and fixing issues
   git          Change detection and git integration
   config       Configuration file reference
+  mcp          MCP server for AI integration
   all          Show complete documentation
 
 Examples:
@@ -630,8 +631,20 @@ Examples:
         "topic",
         nargs="?",
         default="quickstart",
-        choices=["quickstart", "format", "hierarchy", "assertions",
-                 "traceability", "validation", "git", "config", "commands", "health", "all"],
+        choices=[
+            "quickstart",
+            "format",
+            "hierarchy",
+            "assertions",
+            "traceability",
+            "validation",
+            "git",
+            "config",
+            "commands",
+            "health",
+            "mcp",
+            "all",
+        ],
         help="Documentation topic (default: quickstart)",
     )
     docs_parser.add_argument(
@@ -767,8 +780,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
-    from elspais.config import find_git_root
     import os
+
+    from elspais.config import find_git_root
 
     original_cwd = Path.cwd()
     git_root = find_git_root(original_cwd)
@@ -865,9 +879,9 @@ def docs_command(args: argparse.Namespace) -> int:
 
 def completion_command(args: argparse.Namespace) -> int:
     """Handle completion command - generate shell completion scripts."""
-    try:
-        import argcomplete
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("argcomplete") is None:
         print("Error: argcomplete not installed.", file=sys.stderr)
         print("Install with: pip install elspais[completion]", file=sys.stderr)
         return 1
@@ -897,7 +911,8 @@ def completion_command(args: argparse.Namespace) -> int:
             return 1
     else:
         # Show setup instructions
-        print("""
+        print(
+            """
 Shell Completion Setup for elspais
 ===================================
 
@@ -922,7 +937,8 @@ Generate script for a specific shell:
   elspais completion --shell tcsh
 
 After adding the line, restart your shell or source the config file.
-""")
+"""
+        )
 
     return 0
 

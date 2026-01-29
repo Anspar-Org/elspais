@@ -25,6 +25,7 @@ TOPIC_ORDER = [
     "config",
     "commands",
     "health",
+    "mcp",
 ]
 
 

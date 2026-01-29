@@ -253,6 +253,7 @@ Read the user guide.
   `git`            Change detection
   `config`         Configuration reference
   `commands`       This CLI reference
+  `mcp`            MCP server for AI integration
   `all`            All topics concatenated
 
 **Options:**
