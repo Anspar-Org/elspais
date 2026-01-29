@@ -1,6 +1,5 @@
 # MASTER PLAN: MCP Server Implementation
 
-> **Workflow:** Follow `~/.claude/refactor-workflow.md` for each phase (SPEC → TEST → IMPL → DEBUG → COMMIT)
 > **Principles:** Follow `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 
 ## Overview
@@ -9,47 +8,38 @@
 
 ---
 
-## Workflow Checklist (Required for Each Phase)
+## Workflow Steps (Reset After Each Phase)
 
-When adding or completing a phase in this file, verify ALL steps are followed:
+**Structure:** `For each Phase → Do each Workflow Step → Clear checkboxes → Next Phase`
 
-| Step | Action | Required |
-|------|--------|----------|
-| **SPEC** | Verify or create requirement in `spec/` | ✅ For code features |
-| **TEST** | Write tests BEFORE implementation (TDD) | ✅ For code features |
-| **IMPL** | Implement the feature | ✅ Always |
-| **DEBUG** | Run tests, verify all pass | ✅ Always |
-| **LINT** | Fix ALL lint errors (Python + Markdown) | ✅ Always |
-| **COMMIT** | Git commit with `[TICKET]` prefix | ✅ Always |
+Use this checklist for the **current phase**. After committing, reset all boxes to `[ ]`.
 
-> ⚠️ **DO NOT use `--no-verify`** to skip pre-commit hooks. Fix markdown lint errors
-> (blank lines around headings/lists, etc.) before committing. The hooks exist to
-> maintain code quality.
+### 1. Core Implementation
 
-**Sub-Agent Delegation:** The following chores should be delegated to sub-agents
-(can be passed as a group of parallel tasks when appropriate):
+- [ ] **SPEC**: Verify or create requirement in `spec/` (for code features)
+- [ ] **TEST**: Write tests BEFORE implementation - TDD (for code features)
+- [ ] **IMPL**: Implement the feature
+- [ ] **DEBUG**: Run tests, verify all pass
 
-- Update CHANGELOG.md with new version entry
-- Bump version in pyproject.toml
-- Update CLAUDE.md if architecture changed
-- Fix markdown lint errors in modified files
-- Update MASTER_PLAN.md progress tracking table
+### 2. Documentation Chores (delegate to sub-agents in parallel)
 
-This keeps the main agent focused on core implementation while sub-agents handle
-mechanical documentation tasks.
+- [ ] Update CHANGELOG.md with new version entry
+- [ ] Bump version in pyproject.toml
+- [ ] Update CLAUDE.md if architecture changed
+- [ ] Update MASTER_PLAN.md progress tracking table
 
-**Phase Completion Checklist** (copy into each phase when completing):
+### 3. Quality & Commit
 
-```markdown
-- [ ] Spec requirement exists or verified
-- [ ] Tests written/updated and passing
-- [ ] Implementation complete
-- [ ] All related tests pass (`pytest tests/relevant/`)
-- [ ] CHANGELOG.md updated
-- [ ] Version bumped in pyproject.toml
-- [ ] All lint errors fixed (ruff, black, markdownlint)
-- [ ] Committed with ticket prefix (no --no-verify)
-```
+- [ ] **LINT**: Fix ALL lint errors (ruff, black, markdownlint)
+- [ ] **COMMIT**: Git commit with `[TICKET]` prefix
+
+> ⚠️ **DO NOT use `--no-verify`** to skip pre-commit hooks. Fix markdown lint
+> errors (blank lines around headings/lists) before committing.
+
+### 4. Phase Complete
+
+- [ ] Mark phase complete in Progress Tracking table below
+- [ ] **CLEAR**: Reset all checkboxes above to `[ ]` for next phase
 
 ---
 
@@ -111,16 +101,6 @@ mechanical documentation tasks.
 
 - [x] Add comprehensive help/docs to MCP server instructions
 - [x] Document all available tools and their parameters
-
-**Completion Checklist:**
-
-- [x] Spec requirement exists or verified (docs only, no spec needed)
-- [x] Tests written/updated and passing (64 doc sync tests)
-- [x] Implementation complete (docs/cli/mcp.md, server instructions)
-- [x] All related tests pass (93 total MCP + doc tests)
-- [x] CHANGELOG.md updated (v0.37.0)
-- [x] Version bumped in pyproject.toml (0.37.0)
-- [x] Committed with ticket prefix ([CUR-514])
 
 ---
 
