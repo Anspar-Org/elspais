@@ -250,7 +250,15 @@ Use this workflow when restructuring existing code without changing behavior.
 - [ ] Include parent requirement context in results
 - [ ] Add tests with REQ-assertion naming pattern
 
-### 6.4 Documentation
+### 6.4 Implement `find_assertions_by_keywords()`
+
+- [ ] Create tool: `find_assertions_by_keywords(keywords: list[str], match_all: bool = True) -> list`
+- [ ] Search assertion text for matching keywords
+- [ ] Return assertion id, text, label, and parent requirement context
+- [ ] Complement to existing `find_by_keywords()` which finds requirements
+- [ ] Add tests with REQ-assertion naming pattern
+
+### 6.5 Documentation
 
 - [ ] Update MCP server help/instructions
 - [ ] Add usage examples to dogfooding report
