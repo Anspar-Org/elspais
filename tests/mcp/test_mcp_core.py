@@ -543,17 +543,26 @@ class TestGetProjectSummary:
         assert "uncommitted" in changes
         assert "branch_changed" in changes
 
-    def test_REQ_o00061_C_uses_count_by_level(self, sample_graph):
-        """REQ-o00061-C: Uses count_by_level() from annotators module."""
+    def test_REQ_o00061_C_uses_aggregate_functions(self, sample_graph):
+        """REQ-o00061-C: Uses aggregate functions from annotators module."""
         pytest.importorskip("mcp")
-        # Verify the output matches count_by_level format
-        from elspais.graph.annotators import count_by_level
+        from elspais.graph.annotators import (
+            count_by_coverage,
+            count_by_git_status,
+            count_by_level,
+        )
         from elspais.mcp.server import _get_project_summary
 
-        expected_counts = count_by_level(sample_graph)
+        # Verify all aggregate functions are used
+        expected_levels = count_by_level(sample_graph)
+        expected_coverage = count_by_coverage(sample_graph)
+        expected_git = count_by_git_status(sample_graph)
+
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
-        assert result["requirements_by_level"] == expected_counts
+        assert result["requirements_by_level"] == expected_levels
+        assert result["coverage"] == expected_coverage
+        assert result["changes"] == expected_git
 
     def test_returns_orphan_and_broken_counts(self, sample_graph):
         """Returns orphan and broken reference counts."""

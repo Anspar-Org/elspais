@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.GraphNode import GraphNode
     from elspais.graph.builder import TraceGraph
+    from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.git import GitChangeInfo
 
 
@@ -302,6 +302,69 @@ def get_implementation_status(node: GraphNode) -> str:
         return "Unimplemented"
 
 
+def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
+    """Count requirements by coverage level.
+
+    Args:
+        graph: The TraceGraph to aggregate.
+
+    Returns:
+        Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
+    """
+    from elspais.graph import NodeKind
+
+    counts: dict[str, int] = {
+        "total": 0,
+        "full_coverage": 0,
+        "partial_coverage": 0,
+        "no_coverage": 0,
+    }
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        counts["total"] += 1
+        coverage_pct = node.get_metric("coverage_pct", 0)
+
+        if coverage_pct >= 100:
+            counts["full_coverage"] += 1
+        elif coverage_pct > 0:
+            counts["partial_coverage"] += 1
+        else:
+            counts["no_coverage"] += 1
+
+    return counts
+
+
+def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
+    """Count requirements by git change status.
+
+    Args:
+        graph: The TraceGraph to aggregate.
+
+    Returns:
+        Dict with 'uncommitted' and 'branch_changed' counts.
+    """
+    from elspais.graph import NodeKind
+
+    counts: dict[str, int] = {
+        "uncommitted": 0,
+        "branch_changed": 0,
+    }
+
+    for node in graph._index.values():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+
+        if node.get_metric("is_uncommitted", False):
+            counts["uncommitted"] += 1
+        if node.get_metric("is_branch_changed", False):
+            counts["branch_changed"] += 1
+
+    return counts
+
+
 def annotate_coverage(graph: TraceGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
@@ -334,7 +397,6 @@ def annotate_coverage(graph: TraceGraph) -> None:
         CoverageSource,
         RollupMetrics,
     )
-    from elspais.graph.relations import EdgeKind
 
     for node in graph._index.values():
         if node.kind != NodeKind.REQUIREMENT:
@@ -455,6 +517,8 @@ __all__ = [
     "annotate_implementation_files",
     "count_by_level",
     "count_by_repo",
+    "count_by_coverage",
+    "count_by_git_status",
     "count_implementation_files",
     "collect_topics",
     "get_implementation_status",

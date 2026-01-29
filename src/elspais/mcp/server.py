@@ -22,7 +22,7 @@ except ImportError:
 
 from elspais.config import find_config_file, get_config
 from elspais.graph import NodeKind
-from elspais.graph.annotators import count_by_level
+from elspais.graph.annotators import count_by_coverage, count_by_git_status, count_by_level
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 
@@ -311,48 +311,17 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
     Returns:
         Project summary dict.
     """
-    # Use count_by_level() from annotators (REQ-o00061-C)
+    # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph)
-
-    # Coverage statistics
-    coverage_stats = {
-        "total": 0,
-        "full_coverage": 0,
-        "partial_coverage": 0,
-        "no_coverage": 0,
-    }
-
-    # Change metrics
-    change_metrics = {
-        "uncommitted": 0,
-        "branch_changed": 0,
-    }
-
-    # Iterate requirements once for coverage and change stats
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        coverage_stats["total"] += 1
-
-        # Coverage from metrics
-        coverage_pct = node.get_metric("coverage_pct", 0)
-        if coverage_pct >= 100:
-            coverage_stats["full_coverage"] += 1
-        elif coverage_pct > 0:
-            coverage_stats["partial_coverage"] += 1
-        else:
-            coverage_stats["no_coverage"] += 1
-
-        # Git change metrics
-        if node.get_metric("is_uncommitted", False):
-            change_metrics["uncommitted"] += 1
-        if node.get_metric("is_branch_changed", False):
-            change_metrics["branch_changed"] += 1
+    coverage_stats = count_by_coverage(graph)
+    change_metrics = count_by_git_status(graph)
 
     return {
         "requirements_by_level": level_counts,
         "coverage": coverage_stats,
         "changes": change_metrics,
         "total_nodes": graph.node_count(),
-        "orphan_count": len(list(graph.orphaned_nodes())),
+        "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(list(graph.broken_references())),
     }
 
