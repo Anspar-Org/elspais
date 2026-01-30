@@ -112,7 +112,16 @@ Common rules to skip:
   format.*         All format rules
 """,
     )
-    # NOTE: --fix, --core-repo removed (dead code - never implemented)
+    validate_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix issues that can be corrected programmatically (hashes, status)",
+    )
+    validate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be fixed without making changes (use with --fix)",
+    )
     validate_parser.add_argument(
         "--skip-rule",
         action="append",

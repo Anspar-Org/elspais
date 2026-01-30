@@ -2,19 +2,33 @@
 
 ## Running Validation
 
-  $ elspais validate          # Check all rules
-  $ elspais validate --fix    # Auto-fix what's fixable
-  $ elspais validate -v       # Verbose output
+  $ elspais validate                   # Check all rules
+  $ elspais validate --fix             # Auto-fix what's fixable
+  $ elspais validate --fix --dry-run   # Preview fixes without applying
+  $ elspais validate -v                # Verbose output
 
 ## Command Options
 
   `--fix`               Auto-fix hashes and formatting issues
+  `--dry-run`           Preview fixes without modifying files (use with --fix)
   `--skip-rule RULE`    Skip validation rules (repeatable)
-  `--core-repo PATH`    Path to core repo (for associated repos)
   `-j, --json`          Output requirements as JSON
-  `--tests`             Force test scanning even if disabled
-  `--no-tests`          Skip test scanning
-  `--mode {core,combined}`  Scope: this repo or include sponsors
+
+## What Can Be Auto-Fixed
+
+The `--fix` flag automatically corrects:
+
+**Fixable:**
+
+- Missing hash → Computes and inserts from assertion text
+- Stale hash → Recomputes from current content
+- Missing Status field → Adds default "Active"
+
+**Not fixable (report only):**
+
+- Broken references to non-existent requirements
+- Orphaned requirements (no parent)
+- Hierarchy violations
 
 ## What Gets Validated
 
@@ -29,7 +43,7 @@
 Skip specific validation rules:
 
   $ elspais validate --skip-rule hash.missing
-  $ elspais validate --skip-rule hash.*       # All hash rules
+  $ elspais validate --skip-rule 'hash.*'     # All hash rules
   $ elspais validate --skip-rule hierarchy.*  # All hierarchy rules
 
 **Available Patterns:**
@@ -58,7 +72,7 @@ Skip specific validation rules:
 
 For expected issues, add inline suppression:
 
-```
+```markdown
 # elspais: expected-broken-links 2
 **Implements**: REQ-future-001, REQ-future-002
 ```

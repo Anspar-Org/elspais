@@ -15,19 +15,17 @@ These options work with all commands:
 
 Validate requirements format, links, hashes, and hierarchy.
 
-  $ elspais validate              # Check all rules
-  $ elspais validate --fix        # Auto-fix fixable issues
-  $ elspais validate -j           # Output JSON for tooling
+  $ elspais validate                   # Check all rules
+  $ elspais validate --fix             # Auto-fix fixable issues
+  $ elspais validate --fix --dry-run   # Preview fixes
+  $ elspais validate -j                # Output JSON for tooling
 
 **Options:**
 
   `--fix`               Auto-fix hashes and formatting issues
+  `--dry-run`           Preview fixes without modifying (use with --fix)
   `--skip-rule RULE`    Skip validation rules (repeatable)
-  `--core-repo PATH`    Path to core repo (associated repo validation)
   `-j, --json`          Output requirements as JSON
-  `--tests`             Force test scanning
-  `--no-tests`          Skip test scanning
-  `--mode {core,combined}`  Scope: this repo or include sponsors
 
 **Skip Rule Patterns:**
 
