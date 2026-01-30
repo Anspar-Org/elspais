@@ -15,6 +15,8 @@ from elspais.utilities.git import (
     get_git_changes,
     get_modified_files,
     get_repo_root,
+    get_req_locations_from_graph,
+    temporary_worktree,
 )
 
 
@@ -251,3 +253,65 @@ class TestGetGitChanges:
 
         assert result.modified_files == set()
         assert result.untracked_files == set()
+
+
+class TestTemporaryWorktree:
+    """Tests for temporary_worktree context manager."""
+
+    def test_creates_and_cleans_up_worktree(self):
+        """Creates worktree, yields path, cleans up on exit."""
+        repo_root = get_repo_root()
+        if repo_root is None:
+            pytest.skip("Not in a git repository")
+
+        worktree_path = None
+        with temporary_worktree(repo_root, "HEAD") as path:
+            worktree_path = path
+            # Worktree should exist
+            assert path.exists()
+            # Should have .elspais.toml or other repo files
+            assert (path / ".elspais.toml").exists() or (path / "spec").exists()
+
+        # Worktree should be cleaned up
+        assert worktree_path is not None
+        assert not worktree_path.exists()
+
+    def test_raises_on_invalid_ref(self):
+        """Raises CalledProcessError for invalid git ref."""
+        repo_root = get_repo_root()
+        if repo_root is None:
+            pytest.skip("Not in a git repository")
+
+        with pytest.raises(subprocess.CalledProcessError):
+            with temporary_worktree(repo_root, "nonexistent-ref-abc123"):
+                pass
+
+
+class TestGetReqLocationsFromGraph:
+    """Tests for get_req_locations_from_graph function."""
+
+    def test_returns_dict(self):
+        """Returns dict mapping REQ IDs to paths."""
+        repo_root = get_repo_root()
+        if repo_root is None:
+            pytest.skip("Not in a git repository")
+
+        result = get_req_locations_from_graph(repo_root)
+
+        assert isinstance(result, dict)
+        # If there are any requirements, they should have string keys and values
+        for req_id, path in result.items():
+            assert isinstance(req_id, str)
+            assert isinstance(path, str)
+
+    def test_extracts_req_suffix(self):
+        """Extracts just the suffix (e.g., 'd00001') from REQ IDs."""
+        repo_root = get_repo_root()
+        if repo_root is None:
+            pytest.skip("Not in a git repository")
+
+        result = get_req_locations_from_graph(repo_root)
+
+        # If we have results, none should start with "REQ-"
+        for req_id in result.keys():
+            assert not req_id.startswith("REQ-"), f"Expected suffix only, got: {req_id}"

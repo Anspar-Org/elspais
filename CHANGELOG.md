@@ -2,6 +2,28 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.43.5] - 2026-01-29
+
+### Changed
+
+- **Generalized keyword search API for all node kinds** (`graph/annotators.py`):
+  - `annotate_keywords()` now annotates ALL node kinds with text content:
+    - REQUIREMENT: title + child assertion text
+    - ASSERTION: SHALL statement (label)
+    - USER_JOURNEY: title + actor + goal + description
+    - REMAINDER: label + raw_text
+    - CODE, TEST, TEST_RESULT: label only
+  - `find_by_keywords()` accepts optional `kind: NodeKind | None` parameter
+    - `kind=None` (default) searches all nodes
+    - `kind=NodeKind.ASSERTION` searches only assertions
+  - `collect_all_keywords()` accepts optional `kind` parameter similarly
+  - 12 new tests in `tests/graph/test_keyword_extraction_generalized.py`
+
+- **MCP server refactored to use public graph API**:
+  - `_find_assertions_by_keywords()` now uses `find_by_keywords(..., kind=NodeKind.ASSERTION)`
+  - `_get_uncovered_assertions()` uses `nodes_by_kind(NodeKind.ASSERTION)`
+  - Removed direct `_index.values()` access (encapsulation violation)
+
 ## [0.43.4] - 2026-01-29
 
 ### Changed

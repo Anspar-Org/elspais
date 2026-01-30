@@ -173,16 +173,35 @@ class HTMLGenerator:
         try:
             from elspais.utilities.git import (
                 GitChangeInfo,
+                _extract_req_locations_from_graph,
                 get_changed_vs_branch,
-                get_committed_req_locations,
                 get_modified_files,
+                temporary_worktree,
             )
 
             repo_root = self.graph.repo_root
             if repo_root:
                 modified, untracked = get_modified_files(repo_root)
                 branch_changed = get_changed_vs_branch(repo_root)
-                committed_locs = get_committed_req_locations(repo_root, "spec")
+
+                # Get committed locations using graph-based approach via git worktree
+                committed_locs: dict[str, str] = {}
+                try:
+                    with temporary_worktree(repo_root, "HEAD") as worktree_path:
+                        from elspais.graph.factory import build_graph
+
+                        committed_graph = build_graph(
+                            repo_root=worktree_path,
+                            scan_code=False,
+                            scan_tests=False,
+                            scan_sponsors=False,
+                        )
+                        committed_locs = _extract_req_locations_from_graph(
+                            committed_graph, worktree_path
+                        )
+                except Exception:
+                    # Worktree creation failed, continue with empty committed_locs
+                    pass
 
                 git_info = GitChangeInfo(
                     modified_files=set(modified),

@@ -1045,9 +1045,7 @@ def _get_uncovered_assertions(
         # Group by parent requirement for sorted output
         req_assertions: dict[str, list[Any]] = {}
 
-        for node in graph._index.values():
-            if node.kind != NodeKind.ASSERTION:
-                continue
+        for node in graph.nodes_by_kind(NodeKind.ASSERTION):
             if _is_assertion_covered(node):
                 continue
 
@@ -1114,30 +1112,15 @@ def _find_assertions_by_keywords(
     Returns:
         Dict with success and list of matching assertions with parent context.
     """
-    # REQ-d00068-E: Normalize keywords to lowercase
-    normalized_keywords = [kw.lower() for kw in keywords]
+    from elspais.graph.annotators import find_by_keywords
 
+    # REQ-d00068-C: Use graph API to search assertion nodes by keyword
+    # REQ-d00068-E: find_by_keywords handles case normalization
+    nodes = find_by_keywords(graph, keywords, match_all, kind=NodeKind.ASSERTION)
+
+    # REQ-d00068-D: Format results with parent context
     results: list[dict[str, Any]] = []
-
-    # REQ-d00068-C: Search assertion text
-    for node in graph._index.values():
-        if node.kind != NodeKind.ASSERTION:
-            continue
-
-        # Get assertion text (the SHALL statement)
-        text = node.get_label() or ""
-        text_lower = text.lower()
-
-        # REQ-d00068-B: Check keyword matching
-        if match_all:
-            # All keywords must be present
-            if not all(kw in text_lower for kw in normalized_keywords):
-                continue
-        else:
-            # Any keyword must be present
-            if not any(kw in text_lower for kw in normalized_keywords):
-                continue
-
+    for node in nodes:
         # Find parent requirement
         parent_req = None
         for parent in node.iter_parents():
@@ -1145,12 +1128,11 @@ def _find_assertions_by_keywords(
                 parent_req = parent
                 break
 
-        # REQ-d00068-D: Include assertion and parent context
         results.append(
             {
                 "id": node.id,
                 "label": node.get_field("label", ""),
-                "text": text,
+                "text": node.get_label() or "",
                 "parent_id": parent_req.id if parent_req else None,
                 "parent_title": parent_req.get_label() if parent_req else None,
             }

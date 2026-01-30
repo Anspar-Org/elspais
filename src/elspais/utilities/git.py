@@ -11,11 +11,12 @@ enabling detection of:
 from __future__ import annotations
 
 import os
-import re
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 def _clean_git_env() -> dict[str, str]:
@@ -28,6 +29,50 @@ def _clean_git_env() -> dict[str, str]:
     env.pop("GIT_DIR", None)
     env.pop("GIT_WORK_TREE", None)
     return env
+
+
+@contextmanager
+def temporary_worktree(repo_root: Path, ref: str = "HEAD") -> Iterator[Path]:
+    """Create a temporary git worktree for a ref.
+
+    Creates a detached worktree at the specified ref, yields its path,
+    then cleans up the worktree automatically on exit.
+
+    Usage:
+        with temporary_worktree(repo_root, "HEAD") as worktree_path:
+            committed_graph = build_graph(repo_root=worktree_path)
+            # work with committed state...
+
+    Args:
+        repo_root: Path to the repository root.
+        ref: Git ref to checkout (default: HEAD).
+
+    Yields:
+        Path to the temporary worktree.
+
+    Raises:
+        subprocess.CalledProcessError: If git worktree commands fail.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        worktree_path = Path(tmp) / "worktree"
+
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree_path), ref],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            check=True,
+        )
+
+        try:
+            yield worktree_path
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree_path)],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+            )
 
 
 @dataclass
@@ -174,116 +219,85 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str
     return set()
 
 
-def get_committed_req_locations(
-    repo_root: Path,
-    spec_dir: str = "spec",
-    exclude_files: list[str] | None = None,
-) -> dict[str, str]:
-    """Get REQ ID -> file path mapping from committed state (HEAD).
+def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None) -> dict[str, str]:
+    """Extract REQ ID -> file path mapping from a TraceGraph.
 
-    This allows detection of moved requirements by comparing current location
-    to where the REQ was in the last commit.
+    This is the graph-based replacement for the old regex-based extraction.
+    Uses the same parsing logic that build_graph() uses.
 
     Args:
-        repo_root: Path to repository root
-        spec_dir: Spec directory relative to repo root
-        exclude_files: Files to exclude (default: INDEX.md, README.md)
+        graph: A TraceGraph instance.
+        repo_root: Repository root for relativizing paths (uses graph.repo_root if None).
 
     Returns:
-        Dict mapping REQ ID (e.g., 'd00001') to relative file path
+        Dict mapping REQ ID (just the suffix, e.g., 'd00001') to relative file path.
     """
-    if exclude_files is None:
-        exclude_files = ["INDEX.md", "README.md", "requirements-format.md"]
+    from elspais.graph.GraphNode import NodeKind
 
     req_locations: dict[str, str] = {}
-    # Pattern matches REQ headers with optional associated prefix
-    req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
 
-    try:
-        # Get list of spec files in committed state
-        result = subprocess.run(
-            ["git", "ls-tree", "-r", "--name-only", "HEAD", f"{spec_dir}/"],
-            cwd=repo_root,
-            env=_clean_git_env(),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+    # Get repo_root for path relativization
+    if repo_root is None:
+        repo_root = getattr(graph, "repo_root", None)
 
-        for file_path in result.stdout.strip().split("\n"):
-            if not file_path.endswith(".md"):
-                continue
-            if any(skip in file_path for skip in exclude_files):
-                continue
+    for node in graph.all_nodes():
+        if node.kind == NodeKind.REQUIREMENT and node.source:
+            # Extract just the suffix (e.g., 'd00001' from 'REQ-d00001')
+            req_id = node.id
+            if req_id.startswith("REQ-"):
+                # Handle possible associated prefix like "REQ-CAL-d00001"
+                parts = req_id[4:].split("-")
+                if len(parts) >= 2 and len(parts[0]) > 1 and parts[0].isupper():
+                    # Has associated prefix (e.g., "CAL-d00001"), use last part
+                    req_id = parts[-1]
+                else:
+                    # No prefix, just use what's after "REQ-"
+                    req_id = parts[-1]
 
-            # Get file content from committed state
-            try:
-                content_result = subprocess.run(
-                    ["git", "show", f"HEAD:{file_path}"],
-                    cwd=repo_root,
-                    env=_clean_git_env(),
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                content = content_result.stdout
+            # Get source path and make it relative if needed
+            source_path = node.source.path
+            if repo_root:
+                try:
+                    # If path is absolute, make it relative to repo_root
+                    path_obj = Path(source_path)
+                    if path_obj.is_absolute():
+                        source_path = str(path_obj.relative_to(repo_root))
+                except ValueError:
+                    # Path is not relative to repo_root, keep as-is
+                    pass
 
-                # Find all REQ IDs in this file
-                for match in req_pattern.finditer(content):
-                    req_id = match.group(1)
-                    req_locations[req_id] = file_path
-
-            except subprocess.CalledProcessError:
-                # File might not exist in HEAD (new file)
-                continue
-
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
+            req_locations[req_id] = source_path
 
     return req_locations
 
 
-def get_current_req_locations(
+def get_req_locations_from_graph(
     repo_root: Path,
-    spec_dir: str = "spec",
-    exclude_files: list[str] | None = None,
+    scan_sponsors: bool = False,
 ) -> dict[str, str]:
-    """Get REQ ID -> file path mapping from current working directory.
+    """Get REQ ID -> file path mapping from a graph built at the given path.
+
+    This is the graph-based approach that uses build_graph() to parse
+    requirements using the project's configuration.
 
     Args:
-        repo_root: Path to repository root
-        spec_dir: Spec directory relative to repo root
-        exclude_files: Files to exclude (default: INDEX.md, README.md)
+        repo_root: Path to repository root (or worktree path).
+        scan_sponsors: Whether to include sponsor/associated repos.
 
     Returns:
-        Dict mapping REQ ID (e.g., 'd00001') to relative file path
+        Dict mapping REQ ID (e.g., 'd00001') to relative file path.
     """
-    if exclude_files is None:
-        exclude_files = ["INDEX.md", "README.md", "requirements-format.md"]
+    from elspais.graph.factory import build_graph
 
-    req_locations: dict[str, str] = {}
-    req_pattern = re.compile(r"^#{1,6}\s+REQ-(?:[A-Z]{2,4}-)?([pod]\d{5}):", re.MULTILINE)
+    # Build graph with minimal scanning (we only need requirements)
+    graph = build_graph(
+        repo_root=repo_root,
+        scan_code=False,
+        scan_tests=False,
+        scan_sponsors=scan_sponsors,
+    )
 
-    spec_path = repo_root / spec_dir
-    if not spec_path.exists():
-        return req_locations
-
-    for md_file in spec_path.rglob("*.md"):
-        if any(skip in md_file.name for skip in exclude_files):
-            continue
-
-        try:
-            content = md_file.read_text(encoding="utf-8")
-            rel_path = str(md_file.relative_to(repo_root))
-
-            for match in req_pattern.finditer(content):
-                req_id = match.group(1)
-                req_locations[req_id] = rel_path
-
-        except (OSError, UnicodeDecodeError):
-            continue
-
-    return req_locations
+    return _extract_req_locations_from_graph(graph, repo_root)
 
 
 def detect_moved_requirements(
@@ -318,6 +332,7 @@ def get_git_changes(
     repo_root: Path | None = None,
     spec_dir: str = "spec",
     base_branch: str = "main",
+    base_ref: str = "HEAD",
 ) -> GitChangeInfo:
     """Get comprehensive git change information for requirement files.
 
@@ -325,12 +340,16 @@ def get_git_changes(
     - Modified files (uncommitted changes to tracked files)
     - Untracked files (new files not yet in git)
     - Branch changed files (files changed vs main/master)
-    - Committed REQ locations (for move detection)
+    - Committed REQ locations (for move detection via graph-based comparison)
+
+    Uses git worktree + build_graph() to properly parse committed state,
+    respecting project configuration rather than hardcoded regex patterns.
 
     Args:
         repo_root: Path to repository root (auto-detected if None)
-        spec_dir: Spec directory relative to repo root
+        spec_dir: Spec directory relative to repo root (deprecated, ignored)
         base_branch: Base branch for comparison (default: 'main')
+        base_ref: Git ref for committed state comparison (default: 'HEAD')
 
     Returns:
         GitChangeInfo with all change information
@@ -342,7 +361,15 @@ def get_git_changes(
 
     modified, untracked = get_modified_files(repo_root)
     branch_changed = get_changed_vs_branch(repo_root, base_branch)
-    committed_locations = get_committed_req_locations(repo_root, spec_dir)
+
+    # Get committed locations using graph-based approach via git worktree
+    committed_locations: dict[str, str] = {}
+    try:
+        with temporary_worktree(repo_root, base_ref) as worktree_path:
+            committed_locations = get_req_locations_from_graph(worktree_path)
+    except subprocess.CalledProcessError:
+        # Worktree creation failed (e.g., no commits yet), fall back to empty
+        pass
 
     return GitChangeInfo(
         modified_files=modified,
@@ -565,11 +592,12 @@ __all__ = [
     "get_repo_root",
     "get_modified_files",
     "get_changed_vs_branch",
-    "get_committed_req_locations",
-    "get_current_req_locations",
     "detect_moved_requirements",
     "get_git_changes",
     "filter_spec_files",
+    # Graph-based location extraction
+    "temporary_worktree",
+    "get_req_locations_from_graph",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

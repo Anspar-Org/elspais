@@ -115,6 +115,11 @@ def coverage_graph():
     }
     graph._roots = [req_node, req_node2]
 
+    # Annotate keywords for keyword-based search
+    from elspais.graph.annotators import annotate_keywords
+
+    annotate_keywords(graph)
+
     return graph
 
 

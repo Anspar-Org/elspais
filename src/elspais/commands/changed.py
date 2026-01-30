@@ -14,9 +14,9 @@ from typing import Dict, Optional
 from elspais.utilities.git import (
     detect_moved_requirements,
     filter_spec_files,
-    get_current_req_locations,
     get_git_changes,
     get_repo_root,
+    get_req_locations_from_graph,
 )
 
 
@@ -61,8 +61,8 @@ def run(args: argparse.Namespace) -> int:
     spec_untracked = filter_spec_files(changes.untracked_files, spec_dir)
     spec_branch = filter_spec_files(changes.branch_changed_files, spec_dir)
 
-    # Detect moved requirements
-    current_locations = get_current_req_locations(repo_root, spec_dir)
+    # Detect moved requirements using graph-based approach
+    current_locations = get_req_locations_from_graph(repo_root)
     moved = detect_moved_requirements(changes.committed_req_locations, current_locations)
 
     # Build result
