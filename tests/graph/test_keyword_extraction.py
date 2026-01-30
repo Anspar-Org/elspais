@@ -146,14 +146,15 @@ class TestExtractKeywords:
         assert "jwt" in keywords
 
     def test_filters_stopwords(self):
-        """Common stopwords are filtered out."""
+        """Common stopwords are filtered out but normative keywords preserved."""
         from elspais.graph.annotators import extract_keywords
 
         text = "The system shall validate the input"
         keywords = extract_keywords(text)
 
         assert "the" not in keywords
-        assert "shall" not in keywords
+        # Normative keywords (RFC 2119) are now PRESERVED
+        assert "shall" in keywords
         assert "validate" in keywords
         assert "input" in keywords
 
@@ -248,17 +249,20 @@ class TestAnnotateKeywords:
         assert "jwt" in keywords
         assert "rsa" in keywords
 
-    def test_only_annotates_requirements(self, simple_graph):
-        """Only REQUIREMENT nodes get keywords, not assertions."""
+    def test_annotates_all_node_kinds(self, simple_graph):
+        """All node kinds get keywords, including assertions."""
         from elspais.graph.annotators import annotate_keywords
 
         annotate_keywords(simple_graph)
 
-        # Assertions should not have keywords field
+        # Assertions now get keywords from their text
         assertion_node = simple_graph._index["REQ-p00001-A"]
-        keywords = assertion_node.get_field("keywords")
+        keywords = assertion_node.get_field("keywords", [])
 
-        assert keywords is None
+        # Assertion text: "The system SHALL support OAuth2 authentication with GitHub"
+        assert isinstance(keywords, list)
+        assert len(keywords) > 0
+        assert "oauth2" in keywords or "authentication" in keywords
 
     def test_handles_requirements_without_assertions(self, multi_req_graph):
         """Requirements without assertions still get keywords from title."""

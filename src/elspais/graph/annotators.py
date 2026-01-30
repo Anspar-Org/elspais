@@ -15,10 +15,12 @@ Usage:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.graph import NodeKind
     from elspais.graph.builder import TraceGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.git import GitChangeInfo
@@ -503,8 +505,10 @@ def annotate_coverage(graph: TraceGraph) -> None:
 # Keywords are stored in node._content["keywords"] as a list of strings.
 
 
-# Common stopwords that should be filtered from keywords
-STOPWORDS = frozenset(
+# Default stopwords - common words filtered from keywords.
+# NOTE: Normative keywords (shall, must, should, may, required) are NOT included
+# as they have semantic meaning for requirements (RFC 2119).
+DEFAULT_STOPWORDS = frozenset(
     [
         # Articles and determiners
         "a",
@@ -557,7 +561,7 @@ STOPWORDS = frozenset(
         "both",
         "either",
         "neither",
-        # Auxiliary verbs
+        # Auxiliary verbs (excluding normative: shall, must, should, may)
         "is",
         "am",
         "are",
@@ -577,10 +581,7 @@ STOPWORDS = frozenset(
         "will",
         "would",
         "could",
-        "should",
-        "may",
         "might",
-        "must",
         "can",
         # Common verbs
         "get",
@@ -588,12 +589,8 @@ STOPWORDS = frozenset(
         "make",
         "made",
         "let",
-        # Normative keywords (not useful for search)
-        "shall",
-        "must",
-        "required",
-        "not",
         # Other common words
+        "not",
         "if",
         "when",
         "where",
@@ -621,19 +618,55 @@ STOPWORDS = frozenset(
     ]
 )
 
+# Alias for backward compatibility
+STOPWORDS = DEFAULT_STOPWORDS
 
-def extract_keywords(text: str) -> list[str]:
+
+@dataclass
+class KeywordsConfig:
+    """Configuration for keyword extraction."""
+
+    stopwords: frozenset[str]
+    min_length: int = 3
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> KeywordsConfig:
+        """Create config from dictionary.
+
+        Args:
+            data: Dict with optional 'stopwords' list and 'min_length' int.
+
+        Returns:
+            KeywordsConfig instance.
+        """
+        stopwords_list = data.get("stopwords")
+        if stopwords_list is not None:
+            stopwords = frozenset(stopwords_list)
+        else:
+            stopwords = DEFAULT_STOPWORDS
+
+        return cls(
+            stopwords=stopwords,
+            min_length=data.get("min_length", 3),
+        )
+
+
+def extract_keywords(
+    text: str,
+    config: KeywordsConfig | None = None,
+) -> list[str]:
     """Extract keywords from text.
 
     Extracts meaningful words by:
     - Lowercasing all text
     - Removing punctuation (except hyphens within words)
     - Filtering stopwords
-    - Filtering words shorter than 3 characters
+    - Filtering words shorter than min_length
     - Deduplicating results
 
     Args:
         text: Input text to extract keywords from.
+        config: Optional KeywordsConfig for custom stopwords/min_length.
 
     Returns:
         List of unique keywords in lowercase.
@@ -642,6 +675,9 @@ def extract_keywords(text: str) -> list[str]:
 
     if not text:
         return []
+
+    # Use provided config or defaults
+    cfg = config or KeywordsConfig(stopwords=DEFAULT_STOPWORDS, min_length=3)
 
     # Lowercase and split into words
     text = text.lower()
@@ -662,11 +698,11 @@ def extract_keywords(text: str) -> list[str]:
         word = word.strip("-")
 
         # Skip short words
-        if len(word) < 3:
+        if len(word) < cfg.min_length:
             continue
 
         # Skip stopwords
-        if word in STOPWORDS:
+        if word in cfg.stopwords:
             continue
 
         # Deduplicate
@@ -677,41 +713,60 @@ def extract_keywords(text: str) -> list[str]:
     return keywords
 
 
-def annotate_keywords(graph: TraceGraph) -> None:
-    """Extract and store keywords for all requirement nodes.
+def annotate_keywords(
+    graph: TraceGraph,
+    config: KeywordsConfig | None = None,
+) -> None:
+    """Extract and store keywords for all nodes with text content.
 
-    Keywords are extracted from:
-    - Requirement title (node.get_label())
-    - Assertion text (from child ASSERTION nodes)
+    Keywords are extracted based on node kind:
+    - REQUIREMENT: title + child assertion text
+    - ASSERTION: SHALL statement (label)
+    - USER_JOURNEY: title + actor + goal + description
+    - REMAINDER: label + raw_text
+    - Others (CODE, TEST, TEST_RESULT): label only
 
     Keywords are stored in node._content["keywords"] as a list.
 
     Args:
         graph: The TraceGraph to annotate.
+        config: Optional KeywordsConfig for custom stopwords/min_length.
     """
     from elspais.graph import NodeKind
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.all_nodes():
+        text_parts: list[str] = []
 
-        all_text_parts: list[str] = []
+        # Get label (all nodes have this)
+        label = node.get_label()
+        if label:
+            text_parts.append(label)
 
-        # Add title
-        title = node.get_label()
-        if title:
-            all_text_parts.append(title)
+        # Add kind-specific text
+        if node.kind == NodeKind.REQUIREMENT:
+            # Include child assertion text
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    child_text = child.get_label()
+                    if child_text:
+                        text_parts.append(child_text)
 
-        # Add assertion text from children
-        for child in node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                assertion_text = child.get_label()
-                if assertion_text:
-                    all_text_parts.append(assertion_text)
+        elif node.kind == NodeKind.USER_JOURNEY:
+            # Include actor, goal, description
+            for field in ["actor", "goal", "description"]:
+                value = node.get_field(field)
+                if value:
+                    text_parts.append(value)
 
-        # Extract keywords from combined text
-        combined_text = " ".join(all_text_parts)
-        keywords = extract_keywords(combined_text)
+        elif node.kind == NodeKind.REMAINDER:
+            # Include raw text
+            raw = node.get_field("raw_text")
+            if raw:
+                text_parts.append(raw)
 
-        # Store in node content
+        # Extract and store keywords
+        combined_text = " ".join(text_parts)
+        keywords = extract_keywords(combined_text, config)
         node.set_field("keywords", keywords)
 
 
@@ -719,27 +774,32 @@ def find_by_keywords(
     graph: TraceGraph,
     keywords: list[str],
     match_all: bool = True,
+    kind: NodeKind | None = None,
 ) -> list[GraphNode]:
-    """Find requirement nodes containing specified keywords.
+    """Find nodes containing specified keywords.
 
     Args:
         graph: The TraceGraph to search.
         keywords: List of keywords to search for.
         match_all: If True, node must contain ALL keywords (AND).
                    If False, node must contain ANY keyword (OR).
+        kind: NodeKind to filter by, or None to search all nodes.
 
     Returns:
         List of matching GraphNode objects.
     """
-    from elspais.graph import NodeKind
-
     # Normalize search keywords to lowercase
     search_keywords = {k.lower() for k in keywords}
 
     results: list[GraphNode] = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    # Choose iterator based on kind parameter
+    if kind is not None:
+        nodes = graph.nodes_by_kind(kind)
+    else:
+        nodes = graph.all_nodes()
 
+    for node in nodes:
         node_keywords = set(node.get_field("keywords", []))
 
         if match_all:
@@ -754,21 +814,28 @@ def find_by_keywords(
     return results
 
 
-def collect_all_keywords(graph: TraceGraph) -> list[str]:
-    """Collect all unique keywords from annotated requirements.
+def collect_all_keywords(
+    graph: TraceGraph,
+    kind: NodeKind | None = None,
+) -> list[str]:
+    """Collect all unique keywords from annotated nodes.
 
     Args:
         graph: The TraceGraph to scan.
+        kind: NodeKind to filter by, or None to collect from all nodes.
 
     Returns:
-        Sorted list of all unique keywords across all requirements.
+        Sorted list of all unique keywords across matching nodes.
     """
-    from elspais.graph import NodeKind
-
     all_keywords: set[str] = set()
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    # Choose iterator based on kind parameter
+    if kind is not None:
+        nodes = graph.nodes_by_kind(kind)
+    else:
+        nodes = graph.all_nodes()
 
+    for node in nodes:
         node_keywords = node.get_field("keywords", [])
         all_keywords.update(node_keywords)
 
@@ -787,8 +854,10 @@ __all__ = [
     "collect_topics",
     "get_implementation_status",
     "annotate_coverage",
-    # Keyword extraction (Phase 4)
+    # Keyword extraction
+    "DEFAULT_STOPWORDS",
     "STOPWORDS",
+    "KeywordsConfig",
     "extract_keywords",
     "annotate_keywords",
     "find_by_keywords",

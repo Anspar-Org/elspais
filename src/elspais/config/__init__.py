@@ -71,6 +71,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
         "overrides": [],
     },
+    "keywords": {
+        "min_length": 3,
+    },
 }
 
 
