@@ -101,6 +101,19 @@ class TraceGraph:
         """Return total number of nodes in the graph."""
         return len(self._index)
 
+    def clone(self) -> TraceGraph:
+        """Create a deep copy of this graph.
+
+        All nodes, edges, and relationships are cloned. The new graph
+        is completely independent - mutations to one do not affect the other.
+
+        Returns:
+            A new TraceGraph with all data deep copied.
+        """
+        import copy
+
+        return copy.deepcopy(self)
+
     # ─────────────────────────────────────────────────────────────────────────
     # Detection API: Orphans and Broken References
     # ─────────────────────────────────────────────────────────────────────────
