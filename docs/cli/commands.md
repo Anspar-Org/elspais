@@ -76,9 +76,10 @@ Generate traceability matrix and reports.
 
 Manage requirement content hashes.
 
-  $ elspais hash verify           # Check without changes
-  $ elspais hash update           # Update all hashes
-  $ elspais hash update REQ-p00001  # Update specific
+  $ elspais hash verify             # Check without changes
+  $ elspais hash update             # Update all stale hashes
+  $ elspais hash update REQ-p00001  # Update specific requirement
+  $ elspais hash update --dry-run   # Preview changes
 
 **Subcommands:**
 
@@ -88,6 +89,7 @@ Manage requirement content hashes.
 **Options for update:**
 
   `--dry-run`   Show changes without applying
+  `--json`      Output results as JSON for tooling
 
 ## analyze
 
