@@ -1,367 +1,306 @@
-# MASTER PLAN: CLI Auto-Fix Commands + Documentation
-
-## Phase 0: Document [ignore] Pattern Syntax
-
-### Background
-
-The `[ignore]` config uses Python's `fnmatch` module, which requires patterns to match from the start of the path. This differs from gitignore behavior where patterns match anywhere.
-
-**Decision**: Document fnmatch behavior rather than change code (simpler, more explicit).
-
-### Correct Pattern Usage
-
-| Pattern | Matches | Notes |
-|---------|---------|-------|
-| `roadmap/**` | ❌ `spec/roadmap/file.md` | fnmatch matches from start |
-| `**/roadmap/**` | ✅ `spec/roadmap/file.md` | Explicit "anywhere" pattern |
-| `spec/roadmap/**` | ✅ `spec/roadmap/file.md` | Full path from repo root |
-
-### Implementation
-
-**Create**: `docs/cli/ignore.md`
-
-```markdown
-# Ignore Configuration
-
-The `[ignore]` section controls which files are skipped during scanning.
-
-## Pattern Syntax
-
-Patterns use Python's `fnmatch` module (similar to shell globs):
-- `*` matches any characters within a path component
-- `**` matches across directory separators
-- `?` matches a single character
-
-**Important**: Patterns match from the START of the path, not anywhere.
-
-## Examples
-
-```toml
-[ignore]
-# Skip files anywhere named "README.md"
-spec = ["README.md", "INDEX.md"]
-
-# Skip a directory at any depth - use **/ prefix
-spec = ["**/roadmap/**"]
-
-# Skip a specific path from repo root
-spec = ["spec/archive/**"]
-
-# Skip by extension
-global = ["*.pyc", "*.tmp"]
-```
-
-## Scopes
-
-- `global` - Applied to all scanning
-- `spec` - Applied when scanning spec directories
-- `code` - Applied when scanning code directories
-- `test` - Applied when scanning test directories
-```
-
-### Verification
-
-```bash
-# Run doc sync test
-pytest tests/test_doc_sync.py -v
-```
-
-### Commit Message
-
-```
-[CUR-240] docs: Document [ignore] pattern syntax (fnmatch behavior)
-
-Added docs/cli/ignore.md explaining:
-- fnmatch pattern syntax (matches from start of path)
-- Correct patterns for matching anywhere (**/dir/**)
-- Scope-specific ignore rules (global, spec, code, test)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-```
-
----
+# MASTER PLAN: Codebase Review for Design Principle Violations
 
 ## Overview
 
-Add CLI commands that leverage the existing MCP file mutation infrastructure to auto-fix common issues.
+Systematic review of the elspais codebase to identify:
+1. **Design principle violations** (per AGENT_DESIGN_PRINCIPLES.md)
+2. **Anti-patterns** (code smells, poor practices)
+3. **Code duplication** (repeated logic that should be centralized)
 
-**Prerequisite**: MCP File Mutation Tools (v0.39.0) already provide:
-- `change_reference_type()` - Modify Implements/Refines in spec files
-- `move_requirement()` - Relocate requirements between files
-- Safety branch utilities for rollback
+## Review Methodology
 
-## Phase 1: `elspais hash update`
+For each subsystem:
+1. Use `feature-dev:code-reviewer` agent to analyze
+2. Check against specific design principles
+3. Document findings with file:line references
+4. Categorize severity: CRITICAL / HIGH / MEDIUM / LOW
 
-Update requirement hashes to match current body content.
+---
 
-### Use Cases
-- After editing requirement body text
-- Bulk update after format migration
-- CI/CD to verify hashes are current
+## Phase 1: MCP Server Review (2108 lines)
 
-### CLI Interface
-```bash
-# Update all stale hashes
-elspais hash update
+**File**: `src/elspais/mcp/server.py`
 
-# Update specific requirement
-elspais hash update REQ-d00001
+### Design Principles to Check
 
-# Dry-run: show what would change
-elspais hash update --dry-run
+- [ ] MCP tools MUST delegate to graph methods, not implement mutation logic directly
+- [ ] ALWAYS use existing graph API functions instead of reimplementing logic
+- [ ] ALWAYS use aggregate functions from `graph/annotators.py` for statistics
+- [ ] DO NOT manually iterate to compute statistics
 
-# JSON output for scripting
-elspais hash update --json
+### Review Tasks
+
+- [ ] Check each MCP tool for direct mutation logic (should delegate to graph)
+- [ ] Check for statistics computed by iteration instead of aggregate functions
+- [ ] Check for duplicated logic between tools
+- [ ] Check for proper error handling patterns
+
+### Findings
+
 ```
-
-### Tasks
-
-- [ ] Create `src/elspais/mcp/file_mutations.py` with `update_hash_in_file()`
-- [ ] Implement `_update_hashes()` in `src/elspais/commands/hash_cmd.py`
-- [ ] Add tests in `tests/commands/test_hash_update.py`
-- [ ] Update `docs/cli/hash.md` with update command docs
-- [ ] Run `pytest tests/test_doc_sync.py` to verify docs
-- [ ] Commit with `[CUR-240]` prefix
-
-### Implementation
-
-**File:** `src/elspais/commands/hash_cmd.py` (already exists, needs `_update_hashes` implementation)
-
-```python
-def _update_hashes(graph, args) -> int:
-    """Update hashes in spec files."""
-    from elspais.utilities.hasher import calculate_hash
-    from elspais.mcp.file_mutations import update_hash_in_file  # New function
-
-    dry_run = getattr(args, "dry_run", False)
-    req_id = getattr(args, "req_id", None)
-
-    updates = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if req_id and node.id != req_id:
-            continue
-
-        stored_hash = node.get_field("hash")
-        body = _get_requirement_body(node)  # Extract body text
-        computed_hash = calculate_hash(body)
-
-        if stored_hash != computed_hash:
-            updates.append({
-                "id": node.id,
-                "old_hash": stored_hash,
-                "new_hash": computed_hash,
-                "file": node.source.path,
-            })
-
-    if dry_run:
-        for u in updates:
-            print(f"{u['id']}: {u['old_hash']} -> {u['new_hash']}")
-        return 0
-
-    for u in updates:
-        update_hash_in_file(u["file"], u["id"], u["new_hash"])
-
-    print(f"Updated {len(updates)} hash(es)")
-    return 0
-```
-
-### New File Mutation Helper
-
-**File:** `src/elspais/mcp/file_mutations.py` (new)
-
-```python
-def update_hash_in_file(file_path: Path, req_id: str, new_hash: str) -> bool:
-    """Update the hash in a spec file for a requirement.
-
-    Finds the end marker line: *End* *REQ-xxx* | **Hash**: old_hash
-    And updates to: *End* *REQ-xxx* | **Hash**: new_hash
-    """
-    content = file_path.read_text()
-
-    # Pattern: *End* *REQ-xxx* | **Hash**: xxxxxxxx
-    pattern = re.compile(
-        rf"(\*End\*\s+\*{re.escape(req_id)}\*\s*\|\s*\*\*Hash\*\*:\s*)([a-fA-F0-9]+)"
-    )
-
-    new_content, count = pattern.subn(rf"\g<1>{new_hash}", content)
-
-    if count > 0:
-        file_path.write_text(new_content)
-        return True
-    return False
+[Document findings here after review]
 ```
 
 ---
 
-## Phase 2: `elspais validate --fix`
+## Phase 2: Graph Builder Review (1752 lines)
 
-Auto-fix validation issues that can be corrected programmatically.
+**File**: `src/elspais/graph/builder.py`
 
-### Fixable Issues
-- Missing hash → compute and insert
-- Outdated hash → recompute from body content
-- Missing `Status:` field → add default "Active"
+### Design Principles to Check
 
-### Non-Fixable Issues (report only)
-- Broken references to non-existent requirements
-- Orphaned requirements (no parent)
-- Circular dependencies
-- Malformed requirement IDs
+- [ ] DO NOT change the structure of Graph, GraphTrace, or GraphBuilder
+- [ ] DO NOT violate existing encapsulation
+- [ ] ALWAYS use iterator-only API methods for traversal
 
-### CLI Interface
-```bash
-# Show what would be fixed
-elspais validate --fix --dry-run
+### Review Tasks
 
-# Fix all auto-fixable issues
-elspais validate --fix
+- [ ] Check for encapsulation violations (direct access to private members)
+- [ ] Check for duplicated parsing/building logic
+- [ ] Check for consistent error handling
+- [ ] Check for proper use of iterator API
 
-# Fix and show details
-elspais validate --fix -v
+### Findings
+
 ```
-
-### Tasks
-
-- [ ] Add `add_status_to_file()` to `src/elspais/mcp/file_mutations.py`
-- [ ] Add `--fix` and `--dry-run` arguments to `src/elspais/commands/validate.py`
-- [ ] Implement `_auto_fix_issues()` function
-- [ ] Add tests in `tests/commands/test_validate_fix.py`
-- [ ] Update `docs/cli/validate.md` with --fix flag docs
-- [ ] Run `pytest tests/test_doc_sync.py` to verify docs
-- [ ] Commit with `[CUR-240]` prefix
-
-### Implementation
-
-**File:** `src/elspais/commands/validate.py`
-
-Add `--fix` argument and fix logic:
-
-```python
-def add_arguments(parser: argparse.ArgumentParser) -> None:
-    # ... existing args ...
-    parser.add_argument(
-        "--fix",
-        action="store_true",
-        help="Auto-fix issues that can be corrected programmatically",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be fixed without making changes",
-    )
-
-def _auto_fix_issues(graph, issues, dry_run: bool) -> list[dict]:
-    """Apply automatic fixes for supported issue types."""
-    from elspais.mcp.file_mutations import update_hash_in_file, add_status_to_file
-
-    fixed = []
-    for issue in issues:
-        if issue["type"] == "missing_hash":
-            if not dry_run:
-                update_hash_in_file(issue["file"], issue["req_id"], issue["computed_hash"])
-            fixed.append(issue)
-        elif issue["type"] == "outdated_hash":
-            if not dry_run:
-                update_hash_in_file(issue["file"], issue["req_id"], issue["computed_hash"])
-            fixed.append(issue)
-        elif issue["type"] == "missing_status":
-            if not dry_run:
-                add_status_to_file(issue["file"], issue["req_id"], "Active")
-            fixed.append(issue)
-    return fixed
+[Document findings here after review]
 ```
 
 ---
 
-## Files to Create/Modify
+## Phase 3: CLI Review (996 lines)
 
-### New Files
-1. `src/elspais/mcp/file_mutations.py` - File mutation helper functions
-   - `update_hash_in_file()`
-   - `add_status_to_file()`
-   - `insert_hash_line()` (for missing hash)
+**File**: `src/elspais/cli.py`
 
-### Modified Files
-1. `src/elspais/commands/hash_cmd.py` - Implement `_update_hashes()`
-2. `src/elspais/commands/validate.py` - Add `--fix` and `--dry-run` flags
-3. `docs/cli/hash.md` - Document hash update command
-4. `docs/cli/validate.md` - Document --fix flag
+### Design Principles to Check
 
-### Tests
-1. `tests/commands/test_hash_update.py` - Hash update tests
-2. `tests/commands/test_validate_fix.py` - Validate --fix tests
+- [ ] There is ONE config system; DO NOT parse configuration separately
+- [ ] New interface layers MUST consume existing APIs directly
+- [ ] ALWAYS use existing graph API functions
 
----
+### Review Tasks
 
-## Verification
+- [ ] Check for configuration parsing outside the config system
+- [ ] Check for duplicated argument handling patterns
+- [ ] Check for direct graph manipulation vs. using commands module
+- [ ] Check consistency across command implementations
 
-```bash
-# Test hash update
-elspais hash update --dry-run
-elspais hash update
-elspais hash verify  # Should show no mismatches
+### Findings
 
-# Test validate --fix
-elspais validate --fix --dry-run
-elspais validate --fix
-elspais validate  # Should show fewer issues
-
-# Full test suite
-pytest tests/ -x --tb=short
+```
+[Document findings here after review]
 ```
 
 ---
 
-## Commit Messages
+## Phase 4: Annotators Review (865 lines)
 
-### Phase 1: `elspais hash update`
+**File**: `src/elspais/graph/annotators.py`
+
+### Design Principles to Check
+
+- [ ] Centralize statistical logic in aggregate functions for reuse
+- [ ] ALWAYS use graph methods instead of materializing iterators
+- [ ] DO NOT manually iterate when count method exists
+
+### Review Tasks
+
+- [ ] Check for statistics that should be aggregate functions but aren't
+- [ ] Check for iterator materialization that could use count methods
+- [ ] Check for duplicated aggregation patterns
+- [ ] Verify all aggregate functions are documented for reuse
+
+### Findings
+
 ```
-[CUR-240] feat: Implement elspais hash update command
+[Document findings here after review]
+```
 
-Add ability to update requirement hashes in spec files:
-- elspais hash update: Update all stale hashes
-- elspais hash update REQ-xxx: Update specific requirement
-- --dry-run: Show changes without applying
-- --json: Machine-readable output
+---
 
-Uses new file_mutations.py helper for safe file updates.
+## Phase 5: Config System Review (807 lines)
+
+**File**: `src/elspais/config/__init__.py`
+
+### Design Principles to Check
+
+- [ ] There is ONE config system; DO NOT parse configuration separately
+- [ ] DO NOT violate existing encapsulation
+
+### Review Tasks
+
+- [ ] Check for configuration being parsed elsewhere in codebase
+- [ ] Check for proper encapsulation of config internals
+- [ ] Check for duplicated config access patterns
+- [ ] Verify config validation is centralized
+
+### Findings
+
+```
+[Document findings here after review]
+```
+
+---
+
+## Phase 6: Commands Module Review
+
+**Files**: `src/elspais/commands/*.py`
+
+### Design Principles to Check
+
+- [ ] ALWAYS use existing graph API functions
+- [ ] ALWAYS use aggregate functions for statistics
+- [ ] Reuse existing modules in `src/elspais/`
+
+### Review Tasks
+
+- [ ] Check each command for duplicated logic
+- [ ] Check for statistics computed manually vs. using aggregates
+- [ ] Check for consistent patterns across commands
+- [ ] Identify shared logic that should be extracted
+
+### Findings
+
+```
+[Document findings here after review]
+```
+
+---
+
+## Phase 7: Parsers Review
+
+**Files**: `src/elspais/graph/parsers/*.py`
+
+### Design Principles to Check
+
+- [ ] DO NOT violate existing encapsulation
+- [ ] Search the codebase for existing functionality before implementing
+
+### Review Tasks
+
+- [ ] Check for duplicated parsing patterns across parsers
+- [ ] Check for consistent regex handling
+- [ ] Check for proper use of ParsedContent structure
+- [ ] Identify common patterns that could be extracted
+
+### Findings
+
+```
+[Document findings here after review]
+```
+
+---
+
+## Phase 8: Cross-Cutting Concerns Review
+
+### Check for Global Anti-Patterns
+
+- [ ] **God Objects**: Classes doing too much (> 500 lines, > 10 public methods)
+- [ ] **Feature Envy**: Methods that use more from other classes than their own
+- [ ] **Shotgun Surgery**: Changes requiring edits in many files
+- [ ] **Duplicate Code**: Similar logic in multiple places
+
+### Check for Specific Issues
+
+- [ ] Functions computing statistics that should use annotators.py
+- [ ] Direct iteration over nodes when find_by_id() would work
+- [ ] Iterator materialization (list()) when not necessary
+- [ ] Configuration parsing outside config module
+- [ ] Mutation logic in interface layers
+
+### Findings
+
+```
+[Document findings here after review]
+```
+
+---
+
+## Phase 9: Documentation & Test Compliance
+
+### Check Test Naming
+
+- [ ] Test names MUST reference a specific assertion
+- [ ] Pattern: `test_REQ_xxx_A_description`
+- [ ] Identify tests without assertion references
+
+### Check Documentation Sync
+
+- [ ] Run `pytest tests/test_doc_sync.py`
+- [ ] Check CLI --help matches docs
+- [ ] Check CLAUDE.md reflects current architecture
+
+### Findings
+
+```
+[Document findings here after review]
+```
+
+---
+
+## Review Execution
+
+### For Each Phase
+
+1. Spawn `feature-dev:code-reviewer` agent with specific file(s)
+2. Provide design principles checklist
+3. Collect findings in the Findings section
+4. Categorize by severity
+
+### Severity Levels
+
+| Level | Definition | Action |
+|-------|------------|--------|
+| CRITICAL | Violates core architecture principle | Must fix immediately |
+| HIGH | Clear anti-pattern with impact | Fix in next sprint |
+| MEDIUM | Code smell, maintainability issue | Add to backlog |
+| LOW | Style or minor improvement | Optional |
+
+---
+
+## Output Format
+
+For each finding:
+
+```markdown
+### [SEVERITY] Finding Title
+
+**Location**: `file.py:line`
+**Principle Violated**: [Which design principle]
+**Description**: [What's wrong]
+**Suggested Fix**: [How to fix]
+```
+
+---
+
+## Summary Template
+
+After all phases complete, summarize:
+
+| Subsystem | Critical | High | Medium | Low |
+|-----------|----------|------|--------|-----|
+| MCP Server | | | | |
+| Graph Builder | | | | |
+| CLI | | | | |
+| Annotators | | | | |
+| Config | | | | |
+| Commands | | | | |
+| Parsers | | | | |
+| Cross-cutting | | | | |
+| Tests/Docs | | | | |
+| **TOTAL** | | | | |
+
+---
+
+## Commit Message
+
+```
+[CUR-XXX] refactor: Address codebase review findings
+
+Fixes identified during systematic design principle review:
+- [List major fixes]
+
+See MASTER_PLAN1.md for full findings and methodology.
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
-
-### Phase 2: `elspais validate --fix`
-```
-[CUR-240] feat: Add --fix flag to elspais validate
-
-Auto-fix validation issues that can be corrected programmatically:
-- Missing hash: Compute and insert
-- Outdated hash: Recompute from body
-- Missing Status: Add default "Active"
-
-Non-fixable issues (broken refs, orphans) are reported only.
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-```
-
-### Phase 3: Fix Hash Computation (Bug Fix)
-```
-[CUR-240] fix: Compute hash from raw body text per spec
-
-Per spec/requirements-spec.md, the hash SHALL be calculated from:
-- every line AFTER the Header line
-- every line BEFORE the Footer line
-
-The previous implementation incorrectly computed hash from assertion text
-only, ignoring metadata, intro text, and other body content.
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-```
-
----
-
-## Completed Phases
-
-- [x] Phase 0: Document [ignore] pattern syntax - f190c38
-- [x] Phase 1: `elspais hash update` - 2639713
-- [x] Phase 2: `elspais validate --fix` - 8f01b17
-- [x] Phase 3: Fix hash computation - ff143f9
