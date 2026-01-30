@@ -6,6 +6,7 @@ traceability graph from parsed content.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
@@ -800,10 +801,109 @@ class TraceGraph:
     # Assertion Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
-        """Recompute hash for a requirement based on its assertions.
+    # Regex pattern for assertion lines in body_text (e.g., "A. The system SHALL...")
+    _ASSERTION_LINE_RE = re.compile(r"^([A-Z0-9]+)\.\s+(.*)$", re.MULTILINE)
 
-        The hash is computed from the concatenated assertion texts.
+    def _update_assertion_in_body_text(self, body_text: str, label: str, new_text: str) -> str:
+        """Update an assertion line in body_text.
+
+        Args:
+            body_text: The requirement body text.
+            label: The assertion label (e.g., "A").
+            new_text: The new assertion text.
+
+        Returns:
+            Updated body_text with the assertion modified.
+        """
+        pattern = re.compile(rf"^({re.escape(label)})\.\s+.*$", re.MULTILINE)
+        return pattern.sub(rf"\1. {new_text}", body_text)
+
+    def _add_assertion_to_body_text(self, body_text: str, label: str, text: str) -> str:
+        """Add an assertion line to body_text.
+
+        Inserts the assertion in sorted order within the assertions section.
+
+        Args:
+            body_text: The requirement body text.
+            label: The assertion label (e.g., "C").
+            text: The assertion text.
+
+        Returns:
+            Updated body_text with the new assertion added.
+        """
+        new_line = f"{label}. {text}"
+        lines = body_text.split("\n")
+        result_lines = []
+        inserted = False
+
+        for line in lines:
+            match = self._ASSERTION_LINE_RE.match(line)
+            if match and not inserted:
+                existing_label = match.group(1)
+                # Insert before this line if our label comes first
+                if label < existing_label:
+                    result_lines.append(new_line)
+                    inserted = True
+            result_lines.append(line)
+
+        # If not inserted, append at end (either no assertions or comes last)
+        if not inserted:
+            # Check if there's an ## Assertions header to append after
+            for i, line in enumerate(result_lines):
+                if line.strip().lower() == "## assertions":
+                    # Find next non-empty line or end of section
+                    insert_pos = i + 1
+                    while insert_pos < len(result_lines):
+                        if result_lines[insert_pos].strip():
+                            break
+                        insert_pos += 1
+                    # Find end of assertion block
+                    while insert_pos < len(result_lines):
+                        if not self._ASSERTION_LINE_RE.match(result_lines[insert_pos]):
+                            break
+                        insert_pos += 1
+                    result_lines.insert(insert_pos, new_line)
+                    inserted = True
+                    break
+
+            if not inserted:
+                # No assertions section found, just append
+                result_lines.append(new_line)
+
+        return "\n".join(result_lines)
+
+    def _delete_assertion_from_body_text(self, body_text: str, label: str) -> str:
+        """Delete an assertion line from body_text.
+
+        Args:
+            body_text: The requirement body text.
+            label: The assertion label to delete (e.g., "B").
+
+        Returns:
+            Updated body_text with the assertion removed.
+        """
+        pattern = re.compile(rf"^{re.escape(label)}\.\s+.*\n?", re.MULTILINE)
+        return pattern.sub("", body_text)
+
+    def _rename_assertion_in_body_text(self, body_text: str, old_label: str, new_label: str) -> str:
+        """Rename an assertion label in body_text.
+
+        Args:
+            body_text: The requirement body text.
+            old_label: The current assertion label (e.g., "A").
+            new_label: The new assertion label (e.g., "D").
+
+        Returns:
+            Updated body_text with the assertion label changed.
+        """
+        pattern = re.compile(rf"^{re.escape(old_label)}(\.\s+.*)$", re.MULTILINE)
+        return pattern.sub(rf"{new_label}\1", body_text)
+
+    def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
+        """Recompute hash for a requirement based on body_text.
+
+        Per spec/requirements-spec.md, the hash is computed from every line
+        AFTER the Header line and BEFORE the Footer line (i.e., body_text).
 
         Args:
             req_node: The requirement node to recompute hash for.
@@ -813,19 +913,10 @@ class TraceGraph:
         """
         from elspais.utilities.hasher import calculate_hash
 
-        # Collect assertion texts in label order
-        assertions = []
-        for child in req_node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                label = child.get_field("label", "")
-                text = child.get_label()
-                assertions.append((label, text))
+        # Use body_text for hash computation (per spec)
+        body_text = req_node.get_field("body_text", "")
 
-        # Sort by label and concatenate
-        assertions.sort(key=lambda x: x[0])
-        body = "\n".join(text for _, text in assertions)
-
-        new_hash = calculate_hash(body)
+        new_hash = calculate_hash(body_text)
         req_node.set_field("hash", new_hash)
         return new_hash
 
@@ -897,6 +988,12 @@ class TraceGraph:
                     edge.assertion_targets.remove(old_label)
                     edge.assertion_targets.append(new_label)
 
+        # Update body_text to reflect renamed assertion
+        body_text = parent.get_field("body_text", "")
+        if body_text:
+            new_body_text = self._rename_assertion_in_body_text(body_text, old_label, new_label)
+            parent.set_field("body_text", new_body_text)
+
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
 
@@ -952,6 +1049,13 @@ class TraceGraph:
         # Update assertion text
         node.set_label(new_text)
 
+        # Update body_text to reflect updated assertion
+        label = node.get_field("label", "")
+        body_text = parent.get_field("body_text", "")
+        if body_text and label:
+            new_body_text = self._update_assertion_in_body_text(body_text, label, new_text)
+            parent.set_field("body_text", new_body_text)
+
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
 
@@ -1000,6 +1104,12 @@ class TraceGraph:
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
         parent.add_child(assertion_node)
+
+        # Update body_text to include new assertion
+        body_text = parent.get_field("body_text", "")
+        if body_text:
+            new_body_text = self._add_assertion_to_body_text(body_text, label, text)
+            parent.set_field("body_text", new_body_text)
 
         # Recompute parent hash
         new_hash = self._recompute_requirement_hash(parent)
@@ -1084,6 +1194,11 @@ class TraceGraph:
                 if old_label in edge.assertion_targets:
                     edge.assertion_targets.remove(old_label)
 
+        # Update body_text to remove deleted assertion
+        body_text = parent.get_field("body_text", "")
+        if body_text:
+            body_text = self._delete_assertion_from_body_text(body_text, old_label)
+
         # Compact if requested
         if compact:
             # Find assertions after the deleted one
@@ -1119,6 +1234,16 @@ class TraceGraph:
                             if sib_label in edge.assertion_targets:
                                 edge.assertion_targets.remove(sib_label)
                                 edge.assertion_targets.append(prev_label)
+
+                    # Update body_text for this rename
+                    if body_text:
+                        body_text = self._rename_assertion_in_body_text(
+                            body_text, sib_label, prev_label
+                        )
+
+        # Update parent's body_text field
+        if parent.get_field("body_text", ""):
+            parent.set_field("body_text", body_text)
 
         # Recompute parent hash
         new_hash = self._recompute_requirement_hash(parent)
