@@ -229,8 +229,12 @@ class TestParser:
             # Check for REQ in test function name
             name_match = test_name_pattern.search(text)
             if name_match:
-                # Convert REQ_p00001 to REQ-p00001
+                # Convert REQ_p00001 to REQ-p00001 and normalize prefix case
                 ref = name_match.group("ref").replace("_", "-")
+                # Ensure prefix is uppercase (e.g., req-d00001 -> REQ-d00001)
+                prefix = pattern_config.prefix
+                if ref.lower().startswith(prefix.lower() + "-"):
+                    ref = prefix + ref[len(prefix) :]
                 validates.append(ref)
 
             # Check for REQ in comment (single-line)
@@ -242,7 +246,11 @@ class TestParser:
                 for ref_match in re.finditer(
                     rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+", refs_str, re.IGNORECASE
                 ):
-                    validates.append(ref_match.group(0).replace("_", "-"))
+                    ref = ref_match.group(0).replace("_", "-")
+                    # Normalize prefix case (e.g., req-d00001 -> REQ-d00001)
+                    if ref.lower().startswith(prefix.lower() + "-"):
+                        ref = prefix + ref[len(prefix) :]
+                    validates.append(ref)
 
             if validates:
                 yield ParsedContent(
