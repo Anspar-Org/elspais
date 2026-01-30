@@ -12,26 +12,24 @@ Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 Do each of these steps for every Phase in the MASTER_PLAN.md
 Check off each step (change [ ] to [x]) after it is complete.
 
-## Current Task: Codebase Review for Design Principle Violations
+## Current Task: Remediate Critical Code Review Findings
 
-Systematic review of the elspais codebase to identify design principle violations, anti-patterns, and code duplication.
+Address the 7 CRITICAL issues identified during systematic codebase review.
 
 ### 1. Understand Current State
 
-- [ ] **EXPLORE**: Read MASTER_PLAN.md for review methodology
-  - [ ] Understand review phases (MCP Server, Graph Builder, CLI, etc.)
-  - [ ] Understand severity levels (CRITICAL, HIGH, MEDIUM, LOW)
-  - [ ] Understand output format for findings
+- [ ] **EXPLORE**: Read MASTER_PLAN.md for remediation plan
+  - [ ] Understand each critical finding
+  - [ ] Understand the solution approach
 - [ ] **BASELINE**: Ensure tests pass before changes
   - [ ] Run full test suite
-  - [ ] Note any flaky or slow tests
 
 ### 2. Incremental Refactor
 
 - [ ] **SMALL STEPS**: Complete one phase at a time
   - [ ] Each phase should be independently reviewable
-  - [ ] Document findings after each phase
-  - [ ] Commit any fixes made
+  - [ ] Test after each change
+  - [ ] Commit after each phase
 - [ ] **PRESERVE BEHAVIOR**: No functional changes unless fixing bugs
   - [ ] Same inputs → same outputs
   - [ ] Same error handling
@@ -39,19 +37,12 @@ Systematic review of the elspais codebase to identify design principle violation
 
 ### 3. Verification
 
-- [ ] **TEST**: All tests still pass after any fixes
-- [ ] **REVIEW**: Findings documented in MASTER_PLAN.md
+- [ ] **TEST**: All tests still pass after fixes
 - [ ] **LINT**: Fix all lint errors
-
-### 3.5 Documentation (for new features/changes)
-
-- [ ] **CHANGELOG**: Update CHANGELOG.md if changes made
-- [ ] **DOCS**: Update docs if needed
-- [ ] **SYNC**: Run `pytest tests/test_doc_sync.py` to verify docs match implementation
 
 ### 4. Commit
 
-- [ ] **COMMIT**: Use `[CUR-240]` prefix in subject (if making fixes)
+- [ ] **COMMIT**: Use `[CUR-240]` prefix in subject
 
 ### 5. Phase Complete
 

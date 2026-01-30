@@ -1,306 +1,226 @@
-# MASTER PLAN: Codebase Review for Design Principle Violations
+# MASTER PLAN: Remediate Critical Code Review Findings
 
 ## Overview
 
-Systematic review of the elspais codebase to identify:
-1. **Design principle violations** (per AGENT_DESIGN_PRINCIPLES.md)
-2. **Anti-patterns** (code smells, poor practices)
-3. **Code duplication** (repeated logic that should be centralized)
+Address the 7 CRITICAL issues identified during the systematic codebase review (ticket CUR-240).
+Each phase addresses one critical finding with TDD approach.
 
-## Review Methodology
+## Critical Findings to Address
 
-For each subsystem:
-1. Use `feature-dev:code-reviewer` agent to analyze
-2. Check against specific design principles
-3. Document findings with file:line references
-4. Categorize severity: CRITICAL / HIGH / MEDIUM / LOW
+| # | Location | Issue | Phase |
+|---|----------|-------|-------|
+| 1 | builder.py:1860 | Direct `_parents` access | Phase 1 |
+| 2 | builder.py (multiple) | Direct `_content` mutation | Phase 2 |
+| 3 | health.py:147 | Imports private `_parse_toml` | Phase 3 |
+| 4 | analyze.py:123-170 | Manual stats vs `count_by_level()` | Phase 4 |
+| 5 | health.py:828-864 | Manual coverage vs `count_by_coverage()` | Phase 5 |
+| 6 | code.py & test.py | Duplicated `_is_empty_comment()` | Phase 6 |
+| 7 | builder.py | TraceGraph God Object | Deferred |
 
----
-
-## Phase 1: MCP Server Review (2108 lines)
-
-**File**: `src/elspais/mcp/server.py`
-
-### Design Principles to Check
-
-- [ ] MCP tools MUST delegate to graph methods, not implement mutation logic directly
-- [ ] ALWAYS use existing graph API functions instead of reimplementing logic
-- [ ] ALWAYS use aggregate functions from `graph/annotators.py` for statistics
-- [ ] DO NOT manually iterate to compute statistics
-
-### Review Tasks
-
-- [ ] Check each MCP tool for direct mutation logic (should delegate to graph)
-- [ ] Check for statistics computed by iteration instead of aggregate functions
-- [ ] Check for duplicated logic between tools
-- [ ] Check for proper error handling patterns
-
-### Findings
-
-```
-[Document findings here after review]
-```
+**Note**: Phase 7 (God Object refactor) is deferred - it's a significant architectural change requiring separate planning.
 
 ---
 
-## Phase 2: Graph Builder Review (1752 lines)
+## Phase 1: Fix `_parents` Encapsulation Violation ✅
 
-**File**: `src/elspais/graph/builder.py`
+**File**: `src/elspais/graph/builder.py:1860`
 
-### Design Principles to Check
+### Problem
 
-- [ ] DO NOT change the structure of Graph, GraphTrace, or GraphBuilder
-- [ ] DO NOT violate existing encapsulation
-- [ ] ALWAYS use iterator-only API methods for traversal
-
-### Review Tasks
-
-- [ ] Check for encapsulation violations (direct access to private members)
-- [ ] Check for duplicated parsing/building logic
-- [ ] Check for consistent error handling
-- [ ] Check for proper use of iterator API
-
-### Findings
-
+```python
+if not node._parents and node.kind == NodeKind.REQUIREMENT
 ```
-[Document findings here after review]
+
+Direct access to private `_parents` attribute violates encapsulation.
+
+### Solution
+
+Replace with public API property `is_root`:
+
+```python
+if node.is_root and node.kind == NodeKind.REQUIREMENT
 ```
+
+### Tasks
+
+- [x] Find all occurrences of `node._parents` access (only 1 external violation found)
+- [x] Replace with `node.is_root` property
+- [x] Run tests to verify behavior unchanged (896 passed)
 
 ---
 
-## Phase 3: CLI Review (996 lines)
+## Phase 2: Document GraphBuilder Privileged Access ✅
 
-**File**: `src/elspais/cli.py`
+**File**: `src/elspais/graph/builder.py` (lines 687-691, 1102, 1622, 1639, 1687, 1749)
 
-### Design Principles to Check
+### Problem
 
-- [ ] There is ONE config system; DO NOT parse configuration separately
-- [ ] New interface layers MUST consume existing APIs directly
-- [ ] ALWAYS use existing graph API functions
+Direct mutation of `node._content` throughout GraphBuilder methods.
 
-### Review Tasks
+### Solution Applied
 
-- [ ] Check for configuration parsing outside the config system
-- [ ] Check for duplicated argument handling patterns
-- [ ] Check for direct graph manipulation vs. using commands module
-- [ ] Check consistency across command implementations
+1. Documented "friend class" pattern in GraphBuilder docstring
+2. Added `get_all_content()` method to GraphNode for serialization
+3. Updated serialize.py to use public API instead of direct `_content` access
 
-### Findings
+### Tasks
 
-```
-[Document findings here after review]
-```
+- [x] Add docstring to GraphBuilder explaining privileged access pattern
+- [x] Add `get_all_content()` method to GraphNode for controlled access
+- [x] Update serialize.py to use public API (was also accessing `_content`)
+- [x] All tests pass (896 passed)
 
 ---
 
-## Phase 4: Annotators Review (865 lines)
+## Phase 3: Fix Private `_parse_toml` Import ✅
 
-**File**: `src/elspais/graph/annotators.py`
+**File**: `src/elspais/commands/health.py:147`
 
-### Design Principles to Check
+### Problem
 
-- [ ] Centralize statistical logic in aggregate functions for reuse
-- [ ] ALWAYS use graph methods instead of materializing iterators
-- [ ] DO NOT manually iterate when count method exists
-
-### Review Tasks
-
-- [ ] Check for statistics that should be aggregate functions but aren't
-- [ ] Check for iterator materialization that could use count methods
-- [ ] Check for duplicated aggregation patterns
-- [ ] Verify all aggregate functions are documented for reuse
-
-### Findings
-
+```python
+from elspais.config import _parse_toml  # Private function
 ```
-[Document findings here after review]
+
+Importing a private function from the config module.
+
+### Solution
+
+Used existing public API `parse_toml` (already exported in `__all__`):
+
+```python
+from elspais.config import parse_toml
 ```
+
+### Tasks
+
+- [x] Check if `parse_toml` (public) exists - YES, already exported
+- [x] Update health.py to use public function
+- [x] All tests pass (896 passed)
 
 ---
 
-## Phase 5: Config System Review (807 lines)
+## Phase 4: Use `count_by_level()` in analyze.py ✅
 
-**File**: `src/elspais/config/__init__.py`
+**File**: `src/elspais/commands/analyze.py:123-170`
 
-### Design Principles to Check
+### Problem
 
-- [ ] There is ONE config system; DO NOT parse configuration separately
-- [ ] DO NOT violate existing encapsulation
+Manual iteration to group requirements by level instead of using shared utility.
 
-### Review Tasks
+### Solution
 
-- [ ] Check for configuration being parsed elsewhere in codebase
-- [ ] Check for proper encapsulation of config internals
-- [ ] Check for duplicated config access patterns
-- [ ] Verify config validation is centralized
+Added new `group_by_level()` function to annotators.py (returns node lists, not just counts), then refactored analyze.py to use it:
 
-### Findings
+```python
+from elspais.graph.annotators import group_by_level
 
+by_level = group_by_level(graph)
 ```
-[Document findings here after review]
-```
+
+### Tasks
+
+- [x] Added `group_by_level()` utility to annotators.py
+- [x] Exported in `__all__`
+- [x] Refactored analyze.py to use shared utility
+- [x] All tests pass (896 passed)
 
 ---
 
-## Phase 6: Commands Module Review
+## Phase 5: Use `count_by_coverage()` in health.py ✅
 
-**Files**: `src/elspais/commands/*.py`
+**File**: `src/elspais/commands/health.py:828-864`
 
-### Design Principles to Check
+### Problem
 
-- [ ] ALWAYS use existing graph API functions
-- [ ] ALWAYS use aggregate functions for statistics
-- [ ] Reuse existing modules in `src/elspais/`
+Manual coverage computation instead of using aggregate function.
 
-### Review Tasks
+### Solution
 
-- [ ] Check each command for duplicated logic
-- [ ] Check for statistics computed manually vs. using aggregates
-- [ ] Check for consistent patterns across commands
-- [ ] Identify shared logic that should be extracted
+Created new `count_with_code_refs()` utility in annotators.py (existing `count_by_coverage()` tracks assertion-level coverage, not code reference coverage). Refactored health.py to use it:
 
-### Findings
+```python
+from elspais.graph.annotators import count_with_code_refs
 
+coverage = count_with_code_refs(graph)
 ```
-[Document findings here after review]
-```
+
+### Tasks
+
+- [x] Added `count_with_code_refs()` utility to annotators.py
+- [x] Exported in `__all__`
+- [x] Refactored health.py to use shared utility
+- [x] All tests pass (896 passed)
 
 ---
 
-## Phase 7: Parsers Review
+## Phase 6: Extract Duplicated `_is_empty_comment()` ✅
 
-**Files**: `src/elspais/graph/parsers/*.py`
+**Files**:
 
-### Design Principles to Check
+- `src/elspais/graph/parsers/code.py:214`
+- `src/elspais/graph/parsers/test.py:306`
 
-- [ ] DO NOT violate existing encapsulation
-- [ ] Search the codebase for existing functionality before implementing
+### Problem
 
-### Review Tasks
+Identical 18-line function duplicated in both parsers.
 
-- [ ] Check for duplicated parsing patterns across parsers
-- [ ] Check for consistent regex handling
-- [ ] Check for proper use of ParsedContent structure
-- [ ] Identify common patterns that could be extracted
+### Solution
 
-### Findings
+Created `parsers/config_helpers.py` with shared `is_empty_comment()` function. Updated both parsers to use it.
 
-```
-[Document findings here after review]
-```
+### Tasks
 
----
-
-## Phase 8: Cross-Cutting Concerns Review
-
-### Check for Global Anti-Patterns
-
-- [ ] **God Objects**: Classes doing too much (> 500 lines, > 10 public methods)
-- [ ] **Feature Envy**: Methods that use more from other classes than their own
-- [ ] **Shotgun Surgery**: Changes requiring edits in many files
-- [ ] **Duplicate Code**: Similar logic in multiple places
-
-### Check for Specific Issues
-
-- [ ] Functions computing statistics that should use annotators.py
-- [ ] Direct iteration over nodes when find_by_id() would work
-- [ ] Iterator materialization (list()) when not necessary
-- [ ] Configuration parsing outside config module
-- [ ] Mutation logic in interface layers
-
-### Findings
-
-```
-[Document findings here after review]
-```
+- [x] Created `parsers/config_helpers.py` with shared function
+- [x] Updated code.py to import and use shared function
+- [x] Updated test.py to import and use shared function
+- [x] Removed duplicate method definitions from both files
+- [x] All tests pass (896 passed), linting passes
 
 ---
 
-## Phase 9: Documentation & Test Compliance
+## Phase 7: TraceGraph God Object (DEFERRED)
 
-### Check Test Naming
+**File**: `src/elspais/graph/builder.py:21-1556`
 
-- [ ] Test names MUST reference a specific assertion
-- [ ] Pattern: `test_REQ_xxx_A_description`
-- [ ] Identify tests without assertion references
+### Problem
 
-### Check Documentation Sync
+TraceGraph has 1,555 lines and 53+ public methods, combining:
 
-- [ ] Run `pytest tests/test_doc_sync.py`
-- [ ] Check CLI --help matches docs
-- [ ] Check CLAUDE.md reflects current architecture
+- Graph structure management
+- Mutation operations
+- Undo infrastructure
+- Body text manipulation
+- Hash computation
 
-### Findings
+### Recommendation
 
-```
-[Document findings here after review]
-```
+This requires architectural planning as a separate effort:
 
----
+1. Extract `GraphMutator` for mutation operations
+2. Extract `RequirementBodyEditor` for body text manipulation
+3. Keep core query/traversal methods in `TraceGraph`
 
-## Review Execution
-
-### For Each Phase
-
-1. Spawn `feature-dev:code-reviewer` agent with specific file(s)
-2. Provide design principles checklist
-3. Collect findings in the Findings section
-4. Categorize by severity
-
-### Severity Levels
-
-| Level | Definition | Action |
-|-------|------------|--------|
-| CRITICAL | Violates core architecture principle | Must fix immediately |
-| HIGH | Clear anti-pattern with impact | Fix in next sprint |
-| MEDIUM | Code smell, maintainability issue | Add to backlog |
-| LOW | Style or minor improvement | Optional |
+**Status**: Deferred to future ticket
 
 ---
 
-## Output Format
+## Verification Checklist
 
-For each finding:
+After each phase:
 
-```markdown
-### [SEVERITY] Finding Title
+- [ ] All tests pass (`pytest`)
+- [ ] No lint errors (`ruff check`)
+- [ ] Commit with `[CUR-240]` prefix
 
-**Location**: `file.py:line`
-**Principle Violated**: [Which design principle]
-**Description**: [What's wrong]
-**Suggested Fix**: [How to fix]
-```
+## Commit Template
 
----
+```text
+[CUR-240] refactor: [Phase description]
 
-## Summary Template
-
-After all phases complete, summarize:
-
-| Subsystem | Critical | High | Medium | Low |
-|-----------|----------|------|--------|-----|
-| MCP Server | | | | |
-| Graph Builder | | | | |
-| CLI | | | | |
-| Annotators | | | | |
-| Config | | | | |
-| Commands | | | | |
-| Parsers | | | | |
-| Cross-cutting | | | | |
-| Tests/Docs | | | | |
-| **TOTAL** | | | | |
-
----
-
-## Commit Message
-
-```
-[CUR-XXX] refactor: Address codebase review findings
-
-Fixes identified during systematic design principle review:
-- [List major fixes]
-
-See MASTER_PLAN1.md for full findings and methodology.
+Addresses critical finding from codebase review:
+- [What was fixed]
+- [Why it matters]
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
