@@ -122,15 +122,10 @@ def _analyze_orphans(graph: TraceGraph, args: argparse.Namespace) -> int:
 
 def _analyze_coverage(graph: TraceGraph, args: argparse.Namespace) -> int:
     """Show implementation coverage report."""
-    # Count by level
-    by_level = {"PRD": [], "OPS": [], "DEV": [], "other": []}
+    from elspais.graph.annotators import group_by_level
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        level = (node.level or "").upper()
-        if level in by_level:
-            by_level[level].append(node)
-        else:
-            by_level["other"].append(node)
+    # Group requirements by level using shared utility
+    by_level = group_by_level(graph)
 
     print("Requirements by Level")
     print("=" * 40)

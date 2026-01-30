@@ -30,7 +30,7 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         "kind": node.kind.name,
         "label": node.get_label(),
         "uuid": node.uuid,
-        "content": dict(node._content),
+        "content": node.get_all_content(),
     }
 
     # Include source location if present

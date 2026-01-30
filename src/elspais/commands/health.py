@@ -143,10 +143,10 @@ def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthChe
 
     try:
         content = actual_path.read_text(encoding="utf-8")
-        # Import the internal parser
-        from elspais.config import _parse_toml
+        # Validate TOML syntax using the public parser
+        from elspais.config import parse_toml
 
-        _parse_toml(content)
+        parse_toml(content)
         return HealthCheck(
             name="config.syntax",
             passed=True,
@@ -828,38 +828,25 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
 def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
+    from elspais.graph.annotators import count_with_code_refs
 
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
-
-    # Count requirements with at least one CODE child
-    covered_reqs = set()
-    for node in graph.nodes_by_kind(NodeKind.CODE):
-        for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT:
-                covered_reqs.add(parent.id)
-            elif parent.kind == NodeKind.ASSERTION:
-                # Get the parent requirement of the assertion
-                for grandparent in parent.iter_parents():
-                    if grandparent.kind == NodeKind.REQUIREMENT:
-                        covered_reqs.add(grandparent.id)
-
-    coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
+    coverage = count_with_code_refs(graph)
 
     return HealthCheck(
         name="code.coverage",
         passed=True,  # Informational only
         message=(
-            f"{len(covered_reqs)}/{req_count} requirements "
-            f"have code references ({coverage_pct:.1f}%)"
+            f"{coverage['with_code_refs']}/{coverage['total_requirements']} requirements "
+            f"have code references ({coverage['coverage_percent']}%)"
         ),
         category="code",
         severity="info",
         details={
             "code_nodes": code_count,
-            "requirements_with_code": len(covered_reqs),
-            "total_requirements": req_count,
-            "coverage_percent": round(coverage_pct, 1),
+            "requirements_with_code": coverage["with_code_refs"],
+            "total_requirements": coverage["total_requirements"],
+            "coverage_percent": coverage["coverage_percent"],
         },
     )
 

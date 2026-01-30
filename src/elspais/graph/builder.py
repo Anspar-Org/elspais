@@ -1563,6 +1563,15 @@ class GraphBuilder:
         for content in parsed_contents:
             builder.add_parsed_content(content)
         graph = builder.build()
+
+    Note on Privileged Access:
+        GraphBuilder directly accesses GraphNode._content during construction.
+        This is intentional - as the construction layer, GraphBuilder has
+        "friend class" privileges to efficiently build node content without
+        the overhead of set_field() calls. This pattern is acceptable because:
+        1. GraphBuilder is the ONLY external class with this access
+        2. Access occurs only during initial construction
+        3. Post-construction, all access should use get_field()/set_field()
     """
 
     def __init__(self, repo_root: Path | None = None) -> None:
@@ -1857,7 +1866,7 @@ class GraphBuilder:
         roots = [
             node
             for node in self._nodes.values()
-            if not node._parents and node.kind == NodeKind.REQUIREMENT
+            if node.is_root and node.kind == NodeKind.REQUIREMENT
         ]
 
         # Also include journeys as roots

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
 from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.graph.parsers.config_helpers import is_empty_comment
 from elspais.utilities.reference_config import (
     ReferenceConfig,
     ReferenceResolver,
@@ -189,7 +190,7 @@ class CodeParser:
                         end_ln = next_ln
                         raw_lines.append(next_text)
                         i += 1
-                    elif self._is_empty_comment(next_text, ref_config.comment_styles):
+                    elif is_empty_comment(next_text, ref_config.comment_styles):
                         # Empty comment line, skip
                         i += 1
                     else:
@@ -210,24 +211,3 @@ class CodeParser:
                 continue
 
             i += 1
-
-    def _is_empty_comment(self, text: str, comment_styles: list[str]) -> bool:
-        """Check if a line is an empty comment.
-
-        Args:
-            text: Line text to check.
-            comment_styles: List of comment style markers.
-
-        Returns:
-            True if line is an empty comment.
-        """
-        stripped = text.strip()
-        for style in comment_styles:
-            if stripped.startswith(style):
-                # Remove the comment marker and check if remainder is empty
-                remainder = stripped[len(style) :].strip()
-                # Also handle trailing comment markers (for decorative comments)
-                remainder = remainder.rstrip("#/-").strip()
-                if not remainder:
-                    return True
-        return False

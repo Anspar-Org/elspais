@@ -178,6 +178,14 @@ class GraphNode:
         """Set a field in content."""
         self._content[key] = value
 
+    def get_all_content(self) -> dict[str, Any]:
+        """Get a copy of all content fields.
+
+        Returns a shallow copy for serialization purposes.
+        Prefer get_field() for accessing individual fields.
+        """
+        return dict(self._content)
+
     def get_metric(self, key: str, default: Any = None) -> Any:
         """Get a metric value."""
         return self._metrics.get(key, default)

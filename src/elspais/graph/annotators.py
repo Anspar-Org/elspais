@@ -208,6 +208,27 @@ def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
     return counts
 
 
+def group_by_level(graph: TraceGraph) -> dict[str, list[GraphNode]]:
+    """Group requirements by level.
+
+    Args:
+        graph: The TraceGraph to query.
+
+    Returns:
+        Dict mapping level (PRD, OPS, DEV, other) to list of requirement nodes.
+    """
+    from elspais.graph import NodeKind
+
+    groups: dict[str, list[GraphNode]] = {"PRD": [], "OPS": [], "DEV": [], "other": []}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        level = (node.get_field("level") or "").upper()
+        if level in groups:
+            groups[level].append(node)
+        else:
+            groups["other"].append(node)
+    return groups
+
+
 def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
     """Count requirements by repo prefix (CORE, CAL, TTN, etc.).
 
@@ -326,6 +347,45 @@ def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
             counts["no_coverage"] += 1
 
     return counts
+
+
+def count_with_code_refs(graph: TraceGraph) -> dict[str, int]:
+    """Count requirements that have at least one CODE reference.
+
+    A requirement has CODE coverage if:
+    - It has a CODE child directly, OR
+    - One of its ASSERTION children has a CODE child
+
+    Args:
+        graph: The TraceGraph to query.
+
+    Returns:
+        Dict with 'total_requirements', 'with_code_refs', 'coverage_percent'.
+    """
+    from elspais.graph import NodeKind
+
+    total = 0
+    covered_req_ids: set[str] = set()
+
+    for node in graph.nodes_by_kind(NodeKind.CODE):
+        for parent in node.iter_parents():
+            if parent.kind == NodeKind.REQUIREMENT:
+                covered_req_ids.add(parent.id)
+            elif parent.kind == NodeKind.ASSERTION:
+                # Get the parent requirement of the assertion
+                for grandparent in parent.iter_parents():
+                    if grandparent.kind == NodeKind.REQUIREMENT:
+                        covered_req_ids.add(grandparent.id)
+
+    for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        total += 1
+
+    pct = (len(covered_req_ids) / total * 100) if total > 0 else 0.0
+    return {
+        "total_requirements": total,
+        "with_code_refs": len(covered_req_ids),
+        "coverage_percent": round(pct, 1),
+    }
 
 
 def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
@@ -847,8 +907,10 @@ __all__ = [
     "annotate_display_info",
     "annotate_implementation_files",
     "count_by_level",
+    "group_by_level",
     "count_by_repo",
     "count_by_coverage",
+    "count_with_code_refs",
     "count_by_git_status",
     "count_implementation_files",
     "collect_topics",
