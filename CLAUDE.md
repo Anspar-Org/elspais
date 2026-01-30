@@ -55,9 +55,9 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 | CSS, C-style block | `/* */` | `/* elspais: expected-broken-links 3 */` |
 
 ## Workflow
-- **ALWAYS** update `CHANGELOG.md` with new features
-- **ALWAYS** use a sub-agent to update the `docs/` files and --help cli commands
-- **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation
+
+**See `WORKFLOW_STATE.md`** for the complete workflow checklist including documentation steps.
+
 - **ALWAYS** use a sub-agent to write tests
 - **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
 

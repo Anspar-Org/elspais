@@ -34,6 +34,12 @@ Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 - [ ] **REVIEW**: Have sub-agent verify no behavior change
 - [ ] **LINT**: Fix all lint errors
 
+### 3.5 Documentation (for new features/changes)
+
+- [ ] **CHANGELOG**: Update CHANGELOG.md with new features
+- [ ] **DOCS**: Use sub-agent to update docs/ files and --help CLI commands
+- [ ] **SYNC**: Run `pytest tests/test_doc_sync.py` to verify docs match implementation
+
 ### 4. Commit
 
 - [ ] **COMMIT**: Use `[TICKET]` prefix in subject (replace with actual ticket ID)
