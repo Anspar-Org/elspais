@@ -304,3 +304,253 @@ class TestUpdateHashesCommand:
         result = run(verify_args)
 
         assert result == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: Hash computed from raw body text (per spec)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestHashComputedFromRawBody:
+    """Tests that hash is computed from raw body text per spec.
+
+    Per spec/requirements-spec.md:
+    > The hash SHALL be calculated from:
+    > - every line AFTER the Header line
+    > - every line BEFORE the Footer line
+
+    This means the hash should include ALL body content (metadata, intro text,
+    assertions), not just reconstructed assertion text.
+    """
+
+    def test_hash_includes_intro_text(self, tmp_path):
+        """Hash should change when intro text changes, not just assertions.
+
+        This test verifies the hash is computed from raw body text, not
+        just from assertion text.
+        """
+        import subprocess
+
+        from elspais.utilities.hasher import calculate_hash
+
+        env = os.environ.copy()
+        env.pop("GIT_DIR", None)
+        env.pop("GIT_WORK_TREE", None)
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], cwd=tmp_path, env=env, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        config = tmp_path / ".elspais.toml"
+        config.write_text(
+            """
+[project]
+name = "test"
+
+[patterns]
+prefix = "REQ"
+"""
+        )
+
+        # The body text is everything AFTER header and BEFORE footer:
+        # This includes metadata line, blank lines, intro text, assertions section
+        body_text = """
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+This is IMPORTANT intro text that should be included in hash.
+
+## Assertions
+
+A. The system SHALL do something.
+"""
+        # Compute expected hash from body text (stripped of leading/trailing whitespace)
+        expected_hash = calculate_hash(body_text.strip())
+
+        spec_file = spec_dir / "requirements.md"
+        spec_file.write_text(
+            f"""# Requirements
+
+## REQ-p00001: Test Requirement
+{body_text}
+*End* *Test Requirement* | **Hash**: 00000000
+"""
+        )
+
+        subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+
+        # Run hash update
+        import argparse
+
+        from elspais.commands.hash_cmd import run
+
+        args = argparse.Namespace(
+            hash_action="update",
+            spec_dir=spec_dir,
+            config=config,
+            dry_run=False,
+            req_id=None,
+            json_output=False,
+        )
+        run(args)
+
+        # Verify hash matches expected (computed from full body, not just assertions)
+        content = spec_file.read_text()
+        assert f"**Hash**: {expected_hash}" in content, (
+            f"Expected hash {expected_hash} computed from full body text, "
+            f"but got different hash in content:\n{content}"
+        )
+
+    def test_hash_changes_when_intro_changes(self, tmp_path):
+        """Changing intro text should change the hash.
+
+        If hash was computed only from assertions, changing intro text
+        would NOT change the hash - this test ensures it does.
+        """
+        import subprocess
+
+        from elspais.utilities.hasher import calculate_hash
+
+        env = os.environ.copy()
+        env.pop("GIT_DIR", None)
+        env.pop("GIT_WORK_TREE", None)
+
+        subprocess.run(["git", "init"], cwd=tmp_path, env=env, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        config = tmp_path / ".elspais.toml"
+        config.write_text(
+            """
+[project]
+name = "test"
+
+[patterns]
+prefix = "REQ"
+"""
+        )
+
+        # Two different body texts with SAME assertions but DIFFERENT intro
+        body_v1 = """
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+Version ONE intro text.
+
+## Assertions
+
+A. The system SHALL do something.
+"""
+        body_v2 = """
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+Version TWO intro text - CHANGED!
+
+## Assertions
+
+A. The system SHALL do something.
+"""
+
+        # Compute expected hashes
+        hash_v1 = calculate_hash(body_v1.strip())
+        hash_v2 = calculate_hash(body_v2.strip())
+
+        # They should be different since intro text changed
+        assert hash_v1 != hash_v2, "Sanity check: different body text should produce different hash"
+
+        # Create spec file with v1 content
+        spec_file = spec_dir / "requirements.md"
+        spec_file.write_text(
+            f"""# Requirements
+
+## REQ-p00001: Test Requirement
+{body_v1}
+*End* *Test Requirement* | **Hash**: 00000000
+"""
+        )
+
+        subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=True,
+        )
+
+        # Run hash update to get correct hash for v1
+        import argparse
+
+        from elspais.commands.hash_cmd import run
+
+        args = argparse.Namespace(
+            hash_action="update",
+            spec_dir=spec_dir,
+            config=config,
+            dry_run=False,
+            req_id=None,
+            json_output=False,
+        )
+        run(args)
+
+        # Check hash matches v1
+        content = spec_file.read_text()
+        assert (
+            f"**Hash**: {hash_v1}" in content
+        ), f"After update, hash should be {hash_v1} (computed from v1 body)"
+
+        # Now change to v2 (same assertions, different intro)
+        spec_file.write_text(
+            f"""# Requirements
+
+## REQ-p00001: Test Requirement
+{body_v2}
+*End* *Test Requirement* | **Hash**: {hash_v1}
+"""
+        )
+
+        # Run hash update again
+        run(args)
+
+        # Hash should have CHANGED because intro text changed
+        content = spec_file.read_text()
+        assert f"**Hash**: {hash_v2}" in content, (
+            f"Hash should change to {hash_v2} when intro text changes, "
+            f"even if assertions are the same. Got:\n{content}"
+        )

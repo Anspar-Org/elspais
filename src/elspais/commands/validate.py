@@ -23,16 +23,14 @@ from elspais.graph import NodeKind
 def _get_requirement_body(node) -> str:
     """Extract hashable body content from a requirement node.
 
-    The body is computed from assertion texts (the SHALL statements).
+    Per spec/requirements-spec.md:
+    > The hash SHALL be calculated from:
+    > - every line AFTER the Header line
+    > - every line BEFORE the Footer line
+
+    The body_text is extracted during parsing and stored in the node.
     """
-    assertions = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            text = child.get_label() or ""
-            if label and text:
-                assertions.append(f"{label}. {text}")
-    return "\n\n".join(assertions)
+    return node.get_field("body_text", "")
 
 
 def run(args: argparse.Namespace) -> int:

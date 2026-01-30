@@ -177,7 +177,12 @@ class RequirementParser:
             "refines": [],
             "assertions": [],
             "hash": None,
+            "body_text": "",  # Raw text between header and footer for hash computation
         }
+
+        # Extract body_text: everything AFTER header line and BEFORE footer line
+        # Per spec: "hash SHALL be calculated from every line AFTER Header, BEFORE Footer"
+        data["body_text"] = self._extract_body_text(text)
 
         # Extract level and status
         level_match = self.LEVEL_STATUS_PATTERN.search(text)
@@ -300,3 +305,43 @@ class RequirementParser:
             )
 
         return assertions
+
+    def _extract_body_text(self, text: str) -> str:
+        """Extract body text for hash computation.
+
+        Per spec/requirements-spec.md:
+        > The hash SHALL be calculated from:
+        > - every line AFTER the Header line
+        > - every line BEFORE the Footer line
+
+        Args:
+            text: Full requirement text including header and footer.
+
+        Returns:
+            Body text (between header and footer) for hash computation.
+        """
+        lines = text.split("\n")
+        if not lines:
+            return ""
+
+        # Header is the first line (## REQ-xxx: Title)
+        # Body starts from line 1 (after header)
+        body_start = 1
+
+        # Find footer line (*End* *Title* | **Hash**: xxx)
+        body_end = len(lines)
+        for i, line in enumerate(lines):
+            if self.END_MARKER_PATTERN.match(line):
+                body_end = i
+                break
+
+        # Extract body lines and join
+        body_lines = lines[body_start:body_end]
+
+        # Strip leading/trailing empty lines but preserve internal structure
+        while body_lines and not body_lines[0].strip():
+            body_lines.pop(0)
+        while body_lines and not body_lines[-1].strip():
+            body_lines.pop()
+
+        return "\n".join(body_lines)
