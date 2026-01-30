@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from elspais.associates import get_associate_spec_directories
-from elspais.config import get_config, get_spec_directories
+from elspais.config import get_config, get_ignore_config, get_spec_directories
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers import ParserRegistry
@@ -156,7 +156,10 @@ def build_graph(
     # 4. Build graph from all spec directories
     builder = GraphBuilder(repo_root=repo_root)
 
-    # Get skip configuration
+    # Get ignore configuration for filtering spec files
+    ignore_config = get_ignore_config(config)
+
+    # Get skip configuration (legacy, for backward compatibility)
     spec_config = config.get("spec", {})
     skip_dirs = spec_config.get("skip_dirs", [])
     skip_files = spec_config.get("skip_files", [])
@@ -179,6 +182,10 @@ def build_graph(
         )
 
         for parsed_content in domain_file.deserialize(spec_registry):
+            # Check if source should be ignored using [ignore].spec patterns
+            source_path = parsed_content.source_context.metadata.get("path")
+            if source_path and ignore_config.should_ignore(source_path, scope="spec"):
+                continue
             builder.add_parsed_content(parsed_content)
 
     # 5. Scan code directories from traceability.scan_patterns
