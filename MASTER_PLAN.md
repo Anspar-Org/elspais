@@ -90,7 +90,7 @@ Add CLI commands that leverage the existing MCP file mutation infrastructure to 
 - `move_requirement()` - Relocate requirements between files
 - Safety branch utilities for rollback
 
-## Feature 1: `elspais hash update`
+## Phase 1: `elspais hash update`
 
 Update requirement hashes to match current body content.
 
@@ -113,6 +113,15 @@ elspais hash update --dry-run
 # JSON output for scripting
 elspais hash update --json
 ```
+
+### Tasks
+
+- [ ] Create `src/elspais/mcp/file_mutations.py` with `update_hash_in_file()`
+- [ ] Implement `_update_hashes()` in `src/elspais/commands/hash_cmd.py`
+- [ ] Add tests in `tests/commands/test_hash_update.py`
+- [ ] Update `docs/cli/hash.md` with update command docs
+- [ ] Run `pytest tests/test_doc_sync.py` to verify docs
+- [ ] Commit with `[CUR-240]` prefix
 
 ### Implementation
 
@@ -184,7 +193,7 @@ def update_hash_in_file(file_path: Path, req_id: str, new_hash: str) -> bool:
 
 ---
 
-## Feature 2: `elspais validate --fix`
+## Phase 2: `elspais validate --fix`
 
 Auto-fix validation issues that can be corrected programmatically.
 
@@ -210,6 +219,16 @@ elspais validate --fix
 # Fix and show details
 elspais validate --fix -v
 ```
+
+### Tasks
+
+- [ ] Add `add_status_to_file()` to `src/elspais/mcp/file_mutations.py`
+- [ ] Add `--fix` and `--dry-run` arguments to `src/elspais/commands/validate.py`
+- [ ] Implement `_auto_fix_issues()` function
+- [ ] Add tests in `tests/commands/test_validate_fix.py`
+- [ ] Update `docs/cli/validate.md` with --fix flag docs
+- [ ] Run `pytest tests/test_doc_sync.py` to verify docs
+- [ ] Commit with `[CUR-240]` prefix
 
 ### Implementation
 
@@ -295,7 +314,7 @@ pytest tests/ -x --tb=short
 
 ## Commit Messages
 
-### Phase 1: Hash Update
+### Phase 1: `elspais hash update`
 ```
 [CUR-240] feat: Implement elspais hash update command
 
@@ -310,7 +329,7 @@ Uses new file_mutations.py helper for safe file updates.
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
 
-### Phase 2: Validate --fix
+### Phase 2: `elspais validate --fix`
 ```
 [CUR-240] feat: Add --fix flag to elspais validate
 
@@ -323,3 +342,26 @@ Non-fixable issues (broken refs, orphans) are reported only.
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
+
+### Phase 3: Fix Hash Computation (Bug Fix)
+```
+[CUR-240] fix: Compute hash from raw body text per spec
+
+Per spec/requirements-spec.md, the hash SHALL be calculated from:
+- every line AFTER the Header line
+- every line BEFORE the Footer line
+
+The previous implementation incorrectly computed hash from assertion text
+only, ignoring metadata, intro text, and other body content.
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+---
+
+## Completed Phases
+
+- [x] Phase 0: Document [ignore] pattern syntax - f190c38
+- [x] Phase 1: `elspais hash update` - 2639713
+- [x] Phase 2: `elspais validate --fix` - 8f01b17
+- [x] Phase 3: Fix hash computation - ff143f9

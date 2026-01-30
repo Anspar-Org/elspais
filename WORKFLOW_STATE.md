@@ -2,66 +2,61 @@
 
 ## Read Objective
 read MASTER_PLAN.md
-DO NOT READ MASTER_PLAN[0-9]+.md 
+DO NOT READ MASTER_PLAN[0-9]+.md
 
 ## Read Design Principles
 Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 
+Check off each step (change [ ] to [x]) after it is complete.
+
+## Current Task: Fix Hash Computation (Critical Bug)
+
+The hash computation in Phase 1 and Phase 2 is WRONG. Per spec/requirements-spec.md:
+> The hash SHALL be calculated from every line AFTER the Header line and BEFORE the Footer line
+
+Current (wrong): Computes hash from reconstructed assertion text
+Correct: Compute hash from raw text between header and footer markers
+
 ### 1. Understand Current State
 
-- [ ] **EXPLORE**: Map the code being refactored
-  - [ ] Identify all files/functions affected
-  - [ ] Document current behavior and contracts
-  - [ ] List existing tests that cover the code
-- [ ] **BASELINE**: Ensure tests pass before changes
-  - [ ] Run full test suite
-  - [ ] Note any flaky or slow tests
+- [x] **EXPLORE**: Map the code being refactored
+  - [x] Identify all files/functions affected
+  - [x] Document current behavior and contracts
+  - [x] List existing tests that cover the code
+- [x] **BASELINE**: Ensure tests pass before changes
+  - [x] Run full test suite (881 passed)
+  - [x] Note any flaky or slow tests (none)
 
 ### 2. Incremental Refactor
 
-- [ ] **SMALL STEPS**: Make one change at a time
-  - [ ] Each step should be independently testable
-  - [ ] Run tests after each step
-  - [ ] Commit working states frequently
-- [ ] **PRESERVE BEHAVIOR**: No functional changes
-  - [ ] Same inputs → same outputs
-  - [ ] Same error handling
-  - [ ] Same side effects
+- [x] **SMALL STEPS**: Make one change at a time
+  - [x] Each step should be independently testable
+  - [x] Run tests after each step
+  - [x] Commit working states frequently
+- [x] **PRESERVE BEHAVIOR**: No functional changes
+  - [x] Same inputs → same outputs (hash now correctly computed per spec)
+  - [x] Same error handling
+  - [x] Same side effects
 
 ### 3. Verification
 
-- [ ] **TEST**: All original tests still pass
+- [x] **TEST**: All original tests still pass (883 passed)
 - [ ] **REVIEW**: Have sub-agent verify no behavior change
-- [ ] **LINT**: Fix all lint errors
+- [x] **LINT**: Fix all lint errors (all checks passed)
 
 ### 3.5 Documentation (for new features/changes)
 
-- [ ] **CHANGELOG**: Update CHANGELOG.md with new features
-- [ ] **DOCS**: Use sub-agent to update docs/ files and --help CLI commands
-- [ ] **SYNC**: Run `pytest tests/test_doc_sync.py` to verify docs match implementation
+- [x] **CHANGELOG**: Update CHANGELOG.md with new features (N/A - bug fix for unreleased code)
+- [x] **DOCS**: Use sub-agent to update docs/ files and --help CLI commands (N/A - CLI unchanged)
+- [x] **SYNC**: Run `pytest tests/test_doc_sync.py` to verify docs match implementation (64 passed)
 
 ### 4. Commit
 
-- [ ] **COMMIT**: Use `[TICKET]` prefix in subject (replace with actual ticket ID)
-- [ ] Mark phase complete
+- [x] **COMMIT**: Use `[CUR-240]` prefix in subject - ff143f9
 
 ### 5. Phase Complete
 
-- Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
-- promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
-- [ ] **CLEAR**: Reset checkboxes for next phase
-
----
-
-## Usage
-
-1. Copy this template to repo as WORKFLOW_STATE.md 
-2. Replace `[TICKET]` with actual ticket ID (e.g., `[CUR-240]`)
-3. Replace `YYYY-MM-DD` with current date
-2. Remove the "Usage" section from WORKFLOW_STATE.md
-
-## File Naming Convention
-
-- `MASTER_PLAN.md` - Current active phase (no number)
-- `MASTER_PLAN2.md` through `MASTER_PLANn.md` - Queued phases
-- `~/archive/YYYY-MM-DD/MASTER_PLANx.md` - Completed phases
+- [x] Mark phase complete in MASTER_PLAN.md
+- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
+- [ ] promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
+- **CLEAR**: Reset checkboxes for next phase (change all [x] to [ ])
