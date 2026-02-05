@@ -1,3 +1,4 @@
+# Validates: REQ-p00001-C, REQ-p00004-A
 """Tests for elspais hash update command.
 
 Tests REQ-p00001-C: detect changes to requirements using content hashing.

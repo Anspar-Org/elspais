@@ -1,3 +1,4 @@
+# Implements: REQ-p00050-A, REQ-p00050-C
 """GraphNode - Unified node representation for traceability graph.
 
 This module provides the core data structures for Architecture 3.0:

@@ -1,4 +1,4 @@
-# Implements: REQ-p00004-B
+# Implements: REQ-p00001-C, REQ-p00004-A, REQ-p00004-B
 """
 elspais.commands.changed - Git-based change detection for requirements.
 

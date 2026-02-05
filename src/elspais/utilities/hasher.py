@@ -1,3 +1,4 @@
+# Implements: REQ-p00001-C, REQ-p00004-A
 """Hasher - Hash calculation for requirement change detection.
 
 Provides functions for calculating and verifying SHA-256 based content hashes.
