@@ -1,3 +1,4 @@
+# Validates: REQ-o00062-C, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 """Tests for edge mutation operations (add, change_kind, delete, fix_broken)."""
 
 import pytest

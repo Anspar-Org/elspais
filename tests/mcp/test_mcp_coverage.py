@@ -1,3 +1,4 @@
+# Validates: REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
 """Tests for MCP test coverage tools.
 
 Tests REQ-o00064: MCP Test Coverage Tools

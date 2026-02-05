@@ -1,3 +1,4 @@
+# Validates: REQ-o00062-A, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 """Tests for node mutation operations (rename, update_title, change_status, add, delete)."""
 
 import pytest

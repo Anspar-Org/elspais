@@ -1,3 +1,4 @@
+# Validates: REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 """Tests for Graph Builder - builds TraceGraph from parsed content."""
 
 import pytest

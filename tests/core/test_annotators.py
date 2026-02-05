@@ -1,3 +1,4 @@
+# Validates: REQ-o00051-A, REQ-o00051-B, REQ-o00051-C, REQ-o00051-D, REQ-o00051-E, REQ-o00051-F
 """Tests for Graph Annotators."""
 
 from elspais.graph import NodeKind

@@ -1,3 +1,5 @@
+# Validates: REQ-o00060-A, REQ-o00060-B, REQ-o00060-C, REQ-o00060-D, REQ-o00060-E, REQ-o00060-F
+# Validates: REQ-o00061-A, REQ-o00061-B, REQ-o00061-C, REQ-o00061-D
 """Tests for MCP core tools.
 
 Tests REQ-o00060: MCP Core Query Tools

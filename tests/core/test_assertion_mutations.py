@@ -1,3 +1,4 @@
+# Validates: REQ-o00062-B, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 """Tests for assertion mutation operations (rename, update, add, delete)."""
 
 import pytest

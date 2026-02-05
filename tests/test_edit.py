@@ -1,4 +1,5 @@
 # elspais: expected-broken-links 3
+# Validates: REQ-o00063-A, REQ-o00063-B
 """
 Tests for the edit command.
 """

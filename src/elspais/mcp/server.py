@@ -1,3 +1,9 @@
+# Implements: REQ-o00060-A, REQ-o00060-B, REQ-o00060-C, REQ-o00060-D, REQ-o00060-E, REQ-o00060-F
+# Implements: REQ-o00061-A, REQ-o00061-B, REQ-o00061-C, REQ-o00061-D
+# Implements: REQ-o00062-A, REQ-o00062-B, REQ-o00062-C, REQ-o00062-D
+# Implements: REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
+# Implements: REQ-o00063-A, REQ-o00063-B, REQ-o00063-C, REQ-o00063-D, REQ-o00063-E, REQ-o00063-F
+# Implements: REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.

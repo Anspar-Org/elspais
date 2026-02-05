@@ -1,3 +1,4 @@
+# Implements: REQ-o00063-A, REQ-o00063-B, REQ-o00063-D
 """File mutation helpers for CLI commands.
 
 Provides functions to safely modify spec files on disk:

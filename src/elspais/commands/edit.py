@@ -1,3 +1,4 @@
+# Implements: REQ-o00063-A, REQ-o00063-B
 """
 elspais.commands.edit - Edit requirements command.
 

@@ -1,3 +1,4 @@
+# Implements: REQ-o00062-E
 """Mutation types for TraceGraph operations.
 
 This module provides dataclasses for tracking graph mutations,
