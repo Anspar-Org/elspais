@@ -23,21 +23,37 @@ Add `hash_mode` config setting with two modes: `full-text` (default, current beh
 
 ### 2. Incremental Implementation
 
-- [ ] **SMALL STEPS**: Complete one phase at a time
-- [ ] **PRESERVE BEHAVIOR**: No unintended changes
+- [x] **SMALL STEPS**: Complete one phase at a time
+- [x] **PRESERVE BEHAVIOR**: No unintended changes
 
 ### 3. Verification
 
-- [ ] **TEST**: All tests still pass
-- [ ] **LINT**: Fix all lint errors
+- [x] **TEST**: All tests still pass (933 passed)
+- [x] **LINT**: Fix all lint errors
 
 ### 4. Commit
 
-- [ ] **COMMIT**: Use ticket prefix in subject
+- [x] **COMMIT**: Use ticket prefix in subject (6 commits: Phase 1-6)
 
 ### 5. Phase Complete
 
-- [ ] Mark phase complete in MASTER_PLAN.md
+- [x] Mark phase complete in MASTER_PLAN.md
 - [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
 - [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase
+
+### Session Progress (2026-02-05)
+
+Completed all 6 phases of MASTER_PLAN:
+- Phase 1: Spec update (680de48)
+- Phase 2: Config defaults (3fa89af)
+- Phase 3: Hasher normalization functions (cf0b08e)
+- Phase 4: Builder + Commands hash mode branching (8e24019)
+- Phase 5: Tests — 37 new tests, 933 total (91eb841)
+- Phase 6: Fixture alignment + file_mutations.py bug fix (e7dc4e7)
+
+Key finding: body_text extraction differs between main branch and feature branch
+(metadata line inclusion). Neither full-text nor normalized-text matches hht_diary
+stored hashes — main branch skips metadata line, feature branch includes it.
+
+Next: Switch to normalized-text mode and fix body_text extraction parity.

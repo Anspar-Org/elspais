@@ -79,10 +79,10 @@ def build_graph(hash_mode: str = "full-text") -> TraceGraph:
 class TestFullTextMode:
     """Tests for full-text hash mode (default)."""
 
-    def test_hash_mode_full_text_is_default(self):
-        """GraphBuilder defaults to full-text hash mode."""
+    def test_hash_mode_normalized_text_is_default(self):
+        """GraphBuilder defaults to normalized-text hash mode."""
         builder = GraphBuilder()
-        assert builder.hash_mode == "full-text"
+        assert builder.hash_mode == "normalized-text"
 
     def test_hash_mode_full_text_graph_has_mode(self):
         """Built graph preserves the hash_mode setting."""

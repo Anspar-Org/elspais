@@ -1,8 +1,11 @@
-"""Tests for hash consistency after assertion mutations.
+"""Tests for hash consistency after assertion mutations (full-text mode).
 
 These tests verify that after each mutation type (add_assertion, update_assertion,
 delete_assertion, rename_assertion), the hash computed from the updated body_text
 matches what would be computed if we re-parsed the content.
+
+Uses explicit hash_mode="full-text" since these tests verify the invariant that
+hash == calculate_hash(body_text), which only holds in full-text mode.
 """
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
@@ -56,7 +59,7 @@ Introduction text for the requirement.
 A. The system SHALL validate input.
 B. The system SHALL log errors."""
 
-    builder = GraphBuilder()
+    builder = GraphBuilder(hash_mode="full-text")
     builder.add_parsed_content(
         make_req_with_body_text(
             "REQ-p00001",

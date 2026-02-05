@@ -50,7 +50,7 @@ def update_hash_in_file(
     # Look for the End marker pattern anywhere after the header
     # It can have various title formats, so we just look for *End* ... **Hash**:
     end_pattern = re.compile(
-        r"(\*End\*\s+\*.+?\*\s*\|\s*\*\*Hash\*\*:\s*)([a-fA-F0-9]+)",
+        r"(\*End\*\s+\*.+?\*\s*\|\s*\*\*Hash\*\*:\s*)([a-fA-F0-9_]+)",
     )
 
     # Search from the header position

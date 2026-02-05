@@ -6,8 +6,8 @@
 
 Add a configurable `hash_mode` setting under `[validation]` in `.elspais.toml` with two modes:
 
-- **`full-text`** (default): Current spec behavior — hash every line between header and footer, no normalization. Backward compatible.
-- **`normalized-text`**: Hash assertions only, with cosmetic normalization. More forgiving of formatting changes.
+- **`full-text`**: Hash every line between header and footer, no normalization.
+- **`normalized-text`** (default): Hash assertions only, with cosmetic normalization. More forgiving of formatting changes.
 
 ### Design Decisions
 

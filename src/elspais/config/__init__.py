@@ -75,7 +75,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_length": 3,
     },
     "validation": {
-        "hash_mode": "full-text",
+        "hash_mode": "normalized-text",
     },
 }
 

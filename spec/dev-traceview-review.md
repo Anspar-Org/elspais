@@ -30,7 +30,7 @@ E. All threads and comments SHALL be owned by exactly one package.
 
 F. Package deletion SHALL archive (not destroy) the package and its threads.
 
-*End* *Review Package Management* | **Hash**: 364b34d9
+*End* *Review Package Management* | **Hash**: 8d2f827b
 
 ---
 
@@ -65,7 +65,7 @@ H. Requirement IDs in paths SHALL be normalized (colons/slashes replaced with un
 
 V2 package-centric storage paths are defined in the codebase but not actively used. The current implementation uses the V1 format described above.
 
-*End* *Review Storage Architecture* | **Hash**: 7bf955c7
+*End* *Review Storage Architecture* | **Hash**: 9ba72e6f
 
 ---
 
@@ -97,7 +97,7 @@ E. Deleting a package SHALL move it to archive rather than destroying it.
 
 F. Archived data SHALL be read-only and preserved indefinitely.
 
-*End* *Review Package Archival* | **Hash**: 4ecab96e
+*End* *Review Package Archival* | **Hash**: 458be109
 
 ---
 
@@ -123,7 +123,7 @@ E. The UI SHALL display commit information with appropriate context:
 
 F. Commit tracking SHALL handle squash-merge scenarios gracefully (archived hash may not exist post-merge).
 
-*End* *Review Git Audit Trail* | **Hash**: 541b87eb
+*End* *Review Git Audit Trail* | **Hash**: f1829e0a
 
 ---
 
@@ -163,7 +163,7 @@ H. The UI SHALL provide an archive viewer modal showing package details, metadat
 
 I. The UI SHALL display commit hashes with warning that they may not exist post-squash-merge.
 
-*End* *Review Archive Viewer* | **Hash**: 65ce52e6
+*End* *Review Archive Viewer* | **Hash**: 0bcf8525
 
 ---
 
@@ -216,7 +216,7 @@ I. StatusRequest state SHALL be automatically calculated from approval votes.
 
 J. All timestamps SHALL be UTC in ISO 8601 format.
 
-*End* *Review Threads and Comments* | **Hash**: 9a6110ed
+*End* *Review Threads and Comments* | **Hash**: 74becc99
 
 ---
 
@@ -269,7 +269,7 @@ I. Requirement IDs SHALL be normalized (colons/slashes replaced with underscores
 
 J. Merge conflict resolution SHALL use timestamp-based deduplication for overlapping data.
 
-*End* *Review Storage Operations* | **Hash**: c8c18634
+*End* *Review Storage Operations* | **Hash**: bffc007d
 
 ---
 
@@ -304,7 +304,7 @@ I. ResolvedPosition SHALL include `resolutionPath` describing the fallback strat
 
 J. When no fallback succeeds, SHALL resolve as UNANCHORED with original position preserved.
 
-*End* *Position Resolution* | **Hash**: 7f10b428
+*End* *Position Resolution* | **Hash**: ad27b8e5
 
 ---
 
@@ -339,7 +339,7 @@ J. Branch cleanup operations SHALL:
     - Warn about unmerged branches (unless force=True)
     - Warn about unpushed commits (unless force=True)
 
-*End* *Git Branch Management* | **Hash**: a31ef4a4
+*End* *Git Branch Management* | **Hash**: ec2a7171
 
 ---
 
@@ -392,7 +392,7 @@ I. Archive endpoints SHALL support:
 
 J. Health check endpoint SHALL be available at `/api/health`.
 
-*End* *Review API Server* | **Hash**: 1636e61b
+*End* *Review API Server* | **Hash**: 41715183
 
 ---
 
@@ -420,7 +420,7 @@ G. Failed status changes SHALL NOT leave the spec file in a corrupted or partial
 
 H. `find_req_in_spec_dir()` SHALL search both core spec/ and sponsor/*/spec/ directories.
 
-*End* *Status Modifier* | **Hash**: 4acca09c
+*End* *Status Modifier* | **Hash**: 3e581bc6
 
 ---
 
@@ -454,4 +454,4 @@ J. The UI SHALL provide a help panel with onboarding guidance and tooltips.
 
 K. JavaScript modules SHALL be loaded in dependency order via the `ReviewSystem` (RS) namespace.
 
-*End* *Review UI Framework* | **Hash**: 0f0f62a5
+*End* *Review UI Framework* | **Hash**: 448be3b9

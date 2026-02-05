@@ -25,7 +25,7 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 - Centralized metrics computation
 - Easier testing and debugging
 
-*End* *Unified Graph Architecture* | **Hash**: a1e228f1
+*End* *Unified Graph Architecture* | **Hash**: 4a1e5d0b
 ---
 
 ## REQ-o00050: Graph Builder as Single Entry Point
@@ -46,7 +46,7 @@ E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reco
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
-*End* *Graph Builder as Single Entry Point* | **Hash**: 01f79cbf
+*End* *Graph Builder as Single Entry Point* | **Hash**: cf6ace9c
 ---
 
 ## REQ-o00051: Composable Annotation Design
@@ -72,7 +72,7 @@ Separating iteration from annotation enables:
 - Easy testing of individual annotators
 - Flexible composition of annotation pipelines
 
-*End* *Composable Annotation Design* | **Hash**: e9fde414
+*End* *Composable Annotation Design* | **Hash**: c73a6e32
 ---
 
 ## REQ-d00050: Node Annotator Functions
@@ -93,7 +93,7 @@ E. Annotator functions SHALL be idempotent - calling twice produces same result.
 
 Per-node annotators enable fine-grained control over which annotations are applied and when.
 
-*End* *Node Annotator Functions* | **Hash**: fc6625b5
+*End* *Node Annotator Functions* | **Hash**: 35713bbd
 ---
 
 ## REQ-d00051: Graph Aggregate Functions
@@ -115,7 +115,7 @@ F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_
 
 Aggregate functions provide reusable statistics computation that any output format can use.
 
-*End* *Graph Aggregate Functions* | **Hash**: 4936b88f
+*End* *Graph Aggregate Functions* | **Hash**: bdf07870
 ---
 
 ## REQ-d00052: Output Generators Consume Graph Directly
@@ -137,7 +137,7 @@ F. Generators SHALL use aggregate functions from annotators module for statistic
 
 Direct graph consumption eliminates data structure conversion overhead and ensures consistency.
 
-*End* *Output Generators Consume Graph Directly* | **Hash**: 31471f7f
+*End* *Output Generators Consume Graph Directly* | **Hash**: 8dc48cec
 ---
 
 ## REQ-d00053: No Duplicate Library Functions
@@ -159,7 +159,7 @@ F. The system SHALL NOT have hierarchy.py files in multiple locations.
 
 Duplicate implementations lead to inconsistencies, bugs, and maintenance burden. Centralizing functionality ensures single source of truth.
 
-*End* *No Duplicate Library Functions* | **Hash**: 3ae417fb
+*End* *No Duplicate Library Functions* | **Hash**: 2e4696ef
 ---
 
 ## REQ-d00054: Annotation Pipeline Pattern
@@ -180,7 +180,7 @@ E. The pipeline SHALL be implemented in TraceViewGenerator._annotate_graph_nodes
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
 
-*End* *Annotation Pipeline Pattern* | **Hash**: 581edb5e
+*End* *Annotation Pipeline Pattern* | **Hash**: 2fe44acd
 ---
 
 ## REQ-d00055: Node Metrics as Extension Point
@@ -201,7 +201,7 @@ E. Custom metrics MAY be added by specific annotators without modifying TraceNod
 
 Using metrics dict as the extension point enables adding new annotations without modifying the core TraceNode dataclass.
 
-*End* *Node Metrics as Extension Point* | **Hash**: 6f96b424
+*End* *Node Metrics as Extension Point* | **Hash**: 86ea9541
 ---
 
 ## Architecture Diagram

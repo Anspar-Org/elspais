@@ -29,6 +29,9 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
+[validation]
+hash_mode = "normalized-text"
+
 [testing]
 enabled = true
 test_dirs = ["tests"]

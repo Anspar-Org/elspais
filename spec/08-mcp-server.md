@@ -22,7 +22,7 @@ E. The MCP server SHALL support undo operations for all graph mutations.
 
 AI agents need programmatic access to requirements data for tasks like coverage analysis, requirement drafting, and traceability verification. The MCP protocol provides a standardized interface that works with multiple AI platforms.
 
-*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: ________
+*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
 
 ---
 
@@ -45,7 +45,7 @@ F. All query tools SHALL read directly from TraceGraph nodes using the iterator-
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
-*End* *MCP Core Query Tools* | **Hash**: ________
+*End* *MCP Core Query Tools* | **Hash**: 3ca6f6e6
 
 ---
 
@@ -66,7 +66,7 @@ D. Configuration data SHALL be read from the unified config system, not parsed s
 
 AI agents need context about the workspace they're operating in to provide relevant assistance. Workspace tools answer "what repo am I serving?" and "what's the state of this project?"
 
-*End* *MCP Workspace Context Tools* | **Hash**: ________
+*End* *MCP Workspace Context Tools* | **Hash**: 0aa9dff4
 
 ---
 
@@ -90,7 +90,7 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
-*End* *MCP Graph Mutation Tools* | **Hash**: ________
+*End* *MCP Graph Mutation Tools* | **Hash**: bed69e43
 
 ---
 
@@ -113,7 +113,7 @@ F. After file mutations, `refresh_graph()` SHALL be called to synchronize the in
 
 File mutations persist changes to the authoritative spec files. Git safety branches provide rollback capability for destructive operations.
 
-*End* *MCP File Mutation Tools* | **Hash**: ________
+*End* *MCP File Mutation Tools* | **Hash**: ea80cc5e
 
 ---
 
@@ -135,7 +135,7 @@ E. SHALL NOT iterate the full graph to count nodes when kind-specific counts suf
 
 Graph status provides a quick health check without expensive traversal operations.
 
-*End* *Graph Status Tool Implementation* | **Hash**: ________
+*End* *Graph Status Tool Implementation* | **Hash**: 4e2277cc
 
 ---
 
@@ -157,7 +157,7 @@ E. SHALL limit results to prevent unbounded response sizes.
 
 Search enables AI agents to discover requirements by content without knowing exact IDs.
 
-*End* *Requirement Search Tool Implementation* | **Hash**: ________
+*End* *Requirement Search Tool Implementation* | **Hash**: f84bf4b1
 
 ---
 
@@ -180,7 +180,7 @@ F. SHALL return 404-equivalent error for non-existent requirements.
 
 Single-requirement lookup is the most common operation. O(1) access via graph index is essential.
 
-*End* *Requirement Detail Tool Implementation* | **Hash**: ________
+*End* *Requirement Detail Tool Implementation* | **Hash**: 51985ec1
 
 ---
 
@@ -202,7 +202,7 @@ E. SHALL handle DAG structure where nodes may have multiple parents.
 
 Hierarchy navigation enables AI agents to understand requirement context and relationships.
 
-*End* *Hierarchy Navigation Tool Implementation* | **Hash**: ________
+*End* *Hierarchy Navigation Tool Implementation* | **Hash**: 2b1d284b
 
 ---
 
@@ -224,7 +224,7 @@ E. Serializers SHALL NOT trigger graph traversal beyond the single node being se
 
 Serializers provide the boundary between graph internals and MCP responses. They ensure consistent, safe data extraction.
 
-*End* *Serializer Functions* | **Hash**: ________
+*End* *Serializer Functions* | **Hash**: 6d8ffacb
 
 ---
 
@@ -246,7 +246,7 @@ E. Mutation tools SHALL return the MutationEntry from the graph method for audit
 
 Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is purely an interface layer.
 
-*End* *Mutation Tool Delegation* | **Hash**: ________
+*End* *Mutation Tool Delegation* | **Hash**: 8b1002b9
 
 ---
 
@@ -268,7 +268,7 @@ E. Coverage tools SHALL support filtering by requirement ID or scanning all requ
 
 AI agents performing requirement analysis need to understand test coverage and identify gaps. These tools enable systematic coverage improvement workflows like those in Phase 7 of the master plan.
 
-*End* *MCP Test Coverage Analysis Tools* | **Hash**: ________
+*End* *MCP Test Coverage Analysis Tools* | **Hash**: 82d8f37e
 
 ---
 
@@ -292,7 +292,7 @@ G. SHALL use `graph.nodes_by_kind(NodeKind.TEST)` and iterate edges, not travers
 
 Test coverage per requirement enables targeted test writing and gap analysis.
 
-*End* *Test Coverage Tool Implementation* | **Hash**: ________
+*End* *Test Coverage Tool Implementation* | **Hash**: 6ac6b51f
 
 ---
 
@@ -315,7 +315,7 @@ F. SHALL limit results to prevent unbounded response sizes.
 
 Finding uncovered assertions enables systematic test coverage improvement across the project.
 
-*End* *Uncovered Assertions Tool Implementation* | **Hash**: ________
+*End* *Uncovered Assertions Tool Implementation* | **Hash**: 7044d63d
 
 ---
 
@@ -338,7 +338,7 @@ F. SHALL complement `find_by_keywords()` which searches requirement titles, not 
 
 Assertion keyword search enables AI agents to find assertions related to specific concepts when linking tests to requirements.
 
-*End* *Assertion Keyword Search Tool Implementation* | **Hash**: ________
+*End* *Assertion Keyword Search Tool Implementation* | **Hash**: c9d5ad87
 
 ---
 

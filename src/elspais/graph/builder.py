@@ -29,7 +29,7 @@ class TraceGraph:
     """
 
     repo_root: Path = field(default_factory=Path.cwd)
-    hash_mode: str = field(default="full-text")
+    hash_mode: str = field(default="normalized-text")
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -1587,7 +1587,7 @@ class GraphBuilder:
         3. Post-construction, all access should use get_field()/set_field()
     """
 
-    def __init__(self, repo_root: Path | None = None, hash_mode: str = "full-text") -> None:
+    def __init__(self, repo_root: Path | None = None, hash_mode: str = "normalized-text") -> None:
         """Initialize the graph builder.
 
         Args:

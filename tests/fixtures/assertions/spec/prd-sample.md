@@ -12,7 +12,7 @@ C. The system SHALL NOT allow unauthenticated access to protected resources.
 
 Security and compliance require verified user identity.
 
-*End* *User Authentication* | **Hash**: f4657055
+*End* *User Authentication* | **Hash**: e6e78a7b
 ---
 
 # REQ-p00002: Session Management
@@ -24,5 +24,5 @@ Security and compliance require verified user identity.
 A. The system SHALL maintain user sessions.
 B. The system SHALL expire sessions after 30 minutes of inactivity.
 
-*End* *Session Management* | **Hash**: 1c40307b
+*End* *Session Management* | **Hash**: 0610fb6c
 ---

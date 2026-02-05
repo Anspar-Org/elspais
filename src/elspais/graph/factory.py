@@ -154,7 +154,7 @@ def build_graph(
     test_registry.register(TestParser(default_pattern_config, default_reference_resolver))
 
     # 4. Build graph from all spec directories
-    hash_mode = config.get("validation", {}).get("hash_mode", "full-text")
+    hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
     builder = GraphBuilder(repo_root=repo_root, hash_mode=hash_mode)
 
     # Get ignore configuration for filtering spec files

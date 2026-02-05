@@ -312,22 +312,23 @@ class TestUpdateHashesCommand:
 
 
 class TestHashComputedFromRawBody:
-    """Tests that hash is computed from raw body text per spec.
+    """Tests that full-text mode hash is computed from raw body text per spec.
 
-    Per spec/requirements-spec.md:
+    Per spec/requirements-spec.md (full-text mode):
     > The hash SHALL be calculated from:
     > - every line AFTER the Header line
     > - every line BEFORE the Footer line
 
-    This means the hash should include ALL body content (metadata, intro text,
-    assertions), not just reconstructed assertion text.
+    These tests explicitly set hash_mode = "full-text" since the default is
+    now "normalized-text". In full-text mode, the hash includes ALL body
+    content (metadata, intro text, assertions).
     """
 
     def test_hash_includes_intro_text(self, tmp_path):
-        """Hash should change when intro text changes, not just assertions.
+        """In full-text mode, hash should change when intro text changes.
 
-        This test verifies the hash is computed from raw body text, not
-        just from assertion text.
+        This test verifies the full-text hash is computed from raw body text,
+        not just from assertion text. Requires explicit hash_mode = "full-text".
         """
         import subprocess
 
@@ -365,6 +366,9 @@ name = "test"
 
 [patterns]
 prefix = "REQ"
+
+[validation]
+hash_mode = "full-text"
 """
         )
 
@@ -424,10 +428,11 @@ A. The system SHALL do something.
         )
 
     def test_hash_changes_when_intro_changes(self, tmp_path):
-        """Changing intro text should change the hash.
+        """In full-text mode, changing intro text should change the hash.
 
         If hash was computed only from assertions, changing intro text
-        would NOT change the hash - this test ensures it does.
+        would NOT change the hash - this test ensures it does in full-text mode.
+        Requires explicit hash_mode = "full-text".
         """
         import subprocess
 
@@ -464,6 +469,9 @@ name = "test"
 
 [patterns]
 prefix = "REQ"
+
+[validation]
+hash_mode = "full-text"
 """
         )
 

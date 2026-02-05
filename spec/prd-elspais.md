@@ -30,7 +30,7 @@ B. The tool SHALL generate traceability matrices showing requirement relationshi
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
-*End* *Requirements Management Tool* | **Hash**: 19d4a678
+*End* *Requirements Management Tool* | **Hash**: bf63eda5
 ---
 
 # REQ-p00002: Requirements Validation
@@ -58,7 +58,7 @@ B. The tool SHALL detect and report hierarchy violations including circular depe
 
 C. The tool SHALL verify content hashes match requirement body text.
 
-*End* *Requirements Validation* | **Hash**: 03335a04
+*End* *Requirements Validation* | **Hash**: e8f0e4eb
 ---
 
 # REQ-p00003: Traceability Matrix Generation
@@ -83,7 +83,7 @@ A. The tool SHALL generate traceability matrices in Markdown, HTML, and CSV form
 
 B. The tool SHALL derive traceability from `Implements:` metadata without manual matrix maintenance.
 
-*End* *Traceability Matrix Generation* | **Hash**: 8e4c1fe9
+*End* *Traceability Matrix Generation* | **Hash**: b935bd53
 ---
 
 # REQ-p00004: Change Detection and Auditability
@@ -111,7 +111,7 @@ A. The tool SHALL compute and verify content hashes for change detection.
 
 B. The tool SHALL detect uncommitted and branch-relative changes to requirement files using git.
 
-*End* *Change Detection and Auditability* | **Hash**: ea0b081b
+*End* *Change Detection and Auditability* | **Hash**: 846fefad
 ---
 
 # REQ-p00005: Multi-Repository Requirements
@@ -141,7 +141,7 @@ A. The tool SHALL support requirement references across repository boundaries us
 
 B. The tool SHALL generate combined traceability matrices spanning multiple repositories.
 
-*End* *Multi-Repository Requirements* | **Hash**: 9a34c37f
+*End* *Multi-Repository Requirements* | **Hash**: b419c8ac
 ---
 
 # REQ-p00006: Interactive Traceability Viewer
@@ -173,7 +173,7 @@ A. The tool SHALL generate an interactive HTML view with clickable requirement n
 
 B. The tool SHALL display test coverage information per requirement when test data is available.
 
-*End* *Interactive Traceability Viewer* | **Hash**: 18d9b287
+*End* *Interactive Traceability Viewer* | **Hash**: 8014e4aa
 ---
 
 # REQ-p00007: Collaborative Review System
@@ -211,7 +211,7 @@ D. The tool SHALL provide access to archived reviews for audit and historical re
 
 E. The tool SHALL preserve review history through archival rather than deletion.
 
-*End* *Collaborative Review System* | **Hash**: cc80dd0a
+*End* *Collaborative Review System* | **Hash**: f275694a
 ---
 
 # REQ-p00008: Review User Interface
@@ -244,7 +244,7 @@ E. The UI SHALL provide a resizable review panel for managing threads and commen
 
 F. The UI SHALL provide contextual help explaining review workflows and features.
 
-*End* *Review User Interface* | **Hash**: 5bef36da
+*End* *Review User Interface* | **Hash**: 2c550af9
 ---
 
 # REQ-p00009: Review Data Model
@@ -272,7 +272,7 @@ C. The system SHALL define storage structures that persist review data reliably 
 
 D. The system SHALL support position anchoring that identifies specific locations within requirement text.
 
-*End* *Review Data Model* | **Hash**: dd72f714
+*End* *Review Data Model* | **Hash**: 8967dc31
 ---
 
 # REQ-p00010: Review Git Integration
@@ -296,7 +296,7 @@ B. The system SHALL support review branches that isolate reviewer work until rea
 
 C. The system SHALL merge review data from multiple contributor branches.
 
-*End* *Review Git Integration* | **Hash**: 9488eddf
+*End* *Review Git Integration* | **Hash**: a410550e
 ---
 
 # REQ-p00011: Review Package Lifecycle
@@ -321,7 +321,7 @@ B. The system SHALL preserve archived reviews in a read-only state for audit pur
 
 C. The system SHALL provide access to view archived packages and their contents.
 
-*End* *Review Package Lifecycle* | **Hash**: 7a1f81d5
+*End* *Review Package Lifecycle* | **Hash**: 0c09b663
 ---
 
 # REQ-p00012: Review Backend Services
@@ -346,4 +346,4 @@ B. The system SHALL provide API endpoints for creating, reading, updating, and m
 
 C. The system SHALL support modifying requirement status in spec files based on review outcomes.
 
-*End* *Review Backend Services* | **Hash**: 4d2489f8
+*End* *Review Backend Services* | **Hash**: c1ec12e5
