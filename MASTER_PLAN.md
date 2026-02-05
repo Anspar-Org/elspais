@@ -1,207 +1,203 @@
-# MASTER PLAN: Remediate Critical Code Review Findings
+# MASTER PLAN
+
+> **Directive**: Use the elspais MCP to mutate spec files when it is necessary to modify a requirement, as a test of that system.
 
 ## Overview
 
-Address the 7 CRITICAL issues identified during the systematic codebase review (ticket CUR-240).
-Each phase addresses one critical finding with TDD approach.
+Add a configurable `hash_mode` setting under `[validation]` in `.elspais.toml` with two modes:
 
-## Critical Findings to Address
+- **`full-text`** (default): Current spec behavior — hash every line between header and footer, no normalization. Backward compatible.
+- **`normalized-text`**: Hash assertions only, with cosmetic normalization. More forgiving of formatting changes.
 
-| # | Location | Issue | Phase |
-|---|----------|-------|-------|
-| 1 | builder.py:1860 | Direct `_parents` access | Phase 1 |
-| 2 | builder.py (multiple) | Direct `_content` mutation | Phase 2 |
-| 3 | health.py:147 | Imports private `_parse_toml` | Phase 3 |
-| 4 | analyze.py:123-170 | Manual stats vs `count_by_level()` | Phase 4 |
-| 5 | health.py:828-864 | Manual coverage vs `count_by_coverage()` | Phase 5 |
-| 6 | code.py & test.py | Duplicated `_is_empty_comment()` | Phase 6 |
-| 7 | builder.py | TraceGraph God Object | Deferred |
+### Design Decisions
 
-**Note**: Phase 7 (God Object refactor) is deferred - it's a significant architectural change requiring separate planning.
+- **Configurable**: Projects choose their hash mode via `[validation].hash_mode`
+- **Default is `full-text`**: No breaking change for existing projects
+- **`normalized-text` rules**: assertions-only, cosmetic normalization (see Phase 3)
+- **Assertion order**: Physical file order preserved (NOT sorted by label)
+- **NOT doing**: Case-invariance, Unicode normalization, trailing period stripping, label prefix stripping
+
+### Configuration
+
+```toml
+[validation]
+hash_algorithm = "sha256"    # existing
+hash_length = 8              # existing
+hash_mode = "full-text"      # NEW — "full-text" | "normalized-text"
+```
+
+### Normalization Rules (for `normalized-text` mode)
+
+For each assertion (in physical file order):
+
+1. Collect the assertion line and any continuation lines (until next assertion or end)
+2. Join into a single line, collapsing internal newlines to spaces
+3. Collapse multiple internal spaces to single space
+4. Strip trailing whitespace
+5. Normalize line endings to `\n`
+
+Join all normalized assertion lines with `\n`, then hash.
+
+## Phases
+
+1. Spec Update
+2. Config Defaults
+3. Hasher Normalization Functions
+4. Builder + Commands (hash mode branching)
+5. Tests
+6. Fixture Alignment + Final Validation
 
 ---
 
-## Phase 1: Fix `_parents` Encapsulation Violation ✅
-
-**File**: `src/elspais/graph/builder.py:1860`
+## Phase 1: Spec Update
 
 ### Problem
 
-```python
-if not node._parents and node.kind == NodeKind.REQUIREMENT
-```
-
-Direct access to private `_parents` attribute violates encapsulation.
+The spec (`spec/requirements-spec.md` ~line 346-357) defines only one hash algorithm (full body text). It needs to document both modes and the new config option.
 
 ### Solution
 
-Replace with public API property `is_root`:
+Expand the "Hash Definition" section to document:
 
-```python
-if node.is_root and node.kind == NodeKind.REQUIREMENT
-```
-
-### Tasks
-
-- [x] Find all occurrences of `node._parents` access (only 1 external violation found)
-- [x] Replace with `node.is_root` property
-- [x] Run tests to verify behavior unchanged (896 passed)
-
----
-
-## Phase 2: Document GraphBuilder Privileged Access ✅
-
-**File**: `src/elspais/graph/builder.py` (lines 687-691, 1102, 1622, 1639, 1687, 1749)
-
-### Problem
-
-Direct mutation of `node._content` throughout GraphBuilder methods.
-
-### Solution Applied
-
-1. Documented "friend class" pattern in GraphBuilder docstring
-2. Added `get_all_content()` method to GraphNode for serialization
-3. Updated serialize.py to use public API instead of direct `_content` access
+- `hash_mode` configuration option with two values
+- `full-text`: every line AFTER Header, BEFORE Footer (current, no normalization)
+- `normalized-text`: assertion text only, with normalization rules
+- Explicit statement: assertions hashed in physical file order, NOT sorted
+- Non-assertion body text excluded in `normalized-text` mode
+- Note: "Any material behavioral constraint SHALL be expressed as an Assertion"
 
 ### Tasks
 
-- [x] Add docstring to GraphBuilder explaining privileged access pattern
-- [x] Add `get_all_content()` method to GraphNode for controlled access
-- [x] Update serialize.py to use public API (was also accessing `_content`)
-- [x] All tests pass (896 passed)
+- [x] Update `spec/requirements-spec.md` Hash Definition section
 
 ---
 
-## Phase 3: Fix Private `_parse_toml` Import ✅
-
-**File**: `src/elspais/commands/health.py:147`
+## Phase 2: Config Defaults
 
 ### Problem
 
-```python
-from elspais.config import _parse_toml  # Private function
-```
-
-Importing a private function from the config module.
+The `DEFAULT_CONFIG` in `config/__init__.py` has no `validation` section with `hash_mode`. The config system needs to know about the new setting.
 
 ### Solution
 
-Used existing public API `parse_toml` (already exported in `__all__`):
-
-```python
-from elspais.config import parse_toml
-```
+Add `hash_mode` to the config defaults following the existing pattern. The `[validation]` section already exists in test fixture configs (`hash_algorithm`, `hash_length`) but may not be in `DEFAULT_CONFIG`.
 
 ### Tasks
 
-- [x] Check if `parse_toml` (public) exists - YES, already exported
-- [x] Update health.py to use public function
-- [x] All tests pass (896 passed)
+- [ ] Add `"validation": {"hash_mode": "full-text"}` to `DEFAULT_CONFIG` in `src/elspais/config/__init__.py`
 
 ---
 
-## Phase 4: Use `count_by_level()` in analyze.py ✅
-
-**File**: `src/elspais/commands/analyze.py:123-170`
+## Phase 3: Hasher Normalization Functions
 
 ### Problem
 
-Manual iteration to group requirements by level instead of using shared utility.
+`src/elspais/utilities/hasher.py` has `calculate_hash()` for raw text hashing but no assertion-specific normalization.
 
 ### Solution
 
-Added new `group_by_level()` function to annotators.py (returns node lists, not just counts), then refactored analyze.py to use it:
+Add new functions to the hasher module:
 
-```python
-from elspais.graph.annotators import group_by_level
+- `normalize_assertion_text(label: str, text: str) -> str` — normalize a single assertion (collapse multiline, strip whitespace, collapse internal spaces)
+- `compute_normalized_hash(assertions: list[tuple[str, str]], algorithm="sha256", length=8) -> str` — full pipeline for normalized-text mode
 
-by_level = group_by_level(graph)
-```
+Keep existing `calculate_hash()` unchanged — used by `full-text` mode.
 
 ### Tasks
 
-- [x] Added `group_by_level()` utility to annotators.py
-- [x] Exported in `__all__`
-- [x] Refactored analyze.py to use shared utility
-- [x] All tests pass (896 passed)
+- [ ] Add `normalize_assertion_text()` to `src/elspais/utilities/hasher.py`
+- [ ] Add `compute_normalized_hash()` to `src/elspais/utilities/hasher.py`
 
 ---
 
-## Phase 5: Use `count_by_coverage()` in health.py ✅
-
-**File**: `src/elspais/commands/health.py:828-864`
+## Phase 4: Builder + Commands (Hash Mode Branching)
 
 ### Problem
 
-Manual coverage computation instead of using aggregate function.
+The graph builder's `_recompute_requirement_hash()` and both command modules (`hash_cmd.py`, `validate.py`) currently use `body_text` unconditionally. They need to branch on `hash_mode`.
 
 ### Solution
 
-Created new `count_with_code_refs()` utility in annotators.py (existing `count_by_coverage()` tracks assertion-level coverage, not code reference coverage). Refactored health.py to use it:
+**`src/elspais/graph/builder.py`** — `_recompute_requirement_hash()`:
 
-```python
-from elspais.graph.annotators import count_with_code_refs
+- Read `hash_mode` from config (builder already has config access)
+- `full-text`: use body_text (current behavior)
+- `normalized-text`: iterate assertion children, call `compute_normalized_hash()`
 
-coverage = count_with_code_refs(graph)
-```
+**`src/elspais/commands/hash_cmd.py`** — `_get_requirement_body()`:
+
+- `full-text`: return `node.get_field("body_text", "")` (current)
+- `normalized-text`: extract assertion label+text from children, normalize
+
+**`src/elspais/commands/validate.py`** — same branching logic.
+
+**`src/elspais/graph/parsers/requirement.py`** — no changes needed:
+
+- Keep `_extract_body_text()` for full-text mode and mutation API
+- Assertions already parsed by `_parse_assertions()` and stored as child nodes
 
 ### Tasks
 
-- [x] Added `count_with_code_refs()` utility to annotators.py
-- [x] Exported in `__all__`
-- [x] Refactored health.py to use shared utility
-- [x] All tests pass (896 passed)
+- [ ] Update `_recompute_requirement_hash()` in `src/elspais/graph/builder.py`
+- [ ] Update `_get_requirement_body()` in `src/elspais/commands/hash_cmd.py`
+- [ ] Update `_get_requirement_body()` in `src/elspais/commands/validate.py`
 
 ---
 
-## Phase 6: Extract Duplicated `_is_empty_comment()` ✅
-
-**Files**:
-
-- `src/elspais/graph/parsers/code.py:214`
-- `src/elspais/graph/parsers/test.py:306`
+## Phase 5: Tests
 
 ### Problem
 
-Identical 18-line function duplicated in both parsers.
+Existing tests assume one hash mode. Need tests for both modes and normalization edge cases.
 
 ### Solution
 
-Created `parsers/config_helpers.py` with shared `is_empty_comment()` function. Updated both parsers to use it.
+**`tests/core/test_hasher.py`** — new normalization function tests:
+
+- Trailing whitespace stripped
+- Multiline assertion collapsed to single line
+- Multiple internal spaces collapsed
+- `\r\n` normalized to `\n`
+
+**`tests/commands/test_hash_update.py`** — config-aware tests for both modes.
+
+**`tests/core/test_mutation_hash_consistency.py`** — test both modes.
+
+**New tests for `normalized-text` mode**:
+
+- Blank lines between assertions don't affect hash
+- Non-assertion body text changes don't affect hash
+- Assertion reordering DOES change hash (explicit)
+- Case changes DO change hash (explicit)
+
+**Full-text mode tests**: Existing behavior preserved, body text changes DO affect hash.
 
 ### Tasks
 
-- [x] Created `parsers/config_helpers.py` with shared function
-- [x] Updated code.py to import and use shared function
-- [x] Updated test.py to import and use shared function
-- [x] Removed duplicate method definitions from both files
-- [x] All tests pass (896 passed), linting passes
+- [ ] Add normalization unit tests to `tests/core/test_hasher.py`
+- [ ] Add config-aware tests to `tests/commands/test_hash_update.py`
+- [ ] Update `tests/core/test_mutation_hash_consistency.py` for both modes
+- [ ] Add `normalized-text` mode integration tests
 
 ---
 
-## Phase 7: TraceGraph God Object (DEFERRED)
-
-**File**: `src/elspais/graph/builder.py:21-1556`
+## Phase 6: Fixture Alignment + Final Validation
 
 ### Problem
 
-TraceGraph has 1,555 lines and 53+ public methods, combining:
+Test fixture hashes were computed with the old assertions-only algorithm (pre-`ff143f9`), then the algorithm changed to full-body-text. Under `full-text` default mode, fixture hashes need to match.
 
-- Graph structure management
-- Mutation operations
-- Undo infrastructure
-- Body text manipulation
-- Hash computation
+### Solution
 
-### Recommendation
+- Run `elspais hash update` on all test fixtures to align stored hashes with `full-text` mode
+- Optionally add `hash_mode = "full-text"` explicitly to `tests/fixtures/hht-like/.elspais.toml`
+- Optionally add a small fixture with `hash_mode = "normalized-text"` for integration testing
 
-This requires architectural planning as a separate effort:
+### Tasks
 
-1. Extract `GraphMutator` for mutation operations
-2. Extract `RequirementBodyEditor` for body text manipulation
-3. Keep core query/traversal methods in `TraceGraph`
-
-**Status**: Deferred to future ticket
+- [ ] Update fixture hashes via `elspais hash update`
+- [ ] Run full test suite (`pytest`)
+- [ ] Run `git push` — verify pre-push hook passes
 
 ---
 
@@ -211,16 +207,23 @@ After each phase:
 
 - [ ] All tests pass (`pytest`)
 - [ ] No lint errors (`ruff check`)
-- [ ] Commit with `[CUR-240]` prefix
+- [ ] Commit with ticket prefix
+
+Final verification:
+
+- [ ] `elspais hash verify` on fixtures — no mismatches (full-text mode)
+- [ ] Temporarily set `hash_mode = "normalized-text"` on a fixture, run `elspais hash update`, verify:
+  - Non-assertion text change → hash unchanged
+  - Assertion text change → hash changes
+  - Trailing space on assertion → hash unchanged
+- [ ] `git push` — pre-push hook passes
 
 ## Commit Template
 
 ```text
-[CUR-240] refactor: [Phase description]
+[CUR-514] type: Description
 
-Addresses critical finding from codebase review:
-- [What was fixed]
-- [Why it matters]
+Details of what was done.
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```

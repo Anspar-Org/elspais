@@ -2,6 +2,15 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.44.0] - 2026-02-04
+
+### Added
+
+- **Configurable hash mode** (`[validation].hash_mode` in `.elspais.toml`):
+  - `full-text` (default): Hash every line between header and footer, no normalization. Backward compatible.
+  - `normalized-text`: Hash assertion text only with cosmetic normalization. Invariant over trailing whitespace, line wrapping, multiple spaces, and non-assertion body text changes.
+  - Documented in `spec/requirements-spec.md` Hash Definition section.
+
 ## [0.43.5] - 2026-01-29
 
 ### Changed

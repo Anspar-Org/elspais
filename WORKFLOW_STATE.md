@@ -12,41 +12,32 @@ Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 Do each of these steps for every Phase in the MASTER_PLAN.md
 Check off each step (change [ ] to [x]) after it is complete.
 
-## Current Task: Remediate Critical Code Review Findings
+## Current Task: [CUR-514] Configurable Hash Mode (full-text / normalized-text)
 
-Address the 7 CRITICAL issues identified during systematic codebase review.
+Add `hash_mode` config setting with two modes: `full-text` (default, current behavior) and `normalized-text` (assertions-only + cosmetic normalization). See MASTER_PLAN.md for 6-phase breakdown.
 
 ### 1. Understand Current State
 
-- [ ] **EXPLORE**: Read MASTER_PLAN.md for remediation plan
-  - [ ] Understand each critical finding
-  - [ ] Understand the solution approach
-- [ ] **BASELINE**: Ensure tests pass before changes
-  - [ ] Run full test suite
+- [x] **EXPLORE**: Read MASTER_PLAN.md for task details
+- [x] **BASELINE**: Ensure tests pass before changes (896 passed)
 
-### 2. Incremental Refactor
+### 2. Incremental Implementation
 
 - [ ] **SMALL STEPS**: Complete one phase at a time
-  - [ ] Each phase should be independently reviewable
-  - [ ] Test after each change
-  - [ ] Commit after each phase
-- [ ] **PRESERVE BEHAVIOR**: No functional changes unless fixing bugs
-  - [ ] Same inputs → same outputs
-  - [ ] Same error handling
-  - [ ] Same side effects
+- [ ] **PRESERVE BEHAVIOR**: No unintended changes
 
 ### 3. Verification
 
-- [ ] **TEST**: All tests still pass after fixes
+- [ ] **TEST**: All tests still pass
 - [ ] **LINT**: Fix all lint errors
 
 ### 4. Commit
 
-- [ ] **COMMIT**: Use `[CUR-240]` prefix in subject
+- [ ] **COMMIT**: Use ticket prefix in subject
 
 ### 5. Phase Complete
 
 - [ ] Mark phase complete in MASTER_PLAN.md
 - [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
-- [ ] promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
-- **CLEAR**: Reset checkboxes for next phase (change all [x] to [ ])
+- [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
+- **CLEAR**: Reset checkboxes for next phase

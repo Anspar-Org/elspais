@@ -351,7 +351,42 @@ Each requirement MUST end with a Footer including a content hash:
 *End* *{Title}* | **Hash**: {value}
 ```
 
+The hash calculation mode is configurable via `[validation].hash_mode` in `.elspais.toml`. Two modes are supported:
+
+### `full-text` Mode (Default)
+
 The hash SHALL be calculated from:
 
 - every line AFTER the Header line
 - every line BEFORE the Footer line
+
+No normalization is applied. The hash is computed from the raw text between the header and footer lines.
+
+### `normalized-text` Mode
+
+The hash SHALL be calculated from **assertion text only**. Non-assertion body text (context, definitions, explanations) is excluded from the hash.
+
+Any material behavioral constraint SHALL be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
+
+**Normalization rules** — for each assertion, in physical file order (assertions are NOT sorted by label before hashing):
+
+1. Collect the assertion line and any continuation lines (until the next assertion or end of body)
+2. Join into a single line, collapsing internal newlines to spaces
+3. Collapse multiple internal spaces to a single space
+4. Strip trailing whitespace from the line
+5. Normalize line endings to `\n`
+
+All normalized assertion lines are joined with `\n`, then hashed.
+
+**Invariances** — the following changes do NOT affect the hash:
+
+- Trailing whitespace on assertion lines
+- Line wrapping within a single assertion (multiline vs single-line)
+- Multiple spaces between words
+- Changes to non-assertion body text (context, definitions, rationale)
+- Blank lines between assertions
+
+**Sensitive changes** — the following changes DO affect the hash:
+
+- Any change to assertion wording (including case changes)
+- Adding, removing, or reordering assertions
