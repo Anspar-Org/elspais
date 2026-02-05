@@ -1,4 +1,5 @@
 # Validates REQ-p00003-A, REQ-p00003-B, REQ-p00006-A
+# Validates REQ-p00050-B
 # Validates REQ-d00052-B, REQ-d00052-C
 """Tests for the trace command."""
 
