@@ -1,4 +1,5 @@
 # Validates: REQ-p00006-A, REQ-p00006-B
+# Validates: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
 """Tests for HTML Generator."""
 
 from pathlib import Path

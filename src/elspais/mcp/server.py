@@ -4,6 +4,19 @@
 # Implements: REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
 # Implements: REQ-o00063-A, REQ-o00063-B, REQ-o00063-C, REQ-o00063-D, REQ-o00063-E, REQ-o00063-F
 # Implements: REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
+# Implements: REQ-d00060-A, REQ-d00060-B, REQ-d00060-C, REQ-d00060-D, REQ-d00060-E
+# Implements: REQ-d00061-A, REQ-d00061-B, REQ-d00061-C, REQ-d00061-D, REQ-d00061-E
+# Implements: REQ-d00062-A, REQ-d00062-B, REQ-d00062-C, REQ-d00062-D
+# Implements: REQ-d00062-E, REQ-d00062-F
+# Implements: REQ-d00063-A, REQ-d00063-B, REQ-d00063-C, REQ-d00063-D, REQ-d00063-E
+# Implements: REQ-d00064-A, REQ-d00064-B, REQ-d00064-C, REQ-d00064-D, REQ-d00064-E
+# Implements: REQ-d00065-A, REQ-d00065-B, REQ-d00065-C, REQ-d00065-D, REQ-d00065-E
+# Implements: REQ-d00066-A, REQ-d00066-B, REQ-d00066-C, REQ-d00066-D
+# Implements: REQ-d00066-E, REQ-d00066-F, REQ-d00066-G
+# Implements: REQ-d00067-A, REQ-d00067-B, REQ-d00067-C, REQ-d00067-D
+# Implements: REQ-d00067-E, REQ-d00067-F
+# Implements: REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
+# Implements: REQ-d00068-E, REQ-d00068-F
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.

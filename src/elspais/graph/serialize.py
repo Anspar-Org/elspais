@@ -1,3 +1,4 @@
+# Implements: REQ-d00064-A, REQ-d00064-B, REQ-d00064-C, REQ-d00064-D, REQ-d00064-E
 """Graph Serialization - Export TraceGraph to various formats.
 
 This module provides functions to serialize TraceGraph and GraphNode

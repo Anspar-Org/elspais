@@ -1,4 +1,5 @@
 # Implements: REQ-p00006-A, REQ-p00006-B
+# Implements: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
 """HTML Generator for traceability reports.
 
 This module generates interactive HTML traceability views from TraceGraph.
