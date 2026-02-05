@@ -20,17 +20,38 @@ if TYPE_CHECKING:
 from elspais.graph import NodeKind
 
 
-def _get_requirement_body(node) -> str:
-    """Extract hashable body content from a requirement node.
+def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
 
-    Per spec/requirements-spec.md:
-    > The hash SHALL be calculated from:
-    > - every line AFTER the Header line
-    > - every line BEFORE the Footer line
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
 
-    The body_text is extracted during parsing and stored in the node.
+    Args:
+        node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+
+    Returns:
+        Computed hash string, or None if no hashable content.
     """
-    return node.get_field("body_text", "")
+    from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = node.get_field("body_text", "")
+        if not body:
+            return None
+        return calculate_hash(body)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -40,7 +61,6 @@ def run(args: argparse.Namespace) -> int:
     Supports --fix to auto-fix certain issues.
     """
     from elspais.graph.factory import build_graph
-    from elspais.utilities.hasher import calculate_hash
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -73,11 +93,11 @@ def run(args: argparse.Namespace) -> int:
             )
 
         # Check for hash presence and correctness
-        body = _get_requirement_body(node)
-        if body:
-            computed_hash = calculate_hash(body)
-            stored_hash = node.hash
+        hash_mode = getattr(graph, "hash_mode", "full-text")
+        computed_hash = _compute_hash_for_node(node, hash_mode)
+        stored_hash = node.hash
 
+        if computed_hash:
             if not stored_hash:
                 # Missing hash - fixable
                 issue = {
@@ -107,8 +127,8 @@ def run(args: argparse.Namespace) -> int:
                 warnings.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
-        elif not node.hash:
-            # No body and no hash
+        elif not stored_hash:
+            # No hashable content and no hash
             warnings.append(
                 {
                     "rule": "hash.missing",

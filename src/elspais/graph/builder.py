@@ -29,6 +29,7 @@ class TraceGraph:
     """
 
     repo_root: Path = field(default_factory=Path.cwd)
+    hash_mode: str = field(default="full-text")
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -900,10 +901,11 @@ class TraceGraph:
         return pattern.sub(rf"{new_label}\1", body_text)
 
     def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
-        """Recompute hash for a requirement based on body_text.
+        """Recompute hash for a requirement.
 
-        Per spec/requirements-spec.md, the hash is computed from every line
-        AFTER the Header line and BEFORE the Footer line (i.e., body_text).
+        Supports two modes (configurable via [validation].hash_mode):
+        - full-text: hash every line between header and footer (body_text)
+        - normalized-text: hash normalized assertion text only
 
         Args:
             req_node: The requirement node to recompute hash for.
@@ -911,12 +913,23 @@ class TraceGraph:
         Returns:
             The new hash value.
         """
-        from elspais.utilities.hasher import calculate_hash
+        from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
 
-        # Use body_text for hash computation (per spec)
-        body_text = req_node.get_field("body_text", "")
+        if self.hash_mode == "normalized-text":
+            # Collect assertions in physical order from child nodes
+            assertions = []
+            for child in req_node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    label = child.get_field("label", "")
+                    text = child.get_label() or ""
+                    if label and text:
+                        assertions.append((label, text))
+            new_hash = compute_normalized_hash(assertions)
+        else:
+            # full-text mode: hash body_text (per original spec)
+            body_text = req_node.get_field("body_text", "")
+            new_hash = calculate_hash(body_text)
 
-        new_hash = calculate_hash(body_text)
         req_node.set_field("hash", new_hash)
         return new_hash
 
@@ -1574,13 +1587,15 @@ class GraphBuilder:
         3. Post-construction, all access should use get_field()/set_field()
     """
 
-    def __init__(self, repo_root: Path | None = None) -> None:
+    def __init__(self, repo_root: Path | None = None, hash_mode: str = "full-text") -> None:
         """Initialize the graph builder.
 
         Args:
             repo_root: Repository root path.
+            hash_mode: Hash calculation mode ("full-text" or "normalized-text").
         """
         self.repo_root = repo_root or Path.cwd()
+        self.hash_mode = hash_mode
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
         # Detection: track orphan candidates and broken references
@@ -1878,7 +1893,7 @@ class GraphBuilder:
         # Final orphan set: candidates that aren't roots
         orphaned_ids = self._orphan_candidates - root_ids
 
-        graph = TraceGraph(repo_root=self.repo_root)
+        graph = TraceGraph(repo_root=self.repo_root, hash_mode=self.hash_mode)
         graph._roots = roots
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids

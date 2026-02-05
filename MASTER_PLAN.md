@@ -138,9 +138,9 @@ The graph builder's `_recompute_requirement_hash()` and both command modules (`h
 
 ### Tasks
 
-- [ ] Update `_recompute_requirement_hash()` in `src/elspais/graph/builder.py`
-- [ ] Update `_get_requirement_body()` in `src/elspais/commands/hash_cmd.py`
-- [ ] Update `_get_requirement_body()` in `src/elspais/commands/validate.py`
+- [x] Update `_recompute_requirement_hash()` in `src/elspais/graph/builder.py`
+- [x] Update `_get_requirement_body()` in `src/elspais/commands/hash_cmd.py`
+- [x] Update `_get_requirement_body()` in `src/elspais/commands/validate.py`
 
 ---
 

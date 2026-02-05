@@ -41,31 +41,43 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
 
-def _get_requirement_body(node) -> str:
-    """Extract hashable body content from a requirement node.
+def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
 
-    Per spec/requirements-spec.md:
-    > The hash SHALL be calculated from:
-    > - every line AFTER the Header line
-    > - every line BEFORE the Footer line
-
-    The body_text is extracted during parsing and stored in the node.
-    This includes metadata, intro text, assertions - everything between
-    the header and footer markers.
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
 
     Args:
         node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
 
     Returns:
-        Body text for hashing.
+        Computed hash string, or None if no hashable content.
     """
-    # Use the stored body_text which was extracted during parsing
-    return node.get_field("body_text", "")
+    from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = node.get_field("body_text", "")
+        if not body:
+            return None
+        return calculate_hash(body)
 
 
 def _verify_hashes(graph, args) -> int:
     """Verify all hashes match content."""
-    from elspais.utilities.hasher import calculate_hash
+    hash_mode = getattr(graph, "hash_mode", "full-text")
 
     mismatches = []
     missing = []
@@ -76,18 +88,15 @@ def _verify_hashes(graph, args) -> int:
             missing.append(node.id)
             continue
 
-        # Get body content from the node's assertions
-        body = _get_requirement_body(node)
-        if body:
-            computed = calculate_hash(body)
-            if computed != stored_hash:
-                mismatches.append(
-                    {
-                        "id": node.id,
-                        "stored": stored_hash,
-                        "computed": computed,
-                    }
-                )
+        computed = _compute_hash_for_node(node, hash_mode)
+        if computed and computed != stored_hash:
+            mismatches.append(
+                {
+                    "id": node.id,
+                    "stored": stored_hash,
+                    "computed": computed,
+                }
+            )
 
     # Report results
     if not getattr(args, "quiet", False):
@@ -121,11 +130,11 @@ def _update_hashes(graph, args) -> int:
     from pathlib import Path
 
     from elspais.mcp.file_mutations import update_hash_in_file
-    from elspais.utilities.hasher import calculate_hash
 
     dry_run = getattr(args, "dry_run", False)
     target_req_id = getattr(args, "req_id", None)
     json_output = getattr(args, "json_output", False)
+    hash_mode = getattr(graph, "hash_mode", "full-text")
 
     # Get repo root from graph or default to cwd
     repo_root = getattr(graph, "_repo_root", None) or Path.cwd()
@@ -137,13 +146,11 @@ def _update_hashes(graph, args) -> int:
             continue
 
         stored_hash = node.hash
-        body = _get_requirement_body(node)
+        computed_hash = _compute_hash_for_node(node, hash_mode)
 
-        # Skip if no body content (can't compute hash)
-        if not body:
+        # Skip if no hashable content
+        if not computed_hash:
             continue
-
-        computed_hash = calculate_hash(body)
 
         # Check if hash needs updating
         if stored_hash != computed_hash:
