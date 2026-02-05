@@ -8,6 +8,11 @@ import hashlib
 import re
 from typing import Optional
 
+# Canonical pattern for matching any hash value in a footer.
+# Matches hex hashes (a1b2c3d4), placeholders (XXXXXXXX, TODO, ________), etc.
+# Safe to use after "**Hash**: " prefix — bounded by end-of-line.
+HASH_VALUE_PATTERN = r"\S+"
+
 
 def clean_requirement_body(content: str, normalize_whitespace: bool = False) -> str:
     """Clean requirement body text for consistent hashing.
@@ -183,7 +188,7 @@ def extract_hash_from_footer(footer_text: str) -> Optional[str]:
     Returns:
         Hash string if found, None otherwise
     """
-    match = re.search(r"\*\*Hash\*\*:\s*([a-fA-F0-9]+)", footer_text)
+    match = re.search(rf"\*\*Hash\*\*:\s*({HASH_VALUE_PATTERN})", footer_text)
     if match:
         return match.group(1)
     return None

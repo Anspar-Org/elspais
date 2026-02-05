@@ -1,6 +1,7 @@
 """Tests for elspais hash update command.
 
 Tests REQ-p00001-C: detect changes to requirements using content hashing.
+Tests REQ-p00004-A: compute and verify content hashes for change detection.
 
 The hash update command updates requirement hashes in spec files:
 - elspais hash update: Update all stale hashes
@@ -120,9 +121,12 @@ A. The system SHALL process data.
 
 
 class TestUpdateHashInFile:
-    """Tests for update_hash_in_file() helper function."""
+    """Tests for update_hash_in_file() helper function.
 
-    def test_updates_hash_in_file(self, git_repo_with_stale_hash):
+    Validates REQ-p00004-A: compute and verify content hashes for change detection.
+    """
+
+    def test_REQ_p00004_A_updates_hash_in_file(self, git_repo_with_stale_hash):
         """Update a hash value in a spec file."""
         from elspais.mcp.file_mutations import update_hash_in_file
 
@@ -134,7 +138,7 @@ class TestUpdateHashInFile:
             new_hash="abcd1234",
         )
 
-        assert result is True
+        assert result is None, f"Expected success (None), got error: {result}"
 
         # Verify the file was updated
         content = spec_file.read_text()
@@ -142,8 +146,8 @@ class TestUpdateHashInFile:
         # Old hash should be gone
         assert "deadbeef" not in content
 
-    def test_returns_false_when_req_not_found(self, git_repo_with_stale_hash):
-        """Return False when requirement is not found in file."""
+    def test_REQ_p00004_A_returns_error_when_req_not_found(self, git_repo_with_stale_hash):
+        """Return descriptive error when requirement is not found in file."""
         from elspais.mcp.file_mutations import update_hash_in_file
 
         spec_file = git_repo_with_stale_hash / "spec" / "requirements.md"
@@ -154,9 +158,11 @@ class TestUpdateHashInFile:
             new_hash="abcd1234",
         )
 
-        assert result is False
+        assert result is not None
+        assert "REQ-NONEXISTENT" in result
+        assert "not found" in result
 
-    def test_handles_different_title_formats(self, tmp_path):
+    def test_REQ_p00004_A_handles_different_title_formats(self, tmp_path):
         """Handle various title formats in the End marker."""
         from elspais.mcp.file_mutations import update_hash_in_file
 
@@ -184,9 +190,103 @@ A. The system SHALL do something.
             new_hash="deadbeef",
         )
 
-        assert result is True
+        assert result is None, f"Expected success (None), got error: {result}"
         content = spec_file.read_text()
         assert "**Hash**: deadbeef" in content
+
+    def test_REQ_p00004_A_returns_error_when_no_end_marker(self, tmp_path):
+        """Return descriptive error when requirement has no End marker."""
+        from elspais.mcp.file_mutations import update_hash_in_file
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            """# Test Spec
+
+## REQ-p00001: Missing Footer
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+A. The system SHALL do something.
+"""
+        )
+
+        result = update_hash_in_file(
+            file_path=spec_file,
+            req_id="REQ-p00001",
+            new_hash="abcd1234",
+        )
+
+        assert result is not None
+        assert "REQ-p00001" in result
+        assert "End marker" in result or "Hash" in result
+
+    def test_REQ_p00004_A_returns_error_when_end_marker_belongs_to_other_req(self, tmp_path):
+        """Return error when End marker is past the next requirement header."""
+        from elspais.mcp.file_mutations import update_hash_in_file
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            """# Test Spec
+
+## REQ-p00001: First Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+A. The system SHALL do something.
+
+## REQ-p00002: Second Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+A. The system SHALL do something else.
+
+*End* *Second Requirement* | **Hash**: deadbeef
+"""
+        )
+
+        result = update_hash_in_file(
+            file_path=spec_file,
+            req_id="REQ-p00001",
+            new_hash="abcd1234",
+        )
+
+        assert result is not None
+        assert "REQ-p00001" in result
+        assert "different requirement" in result
+
+    @pytest.mark.parametrize(
+        "placeholder",
+        ["XXXXXXXX", "TODO", "________", "PLACEHOLDER", "TBD"],
+        ids=["x-placeholder", "todo", "underscore", "placeholder-word", "tbd"],
+    )
+    def test_REQ_p00004_A_updates_placeholder_hashes(self, tmp_path, placeholder):
+        """Placeholder hash values (XXXXXXXX, TODO, ________) are matched and replaced."""
+        from elspais.mcp.file_mutations import update_hash_in_file
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            f"""# Test Spec
+
+## REQ-p00001: Placeholder Test
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+A. The system SHALL do something.
+
+*End* *Placeholder Test* | **Hash**: {placeholder}
+"""
+        )
+
+        result = update_hash_in_file(
+            file_path=spec_file,
+            req_id="REQ-p00001",
+            new_hash="abcd1234",
+        )
+
+        assert result is None, f"Expected success replacing '{placeholder}', got error: {result}"
+        content = spec_file.read_text()
+        assert "**Hash**: abcd1234" in content
+        assert placeholder not in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,9 +295,12 @@ A. The system SHALL do something.
 
 
 class TestUpdateHashesCommand:
-    """Tests for the hash update command."""
+    """Tests for the hash update command.
 
-    def test_dry_run_shows_changes_without_applying(self, git_repo_with_stale_hash, capsys):
+    Validates REQ-p00001-C: detect changes to requirements using content hashing.
+    """
+
+    def test_REQ_p00001_C_dry_run_shows_changes(self, git_repo_with_stale_hash, capsys):
         """--dry-run shows what would be changed but doesn't modify files."""
         import argparse
 
@@ -226,7 +329,7 @@ class TestUpdateHashesCommand:
         content = spec_file.read_text()
         assert "deadbeef" in content  # Original hash still there
 
-    def test_updates_all_stale_hashes(self, git_repo_with_stale_hash, capsys):
+    def test_REQ_p00001_C_updates_all_stale_hashes(self, git_repo_with_stale_hash, capsys):
         """Update all stale hashes in spec files."""
         import argparse
 
@@ -252,7 +355,7 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content
         assert "00000000" not in content
 
-    def test_updates_specific_requirement(self, git_repo_with_stale_hash, capsys):
+    def test_REQ_p00001_C_updates_specific_requirement(self, git_repo_with_stale_hash, capsys):
         """Update hash for a specific requirement only."""
         import argparse
 
@@ -277,7 +380,7 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content  # REQ-p00001 hash updated
         assert "00000000" in content  # REQ-p00002 hash NOT updated
 
-    def test_verify_after_update_passes(self, git_repo_with_stale_hash):
+    def test_REQ_p00001_C_verify_after_update_passes(self, git_repo_with_stale_hash):
         """After update, hash verify should pass."""
         import argparse
 
@@ -324,7 +427,7 @@ class TestHashComputedFromRawBody:
     content (metadata, intro text, assertions).
     """
 
-    def test_hash_includes_intro_text(self, tmp_path):
+    def test_REQ_p00004_A_hash_includes_intro_text(self, tmp_path):
         """In full-text mode, hash should change when intro text changes.
 
         This test verifies the full-text hash is computed from raw body text,
@@ -427,7 +530,7 @@ A. The system SHALL do something.
             f"but got different hash in content:\n{content}"
         )
 
-    def test_hash_changes_when_intro_changes(self, tmp_path):
+    def test_REQ_p00004_A_hash_changes_when_intro_changes(self, tmp_path):
         """In full-text mode, changing intro text should change the hash.
 
         If hash was computed only from assertions, changing intro text
@@ -562,3 +665,36 @@ A. The system SHALL do something.
             f"Hash should change to {hash_v2} when intro text changes, "
             f"even if assertions are the same. Got:\n{content}"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: Verify hint and warning output
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestHashCommandOutput:
+    """Tests for hash command user-facing output messages.
+
+    Validates REQ-p00001-C: detect changes to requirements using content hashing.
+    """
+
+    def test_REQ_p00001_C_verify_shows_run_update_hint(self, git_repo_with_stale_hash, capsys):
+        """hash verify shows 'run hash update' hint when mismatches found."""
+        import argparse
+
+        from elspais.commands.hash_cmd import run
+
+        args = argparse.Namespace(
+            hash_action="verify",
+            spec_dir=git_repo_with_stale_hash / "spec",
+            config=git_repo_with_stale_hash / ".elspais.toml",
+            quiet=False,
+        )
+
+        result = run(args)
+
+        # Should fail (mismatches exist)
+        assert result == 1
+
+        captured = capsys.readouterr()
+        assert "hash update" in captured.err.lower() or "hash update" in captured.out.lower()

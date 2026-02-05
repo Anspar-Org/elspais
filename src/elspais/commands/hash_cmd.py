@@ -116,6 +116,8 @@ def _verify_hashes(graph, args) -> int:
 
         if not missing and not mismatches:
             print("All hashes valid")
+        elif missing or mismatches:
+            print("Run 'elspais hash update' to fix.", file=sys.stderr)
 
     return 1 if mismatches else 0
 
@@ -187,25 +189,40 @@ def _update_hashes(graph, args) -> int:
 
     # Apply updates
     updated_count = 0
+    failed_count = 0
     for u in updates:
-        success = update_hash_in_file(
+        error = update_hash_in_file(
             file_path=Path(u["file"]),
             req_id=u["id"],
             new_hash=u["new_hash"],
         )
-        if success:
+        if error is None:
             updated_count += 1
             if not json_output:
                 print(f"Updated {u['id']}: {u['old_hash']} -> {u['new_hash']}")
+        else:
+            failed_count += 1
+            if not json_output:
+                print(f"Warning: {error}", file=sys.stderr)
 
     if json_output:
         import json
 
-        print(json.dumps({"updated": updated_count, "total": len(updates)}, indent=2))
+        print(
+            json.dumps(
+                {"updated": updated_count, "failed": failed_count, "total": len(updates)},
+                indent=2,
+            )
+        )
     else:
-        if updated_count == 0:
+        if updated_count == 0 and failed_count == 0:
             print("No hashes needed updating.")
         else:
-            print(f"Updated {updated_count} hash(es).")
+            parts = []
+            if updated_count:
+                parts.append(f"Updated {updated_count} hash(es).")
+            if failed_count:
+                parts.append(f"{failed_count} failed (see warnings above).")
+            print(" ".join(parts))
 
     return 0

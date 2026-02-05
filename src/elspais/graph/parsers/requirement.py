@@ -10,6 +10,7 @@ import re
 from typing import Any, Iterator
 
 from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.utilities.hasher import HASH_VALUE_PATTERN
 from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
@@ -39,7 +40,7 @@ class RequirementParser:
     IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
     REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refines>[^|\n]+)")
     END_MARKER_PATTERN = re.compile(
-        r"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>[a-zA-Z0-9]+))?",
+        rf"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>{HASH_VALUE_PATTERN}))?",
         re.MULTILINE,
     )
     ASSERTIONS_HEADER_PATTERN = re.compile(r"^##\s+Assertions\s*$", re.MULTILINE)

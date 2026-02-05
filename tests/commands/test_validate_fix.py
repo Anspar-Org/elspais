@@ -236,9 +236,12 @@ class TestValidateFix:
 
 
 class TestAddStatusToFile:
-    """Tests for add_status_to_file() helper function."""
+    """Tests for add_status_to_file() helper function.
 
-    def test_adds_status_when_missing(self, tmp_path):
+    Validates REQ-p00002-A: validate requirement format against configurable patterns.
+    """
+
+    def test_REQ_p00002_A_adds_status_when_missing(self, tmp_path):
         """Add Status field to requirement that's missing it."""
         from elspais.mcp.file_mutations import add_status_to_file
 
@@ -264,12 +267,12 @@ A. The system SHALL do something.
             status="Active",
         )
 
-        assert result is True
+        assert result is None, f"Expected success (None), got error: {result}"
         content = spec_file.read_text()
         assert "**Status**: Active" in content
 
-    def test_returns_false_when_status_exists(self, tmp_path):
-        """Return False when Status already exists."""
+    def test_REQ_p00002_A_returns_error_when_status_exists(self, tmp_path):
+        """Return error string when Status already exists."""
         from elspais.mcp.file_mutations import add_status_to_file
 
         spec_file = tmp_path / "test.md"
@@ -294,8 +297,10 @@ A. The system SHALL do something.
             status="Active",
         )
 
-        # Should return False - status already exists
-        assert result is False
+        # Should return error string - status already exists
+        assert result is not None
+        assert "REQ-d00001" in result
+        assert "Status" in result
         content = spec_file.read_text()
         # Original status should be unchanged
         assert "**Status**: Draft" in content

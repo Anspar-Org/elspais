@@ -16,6 +16,13 @@ Check off each step (change [ ] to [x]) after it is complete.
 
 Add `hash_mode` config setting with two modes: `full-text` (default, current behavior) and `normalized-text` (assertions-only + cosmetic normalization). See MASTER_PLAN.md for 6-phase breakdown.
 
+### 0. Identify Assertions
+
+- [ ] **ASSERTIONS**: Search spec/ for assertions related to the work being done
+- [ ] **CREATE IF MISSING**: If no applicable assertion exists, create one in the appropriate spec file
+- [ ] **RECORD**: Set `CURRENT_ASSERTIONS` in MASTER_PLAN.md (e.g., `CURRENT_ASSERTIONS: REQ-p00004-A, REQ-p00001-C`)
+- All code changes, tests, and commits MUST reference one or more assertions from `CURRENT_ASSERTIONS`
+
 ### 1. Understand Current State
 
 - [x] **EXPLORE**: Read MASTER_PLAN.md for task details
@@ -25,17 +32,23 @@ Add `hash_mode` config setting with two modes: `full-text` (default, current beh
 
 - [x] **SMALL STEPS**: Complete one phase at a time
 - [x] **PRESERVE BEHAVIOR**: No unintended changes
+- [ ] **ASSERTION REFERENCES**: Add `# Implements: REQ-xxx` comments to new/modified source files using IDs from `CURRENT_ASSERTIONS`
 
-### 3. Verification
+### 3. Write Tests
 
 - [x] **TEST**: All tests still pass (933 passed)
+- [ ] **ASSERTION NAMES**: Test functions MUST include assertion IDs from `CURRENT_ASSERTIONS` in their names (e.g., `test_REQ_p00004_A_validates_hash`)
+- [ ] **CLASS DOCSTRINGS**: Test classes MUST include `Validates REQ-xxx-Y:` in their docstring
+
+### 4. Verification
+
 - [x] **LINT**: Fix all lint errors
 
-### 4. Commit
+### 5. Commit
 
 - [x] **COMMIT**: Use ticket prefix in subject (6 commits: Phase 1-6)
 
-### 5. Phase Complete
+### 6. Phase Complete
 
 - [x] Mark phase complete in MASTER_PLAN.md
 - [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`

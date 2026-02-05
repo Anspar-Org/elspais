@@ -230,22 +230,26 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
 
         if fix_type == "hash":
             # Fix hash (missing or mismatch)
-            success = update_hash_in_file(
+            error = update_hash_in_file(
                 file_path=Path(file_path),
                 req_id=issue["id"],
                 new_hash=issue["computed_hash"],
             )
-            if success:
+            if error is None:
                 fixed += 1
+            else:
+                print(f"Warning: {error}", file=sys.stderr)
 
         elif fix_type == "status":
             # Add missing status
-            success = add_status_to_file(
+            error = add_status_to_file(
                 file_path=Path(file_path),
                 req_id=issue["id"],
                 status=issue.get("status", "Active"),
             )
-            if success:
+            if error is None:
                 fixed += 1
+            else:
+                print(f"Warning: {error}", file=sys.stderr)
 
     return fixed
