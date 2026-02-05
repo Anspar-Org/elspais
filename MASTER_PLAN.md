@@ -195,8 +195,8 @@ Test fixture hashes were computed with the old assertions-only algorithm (pre-`f
 
 ### Tasks
 
-- [ ] Update fixture hashes via `elspais hash update`
-- [ ] Run full test suite (`pytest`)
+- [x] Update fixture hashes via `elspais hash update`
+- [x] Run full test suite (`pytest`)
 - [ ] Run `git push` — verify pre-push hook passes
 
 ---

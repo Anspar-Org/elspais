@@ -35,7 +35,7 @@ def update_hash_in_file(
     # Find the requirement block to locate its End marker
     # First find the header line: ## REQ-xxx: Title
     header_pattern = re.compile(
-        rf"^(##+ {re.escape(req_id)}:\s*(.+?)\s*)$",
+        rf"^(#+ {re.escape(req_id)}:\s*(.+?)\s*)$",
         re.MULTILINE,
     )
     header_match = header_pattern.search(content)
@@ -60,7 +60,7 @@ def update_hash_in_file(
 
     # Check if this End marker is still part of our requirement block
     # (i.e., no new requirement header between our header and this End marker)
-    next_header_pattern = re.compile(r"^##+ REQ-", re.MULTILINE)
+    next_header_pattern = re.compile(r"^#+ [A-Z]+-", re.MULTILINE)
     next_header_match = next_header_pattern.search(content, pos=start_pos)
 
     if next_header_match and next_header_match.start() < end_match.start():
@@ -97,7 +97,7 @@ def add_status_to_file(
 
     # Find the requirement header
     header_pattern = re.compile(
-        rf"^(##+ {re.escape(req_id)}:\s*.+?)$",
+        rf"^(#+ {re.escape(req_id)}:\s*.+?)$",
         re.MULTILINE,
     )
     header_match = header_pattern.search(content)
@@ -107,7 +107,7 @@ def add_status_to_file(
     start_pos = header_match.end()
 
     # Find the next requirement header or end of file to bound our search
-    next_header_pattern = re.compile(r"^##+ REQ-", re.MULTILINE)
+    next_header_pattern = re.compile(r"^#+ [A-Z]+-", re.MULTILINE)
     next_header_match = next_header_pattern.search(content, pos=start_pos)
     end_pos = next_header_match.start() if next_header_match else len(content)
 

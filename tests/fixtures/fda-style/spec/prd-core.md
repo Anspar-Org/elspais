@@ -13,7 +13,7 @@ The system SHALL support electronic signatures compliant with FDA 21 CFR Part 11
 - Signature is cryptographically bound to signed content
 - Signature meaning is captured
 
-*End* *Electronic Signatures* | **Hash**: abc12345
+*End* *Electronic Signatures* | **Hash**: 9ead6ee0
 ---
 
 ### PRD-00002: Audit Trail
@@ -27,5 +27,5 @@ The system SHALL maintain audit trails for all data changes.
 - Audit records are immutable
 - Audit trail available for inspection
 
-*End* *Audit Trail* | **Hash**: def67890
+*End* *Audit Trail* | **Hash**: 85ebed06
 ---
