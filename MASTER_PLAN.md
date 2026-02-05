@@ -105,8 +105,8 @@ Keep existing `calculate_hash()` unchanged — used by `full-text` mode.
 
 ### Tasks
 
-- [ ] Add `normalize_assertion_text()` to `src/elspais/utilities/hasher.py`
-- [ ] Add `compute_normalized_hash()` to `src/elspais/utilities/hasher.py`
+- [x] Add `normalize_assertion_text()` to `src/elspais/utilities/hasher.py`
+- [x] Add `compute_normalized_hash()` to `src/elspais/utilities/hasher.py`
 
 ---
 

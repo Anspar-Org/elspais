@@ -112,6 +112,66 @@ def verify_hash(
     return actual_hash.lower() == expected_hash.lower()
 
 
+def normalize_assertion_text(label: str, text: str) -> str:
+    """Normalize a single assertion for hash computation.
+
+    Normalization rules (per spec/requirements-spec.md normalized-text mode):
+    1. Join multiline text into a single line (collapse newlines to spaces)
+    2. Collapse multiple internal spaces to a single space
+    3. Strip trailing whitespace
+    4. Normalize line endings to \\n
+
+    Args:
+        label: Assertion label (e.g., "A", "B").
+        text: Assertion text (the SHALL statement), possibly multiline.
+
+    Returns:
+        Normalized assertion string in "{label}. {text}" format.
+    """
+    # Normalize line endings first
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Collapse multiline to single line
+    text = text.replace("\n", " ")
+    # Collapse multiple spaces to single space
+    text = re.sub(r" {2,}", " ", text)
+    # Strip leading/trailing whitespace
+    text = text.strip()
+    return f"{label}. {text}"
+
+
+def compute_normalized_hash(
+    assertions: list[tuple[str, str]],
+    length: int = 8,
+    algorithm: str = "sha256",
+) -> str:
+    """Compute hash from normalized assertion text.
+
+    Used by normalized-text hash mode. Assertions are processed in the
+    order provided (physical file order, NOT sorted by label).
+
+    Args:
+        assertions: List of (label, text) tuples in physical file order.
+        length: Number of characters in the hash (default 8).
+        algorithm: Hash algorithm to use (default "sha256").
+
+    Returns:
+        Hexadecimal hash string of specified length.
+    """
+    normalized_lines = [normalize_assertion_text(label, text) for label, text in assertions]
+    content = "\n".join(normalized_lines)
+
+    if algorithm == "sha256":
+        hash_obj = hashlib.sha256(content.encode("utf-8"))
+    elif algorithm == "sha1":
+        hash_obj = hashlib.sha1(content.encode("utf-8"))
+    elif algorithm == "md5":
+        hash_obj = hashlib.md5(content.encode("utf-8"))
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    return hash_obj.hexdigest()[:length]
+
+
 def extract_hash_from_footer(footer_text: str) -> Optional[str]:
     """Extract hash value from requirement footer line.
 
