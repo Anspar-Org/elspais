@@ -174,10 +174,10 @@ Existing tests assume one hash mode. Need tests for both modes and normalization
 
 ### Tasks
 
-- [ ] Add normalization unit tests to `tests/core/test_hasher.py`
-- [ ] Add config-aware tests to `tests/commands/test_hash_update.py`
-- [ ] Update `tests/core/test_mutation_hash_consistency.py` for both modes
-- [ ] Add `normalized-text` mode integration tests
+- [x] Add normalization unit tests to `tests/core/test_hasher.py` (20 tests)
+- [x] Add `normalized-text` mode integration tests in `tests/core/test_hash_mode.py` (17 tests)
+- [ ] ~Add config-aware tests to `tests/commands/test_hash_update.py`~ (covered by integration tests)
+- [ ] ~Update `tests/core/test_mutation_hash_consistency.py` for both modes~ (covered by integration tests)
 
 ---
 
