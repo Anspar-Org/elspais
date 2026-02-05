@@ -1,4 +1,4 @@
-# Validates: REQ-p00006-B
+# Validates REQ-p00006-B
 """Tests for Coverage Metrics (RollupMetrics, annotate_coverage)."""
 
 from elspais.graph.annotators import annotate_coverage

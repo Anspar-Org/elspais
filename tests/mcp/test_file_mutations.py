@@ -1,4 +1,4 @@
-# Validates: REQ-o00063-A, REQ-o00063-B, REQ-o00063-C, REQ-o00063-D, REQ-o00063-E, REQ-o00063-F
+# Validates REQ-o00063-A, REQ-o00063-B, REQ-o00063-C, REQ-o00063-D, REQ-o00063-E, REQ-o00063-F
 """Tests for MCP file mutation tools.
 
 Tests REQ-o00063: MCP File Mutation Tools

@@ -1,7 +1,7 @@
-# Validates: REQ-p00060-D, REQ-p00060-E
-# Validates: REQ-o00062-A, REQ-o00062-B, REQ-o00062-C, REQ-o00062-D
-# Validates: REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
-# Validates: REQ-d00065-A, REQ-d00065-B, REQ-d00065-C, REQ-d00065-D, REQ-d00065-E
+# Validates REQ-p00060-D, REQ-p00060-E
+# Validates REQ-o00062-A, REQ-o00062-B, REQ-o00062-C, REQ-o00062-D
+# Validates REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
+# Validates REQ-d00065-A, REQ-d00065-B, REQ-d00065-C, REQ-d00065-D, REQ-d00065-E
 """Tests for MCP mutation tools.
 
 Tests REQ-o00062: MCP Graph Mutation Tools

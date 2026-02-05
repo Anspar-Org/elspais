@@ -1,4 +1,4 @@
-# Validates: REQ-p00001-C, REQ-p00004-A
+# Validates REQ-p00001-C, REQ-p00004-A
 """Tests for hasher.py - Content hashing utilities."""
 
 import pytest

@@ -1,10 +1,10 @@
-# Validates: REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
-# Validates: REQ-d00066-A, REQ-d00066-B, REQ-d00066-C, REQ-d00066-D
-# Validates: REQ-d00066-E, REQ-d00066-F, REQ-d00066-G
-# Validates: REQ-d00067-A, REQ-d00067-B, REQ-d00067-C, REQ-d00067-D
-# Validates: REQ-d00067-E, REQ-d00067-F
-# Validates: REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
-# Validates: REQ-d00068-E, REQ-d00068-F
+# Validates REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
+# Validates REQ-d00066-A, REQ-d00066-B, REQ-d00066-C, REQ-d00066-D
+# Validates REQ-d00066-E, REQ-d00066-F, REQ-d00066-G
+# Validates REQ-d00067-A, REQ-d00067-B, REQ-d00067-C, REQ-d00067-D
+# Validates REQ-d00067-E, REQ-d00067-F
+# Validates REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
+# Validates REQ-d00068-E, REQ-d00068-F
 """Tests for MCP test coverage tools.
 
 Tests REQ-o00064: MCP Test Coverage Tools

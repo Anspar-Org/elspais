@@ -1,4 +1,4 @@
-# Validates: REQ-p00005-A
+# Validates REQ-p00005-A
 """
 Tests for the init command.
 """
