@@ -1,4 +1,5 @@
 # Implements: REQ-int-d00003 (CLI Extension)
+# Implements: REQ-p00001-B, REQ-p00003-A, REQ-p00003-B
 """
 elspais.commands.trace - Generate traceability matrix command.
 
@@ -353,6 +354,7 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
     yield "]"
 
 
+# Implements: REQ-p00006-A
 def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str = "") -> str:
     """Generate interactive HTML via HTMLGenerator."""
     try:

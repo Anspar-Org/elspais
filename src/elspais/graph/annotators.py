@@ -1,3 +1,4 @@
+# Implements: REQ-p00006-B
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.

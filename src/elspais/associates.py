@@ -1,3 +1,4 @@
+# Implements: REQ-p00005-A
 """
 elspais.associates - Associate repository configuration loading.
 

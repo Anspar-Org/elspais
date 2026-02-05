@@ -1,3 +1,4 @@
+# Validates: REQ-p00003-A, REQ-p00003-B, REQ-p00006-A
 """Tests for the trace command."""
 
 import argparse

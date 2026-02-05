@@ -89,6 +89,7 @@ def _create_registry_for_spec_dir(
     return registry
 
 
+# Implements: REQ-p00005-B
 def build_graph(
     config: dict[str, Any] | None = None,
     spec_dirs: list[Path] | None = None,
