@@ -74,6 +74,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "keywords": {
         "min_length": 3,
     },
+    "validation": {
+        "hash_mode": "full-text",
+    },
 }
 
 

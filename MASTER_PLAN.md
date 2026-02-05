@@ -84,7 +84,7 @@ Add `hash_mode` to the config defaults following the existing pattern. The `[val
 
 ### Tasks
 
-- [ ] Add `"validation": {"hash_mode": "full-text"}` to `DEFAULT_CONFIG` in `src/elspais/config/__init__.py`
+- [x] Add `"validation": {"hash_mode": "full-text"}` to `DEFAULT_CONFIG` in `src/elspais/config/__init__.py`
 
 ---
 
