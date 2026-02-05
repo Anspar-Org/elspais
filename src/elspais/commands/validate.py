@@ -82,6 +82,7 @@ def run(args: argparse.Namespace) -> int:
     fixable = []  # Issues that can be auto-fixed
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        # Implements: REQ-p00002-B
         # Check for orphan requirements (no parents except roots)
         if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
             warnings.append(
@@ -92,6 +93,7 @@ def run(args: argparse.Namespace) -> int:
                 }
             )
 
+        # Implements: REQ-p00002-C
         # Check for hash presence and correctness
         hash_mode = getattr(graph, "hash_mode", "full-text")
         computed_hash = _compute_hash_for_node(node, hash_mode)

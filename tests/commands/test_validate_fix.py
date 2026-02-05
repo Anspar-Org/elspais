@@ -166,8 +166,8 @@ class TestValidateFixDryRun:
 class TestValidateFix:
     """Tests for validate --fix mode."""
 
-    def test_fix_updates_stale_hashes(self, git_repo_with_issues, capsys):
-        """--fix updates stale hashes in spec files."""
+    def test_REQ_p00002_C_fix_updates_stale_hashes(self, git_repo_with_issues, capsys):
+        """Validates REQ-p00002-C: --fix updates stale hashes in spec files."""
         import argparse
 
         from elspais.commands.validate import run
@@ -191,8 +191,8 @@ class TestValidateFix:
         content = spec_file.read_text()
         assert "deadbeef" not in content  # Stale hash should be replaced
 
-    def test_after_fix_validation_passes(self, git_repo_with_issues, capsys):
-        """After --fix, regular validation should pass (for fixable issues)."""
+    def test_REQ_p00002_C_after_fix_validation_passes(self, git_repo_with_issues, capsys):
+        """Validates REQ-p00002-C: After --fix, regular validation should pass."""
         import argparse
 
         from elspais.commands.validate import run
