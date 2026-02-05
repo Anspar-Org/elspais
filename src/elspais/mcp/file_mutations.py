@@ -11,20 +11,9 @@ import re
 from pathlib import Path
 
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
+from elspais.utilities.patterns import find_req_header as _find_req_header
 
 # --- Shared helpers for locating requirement blocks in spec files ---
-
-
-def _find_req_header(content: str, req_id: str) -> re.Match | None:
-    """Find a requirement header line by ID.
-
-    Matches: # REQ-xxx: Title  (any heading level)
-    """
-    pattern = re.compile(
-        rf"^(#+ {re.escape(req_id)}:\s*(.+?)\s*)$",
-        re.MULTILINE,
-    )
-    return pattern.search(content)
 
 
 def _find_end_marker(content: str, start_pos: int) -> re.Match | None:

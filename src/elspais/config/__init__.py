@@ -320,6 +320,26 @@ def _ensure_nested(data: dict[str, Any], keys: list[str]) -> None:
         current = current[key]
 
 
+_INT_RE = re.compile(r"^-?\d+$")
+_FLOAT_RE = re.compile(r"^-?\d+\.\d+$")
+
+
+def _try_parse_numeric(value: str) -> int | float | None:
+    """Try to parse a string as an integer or float.
+
+    Args:
+        value: String to parse.
+
+    Returns:
+        Parsed int or float, or None if not numeric.
+    """
+    if _INT_RE.match(value):
+        return int(value)
+    if _FLOAT_RE.match(value):
+        return float(value)
+    return None
+
+
 def _parse_value(value: str) -> Any:
     """Parse a TOML value string."""
     # String (quoted)
@@ -334,13 +354,10 @@ def _parse_value(value: str) -> Any:
     if value.lower() == "false":
         return False
 
-    # Integer
-    if re.match(r"^-?\d+$", value):
-        return int(value)
-
-    # Float
-    if re.match(r"^-?\d+\.\d+$", value):
-        return float(value)
+    # Numeric
+    numeric = _try_parse_numeric(value)
+    if numeric is not None:
+        return numeric
 
     # Array (simple single-line)
     if value.startswith("[") and value.endswith("]"):
@@ -807,4 +824,5 @@ __all__ = [
     "validate_project_config",
     "DEFAULT_CONFIG",
     "parse_toml",
+    "_try_parse_numeric",
 ]

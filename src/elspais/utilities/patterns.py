@@ -13,6 +13,31 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+# --- Shared regex patterns ---
+
+# Matches 3+ consecutive newlines for cleanup (collapse to double-newline)
+BLANK_LINE_CLEANUP_RE = re.compile(r"\n{3,}")
+
+
+def find_req_header(content: str, req_id: str) -> re.Match | None:
+    """Find a requirement header line by ID.
+
+    Matches any heading level: # REQ-xxx: Title, ## REQ-xxx: Title, etc.
+    Group 1 = full header line, Group 2 = title text.
+
+    Args:
+        content: File content to search.
+        req_id: Requirement ID to find.
+
+    Returns:
+        Match object or None if not found.
+    """
+    pattern = re.compile(
+        rf"^(#+ {re.escape(req_id)}:\s*(.+?)\s*)$",
+        re.MULTILINE,
+    )
+    return pattern.search(content)
+
 
 @dataclass
 class ParsedRequirement:

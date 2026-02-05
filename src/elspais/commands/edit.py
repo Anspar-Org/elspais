@@ -176,12 +176,11 @@ def find_requirement_in_files(
     Returns:
         Dict with file_path, req_id, line_number, or None if not found
     """
-    # Pattern to match requirement header (any markdown header level ##, ###, etc.)
-    pattern = re.compile(rf"^#+\s*{re.escape(req_id)}:", re.MULTILINE)
+    from elspais.utilities.patterns import find_req_header
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
-        match = pattern.search(content)
+        match = find_req_header(content, req_id)
         if match:
             # Count line number
             line_number = content[: match.start()].count("\n") + 1
@@ -212,11 +211,13 @@ def modify_implements(
     Returns:
         Dict with success, old_implements, new_implements, error
     """
+    from elspais.graph.parsers.requirement import RequirementParser
+    from elspais.utilities.patterns import find_req_header
+
     content = file_path.read_text()
 
     # Find the requirement header (any markdown header level)
-    req_pattern = re.compile(rf"^(#+\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
-    req_match = req_pattern.search(content)
+    req_match = find_req_header(content, req_id)
 
     if not req_match:
         return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
@@ -225,14 +226,13 @@ def modify_implements(
     start_pos = req_match.end()
     search_region = content[start_pos : start_pos + 500]
 
-    impl_pattern = re.compile(r"(\*\*Implements\*\*:\s*)([^|\n]+)")
-    impl_match = impl_pattern.search(search_region)
+    impl_match = RequirementParser.IMPLEMENTS_PATTERN.search(search_region)
 
     if not impl_match:
         return {"success": False, "error": f"Could not find **Implements** for {req_id}"}
 
     # Extract old value
-    old_value = impl_match.group(2).strip()
+    old_value = impl_match.group("implements").strip()
     old_implements = [v.strip() for v in old_value.split(",")] if old_value != "-" else []
 
     # Build new value
@@ -241,14 +241,11 @@ def modify_implements(
     else:
         new_value = "-"
 
-    # Calculate absolute positions
-    abs_start = start_pos + impl_match.start()
-    abs_end = start_pos + impl_match.end()
+    # Calculate absolute positions using the named group bounds
+    abs_start = start_pos + impl_match.start("implements")
+    abs_end = start_pos + impl_match.end("implements")
 
-    old_line = impl_match.group(0)
-    new_line = impl_match.group(1) + new_value
-
-    if old_line == new_line:
+    if old_value == new_value:
         return {
             "success": True,
             "old_implements": old_implements,
@@ -257,8 +254,8 @@ def modify_implements(
             "dry_run": dry_run,
         }
 
-    # Apply change
-    new_content = content[:abs_start] + new_line + content[abs_end:]
+    # Apply change — replace just the implements value
+    new_content = content[:abs_start] + new_value + content[abs_end:]
 
     if not dry_run:
         file_path.write_text(new_content)
@@ -289,11 +286,13 @@ def modify_status(
     Returns:
         Dict with success, old_status, new_status, error
     """
+    from elspais.graph.parsers.requirement import RequirementParser
+    from elspais.utilities.patterns import find_req_header
+
     content = file_path.read_text()
 
     # Find the requirement header (any markdown header level)
-    req_pattern = re.compile(rf"^(#+\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
-    req_match = req_pattern.search(content)
+    req_match = find_req_header(content, req_id)
 
     if not req_match:
         return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
@@ -302,13 +301,12 @@ def modify_status(
     start_pos = req_match.end()
     search_region = content[start_pos : start_pos + 500]
 
-    status_pattern = re.compile(r"(\*\*Status\*\*:\s*)(\w+)")
-    status_match = status_pattern.search(search_region)
+    status_match = RequirementParser.ALT_STATUS_PATTERN.search(search_region)
 
     if not status_match:
         return {"success": False, "error": f"Could not find **Status** for {req_id}"}
 
-    old_status = status_match.group(2)
+    old_status = status_match.group("status")
 
     if old_status == new_status:
         return {
@@ -319,14 +317,12 @@ def modify_status(
             "dry_run": dry_run,
         }
 
-    # Calculate absolute positions
-    abs_start = start_pos + status_match.start()
-    abs_end = start_pos + status_match.end()
+    # Calculate absolute positions using the named group bounds
+    abs_start = start_pos + status_match.start("status")
+    abs_end = start_pos + status_match.end("status")
 
-    new_line = status_match.group(1) + new_status
-
-    # Apply change
-    new_content = content[:abs_start] + new_line + content[abs_end:]
+    # Apply change — replace just the status value
+    new_content = content[:abs_start] + new_status + content[abs_end:]
 
     if not dry_run:
         file_path.write_text(new_content)
@@ -380,7 +376,9 @@ def move_requirement(
     # Remove from source
     new_source_content = source_content[: req_match.start()] + source_content[req_match.end() :]
     # Clean up extra blank lines
-    new_source_content = re.sub(r"\n{3,}", "\n\n", new_source_content)
+    from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
+
+    new_source_content = BLANK_LINE_CLEANUP_RE.sub("\n\n", new_source_content)
 
     # Add to destination
     dest_content = dest_file.read_text() if dest_file.exists() else ""

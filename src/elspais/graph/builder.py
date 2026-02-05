@@ -14,6 +14,7 @@ from typing import Iterator
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind
 
 
@@ -802,8 +803,8 @@ class TraceGraph:
     # Assertion Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
-    # Regex pattern for assertion lines in body_text (e.g., "A. The system SHALL...")
-    _ASSERTION_LINE_RE = re.compile(r"^([A-Z0-9]+)\.\s+(.*)$", re.MULTILINE)
+    # Assertion line pattern shared with RequirementParser
+    _ASSERTION_LINE_RE = RequirementParser.ASSERTION_LINE_PATTERN
 
     def _update_assertion_in_body_text(self, body_text: str, label: str, new_text: str) -> str:
         """Update an assertion line in body_text.

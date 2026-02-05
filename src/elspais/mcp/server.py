@@ -1309,7 +1309,9 @@ def _move_requirement(
     # Remove from source
     new_source_content = source_content[: match.start()] + source_content[match.end() :]
     # Clean up multiple consecutive blank lines
-    new_source_content = re.sub(r"\n{3,}", "\n\n", new_source_content)
+    from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
+
+    new_source_content = BLANK_LINE_CLEANUP_RE.sub("\n\n", new_source_content)
 
     # Append to target
     target_content = target_path.read_text(encoding="utf-8")

@@ -5,7 +5,6 @@ Provides functions for loading associate configurations from YAML files
 and resolving associate spec directories.
 """
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -144,6 +143,8 @@ def parse_yaml(content: str) -> Dict[str, Any]:
 
 def _parse_yaml_value(value: str) -> Any:
     """Parse a YAML value string."""
+    from elspais.config import _try_parse_numeric
+
     value = value.strip()
 
     # Remove quotes if present
@@ -158,13 +159,10 @@ def _parse_yaml_value(value: str) -> Any:
     if value.lower() == "false":
         return False
 
-    # Integer
-    if re.match(r"^-?\d+$", value):
-        return int(value)
-
-    # Float
-    if re.match(r"^-?\d+\.\d+$", value):
-        return float(value)
+    # Numeric
+    numeric = _try_parse_numeric(value)
+    if numeric is not None:
+        return numeric
 
     return value
 
