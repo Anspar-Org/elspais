@@ -289,8 +289,8 @@ class TestGetRequirement:
 
         result = _get_requirement(sample_graph, "REQ-p00001")
 
-        assert "assertions" in result
-        assertions = result["assertions"]
+        assert "children" in result
+        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
         assert len(assertions) == 2
 
         labels = {a["label"] for a in assertions}
@@ -305,8 +305,9 @@ class TestGetRequirement:
         result = _get_requirement(sample_graph, "REQ-p00001")
 
         assert "children" in result
-        # PRD should have OPS as child
-        assert any(c["id"] == "REQ-o00001" for c in result["children"])
+        # PRD should have OPS as child (kind=="requirement")
+        req_children = [c for c in result["children"] if c["kind"] == "requirement"]
+        assert any(c["id"] == "REQ-o00001" for c in req_children)
 
     def test_REQ_d00062_F_returns_error_for_missing(self, sample_graph):
         """REQ-d00062-F: Returns error for non-existent requirements."""
@@ -607,3 +608,196 @@ class TestGetProjectSummary:
         assert coverage["full_coverage"] == 1  # PRD at 100%
         assert coverage["partial_coverage"] == 1  # OPS at 50%
         assert coverage["no_coverage"] == 1  # DEV at 0%
+
+
+class TestRoundTripFidelity:
+    """Tests for round-trip fidelity: flat children, line numbers, edge_kind."""
+
+    @pytest.fixture
+    def rich_graph(self):
+        """Graph with source locations on assertions and sections."""
+        from elspais.graph.GraphNode import SourceLocation
+        from elspais.graph.relations import EdgeKind
+
+        graph = TraceGraph(repo_root=Path("/test/repo"))
+
+        # PRD requirement
+        prd_node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Platform Security",
+            source=SourceLocation(path="spec/prd.md", line=10, end_line=30),
+        )
+        prd_node._content = {
+            "level": "PRD",
+            "status": "Active",
+            "hash": "abc12345",
+            "body_text": "Some body text",
+        }
+
+        # Assertion A with source location
+        assertion_a = GraphNode(
+            id="REQ-p00001-A",
+            kind=NodeKind.ASSERTION,
+            label="SHALL encrypt all data at rest",
+            source=SourceLocation(path="spec/prd.md", line=20),
+        )
+        assertion_a._content = {"label": "A"}
+
+        # Section (REMAINDER) with source location - comes BEFORE assertions
+        section_node = GraphNode(
+            id="REQ-p00001:section:0",
+            kind=NodeKind.REMAINDER,
+            label="Rationale",
+            source=SourceLocation(path="spec/prd.md", line=14),
+        )
+        section_node._content = {
+            "heading": "Rationale",
+            "text": "This is why we need security.",
+            "order": 0,
+        }
+
+        # Assertion B with source location
+        assertion_b = GraphNode(
+            id="REQ-p00001-B",
+            kind=NodeKind.ASSERTION,
+            label="SHALL use TLS 1.3",
+            source=SourceLocation(path="spec/prd.md", line=21),
+        )
+        assertion_b._content = {"label": "B"}
+
+        # Add children in document order (section at line 14, then assertions at 20, 21)
+        prd_node.add_child(section_node)
+        prd_node.add_child(assertion_a)
+        prd_node.add_child(assertion_b)
+
+        # OPS requirement implementing PRD
+        ops_node = GraphNode(
+            id="REQ-o00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Database Encryption",
+            source=SourceLocation(path="spec/ops.md", line=1),
+        )
+        ops_node._content = {
+            "level": "OPS",
+            "status": "Active",
+            "hash": "def67890",
+        }
+
+        # Link: OPS implements PRD
+        prd_node.link(ops_node, EdgeKind.IMPLEMENTS)
+
+        # DEV requirement refining OPS
+        dev_node = GraphNode(
+            id="REQ-d00001",
+            kind=NodeKind.REQUIREMENT,
+            label="AES-256 Implementation",
+            source=SourceLocation(path="spec/dev.md", line=1),
+        )
+        dev_node._content = {
+            "level": "DEV",
+            "status": "Draft",
+            "hash": "ghi11111",
+        }
+
+        # Link: DEV refines OPS
+        ops_node.link(dev_node, EdgeKind.REFINES)
+
+        graph._roots = [prd_node]
+        graph._index = {
+            "REQ-p00001": prd_node,
+            "REQ-p00001-A": assertion_a,
+            "REQ-p00001-B": assertion_b,
+            "REQ-p00001:section:0": section_node,
+            "REQ-o00001": ops_node,
+            "REQ-d00001": dev_node,
+        }
+
+        return graph
+
+    def test_children_flat_list_with_kind(self, rich_graph):
+        """Children should be a single flat list with 'kind' field."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        assert "children" in result
+        assert "assertions" not in result
+        assert "remainder" not in result
+
+        kinds = [c["kind"] for c in result["children"]]
+        assert "assertion" in kinds
+        assert "remainder" in kinds
+
+    def test_children_document_order(self, rich_graph):
+        """Children should be in document order (by line number)."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        children = result["children"]
+        # Filter to assertions and sections (skip requirement children)
+        doc_children = [c for c in children if c["kind"] in ("assertion", "remainder")]
+
+        # Section at line 14 should come before assertions at 20, 21
+        lines = [c["line"] for c in doc_children]
+        assert lines == sorted(lines), f"Children not in document order: {lines}"
+        assert doc_children[0]["kind"] == "remainder"
+        assert doc_children[0]["line"] == 14
+
+    def test_assertion_children_have_line(self, rich_graph):
+        """Assertion children should include line number."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
+        for a in assertions:
+            assert "line" in a
+            assert a["line"] is not None
+
+        # Check specific line numbers
+        a_node = next(a for a in assertions if a["label"] == "A")
+        assert a_node["line"] == 20
+        b_node = next(a for a in assertions if a["label"] == "B")
+        assert b_node["line"] == 21
+
+    def test_remainder_children_have_line(self, rich_graph):
+        """Remainder (section) children should include line number."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        sections = [c for c in result["children"] if c["kind"] == "remainder"]
+        assert len(sections) >= 1
+        for s in sections:
+            assert "line" in s
+            assert s["line"] is not None
+
+    def test_parents_include_edge_kind(self, rich_graph):
+        """Parent entries should include edge_kind (IMPLEMENTS or REFINES)."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        # OPS implements PRD - check from OPS perspective
+        result = _get_requirement(rich_graph, "REQ-o00001")
+        assert len(result["parents"]) == 1
+        parent = result["parents"][0]
+        assert parent["id"] == "REQ-p00001"
+        assert parent["edge_kind"] == "implements"
+
+    def test_parents_edge_kind_refines(self, rich_graph):
+        """REFINES edge kind should be exposed on parent."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        # DEV refines OPS
+        result = _get_requirement(rich_graph, "REQ-d00001")
+        assert len(result["parents"]) == 1
+        parent = result["parents"][0]
+        assert parent["id"] == "REQ-o00001"
+        assert parent["edge_kind"] == "refines"

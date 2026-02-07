@@ -81,21 +81,61 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
 
     REQ-d00064-B: Returns all fields including assertions and edges.
     REQ-d00064-C: Reads from node.get_field() and node.get_label().
+
+    Children are returned as a single flat list in document order,
+    each tagged with "kind" so the receiver can distinguish assertion
+    vs remainder vs other children without needing to re-sort.
+
+    Parents include "edge_kind" (IMPLEMENTS/REFINES) so the metadata
+    line can be reconstructed.
     """
-    # Get assertions from children
-    assertions = []
+    # Build flat children list in document order (iter_children preserves insertion order)
     children = []
     for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
-            assertions.append(_serialize_assertion(child))
+            children.append(
+                {
+                    "kind": "assertion",
+                    "id": child.id,
+                    "label": child.get_field("label"),
+                    "text": child.get_label(),
+                    "line": child.source.line if child.source else None,
+                }
+            )
+        elif child.kind == NodeKind.REMAINDER:
+            children.append(
+                {
+                    "kind": "remainder",
+                    "id": child.id,
+                    "heading": child.get_field("heading"),
+                    "text": child.get_field("text"),
+                    "line": child.source.line if child.source else None,
+                }
+            )
         else:
-            children.append(_serialize_requirement_summary(child))
+            children.append(
+                {
+                    "kind": child.kind.value,
+                    "id": child.id,
+                    "title": child.get_label(),
+                    "line": child.source.line if child.source else None,
+                }
+            )
 
-    # Get parents
+    # Build edge_kind map from incoming edges (parent -> this node direction)
+    # incoming edges have source=parent, target=this node
+    edge_map = {e.source.id: e.kind.value for e in node.iter_incoming_edges()}
+
+    # Get parents with edge_kind annotation
     parents = []
     for parent in node.iter_parents():
         if parent.kind == NodeKind.REQUIREMENT:
-            parents.append(_serialize_requirement_summary(parent))
+            parents.append(
+                {
+                    **_serialize_requirement_summary(parent),
+                    "edge_kind": edge_map.get(parent.id, "unknown"),
+                }
+            )
 
     return {
         "id": node.id,
@@ -103,9 +143,13 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
         "level": node.get_field("level"),
         "status": node.get_field("status"),
         "hash": node.get_field("hash"),
-        "assertions": assertions,
+        "body_text": node.get_field("body_text"),
         "children": children,
         "parents": parents,
+        "source": {
+            "path": node.source.path if node.source else None,
+            "line": node.source.line if node.source else None,
+        },
     }
 
 
