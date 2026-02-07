@@ -3,68 +3,41 @@
 # Validates REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
 """Tests for HTML Generator."""
 
-from pathlib import Path
-
 import pytest
 
-from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
-from elspais.graph.relations import EdgeKind
 from elspais.html.generator import HTMLGenerator
+from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
 
 
 @pytest.fixture
 def sample_graph():
     """Create a sample graph for testing."""
-    # Create a simple graph with PRD -> OPS -> DEV hierarchy
-    prd = GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Requirement",
-        source=SourceLocation(path="spec/prd.md", line=10, end_line=20),
+    return build_graph(
+        make_requirement(
+            "REQ-p00001",
+            level="PRD",
+            title="Product Requirement",
+            assertions=[{"label": "A", "text": "First assertion"}],
+            hash_value="abc12345",
+            source_path="spec/prd.md",
+        ),
+        make_requirement(
+            "REQ-o00001",
+            level="OPS",
+            title="Operations Requirement",
+            implements=["REQ-p00001"],
+            hash_value="def67890",
+            source_path="spec/ops.md",
+        ),
+        make_requirement(
+            "REQ-d00001",
+            level="DEV",
+            title="Dev Requirement",
+            implements=["REQ-o00001"],
+            hash_value="ghi13579",
+            source_path="spec/dev.md",
+        ),
     )
-    prd._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
-
-    ops = GraphNode(
-        id="REQ-o00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Operations Requirement",
-        source=SourceLocation(path="spec/ops.md", line=5, end_line=15),
-    )
-    ops._content = {"level": "OPS", "status": "Active", "hash": "def67890"}
-
-    dev = GraphNode(
-        id="REQ-d00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Dev Requirement",
-        source=SourceLocation(path="spec/dev.md", line=1, end_line=10),
-    )
-    dev._content = {"level": "DEV", "status": "Active", "hash": "ghi13579"}
-
-    # Create assertions
-    assertion_a = GraphNode(
-        id="REQ-p00001-A",
-        kind=NodeKind.ASSERTION,
-        label="First assertion",
-    )
-    assertion_a._content = {"label": "A"}
-    prd.add_child(assertion_a)
-
-    # Link hierarchy
-    prd.link(ops, EdgeKind.IMPLEMENTS)
-    ops.link(dev, EdgeKind.IMPLEMENTS)
-
-    # Build graph
-    graph = TraceGraph(repo_root=Path("/test/repo"))
-    graph._roots = [prd]
-    graph._index = {
-        "REQ-p00001": prd,
-        "REQ-o00001": ops,
-        "REQ-d00001": dev,
-        "REQ-p00001-A": assertion_a,
-    }
-
-    return graph
 
 
 class TestHTMLGeneratorBasic:
@@ -359,3 +332,47 @@ class TestHTMLGeneratorGitIntegration:
 
         assert "Uncommitted" in result
         assert "Changed vs Main" in result
+
+
+class TestHTMLGeneratorJourneyBadges:
+    """Tests for journey REQ pill badges in trace view.
+
+    Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
+    linking including addresses.
+    """
+
+    def test_REQ_o00050_C_journey_with_addresses_shows_badges(self):
+        """Journey with ADDRESSES edges renders ref badges in HTML."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD", title="Product Req"),
+            make_journey(
+                "JNY-Dev-01",
+                title="Dev Workflow",
+                actor="Developer",
+                goal="Implement feature",
+                addresses=["REQ-p00001"],
+            ),
+        )
+        generator = HTMLGenerator(graph)
+
+        result = generator.generate()
+
+        assert "journey-ref-badge" in result
+        assert "REQ-p00001" in result
+        assert "switchToReqTab" in result
+
+    def test_REQ_o00050_C_journey_without_addresses_no_refs_section(self):
+        """Journey without ADDRESSES edges omits refs section in HTML."""
+        graph = build_graph(
+            make_journey(
+                "JNY-Dev-02",
+                title="Simple Journey",
+                actor="Developer",
+                goal="Do something",
+            ),
+        )
+        generator = HTMLGenerator(graph)
+
+        result = generator.generate()
+
+        assert '<span class="journey-ref-badge"' not in result
