@@ -1000,7 +1000,257 @@ body {
         width: 100%;
         justify-content: space-between;
     }
+
+    .split-layout {
+        flex-direction: column !important;
+    }
+
+    .file-viewer-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-left: none !important;
+        border-top: 1px solid #e9ecef;
+    }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Split Layout & File Viewer Panel
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.split-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+    overflow: hidden;
+}
+
+.split-layout > .main-content {
+    flex: 1;
+    min-width: 350px;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.split-layout > .main-content.full-width {
+    /* When file viewer is closed */
+}
+
+.split-divider {
+    width: 5px;
+    background: #e9ecef;
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s;
+    display: none; /* hidden until panel opens */
+}
+
+.split-divider:hover,
+.split-divider.dragging {
+    background: #0d6efd;
+}
+
+.split-divider::after {
+    content: '···';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    color: #6c757d;
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.file-viewer-panel {
+    width: 50%;
+    max-width: 60%;
+    min-width: 300px;
+    display: none; /* hidden until a file is clicked */
+    flex-direction: column;
+    background: white;
+    border-left: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+.file-viewer-panel.open {
+    display: flex;
+}
+
+.file-viewer-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.file-viewer-path {
+    flex: 1;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.8rem;
+    color: #495057;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-viewer-lang {
+    font-size: 0.7rem;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.file-viewer-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    color: #495057;
+    font-size: 0.8rem;
+    transition: background 0.15s;
+}
+
+.file-viewer-btn:hover {
+    background: #e9ecef;
+}
+
+.file-viewer-close {
+    font-size: 1.2rem;
+    line-height: 1;
+    font-weight: bold;
+    color: #6c757d;
+}
+
+.file-viewer-close:hover {
+    color: #dc3545;
+}
+
+.file-viewer-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0;
+}
+
+/* Line-numbered source display */
+.source-lines {
+    display: table;
+    width: 100%;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.source-line {
+    display: table-row;
+}
+
+.source-line:hover {
+    background: #f0f4ff;
+}
+
+.source-line.highlighted {
+    background: #fff3cd;
+}
+
+.source-line.highlighted:hover {
+    background: #ffe69c;
+}
+
+.line-num {
+    display: table-cell;
+    width: 1px; /* shrink to content */
+    min-width: 40px;
+    padding: 0 12px 0 8px;
+    text-align: right;
+    color: #adb5bd;
+    user-select: none;
+    white-space: nowrap;
+    vertical-align: top;
+    border-right: 1px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+.line-content {
+    display: table-cell;
+    padding: 0 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    tab-size: 4;
+}
+
+/* Markdown rendered view */
+.file-viewer-rendered {
+    padding: 16px 24px;
+    line-height: 1.6;
+}
+
+.file-viewer-rendered h1,
+.file-viewer-rendered h2,
+.file-viewer-rendered h3 {
+    margin: 16px 0 8px;
+    color: #212529;
+}
+
+.file-viewer-rendered p {
+    margin: 8px 0;
+}
+
+.file-viewer-rendered code {
+    background: #f1f3f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.file-viewer-rendered pre {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.file-viewer-rendered pre code {
+    background: none;
+    padding: 0;
+}
+
+/* View mode toggle for markdown files */
+.file-viewer-mode-toggle {
+    display: flex;
+    gap: 2px;
+    background: #e9ecef;
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.file-viewer-mode-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    color: #495057;
+    transition: all 0.15s;
+}
+
+.file-viewer-mode-btn.active {
+    background: white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Pygments syntax highlighting theme */
+{% if pygments_css %}
+.highlight {
+{{ pygments_css }}
+}
+{% endif %}
 
     </style>
 </head>
@@ -1102,10 +1352,11 @@ body {
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     MAIN CONTENT
+     SPLIT LAYOUT: MAIN CONTENT + FILE VIEWER
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<main class="main-content">
+<div class="split-layout" id="split-layout">
+<main class="main-content" id="main-content">
     <!-- Requirements Tab Content -->
     <div class="tab-content active" id="content-requirements">
         <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
@@ -1346,6 +1597,30 @@ Steps...<br><br>
 </main>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
+     RESIZABLE DIVIDER + FILE VIEWER PANEL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="split-divider" id="split-divider"></div>
+
+<aside class="file-viewer-panel" id="file-viewer-panel">
+    <div class="file-viewer-header">
+        <span class="file-viewer-path" id="file-viewer-path">No file selected</span>
+        <span class="file-viewer-lang" id="file-viewer-lang"></span>
+        <div class="file-viewer-mode-toggle" id="file-viewer-mode-toggle" style="display:none;">
+            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
+            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
+        </div>
+        <a class="file-viewer-btn" id="file-viewer-vscode" href="#" title="Open in VS Code">VS Code</a>
+        <button class="file-viewer-btn file-viewer-close" onclick="closeFileViewer()" title="Close panel">&times;</button>
+    </div>
+    <div class="file-viewer-body" id="file-viewer-body">
+        <!-- File content rendered here by JavaScript -->
+    </div>
+</aside>
+
+</div><!-- end split-layout -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
      LEGEND MODAL
      ═══════════════════════════════════════════════════════════════════════════ -->
 
@@ -1434,6 +1709,10 @@ Steps...<br><br>
 {{ tree_data | tojson }}
 </script>
 
+<script type="application/json" id="source-files">
+{{ source_files | tojson }}
+</script>
+
 <!-- ═══════════════════════════════════════════════════════════════════════════
      JAVASCRIPT
      ═══════════════════════════════════════════════════════════════════════════ -->
@@ -1460,7 +1739,12 @@ const state = {
     collapsedNodes: new Set(),
     totalCount: {{ stats.total_count }},
     activeTab: 'requirements',
-    treeData: JSON.parse(document.getElementById('tree-data').textContent)
+    treeData: JSON.parse(document.getElementById('tree-data').textContent),
+    sourceFiles: JSON.parse(document.getElementById('source-files').textContent),
+    fileViewerOpen: false,
+    currentFile: null,
+    fileViewMode: 'source', // 'source' or 'rendered'
+    splitRatio: 50 // percentage width for file viewer
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1490,7 +1774,9 @@ function saveStateToCookie() {
         // Journey state
         journeyGroupBy: journeyGroupBy ? journeyGroupBy.value : 'none',
         journeySearch: journeySearch ? journeySearch.value : '',
-        collapsedJourneyGroups: Array.from(collapsedJourneyGroups)
+        collapsedJourneyGroups: Array.from(collapsedJourneyGroups),
+        // File viewer state
+        splitRatio: state.splitRatio
     };
     const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
     document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateToSave))}; expires=${expires}; path=/; SameSite=Lax`;
@@ -1587,6 +1873,11 @@ function restoreState() {
             // Apply grouping after DOM is ready
             setTimeout(() => regroupJourneys(), 0);
         }
+    }
+
+    // Restore file viewer split ratio
+    if (saved.splitRatio) {
+        state.splitRatio = saved.splitRatio;
     }
 }
 
@@ -2098,6 +2389,220 @@ function collapseAllJourneyGroups() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// File Viewer Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showFile(filePath, lineNumber) {
+    const fileData = state.sourceFiles[filePath];
+    if (!fileData) {
+        // No embedded content for this file
+        const panel = document.getElementById('file-viewer-panel');
+        const body = document.getElementById('file-viewer-body');
+        document.getElementById('file-viewer-path').textContent = filePath.split('/').pop();
+        document.getElementById('file-viewer-path').title = filePath;
+        document.getElementById('file-viewer-lang').textContent = '';
+        document.getElementById('file-viewer-mode-toggle').style.display = 'none';
+        body.innerHTML = '<div style="padding:24px;color:#6c757d;text-align:center;">' +
+            'File content not available.<br>Regenerate with <code>--embed-content</code> to enable inline viewing.</div>';
+        openFileViewer();
+        return;
+    }
+
+    state.currentFile = filePath;
+    const fileName = filePath.split('/').pop();
+    const isMarkdown = fileName.endsWith('.md');
+
+    // Update header
+    document.getElementById('file-viewer-path').textContent = fileName;
+    document.getElementById('file-viewer-path').title = filePath;
+    document.getElementById('file-viewer-lang').textContent = fileData.language || '';
+    document.getElementById('file-viewer-vscode').href =
+        'vscode://file/' + filePath + ':' + (lineNumber || 1) + ':1';
+
+    // Show mode toggle for markdown files
+    const modeToggle = document.getElementById('file-viewer-mode-toggle');
+    if (isMarkdown) {
+        modeToggle.style.display = 'flex';
+        state.fileViewMode = 'source';
+        modeToggle.querySelectorAll('.file-viewer-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === 'source');
+        });
+    } else {
+        modeToggle.style.display = 'none';
+        state.fileViewMode = 'source';
+    }
+
+    // Render file content
+    renderFileContent(fileData, lineNumber);
+    openFileViewer();
+}
+
+function renderFileContent(fileData, lineNumber) {
+    const body = document.getElementById('file-viewer-body');
+
+    if (state.fileViewMode === 'rendered' && state.currentFile && state.currentFile.endsWith('.md')) {
+        // Rendered markdown view
+        body.innerHTML = '<div class="file-viewer-rendered">' +
+            renderMarkdown(fileData.raw) + '</div>';
+        return;
+    }
+
+    // Source view with line numbers and syntax highlighting
+    const lines = fileData.lines;
+    let html = '<div class="source-lines">';
+
+    for (let i = 0; i < lines.length; i++) {
+        const num = i + 1;
+        const highlighted = num === lineNumber ? ' highlighted' : '';
+        html += '<div class="source-line' + highlighted + '" data-line="' + num + '">' +
+            '<span class="line-num">' + num + '</span>' +
+            '<code class="line-content highlight">' + (lines[i] || '') + '</code>' +
+            '</div>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+
+    // Scroll to highlighted line
+    if (lineNumber) {
+        setTimeout(function() {
+            const target = body.querySelector('.source-line[data-line="' + lineNumber + '"]');
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 50);
+    }
+}
+
+function openFileViewer() {
+    const panel = document.getElementById('file-viewer-panel');
+    const divider = document.getElementById('split-divider');
+    panel.classList.add('open');
+    divider.style.display = 'block';
+    state.fileViewerOpen = true;
+    // Apply saved split ratio
+    panel.style.width = state.splitRatio + '%';
+    saveStateToCookie();
+}
+
+function closeFileViewer() {
+    const panel = document.getElementById('file-viewer-panel');
+    const divider = document.getElementById('split-divider');
+    panel.classList.remove('open');
+    divider.style.display = 'none';
+    state.fileViewerOpen = false;
+    state.currentFile = null;
+    saveStateToCookie();
+}
+
+function setFileViewMode(mode) {
+    state.fileViewMode = mode;
+    document.querySelectorAll('#file-viewer-mode-toggle .file-viewer-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+
+    // Re-render with current file
+    if (state.currentFile) {
+        const fileData = state.sourceFiles[state.currentFile];
+        if (fileData) {
+            renderFileContent(fileData, null);
+        }
+    }
+}
+
+function renderMarkdown(text) {
+    // Simple markdown to HTML renderer for inline display
+    let html = text
+        // Escape HTML first
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // Headers
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bold and italic
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Horizontal rules
+        .replace(/^---+$/gm, '<hr>')
+        // List items
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        // Paragraphs (double newline)
+        .replace(/\n\n/g, '</p><p>')
+        // Single newlines to <br>
+        .replace(/\n/g, '<br>');
+
+    return '<p>' + html + '</p>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intercept File Links
+// ─────────────────────────────────────────────────────────────────────────────
+
+function interceptFileLinks() {
+    // Only intercept if we have source files embedded
+    if (!state.sourceFiles || Object.keys(state.sourceFiles).length === 0) return;
+
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('a[href^="vscode://file/"]');
+        if (!link) return;
+
+        e.preventDefault();
+        const href = link.getAttribute('href');
+        // Parse vscode://file/PATH:LINE:COL
+        const match = href.match(/^vscode:\/\/file\/(.+?)(?::(\d+))?(?::(\d+))?$/);
+        if (match) {
+            const filePath = match[1];
+            const lineNum = match[2] ? parseInt(match[2], 10) : 1;
+            showFile(filePath, lineNum);
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resizable Divider
+// ─────────────────────────────────────────────────────────────────────────────
+
+(function() {
+    const divider = document.getElementById('split-divider');
+    const layout = document.getElementById('split-layout');
+    const panel = document.getElementById('file-viewer-panel');
+    let isDragging = false;
+
+    divider.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        const layoutRect = layout.getBoundingClientRect();
+        const totalWidth = layoutRect.width;
+        const mouseX = e.clientX - layoutRect.left;
+        // Calculate panel width as percentage (panel is on the right)
+        const panelPct = Math.max(15, Math.min(75, ((totalWidth - mouseX) / totalWidth) * 100));
+        panel.style.width = panelPct + '%';
+        state.splitRatio = panelPct;
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        saveStateToCookie();
+    });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Legend Modal
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2117,11 +2622,15 @@ function closeLegendOnOverlay(event) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('keydown', function(e) {
-    // Escape closes modal
     if (e.key === 'Escape') {
-        const modal = document.getElementById('legend-modal');
-        if (modal.classList.contains('visible')) {
-            toggleLegend();
+        // Escape closes file viewer first, then legend modal
+        if (state.fileViewerOpen) {
+            closeFileViewer();
+        } else {
+            const modal = document.getElementById('legend-modal');
+            if (modal.classList.contains('visible')) {
+                toggleLegend();
+            }
         }
     }
 });
@@ -2141,6 +2650,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // No saved state - start with tree collapsed (default state)
         collapseAll();
     }
+
+    // Set up file link interception for inline viewer
+    interceptFileLinks();
 
     // Apply filters (this will also save state)
     applyFilters();

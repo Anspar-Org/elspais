@@ -2,6 +2,20 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.46.0] - 2026-02-07
+
+### Added
+
+- **Inline file viewer panel** for `elspais trace --view --embed-content`: clicking file links now opens source files in a right-side panel with syntax-highlighted content and stable line numbers, instead of opening VS Code externally. Supports 500+ languages via Pygments.
+- **Syntax highlighting** powered by Pygments (new optional dependency under `trace-view` extra). Highlighting runs at generation time — no client-side JS library needed.
+- **Resizable split-pane layout**: drag the divider between the trace table and file viewer. Panel width persists via cookies.
+- **Markdown rendered view**: `.md` files show a toggle between "Rendered" and "Source" views.
+- **Graceful fallback**: without `--embed-content`, file links open in VS Code as before.
+
+### Changed
+
+- **Optional dependency**: Added `pygments>=2.0` to `trace-view`, `trace-review`, and `all` extras.
+
 ## [0.45.0] - 2026-02-06
 
 ### Fixed

@@ -173,7 +173,9 @@ A. The tool SHALL generate an interactive HTML view with clickable requirement n
 
 B. The tool SHALL display test coverage information per requirement when test data is available.
 
-*End* *Interactive Traceability Viewer* | **Hash**: 8014e4aa
+C. The viewer SHALL display source files inline in a side panel with syntax-highlighted content and stable line numbers, when embedded content is enabled.
+
+*End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
 ---
 
 # REQ-p00007: Collaborative Review System

@@ -1,4 +1,4 @@
-# Implements: REQ-p00006-A, REQ-p00006-B
+# Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
 # Implements: REQ-p00050-B
 # Implements: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
 """HTML Generator for traceability reports.
@@ -146,6 +146,10 @@ class HTMLGenerator:
         topics = self._collect_unique_values("topic")
         tree_data = self._build_tree_data() if embed_content else {}
 
+        # Collect source files with syntax highlighting for inline viewer
+        source_files = self._collect_source_files() if embed_content else {}
+        pygments_css = self._get_pygments_css() if source_files else ""
+
         # Update journey count in stats
         stats.journey_count = len(journeys)
 
@@ -157,6 +161,8 @@ class HTMLGenerator:
             statuses=sorted(statuses),
             topics=sorted(topics),
             tree_data=tree_data,
+            source_files=source_files,
+            pygments_css=pygments_css,
             version=self.version,
             base_path=self.base_path,
         )
@@ -683,6 +689,109 @@ class HTMLGenerator:
                 },
             }
         return data
+
+    def _collect_source_files(self) -> dict[str, Any]:
+        """Collect source file contents with syntax highlighting for inline viewer.
+
+        Walks all graph nodes, reads unique source files, and applies Pygments
+        syntax highlighting at generation time. The pre-highlighted HTML is
+        embedded in the output so the browser needs no JS highlighting library.
+
+        Returns:
+            Dict mapping file paths to their content data:
+            {path: {lines: [highlighted_html_per_line], language: str, raw: str}}
+        """
+        _MAX_FILE_SIZE = 512_000  # 500KB limit
+
+        # Collect unique source paths from all nodes
+        paths: set[str] = set()
+        for node in self.graph.all_nodes():
+            if node.source and node.source.path:
+                paths.add(node.source.path)
+
+        # Try to import Pygments for syntax highlighting
+        try:
+            from pygments import highlight as pygments_highlight
+            from pygments.formatters import HtmlFormatter
+            from pygments.lexers import TextLexer, get_lexer_for_filename
+
+            has_pygments = True
+            formatter = HtmlFormatter(nowrap=True)
+        except ImportError:
+            has_pygments = False
+
+        result: dict[str, Any] = {}
+        for path in sorted(paths):
+            try:
+                file_path = Path(path)
+                if not file_path.is_file():
+                    continue
+
+                # Skip files that are too large
+                if file_path.stat().st_size > _MAX_FILE_SIZE:
+                    continue
+
+                # Skip binary files (check first 8KB for null bytes)
+                with open(file_path, "rb") as f:
+                    chunk = f.read(8192)
+                    if b"\x00" in chunk:
+                        continue
+
+                raw_content = file_path.read_text(encoding="utf-8", errors="replace")
+                raw_lines = raw_content.split("\n")
+
+                # Determine language and apply highlighting
+                language = file_path.suffix.lstrip(".") or "text"
+                highlighted_lines: list[str] = []
+
+                if has_pygments:
+                    try:
+                        lexer = get_lexer_for_filename(path)
+                        language = lexer.name.lower()
+                    except Exception:
+                        lexer = TextLexer()
+                        language = "text"
+
+                    # Highlight the full content, then split by line
+                    # This preserves multi-line token state (e.g., docstrings)
+                    full_highlighted = pygments_highlight(raw_content, lexer, formatter)
+                    highlighted_lines = full_highlighted.split("\n")
+
+                    # Pygments may add a trailing empty string after final \n
+                    if highlighted_lines and highlighted_lines[-1] == "":
+                        highlighted_lines.pop()
+                else:
+                    # No Pygments: use HTML-escaped plain text
+                    import html
+
+                    highlighted_lines = [html.escape(line) for line in raw_lines]
+                    # Remove trailing empty line to match raw_lines
+                    if highlighted_lines and raw_content.endswith("\n"):
+                        highlighted_lines.pop()
+
+                result[path] = {
+                    "lines": highlighted_lines,
+                    "language": language,
+                    "raw": raw_content,
+                }
+            except (OSError, UnicodeDecodeError):
+                continue
+
+        return result
+
+    def _get_pygments_css(self) -> str:
+        """Generate Pygments CSS theme for syntax highlighting.
+
+        Returns CSS rules scoped under .highlight for the file viewer panel.
+        Returns empty string if Pygments is not installed.
+        """
+        try:
+            from pygments.formatters import HtmlFormatter
+
+            formatter = HtmlFormatter(style="default")
+            return formatter.get_style_defs(".highlight")
+        except ImportError:
+            return ""
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""
