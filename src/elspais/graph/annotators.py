@@ -435,6 +435,7 @@ def annotate_coverage(graph: TraceGraph) -> None:
     - Edges have assertion_targets when they target specific assertions
     - VALIDATES to TEST with assertion_targets → DIRECT coverage
     - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
+    - IMPLEMENTS to CODE → VALIDATES to TEST → INDIRECT coverage (transitive)
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
 
@@ -454,6 +455,7 @@ def annotate_coverage(graph: TraceGraph) -> None:
         CoverageSource,
         RollupMetrics,
     )
+    from elspais.graph.relations import EdgeKind
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -525,6 +527,40 @@ def annotate_coverage(graph: TraceGraph) -> None:
                                     assertion_label=label,
                                 )
                             )
+
+                # Transitive: CODE → TEST → TEST_RESULT (indirect test coverage)
+                # Check if this CODE node has TEST children via VALIDATES edges
+                for code_edge in target_node.iter_outgoing_edges():
+                    if (
+                        code_edge.kind == EdgeKind.VALIDATES
+                        and code_edge.target.kind == NodeKind.TEST
+                    ):
+                        transitive_test = code_edge.target
+                        # Credit assertions the CODE implements with INDIRECT coverage
+                        code_assertion_targets = edge.assertion_targets
+                        if code_assertion_targets:
+                            for label in code_assertion_targets:
+                                if label in assertion_labels:
+                                    metrics.add_contribution(
+                                        CoverageContribution(
+                                            source_id=transitive_test.id,
+                                            source_type=CoverageSource.INDIRECT,
+                                            assertion_label=label,
+                                        )
+                                    )
+                        else:
+                            # CODE without assertion targets → all assertions
+                            for label in assertion_labels:
+                                metrics.add_contribution(
+                                    CoverageContribution(
+                                        source_id=transitive_test.id,
+                                        source_type=CoverageSource.INDIRECT,
+                                        assertion_label=label,
+                                    )
+                                )
+
+                        # Track for TEST_RESULT lookup (use CODE's assertion_targets)
+                        test_nodes_for_result_lookup.append((transitive_test, None))
 
             elif target_kind == NodeKind.REQUIREMENT:
                 # Child REQ implements this REQ

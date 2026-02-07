@@ -267,7 +267,20 @@ def build_graph(
                         for parsed_content in domain_file.deserialize(registry):
                             builder.add_parsed_content(parsed_content)
 
-    return builder.build()
+    graph = builder.build()
+
+    # Link TEST nodes to CODE nodes via import analysis.
+    # This creates TEST→CODE edges that enable transitive coverage:
+    # REQUIREMENT ← CODE ← TEST ← TEST_RESULT
+    if scan_code and scan_tests:
+        from elspais.graph.test_code_linker import link_tests_to_code
+
+        # Get source roots from config (default: ["src", ""])
+        traceability_config = config.get("traceability", {})
+        source_roots = traceability_config.get("source_roots", None)
+        link_tests_to_code(graph, repo_root, source_roots)
+
+    return graph
 
 
 __all__ = ["build_graph"]

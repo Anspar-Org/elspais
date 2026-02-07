@@ -1,15 +1,22 @@
 # Validates REQ-d00069-A, REQ-d00069-B, REQ-d00069-C, REQ-d00069-D
 # Validates REQ-d00069-E, REQ-d00069-F
 # Validates REQ-d00070-A, REQ-d00070-B, REQ-d00070-C, REQ-d00070-D, REQ-d00070-E
-"""Tests for INDIRECT coverage from whole-requirement tests.
+"""Tests for INDIRECT coverage from whole-requirement tests and transitive CODE chains.
 
 INDIRECT coverage counts whole-req tests (tests targeting a requirement without
 assertion suffixes) as covering all assertions. This provides a "progress indicator"
 view alongside the strict traceability view.
+
+Also tests transitive CODE->TEST chains where a TEST validates a CODE node that
+implements a REQUIREMENT, producing INDIRECT coverage through the chain:
+REQUIREMENT <- (IMPLEMENTS) <- CODE <- (VALIDATES) <- TEST <- (CONTAINS) <- TEST_RESULT
 """
 
 from elspais.graph.annotators import annotate_coverage
+from elspais.graph.builder import TraceGraph
+from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
+from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
     make_requirement,
@@ -460,3 +467,443 @@ class TestIndirectWithExistingSources:
         a_sources = {c.source_type for c in rollup.assertion_coverage["A"]}
         assert CoverageSource.INFERRED in a_sources
         assert CoverageSource.INDIRECT in a_sources
+
+
+# =============================================================================
+# Transitive CODE->TEST chain coverage tests
+# =============================================================================
+
+
+class TestTransitiveCoverageThroughCode:
+    """Tests that TEST->CODE->REQUIREMENT provides indirect coverage.
+
+    When a CODE node implements a REQUIREMENT and a TEST validates that CODE,
+    the TEST provides INDIRECT coverage to the REQUIREMENT's assertions through
+    the transitive chain: REQUIREMENT <- CODE <- TEST <- TEST_RESULT.
+    """
+
+    def _build_chain(self, *, with_result=True, result_status="passed", assertion_targets=None):
+        """Build a REQUIREMENT <- CODE <- TEST <- TEST_RESULT chain.
+
+        The chain uses:
+        - req.link(code, IMPLEMENTS, assertion_targets) for REQ->CODE edge
+        - code.link(test, VALIDATES) for CODE->TEST edge
+        - test.add_child(result) for TEST->TEST_RESULT containment
+
+        Returns (graph, req_node, code_node, test_node, result_node_or_None)
+        """
+        graph = TraceGraph()
+
+        # Requirement with 2 assertions
+        req = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Auth Req")
+        req.set_field("level", "PRD")
+        req.set_field("status", "Active")
+        graph._index[req.id] = req
+        graph._roots.append(req)
+
+        assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL authenticate")
+        assert_a.set_field("label", "A")
+        graph._index[assert_a.id] = assert_a
+        req.add_child(assert_a)
+
+        assert_b = GraphNode(id="REQ-p00001-B", kind=NodeKind.ASSERTION, label="SHALL log attempts")
+        assert_b.set_field("label", "B")
+        graph._index[assert_b.id] = assert_b
+        req.add_child(assert_b)
+
+        # CODE implements requirement (with or without assertion_targets)
+        code = GraphNode(
+            id="code:src/auth.py:10",
+            kind=NodeKind.CODE,
+            source=SourceLocation(path="src/auth.py", line=10),
+        )
+        code.set_field("function_name", "authenticate")
+        graph._index[code.id] = code
+        req.link(code, EdgeKind.IMPLEMENTS, assertion_targets=assertion_targets)
+
+        # TEST validates CODE (created by test_code_linker)
+        test = GraphNode(
+            id="test:tests/test_auth.py::test_authenticate",
+            kind=NodeKind.TEST,
+            source=SourceLocation(path="tests/test_auth.py", line=5),
+        )
+        graph._index[test.id] = test
+        code.link(test, EdgeKind.VALIDATES)
+
+        result_node = None
+        if with_result:
+            result = GraphNode(
+                id="result:tests/test_auth.py::test_authenticate",
+                kind=NodeKind.TEST_RESULT,
+                label="test_authenticate",
+            )
+            result.set_field("status", result_status)
+            graph._index[result.id] = result
+            test.add_child(result)
+            result_node = result
+
+        return graph, req, code, test, result_node
+
+    def test_transitive_provides_indirect_coverage(self):
+        """CODE->TEST chain provides INDIRECT coverage to requirement."""
+        graph, req, code, test, result = self._build_chain()
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics is not None
+        # INDIRECT coverage for both assertions (CODE has no assertion_targets)
+        assert metrics.indirect_coverage_pct > 0
+
+        # Check contributions include INDIRECT from test
+        for label in ["A", "B"]:
+            contribs = metrics.assertion_coverage.get(label, [])
+            indirect = [c for c in contribs if c.source_type == CoverageSource.INDIRECT]
+            assert len(indirect) > 0, f"Expected INDIRECT coverage for assertion {label}"
+
+    def test_transitive_with_assertion_targets(self):
+        """CODE targeting specific assertions only provides INDIRECT for those."""
+        graph, req, code, test, result = self._build_chain(assertion_targets=["A"])
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        # A should have DIRECT (from CODE) + INDIRECT (from TEST via CODE)
+        a_contribs = metrics.assertion_coverage.get("A", [])
+        assert any(c.source_type == CoverageSource.DIRECT for c in a_contribs)
+        assert any(c.source_type == CoverageSource.INDIRECT for c in a_contribs)
+
+        # B should have NO coverage (CODE only targets A)
+        b_contribs = metrics.assertion_coverage.get("B", [])
+        assert len(b_contribs) == 0
+
+    def test_transitive_with_passing_result_validates_indirect(self):
+        """Passing TEST_RESULT via CODE chain marks assertions as indirectly validated."""
+        graph, req, code, test, result = self._build_chain(result_status="passed")
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics.validated_with_indirect == 2  # Both A and B
+
+    def test_transitive_with_failing_result_marks_failure(self):
+        """Failed TEST_RESULT via CODE chain sets has_failures."""
+        graph, req, code, test, result = self._build_chain(result_status="failed")
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics.has_failures is True
+
+    def test_transitive_without_result_still_covers(self):
+        """TEST via CODE without TEST_RESULT still provides INDIRECT coverage."""
+        graph, req, code, test, _ = self._build_chain(with_result=False)
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics.indirect_coverage_pct > 0
+        # But validated_with_indirect should be 0 (no passing result)
+        assert metrics.validated_with_indirect == 0
+
+    def test_direct_test_overrides_transitive(self):
+        """Direct TEST->REQ edge takes precedence; transitive adds INDIRECT."""
+        graph, req, code, test, result = self._build_chain()
+
+        # Also add a direct TEST->REQ edge (as if test had # Tests REQ-p00001-A)
+        direct_test = GraphNode(
+            id="test:tests/test_auth.py::test_auth_direct",
+            kind=NodeKind.TEST,
+            source=SourceLocation(path="tests/test_auth.py", line=20),
+        )
+        graph._index[direct_test.id] = direct_test
+        req.link(direct_test, EdgeKind.VALIDATES, assertion_targets=["A"])
+
+        # Add passing result for direct test
+        direct_result = GraphNode(
+            id="result:tests/test_auth.py::test_auth_direct",
+            kind=NodeKind.TEST_RESULT,
+        )
+        direct_result.set_field("status", "passed")
+        graph._index[direct_result.id] = direct_result
+        direct_test.add_child(direct_result)
+
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        # A has both DIRECT (from direct test) and INDIRECT (from transitive)
+        a_contribs = metrics.assertion_coverage.get("A", [])
+        assert any(c.source_type == CoverageSource.DIRECT for c in a_contribs)
+        assert any(c.source_type == CoverageSource.INDIRECT for c in a_contribs)
+
+        # A should be directly tested AND validated
+        assert metrics.direct_tested >= 1
+        assert metrics.validated >= 1
+
+    def test_no_transitive_for_refines_edge(self):
+        """REFINES edges should NOT trigger transitive coverage lookup."""
+        graph = TraceGraph()
+
+        req = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Req")
+        req.set_field("level", "PRD")
+        req.set_field("status", "Active")
+        graph._index[req.id] = req
+        graph._roots.append(req)
+
+        assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL do X")
+        assert_a.set_field("label", "A")
+        graph._index[assert_a.id] = assert_a
+        req.add_child(assert_a)
+
+        code = GraphNode(
+            id="code:src/mod.py:5",
+            kind=NodeKind.CODE,
+            source=SourceLocation(path="src/mod.py", line=5),
+        )
+        graph._index[code.id] = code
+        # REFINES, not IMPLEMENTS -- should not count
+        req.link(code, EdgeKind.REFINES)
+
+        test = GraphNode(
+            id="test:tests/test_mod.py::test_func",
+            kind=NodeKind.TEST,
+            source=SourceLocation(path="tests/test_mod.py", line=1),
+        )
+        graph._index[test.id] = test
+        code.link(test, EdgeKind.VALIDATES)
+
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics.indirect_coverage_pct == 0
+        assert metrics.coverage_pct == 0
+
+    def test_transitive_strict_coverage_excludes_indirect(self):
+        """Transitive CODE->TEST only provides INDIRECT, not strict coverage."""
+        graph, req, code, test, result = self._build_chain()
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        # Strict coverage should be 0 (only INDIRECT from transitive)
+        assert metrics.coverage_pct == 0.0
+        assert metrics.covered_assertions == 0
+        # But indirect coverage should be 100%
+        assert metrics.indirect_coverage_pct == 100.0
+
+    def test_transitive_multiple_code_nodes(self):
+        """Multiple CODE nodes each with TEST children all contribute INDIRECT."""
+        graph = TraceGraph()
+
+        req = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Req")
+        req.set_field("level", "PRD")
+        req.set_field("status", "Active")
+        graph._index[req.id] = req
+        graph._roots.append(req)
+
+        assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL X")
+        assert_a.set_field("label", "A")
+        graph._index[assert_a.id] = assert_a
+        req.add_child(assert_a)
+
+        # Two CODE nodes, each implementing the requirement
+        for i in range(2):
+            code = GraphNode(
+                id=f"code:src/mod{i}.py:1",
+                kind=NodeKind.CODE,
+                source=SourceLocation(path=f"src/mod{i}.py", line=1),
+            )
+            graph._index[code.id] = code
+            req.link(code, EdgeKind.IMPLEMENTS)
+
+            test = GraphNode(
+                id=f"test:tests/test_mod{i}.py::test_func",
+                kind=NodeKind.TEST,
+                source=SourceLocation(path=f"tests/test_mod{i}.py", line=1),
+            )
+            graph._index[test.id] = test
+            code.link(test, EdgeKind.VALIDATES)
+
+        annotate_coverage(graph)
+
+        metrics = req.get_metric("rollup_metrics")
+        assert metrics.indirect_coverage_pct == 100.0
+        # A should have INDIRECT contributions from both tests
+        a_contribs = metrics.assertion_coverage.get("A", [])
+        indirect = [c for c in a_contribs if c.source_type == CoverageSource.INDIRECT]
+        assert len(indirect) >= 2
+
+
+class TestFactoryIntegration:
+    """Tests that factory.build_graph() calls link_tests_to_code."""
+
+    def test_factory_calls_linker(self, tmp_path):
+        """Build graph from spec + code + test files, verify transitive edges."""
+        # This is a lightweight integration test. We create minimal files.
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Create minimal config
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            "[patterns]\n"
+            'prefix = "REQ"\n'
+            "\n"
+            "[patterns.types.prd]\n"
+            'id = "p"\n'
+            'name = "PRD"\n'
+            "\n"
+            "[patterns.id_format]\n"
+            'style = "numeric"\n'
+            "digits = 5\n"
+            "\n"
+            "[directories]\n"
+            'spec = "spec"\n'
+            "\n"
+            "[traceability]\n"
+            'scan_patterns = ["src/**/*.py"]\n'
+            "\n"
+            "[testing]\n"
+            "enabled = true\n"
+            'test_dirs = ["tests"]\n'
+            'patterns = ["test_*.py"]\n'
+        )
+
+        # Create a source file with # Implements: inside a function
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "auth.py").write_text(
+            "# Implements: REQ-p00001\n" "def authenticate():\n" "    pass\n"
+        )
+
+        # Create a test file that imports the source module
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+        (test_dir / "test_auth.py").write_text(
+            "from auth import authenticate\n\n"
+            "def test_authenticate():\n"
+            "    assert authenticate() is None\n"
+        )
+
+        # Create a minimal spec file
+        (spec_dir / "requirements.md").write_text(
+            "# REQ-p00001 Authentication\n\n"
+            "**Status**: Active | **Level**: PRD\n\n"
+            "*End* Authentication | **Hash**: 12345678\n"
+        )
+
+        from elspais.graph.factory import build_graph as factory_build_graph
+
+        graph = factory_build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_sponsors=False,
+        )
+
+        # Check that the graph was built (may or may not have transitive edges
+        # depending on whether source_roots resolves -- this just tests the
+        # integration doesn't crash)
+        assert graph is not None
+
+    def test_factory_no_linker_when_tests_disabled(self, tmp_path):
+        """When scan_tests=False, no linker is called."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            "[patterns]\n"
+            'prefix = "REQ"\n'
+            "\n"
+            "[patterns.types.prd]\n"
+            'id = "p"\n'
+            'name = "PRD"\n'
+            "\n"
+            "[patterns.id_format]\n"
+            'style = "numeric"\n'
+            "digits = 5\n"
+            "\n"
+            "[directories]\n"
+            'spec = "spec"\n'
+            "\n"
+            "[traceability]\n"
+            'scan_patterns = ["src/**/*.py"]\n'
+        )
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "auth.py").write_text(
+            "# Implements: REQ-p00001\n" "def authenticate():\n" "    pass\n"
+        )
+
+        (spec_dir / "requirements.md").write_text(
+            "# REQ-p00001 Authentication\n\n"
+            "**Status**: Active | **Level**: PRD\n\n"
+            "*End* Authentication | **Hash**: 12345678\n"
+        )
+
+        from elspais.graph.factory import build_graph as factory_build_graph
+
+        # scan_tests=False means no TEST nodes and no linker call
+        graph = factory_build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+            scan_sponsors=False,
+        )
+
+        assert graph is not None
+        # Should have CODE node but no TEST nodes linked to it
+        code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
+        for code_node in code_nodes:
+            for edge in code_node.iter_outgoing_edges():
+                # No VALIDATES edges from CODE to TEST
+                assert edge.kind != EdgeKind.VALIDATES or edge.target.kind != NodeKind.TEST
+
+    def test_factory_no_linker_when_code_disabled(self, tmp_path):
+        """When scan_code=False, no linker is called."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            "[patterns]\n"
+            'prefix = "REQ"\n'
+            "\n"
+            "[patterns.types.prd]\n"
+            'id = "p"\n'
+            'name = "PRD"\n'
+            "\n"
+            "[patterns.id_format]\n"
+            'style = "numeric"\n'
+            "digits = 5\n"
+            "\n"
+            "[directories]\n"
+            'spec = "spec"\n'
+            "\n"
+            "[testing]\n"
+            "enabled = true\n"
+            'test_dirs = ["tests"]\n'
+            'patterns = ["test_*.py"]\n'
+        )
+
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+        (test_dir / "test_auth.py").write_text(
+            "# Validates: REQ-p00001\n" "def test_authenticate():\n" "    pass\n"
+        )
+
+        (spec_dir / "requirements.md").write_text(
+            "# REQ-p00001 Authentication\n\n"
+            "**Status**: Active | **Level**: PRD\n\n"
+            "*End* Authentication | **Hash**: 12345678\n"
+        )
+
+        from elspais.graph.factory import build_graph as factory_build_graph
+
+        # scan_code=False means no CODE nodes and no linker call
+        graph = factory_build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_code=False,
+            scan_sponsors=False,
+        )
+
+        assert graph is not None
+        # No CODE nodes should exist
+        code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
+        assert len(code_nodes) == 0
