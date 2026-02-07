@@ -5,6 +5,7 @@
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
 # Implements: REQ-d00051-E, REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
+# Implements: REQ-d00069-B, REQ-d00069-D
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.
@@ -498,6 +499,16 @@ def annotate_coverage(graph: TraceGraph) -> None:
                                 )
                             )
                             tested_labels.add(label)
+                else:
+                    # Whole-req test (no assertion targets) → INDIRECT for all assertions
+                    for label in assertion_labels:
+                        metrics.add_contribution(
+                            CoverageContribution(
+                                source_id=target_node.id,
+                                source_type=CoverageSource.INDIRECT,
+                                assertion_label=label,
+                            )
+                        )
 
                 # Track this TEST node for result lookup later
                 test_nodes_for_result_lookup.append((target_node, edge.assertion_targets))
@@ -540,21 +551,28 @@ def annotate_coverage(graph: TraceGraph) -> None:
                         )
 
         # Process TEST children to find TEST_RESULT nodes
+        validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             for result in test_node.iter_children():
                 if result.kind == NodeKind.TEST_RESULT:
                     status = (result.get_field("status", "") or "").lower()
                     if status in ("passed", "pass", "success"):
-                        # Mark assertions as validated by passing tests
-                        for label in assertion_targets or []:
-                            if label in assertion_labels:
-                                validated_labels.add(label)
+                        if assertion_targets:
+                            # Assertion-targeted test: mark specific assertions
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    validated_labels.add(label)
+                        else:
+                            # Whole-req test: mark all assertions as indirect-validated
+                            for label in assertion_labels:
+                                validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         has_failures = True
 
         # Set test-specific metrics before finalize
         metrics.direct_tested = len(tested_labels)
         metrics.validated = len(validated_labels)
+        metrics.validated_with_indirect = len(validated_labels | validated_indirect_labels)
         metrics.has_failures = has_failures
 
         # Finalize metrics (computes aggregate coverage counts)

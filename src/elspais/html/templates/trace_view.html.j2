@@ -1360,6 +1360,10 @@ body {
             <input type="checkbox" id="toggle-code" onchange="applyFilters()">
             <span>Show code refs</span>
         </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-indirect" onchange="toggleIndirectCoverage()">
+            <span>Indirect coverage</span>
+        </label>
     </div>
 
     <!-- Actions -->
@@ -1448,6 +1452,7 @@ body {
                     data-level="{{ row.level }}"
                     data-status="{{ row.status }}"
                     data-coverage="{{ row.coverage }}"
+                    data-coverage-indirect="{{ row.coverage_indirect }}"
                     data-topic="{{ row.topic }}"
                     data-depth="{{ row.depth }}"
                     data-is-leaf="{{ 'true' if row.is_leaf else 'false' }}"
@@ -1773,7 +1778,8 @@ const state = {
     fileViewerOpen: false,
     currentFile: null,
     fileViewMode: 'source', // 'source' or 'rendered'
-    splitRatio: 50 // percentage width for file viewer
+    splitRatio: 50, // percentage width for file viewer
+    indirectCoverage: false // show indirect (whole-req test) coverage
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1795,6 +1801,7 @@ function saveStateToCookie() {
         toggleDeprecated: document.getElementById('toggle-deprecated').checked,
         toggleRoadmap: document.getElementById('toggle-roadmap').checked,
         toggleCode: document.getElementById('toggle-code').checked,
+        toggleIndirect: state.indirectCoverage,
         filterLevel: document.getElementById('filter-level').value,
         filterStatus: document.getElementById('filter-status').value,
         filterCov: document.getElementById('filter-cov').value,
@@ -1858,6 +1865,11 @@ function restoreState() {
     if (saved.toggleDeprecated !== undefined) document.getElementById('toggle-deprecated').checked = saved.toggleDeprecated;
     if (saved.toggleRoadmap !== undefined) document.getElementById('toggle-roadmap').checked = saved.toggleRoadmap;
     if (saved.toggleCode !== undefined) document.getElementById('toggle-code').checked = saved.toggleCode;
+    if (saved.toggleIndirect !== undefined) {
+        state.indirectCoverage = saved.toggleIndirect;
+        document.getElementById('toggle-indirect').checked = saved.toggleIndirect;
+        if (saved.toggleIndirect) toggleIndirectCoverage();
+    }
 
     // Restore dropdowns
     if (saved.filterLevel) document.getElementById('filter-level').value = saved.filterLevel;
@@ -1968,6 +1980,25 @@ function setViewMode(mode) {
 // Filter Toggles
 // ─────────────────────────────────────────────────────────────────────────────
 
+function toggleIndirectCoverage() {
+    state.indirectCoverage = document.getElementById('toggle-indirect').checked;
+
+    // Update coverage icons to reflect the active mode
+    document.querySelectorAll('#table-body .req-row').forEach(row => {
+        const cov = state.indirectCoverage ? row.dataset.coverageIndirect : row.dataset.coverage;
+        const icon = row.querySelector('.coverage-icon');
+        if (icon) {
+            icon.className = 'coverage-icon ' + cov;
+            if (cov === 'full') icon.textContent = '\u25CF';       // ●
+            else if (cov === 'partial') icon.textContent = '\u25D0'; // ◐
+            else icon.textContent = '\u25CB';                        // ○
+        }
+    });
+
+    applyFilters();
+    saveStateToCookie();
+}
+
 function toggleFilter(filter) {
     state.activeFilters[filter] = !state.activeFilters[filter];
 
@@ -2024,6 +2055,9 @@ function clearFilters() {
     document.getElementById('toggle-deprecated').checked = false;
     document.getElementById('toggle-roadmap').checked = false;
     document.getElementById('toggle-code').checked = false;
+    document.getElementById('toggle-indirect').checked = false;
+    state.indirectCoverage = false;
+    toggleIndirectCoverage(); // Reset coverage icons to strict mode
 
     applyFilters();
     saveStateToCookie();
@@ -2058,7 +2092,7 @@ function applyFilters() {
         const id = row.dataset.id.toLowerCase();
         const level = row.dataset.level;
         const status = row.dataset.status;
-        const coverage = row.dataset.coverage;
+        const coverage = state.indirectCoverage ? row.dataset.coverageIndirect : row.dataset.coverage;
         const topic = row.dataset.topic;
         const title = row.querySelector('.col-title')?.textContent.toLowerCase() || '';
         const isLeaf = row.dataset.isLeaf === 'true';

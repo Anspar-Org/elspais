@@ -2,6 +2,15 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.47.0] - 2026-02-06
+
+### Added
+
+- **Indirect coverage toggle** for trace view: whole-requirement tests (tests targeting a requirement without assertion suffixes) can now count as covering all assertions. A new "Indirect coverage" toggle in the toolbar switches between strict traceability view and a progress-indicator view.
+- **`CoverageSource.INDIRECT`**: New coverage source type for whole-requirement test contributions, alongside existing DIRECT, EXPLICIT, and INFERRED sources.
+- **Dual coverage metrics**: `RollupMetrics` now tracks both `coverage_pct` (strict, excludes indirect) and `indirect_coverage_pct` (includes indirect). `validated_with_indirect` counts assertions validated when including whole-req passing tests.
+- **`data-coverage-indirect` attribute**: Tree rows carry both strict and indirect coverage data for client-side toggle without page reload.
+
 ## [0.46.0] - 2026-02-07
 
 ### Added

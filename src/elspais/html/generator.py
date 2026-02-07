@@ -1,6 +1,7 @@
 # Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
 # Implements: REQ-p00050-B
 # Implements: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
+# Implements: REQ-d00070-A, REQ-d00070-B
 """HTML Generator for traceability reports.
 
 This module generates interactive HTML traceability views from TraceGraph.
@@ -44,6 +45,7 @@ class TreeRow:
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
+    coverage_indirect: str = "none"  # "none", "partial", "full" (including indirect)
     source_file: str = ""  # Relative path to source file
     source_line: int = 0  # Line number in source file
     result_status: str = ""  # For TEST_RESULT: passed/failed/error/skipped
@@ -365,14 +367,15 @@ class HTMLGenerator:
                 return False
             return "roadmap" in node.source.path.lower()
 
-        def compute_coverage(node: GraphNode) -> tuple[str, bool]:
+        def compute_coverage(node: GraphNode) -> tuple[str, str, bool]:
             """Get coverage status and failure flag from pre-computed metrics.
 
             Uses RollupMetrics computed by annotate_coverage().
 
             Returns:
-                Tuple of (coverage_status, has_failures)
-                coverage_status: "none", "partial", or "full"
+                Tuple of (coverage_status, coverage_indirect, has_failures)
+                coverage_status: "none", "partial", or "full" (strict)
+                coverage_indirect: "none", "partial", or "full" (includes indirect)
             """
             from elspais.graph.metrics import RollupMetrics
 
@@ -385,15 +388,26 @@ class HTMLGenerator:
                     if child.kind == NodeKind.CODE:
                         has_code = True
                         break
-                return ("full" if has_code else "none", False)
+                cov = "full" if has_code else "none"
+                return (cov, cov, False)
 
-            # Use pre-computed coverage percentage
+            # Strict coverage (excludes INDIRECT)
             if rollup.coverage_pct == 0:
-                return ("none", rollup.has_failures)
+                strict = "none"
             elif rollup.coverage_pct < 100:
-                return ("partial", rollup.has_failures)
+                strict = "partial"
             else:
-                return ("full", rollup.has_failures)
+                strict = "full"
+
+            # Indirect coverage (includes INDIRECT)
+            if rollup.indirect_coverage_pct == 0:
+                indirect = "none"
+            elif rollup.indirect_coverage_pct < 100:
+                indirect = "partial"
+            else:
+                indirect = "full"
+
+            return (strict, indirect, rollup.has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""
@@ -460,7 +474,9 @@ class HTMLGenerator:
             is_test = node.kind == NodeKind.TEST
             is_test_result = node.kind == NodeKind.TEST_RESULT
             is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
-            coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
+            coverage, coverage_indirect, has_failures = (
+                ("none", "none", False) if is_impl_node else compute_coverage(node)
+            )
             assertion_letters = (
                 get_assertion_letters(node, parent_id)
                 if parent_assertions is None
@@ -497,6 +513,7 @@ class HTMLGenerator:
                 level=(node.level or "").upper() if not is_impl_node else "",
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
+                coverage_indirect=coverage_indirect,
                 topic=get_topic(node) if not is_impl_node else "",
                 depth=depth,
                 parent_id=(

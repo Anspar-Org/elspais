@@ -53,35 +53,35 @@ Both modes: 3/5 = 60% `partial`. Indirect mode only affects tests with empty `as
 ### Step 1: Add `CoverageSource.INDIRECT` + dual metrics
 
 `src/elspais/graph/metrics.py`:
-- [ ] Add `INDIRECT = "indirect"` to `CoverageSource` enum
-- [ ] Add fields to `RollupMetrics`: `indirect_coverage_pct: float`, `validated_with_indirect: int`
-- [ ] Update `finalize()`: compute `indirect_coverage_pct` including INDIRECT source alongside existing `coverage_pct` (which excludes INDIRECT)
+- [x] Add `INDIRECT = "indirect"` to `CoverageSource` enum
+- [x] Add fields to `RollupMetrics`: `indirect_coverage_pct: float`, `validated_with_indirect: int`
+- [x] Update `finalize()`: compute `indirect_coverage_pct` including INDIRECT source alongside existing `coverage_pct` (which excludes INDIRECT)
 
 ### Step 2: Emit INDIRECT contributions in annotator
 
 `src/elspais/graph/annotators.py` (around line 488):
-- [ ] When TEST edge has `assertion_targets=[]`, add INDIRECT contributions for ALL assertion labels
-- [ ] Track `validated_indirect_labels`: when whole-req test passes, add all assertion labels
-- [ ] Set `metrics.validated_with_indirect` before finalize
+- [x] When TEST edge has `assertion_targets=[]`, add INDIRECT contributions for ALL assertion labels
+- [x] Track `validated_indirect_labels`: when whole-req test passes, add all assertion labels
+- [x] Set `metrics.validated_with_indirect` before finalize
 
 ### Step 3: Generator dual data attributes
 
 `src/elspais/html/generator.py`:
-- [ ] Add `coverage_indirect: str` field to `TreeRow` dataclass
-- [ ] Compute from `indirect_coverage_pct` (same thresholds: 0=none, <100=partial, 100=full)
-- [ ] Pass through to template
+- [x] Add `coverage_indirect: str` field to `TreeRow` dataclass
+- [x] Compute from `indirect_coverage_pct` (same thresholds: 0=none, <100=partial, 100=full)
+- [x] Pass through to template
 
 ### Step 4: Template + JS toggle
 
 `src/elspais/html/templates/trace_view.html.j2`:
-- [ ] Add `data-coverage-indirect="{{ row.coverage_indirect }}"` attribute on `<tr>`
-- [ ] Add toggle button in filter bar area
-- [ ] JS function: swap which `data-coverage*` attribute drives the coverage icon text and class
+- [x] Add `data-coverage-indirect="{{ row.coverage_indirect }}"` attribute on `<tr>`
+- [x] Add toggle button in filter bar area
+- [x] JS function: swap which `data-coverage*` attribute drives the coverage icon text and class
 
 ### Step 5: Tests
 
-- [ ] `tests/core/test_coverage_metrics.py`: INDIRECT source, dual coverage computation, all 4 edge cases
-- [ ] Integration test: whole-req test → `coverage_pct=0`, `indirect_coverage_pct=100`
+- [x] `tests/core/test_indirect_coverage.py`: INDIRECT source, dual coverage computation, all 4 edge cases
+- [x] Integration test: whole-req test → `coverage_pct=0`, `indirect_coverage_pct=100`
 
 ## Files to Modify
 

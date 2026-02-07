@@ -1,3 +1,4 @@
+# Implements: REQ-d00069-A, REQ-d00069-C
 """Coverage metrics data structures.
 
 This module defines the data structures for centralized coverage tracking:
@@ -24,6 +25,7 @@ class CoverageSource(Enum):
     DIRECT = "direct"  # TEST/CODE validates/implements assertion
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
+    INDIRECT = "indirect"  # TEST validates whole REQ (all assertions implied)
 
 
 @dataclass
@@ -74,6 +76,9 @@ class RollupMetrics:
     direct_tested: int = 0  # Assertions with TEST coverage (not CODE)
     validated: int = 0  # Assertions with passing TEST_RESULTs
     has_failures: bool = False  # Any TEST_RESULT failed?
+    # Indirect coverage metrics (whole-req tests covering all assertions)
+    indirect_coverage_pct: float = 0.0  # Coverage % including INDIRECT source
+    validated_with_indirect: int = 0  # Assertions validated when including indirect
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.
@@ -99,6 +104,7 @@ class RollupMetrics:
         direct_labels: set[str] = set()
         explicit_labels: set[str] = set()
         inferred_labels: set[str] = set()
+        indirect_labels: set[str] = set()
 
         for label, contributions in self.assertion_coverage.items():
             for contrib in contributions:
@@ -108,16 +114,22 @@ class RollupMetrics:
                     explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.INFERRED:
                     inferred_labels.add(label)
+                elif contrib.source_type == CoverageSource.INDIRECT:
+                    indirect_labels.add(label)
 
-        # Count assertions with any coverage
+        # Count assertions with any coverage (strict: excludes INDIRECT)
         all_covered = direct_labels | explicit_labels | inferred_labels
         self.covered_assertions = len(all_covered)
         self.direct_covered = len(direct_labels)
         self.explicit_covered = len(explicit_labels)
         self.inferred_covered = len(inferred_labels)
 
-        # Compute percentage
+        # Compute strict percentage (excludes INDIRECT)
         self.coverage_pct = (self.covered_assertions / self.total_assertions) * 100
+
+        # Compute indirect percentage (includes INDIRECT)
+        all_covered_with_indirect = all_covered | indirect_labels
+        self.indirect_coverage_pct = (len(all_covered_with_indirect) / self.total_assertions) * 100
 
 
 __all__ = [
