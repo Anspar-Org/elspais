@@ -1184,7 +1184,38 @@ body {
     tab-size: 4;
 }
 
-/* Markdown rendered view */
+.line-content.rendered-line {
+    white-space: normal;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.line-content.rendered-line p {
+    margin: 0;
+    display: inline;
+}
+
+.line-content.rendered-line h1,
+.line-content.rendered-line h2,
+.line-content.rendered-line h3 {
+    margin: 0;
+    display: inline;
+    font-size: inherit;
+}
+
+.line-content.rendered-line h1 { font-size: 1.4em; }
+.line-content.rendered-line h2 { font-size: 1.2em; }
+.line-content.rendered-line h3 { font-size: 1.1em; }
+
+.line-content.rendered-line code {
+    background: #f1f3f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+/* Markdown rendered view (full-page, no longer used but kept for fallback) */
 .file-viewer-rendered {
     padding: 16px 24px;
     line-height: 1.6;
@@ -1247,9 +1278,7 @@ body {
 
 /* Pygments syntax highlighting theme */
 {% if pygments_css %}
-.highlight {
 {{ pygments_css }}
-}
 {% endif %}
 
     </style>
@@ -2441,9 +2470,20 @@ function renderFileContent(fileData, lineNumber) {
     const body = document.getElementById('file-viewer-body');
 
     if (state.fileViewMode === 'rendered' && state.currentFile && state.currentFile.endsWith('.md')) {
-        // Rendered markdown view
-        body.innerHTML = '<div class="file-viewer-rendered">' +
-            renderMarkdown(fileData.raw) + '</div>';
+        // Rendered markdown view with line numbers
+        const rawLines = fileData.raw.split('\n');
+        let html = '<div class="source-lines">';
+        for (let i = 0; i < rawLines.length; i++) {
+            const num = i + 1;
+            const renderedLine = renderMarkdown(rawLines[i]);
+            html += '<div class="source-line" data-line="' + num + '">' +
+                '<span class="line-num">' + num + '</span>' +
+                '<div class="line-content rendered-line">' + renderedLine + '</div>' +
+                '</div>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+        scrollAndFlashLine(body, lineNumber);
         return;
     }
 
@@ -2453,24 +2493,46 @@ function renderFileContent(fileData, lineNumber) {
 
     for (let i = 0; i < lines.length; i++) {
         const num = i + 1;
-        const highlighted = num === lineNumber ? ' highlighted' : '';
-        html += '<div class="source-line' + highlighted + '" data-line="' + num + '">' +
+        html += '<div class="source-line" data-line="' + num + '">' +
             '<span class="line-num">' + num + '</span>' +
             '<code class="line-content highlight">' + (lines[i] || '') + '</code>' +
             '</div>';
     }
     html += '</div>';
     body.innerHTML = html;
+    scrollAndFlashLine(body, lineNumber);
+}
 
-    // Scroll to highlighted line
-    if (lineNumber) {
-        setTimeout(function() {
-            const target = body.querySelector('.source-line[data-line="' + lineNumber + '"]');
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+function scrollAndFlashLine(container, lineNumber) {
+    if (!lineNumber) return;
+    setTimeout(function() {
+        // Clear any previous highlight
+        var prev = container.querySelector('.source-line.highlighted');
+        if (prev) {
+            prev.classList.remove('highlighted');
+            prev.style.backgroundColor = '';
+            prev.style.transition = '';
+        }
+
+        var target = container.querySelector('.source-line[data-line="' + lineNumber + '"]');
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.classList.add('highlighted');
+            // Flash the child cells directly — table row backgrounds are hidden
+            // behind the opaque .line-num and .highlight cell backgrounds
+            var cells = target.querySelectorAll('.line-num, .line-content');
+            for (var i = 0; i < cells.length; i++) {
+                cells[i].style.transition = 'none';
+                cells[i].style.backgroundColor = '#ffc107';
             }
-        }, 50);
-    }
+            setTimeout(function() {
+                for (var i = 0; i < cells.length; i++) {
+                    cells[i].style.transition = 'background-color 1s ease-out';
+                    cells[i].style.backgroundColor = '';
+                }
+            }, 400);
+        }
+    }, 50);
 }
 
 function openFileViewer() {
