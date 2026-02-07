@@ -40,7 +40,7 @@ The executive summary makes the following implicit and explicit claims:
 
 1. **Plain Text Artifacts**: ✅ **CONFIRMED**
    - Requirements are stored in Markdown files in `spec/` directories
-   - Zero-dependency core uses only Python stdlib
+   - Minimal-dependency core (only tomlkit for TOML parsing)
    - Version control friendly format
 
 2. **Separation of Concerns**: ✅ **PARTIALLY CONFIRMED**
@@ -185,7 +185,7 @@ mcp = ["mcp>=1.0"]  # AI integration
    ```markdown
    ## Core vs. Enhanced Features
 
-   **Core (zero dependencies)**:
+   **Core (minimal dependencies — only tomlkit)**:
    - Requirement validation and parsing
    - Basic traceability matrices (Markdown)
    - Hash-based change detection

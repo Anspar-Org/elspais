@@ -112,4 +112,4 @@ elspais reformat-with-claude --dry-run
 | **Implements** | Child references parent(s), never reverse |
 | **Conflict** | Duplicate IDs detected and marked |
 
-The tool is zero-dependency (stdlib only), with optional extras for HTML generation (`[trace-view]`) and review server (`[trace-review]`).
+The tool has minimal dependencies (only `tomlkit` for TOML parsing), with optional extras for HTML generation (`[trace-view]`) and review server (`[trace-review]`).

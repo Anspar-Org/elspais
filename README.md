@@ -7,7 +7,7 @@
 
 ## Features
 
-- **Zero Dependencies**: Core CLI uses only Python 3.9+ standard library
+- **Minimal Dependencies**: Core CLI requires only `tomlkit` (pure Python, no transitive deps)
 - **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
 - **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
 - **Multi-Repository**: Link requirements across core and associated repositories

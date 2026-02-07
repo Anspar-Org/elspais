@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
+elspais is a minimal-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
 ## Full documentation
 
@@ -15,7 +15,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
 
-**Zero Dependencies**: Uses only Python 3.9+ stdlib. Custom TOML parser in `config/loader.py`.
+**Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.9+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
 **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
 **Configuration System** (`config/__init__.py`) almost all parsible content is configurable.

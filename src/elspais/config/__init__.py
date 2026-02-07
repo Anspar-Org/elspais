@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import tomlkit
+
 if TYPE_CHECKING:
     from elspais.testing.config import TestingConfig
 
@@ -266,9 +268,10 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
 
 
 def _parse_toml(content: str) -> dict[str, Any]:
-    """Parse TOML content into a dictionary.
+    """Parse TOML content into a plain dictionary.
 
-    Simple zero-dependency TOML parser.
+    Uses tomlkit for full TOML 1.0 compliance. Returns a plain dict
+    (unwrapped from TOMLDocument) to avoid downstream type surprises.
 
     Args:
         content: TOML file content.
@@ -276,48 +279,25 @@ def _parse_toml(content: str) -> dict[str, Any]:
     Returns:
         Parsed dictionary.
     """
-    result: dict[str, Any] = {}
-    current_section: list[str] = []
-    lines = content.split("\n")
-
-    for line in lines:
-        line = line.strip()
-
-        # Skip empty lines and comments
-        if not line or line.startswith("#"):
-            continue
-
-        # Section header
-        if line.startswith("[") and not line.startswith("[["):
-            section = line.strip("[]").strip()
-            current_section = section.split(".")
-            _ensure_nested(result, current_section)
-            continue
-
-        # Key-value pair
-        if "=" in line:
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = _parse_value(value.strip())
-
-            if current_section:
-                target = result
-                for part in current_section:
-                    target = target[part]
-                target[key] = value
-            else:
-                result[key] = value
-
-    return result
+    # Implements: REQ-p00002-A
+    doc = tomlkit.parse(content)
+    return doc.unwrap()
 
 
-def _ensure_nested(data: dict[str, Any], keys: list[str]) -> None:
-    """Ensure nested dictionary structure exists."""
-    current = data
-    for key in keys:
-        if key not in current:
-            current[key] = {}
-        current = current[key]
+def parse_toml_document(content: str) -> tomlkit.TOMLDocument:
+    """Parse TOML content into a TOMLDocument for round-trip editing.
+
+    Unlike parse_toml(), this preserves comments, whitespace, and
+    formatting. Use this when modifying and writing back TOML content.
+
+    Args:
+        content: TOML file content.
+
+    Returns:
+        TOMLDocument that preserves formatting on dumps().
+    """
+    # Implements: REQ-p00002-A
+    return tomlkit.parse(content)
 
 
 _INT_RE = re.compile(r"^-?\d+$")
@@ -338,51 +318,6 @@ def _try_parse_numeric(value: str) -> int | float | None:
     if _FLOAT_RE.match(value):
         return float(value)
     return None
-
-
-def _parse_value(value: str) -> Any:
-    """Parse a TOML value string."""
-    # String (quoted)
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
-        return value[1:-1]
-
-    # Boolean
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-
-    # Numeric
-    numeric = _try_parse_numeric(value)
-    if numeric is not None:
-        return numeric
-
-    # Array (simple single-line)
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        items = [_parse_value(item.strip()) for item in inner.split(",")]
-        return items
-
-    # Inline table: { key = value, key2 = value2 }
-    if value.startswith("{") and value.endswith("}"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return {}
-        result = {}
-        # Split on commas, but handle nested structures
-        pairs = inner.split(",")
-        for pair in pairs:
-            pair = pair.strip()
-            if "=" in pair:
-                k, v = pair.split("=", 1)
-                result[k.strip()] = _parse_value(v.strip())
-        return result
-
-    return value
 
 
 def get_config(
@@ -824,5 +759,6 @@ __all__ = [
     "validate_project_config",
     "DEFAULT_CONFIG",
     "parse_toml",
+    "parse_toml_document",
     "_try_parse_numeric",
 ]

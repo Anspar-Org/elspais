@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.45.0] - 2026-02-06
+
+### Fixed
+
+- **TOML parser: multi-line arrays corrupted during `config add` round-trips** — replaced custom TOML parser/serializer with `tomlkit` library for full TOML 1.0 compliance. Multi-line arrays and arrays containing comma-delimited strings are now handled correctly. Comments and formatting are preserved during config modifications.
+
+### Changed
+
+- **Core dependency**: Added `tomlkit>=0.12` as the sole core dependency (pure Python, no transitive deps). The custom TOML parser has been removed.
+
 ## [0.44.0] - 2026-02-04
 
 ### Added

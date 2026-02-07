@@ -319,7 +319,7 @@ These are **separate concerns** with different installation profiles, not a unif
 
 The document correctly captures these excellent design decisions:
 
-- Zero-dependency core implementation
+- Minimal-dependency core implementation (only tomlkit)
 - Hash-based tamper evidence
 - One-way traceability (prevents circular authority)
 - Assertion-based verification

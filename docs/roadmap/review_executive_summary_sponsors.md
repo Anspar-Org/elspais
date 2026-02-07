@@ -91,7 +91,7 @@ The document makes **specific regulatory claims** that are **not supported** by 
 
 2. **vs. Traditional ALM Tools (Jama, DOORS)**
    - **Claim**: "Lower friction for development teams"
-   - **Reality**: TRUE - Markdown-based, git-integrated, zero dependencies
+   - **Reality**: TRUE - Markdown-based, git-integrated, minimal dependencies
    - **Claim**: "Stronger semantic guarantees"
    - **Reality**: QUESTIONABLE - configurable validation rules exist, but "stronger" is subjective without evidence
    - **Claim**: "Validation evidence is intrinsic to development"
@@ -171,7 +171,7 @@ Change from absolute claims to specific feature comparisons:
 
 **What elspais provides:**
 - Git-native workflow (requirements as code)
-- Zero-dependency validation (no license servers)
+- Minimal-dependency validation (no license servers)
 - Markdown format (human-readable, diff-friendly)
 
 **What traditional ALM tools provide:**
