@@ -12,9 +12,9 @@ Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 Do each of these steps for every Phase in the MASTER_PLAN.md
 Check off each step (change [ ] to [x]) after it is complete.
 
-## Current Task: Linking Convention Documentation
+## Current Task: MCP Round-Trip Fidelity (Complete)
 
-Document the linking conventions for developers and AI agents. See MASTER_PLAN.md for details.
+All phases (6-10) are complete. Plan ready for archival.
 
 ### 0. Identify Assertions
 
@@ -46,11 +46,11 @@ Document the linking conventions for developers and AI agents. See MASTER_PLAN.m
 
 ### 5. Commit
 
-- [ ] **COMMIT**: Use ticket prefix in subject
+- [x] **COMMIT**: Use ticket prefix in subject
 
 ### 6. Phase Complete
 
-- [ ] Mark phase complete in MASTER_PLAN.md
+- [x] Mark phase complete in MASTER_PLAN.md
 - [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
 - [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase

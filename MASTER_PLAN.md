@@ -1,54 +1,61 @@
-# MASTER PLAN — Linking Convention Documentation
+# MASTER PLAN — MCP get_requirement Round-Trip Fidelity
 
-**Branch**: feature/CUR-240-viewtrace-port
-**Ticket**: CUR-240
-**CURRENT_ASSERTIONS**: (populate via WORKFLOW_STATE.md "Identify Assertions" step before implementation)
+**CURRENT_ASSERTIONS**: REQ-d00062-B, REQ-d00064-B
 
-## Goal
+## Context
 
-Define a clear, authoritative convention for requirement linking that developers and AI agents follow. This is a documentation-only change that establishes the linking patterns already supported by the tooling.
+The MCP `get_requirement` tool must return enough data to reconstruct the original requirement from the graph (ignoring whitespace). Phases 1-5 (archived) added section extraction, REMAINDER child nodes, and body_text/remainder/source to the MCP serializer.
 
-## Principle: Conventions should be documented where users can find them
+**Goal**: Line numbers for document-order reconstruction. Flat children list. Parent edge kinds exposed.
 
-The codebase already supports multiple linking patterns (`# Implements:`, `REQ-xxx` in test names, multi-assertion syntax), but there's no single reference document describing when and how to use each approach.
+## Phase 6: Parser -- Line Numbers on Assertions and Sections
 
-## Implementation Steps
+**File**: `src/elspais/graph/parsers/requirement.py`
 
-### Step 1: Linking convention documentation
+- [x] Add `start_line` param to `_parse_requirement()`
+- [x] `_extract_assertions()`: accept `start_line`, compute `line = start_line + text[:match.start()].count('\n')` per assertion
+- [x] `_extract_sections()`: accept `start_line` + raw `text`, compute absolute line per section heading
+- [x] `claim_and_parse()`: pass `start_line` to `_parse_requirement()`
+- [x] Each assertion dict returns `{"label", "text", "line"}`
+- [x] Each section dict returns `{"heading", "content", "line"}`
+- [x] Verify: `pytest tests/core/test_parsers/test_requirement_parser.py` passes
 
-**Files**: `docs/cli/linking.md` (new documentation topic for `elspais docs linking`)
+## Phase 7: Builder -- Source Locations + Document-Order Children
 
-- [ ] **Code files**: Use `# Implements: REQ-xxx` (or language-appropriate comment) above or inside the function that implements the requirement
-- [ ] **Test files — direct**: Use `# Tests REQ-xxx` comment or include `REQ_xxx` in test function names (`test_REQ_p00001_A_validates_input`)
-- [ ] **Test files — indirect**: Import and exercise a function that has `# Implements: REQ-xxx`; coverage rolls up automatically
-- [ ] **Multi-assertion syntax**: `# Implements: REQ-p00001-A-B-C` expands to individual assertion references
-- [ ] **When to use each approach**: Decision tree — direct linking for acceptance/integration tests, indirect linking acceptable for unit tests of implementation functions
-- [ ] **AI agent instructions**: Snippet suitable for inclusion in agent prompts (CLAUDE.md, etc.) describing the linking convention
+**File**: `src/elspais/graph/builder.py`, `_add_requirement()`
 
-## Files to Modify
+- [x] Set `source=SourceLocation(path, line)` on assertion nodes from `assertion["line"]`
+- [x] Set accurate `source=SourceLocation(path, line)` on REMAINDER section nodes from `section["line"]`
+- [x] Collect all children (assertions + sections) into one list, sort by line, then `add_child()` in order
+- [x] Verify: `pytest tests/mcp/test_mcp_core.py` passes
 
-| File | Change |
-|------|--------|
-| **NEW** `docs/cli/linking.md` | Linking convention documentation |
+## Phase 8: MCP Serializer -- Flat Children + Edge Kind on Parents
 
-## What Stays the Same
+**File**: `src/elspais/mcp/server.py`, `_serialize_requirement_full()`
 
-- Everything. This is documentation only.
+- [x] Replace separate `assertions`/`remainder`/`children` with one flat `children` list
+- [x] Each child entry includes `kind` ("assertion" | "remainder" | other), `id`, `line`, and kind-specific fields
+- [x] Add `edge_kind` field to each parent entry (from `node.iter_outgoing_edges()` target→kind map)
+- [x] Return dict: `{id, title, level, status, hash, body_text, children, parents, source}`
+- [x] Verify: `pytest tests/mcp/test_mcp_core.py` passes
 
-## Commit Strategy
+## Phase 9: Tests
 
-1 commit:
-1. **Linking convention docs** (Step 1)
+- [x] Parser: assertions and sections include `line` key
+- [x] Builder: children iterate in document order (preamble before assertions before rationale)
+- [x] MCP: flat `children` list, `edge_kind` on parents
+- [x] Verify: full test suite passes
 
-## Verification
+## Phase 10: Commit
 
-1. `elspais docs linking` displays the convention documentation
-2. Documentation covers all supported linking patterns
-3. AI agent snippet is self-contained and accurate
+- [x] Update version in `pyproject.toml`
+- [x] Update CHANGELOG.md
+- [x] Update CLAUDE.md if needed
+- [x] Commit with assertion references
 
 ## Archive
 
 - [x] Mark phase complete in MASTER_PLAN.md
-- [x] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
-- [x] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
+- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
+- [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase
