@@ -247,6 +247,29 @@ Users need both a strict traceability view (only assertion-targeted tests count)
 *End* *Indirect Coverage Toggle Display* | **Hash**: ________
 ---
 
+## REQ-d00071: Unified Root vs Orphan Classification
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00050, REQ-p00002
+
+The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
+
+## Assertions
+
+A. The graph builder SHALL classify a parentless node as a root only when it has at least one child whose kind is not a satellite kind.
+
+B. The graph builder SHALL classify a parentless node as an orphan when it has no children whose kind is not a satellite kind.
+
+C. ASSERTION and TEST_RESULT node kinds SHALL be defined as satellite kinds that do not count as meaningful children for root vs orphan classification.
+
+D. USER_JOURNEY nodes SHALL follow the same root vs orphan classification rules as REQUIREMENT nodes.
+
+## Rationale
+
+Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally treated as roots, even when disconnected from the rest of the graph. A PRD with only assertions but no OPS/DEV implementations is effectively orphaned — it anchors no subgraph. Unifying the classification rule across all node kinds simplifies the logic and produces more accurate orphan detection.
+
+*End* *Unified Root vs Orphan Classification* | **Hash**: ________
+---
+
 ## Architecture Diagram
 
 ```

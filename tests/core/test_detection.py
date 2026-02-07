@@ -51,19 +51,20 @@ class TestOrphanDetection:
         assert graph.orphan_count() == 0
         assert list(graph.orphaned_nodes()) == []
 
-    def test_orphan_without_implements(self):
-        """Requirement without implements link that isn't a root is also root."""
+    def test_REQ_d00071_B_orphan_without_implements(self):
+        """REQ-d00071-B: Requirements without implements and without children are orphans."""
         builder = GraphBuilder()
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(make_req("REQ-o00001", "Orphan OPS", "OPS"))
 
         graph = builder.build()
 
-        # Both are roots since neither has a parent that links TO them
-        assert graph.root_count() == 2
+        # Neither has meaningful children, so both are orphans (not roots)
+        assert graph.root_count() == 0
+        assert graph.orphan_count() == 2
 
-    def test_orphan_with_broken_reference(self):
-        """Requirement with invalid implements reference stays orphan."""
+    def test_REQ_d00071_B_orphan_with_broken_reference(self):
+        """REQ-d00071-B: Requirement with invalid implements reference is an orphan."""
         builder = GraphBuilder()
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(
@@ -74,8 +75,9 @@ class TestOrphanDetection:
 
         # Child tried to link but target doesn't exist
         assert graph.has_broken_references()
-        # Since the link failed, the child has no parent and becomes a root
-        assert graph.root_count() == 2
+        # Neither has meaningful children, so both are orphans (not roots)
+        assert graph.root_count() == 0
+        assert graph.orphan_count() == 2
 
 
 class TestBrokenReferenceDetection:

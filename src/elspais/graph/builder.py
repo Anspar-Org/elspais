@@ -1,6 +1,7 @@
 # Implements: REQ-p00050-A, REQ-p00050-D
 # Implements: REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 # Implements: REQ-d00053-A, REQ-d00053-B
+# Implements: REQ-d00071-A, REQ-d00071-B, REQ-d00071-C, REQ-d00071-D
 """Graph Builder - Constructs TraceGraph from parsed content.
 
 This module provides the builder pattern for constructing a complete
@@ -20,6 +21,11 @@ from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind
 from elspais.utilities.test_identity import build_test_id
+
+# Implements: REQ-d00071-C
+# Satellite kinds: children of these types don't count as "meaningful"
+# for determining root vs orphan status
+_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
 
 
 @dataclass
@@ -1707,6 +1713,8 @@ class GraphBuilder:
             "goal": data.get("goal"),
         }
         self._nodes[journey_id] = node
+        # Implements: REQ-d00071-D
+        self._orphan_candidates.add(journey_id)
 
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
@@ -1752,6 +1760,7 @@ class GraphBuilder:
                 if func_line:
                     node.set_field("function_line", func_line)
                 self._nodes[code_id] = node
+                self._orphan_candidates.add(code_id)
 
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
 
@@ -1795,6 +1804,7 @@ class GraphBuilder:
                 ),
             )
             self._nodes[test_id] = node
+            self._orphan_candidates.add(test_id)
 
         for val_ref in data.get("validates", []):
             self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
@@ -1842,6 +1852,7 @@ class GraphBuilder:
             "message": data.get("message"),
         }
         self._nodes[result_id] = node
+        self._orphan_candidates.add(result_id)
 
         # Queue edge to parent TEST node if test_id is provided
         if test_id:
@@ -1920,18 +1931,16 @@ class GraphBuilder:
                     )
                 )
 
-        # Identify roots (nodes with no parents)
-        roots = [
-            node
-            for node in self._nodes.values()
-            if node.is_root and node.kind == NodeKind.REQUIREMENT
-        ]
-
-        # Also include journeys as roots
-        roots.extend(node for node in self._nodes.values() if node.kind == NodeKind.USER_JOURNEY)
-
-        # Root nodes are not orphans - they're intentionally parentless
-        root_ids = {r.id for r in roots}
+        # Implements: REQ-d00071-A, REQ-d00071-B
+        # Roots: parentless candidates with at least one meaningful child
+        # Orphans: parentless candidates with no meaningful children
+        roots = []
+        root_ids = set()
+        for node_id in self._orphan_candidates:
+            node = self._nodes.get(node_id)
+            if node and any(c.kind not in _SATELLITE_KINDS for c in node.iter_children()):
+                roots.append(node)
+                root_ids.add(node_id)
 
         # Final orphan set: candidates that aren't roots
         orphaned_ids = self._orphan_candidates - root_ids

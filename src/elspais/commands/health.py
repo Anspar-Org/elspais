@@ -645,29 +645,42 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
 
 
 def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
-    """Check for orphan requirements (non-PRD with no parents)."""
-    from elspais.graph import NodeKind
+    """Check for orphaned nodes across all kinds.
 
-    orphans = []
+    Uses graph.orphaned_nodes() which returns all parentless nodes
+    that have no meaningful (non-satellite) children.
+    """
+    by_kind: dict[str, list[dict]] = {}
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.parent_count() == 0 and node.level and node.level.upper() not in ("PRD", "P"):
-            orphans.append({"id": node.id, "level": node.level})
+    for node in graph.orphaned_nodes():
+        kind_name = node.kind.value
+        if kind_name not in by_kind:
+            by_kind[kind_name] = []
+        entry: dict = {"id": node.id, "kind": kind_name}
+        if node.level:
+            entry["level"] = node.level
+        by_kind[kind_name].append(entry)
 
-    if orphans:
+    total = sum(len(nodes) for nodes in by_kind.values())
+
+    if total:
+        summary_parts = [f"{len(v)} {k}" for k, v in sorted(by_kind.items())]
         return HealthCheck(
             name="spec.orphans",
             passed=False,
-            message=f"{len(orphans)} orphan requirements (non-PRD without parents)",
+            message=f"{total} orphaned nodes ({', '.join(summary_parts)})",
             category="spec",
             severity="warning",
-            details={"orphans": orphans[:10]},
+            details={
+                "by_kind": {k: v[:10] for k, v in by_kind.items()},
+                "total": total,
+            },
         )
 
     return HealthCheck(
         name="spec.orphans",
         passed=True,
-        message="No orphan requirements",
+        message="No orphaned nodes",
         category="spec",
     )
 

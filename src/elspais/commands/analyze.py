@@ -88,36 +88,35 @@ def _print_tree(node: GraphNode, indent: int) -> None:
 
 
 def _analyze_orphans(graph: TraceGraph, args: argparse.Namespace) -> int:
-    """Find orphaned requirements."""
-    orphans = []
+    """Find orphaned nodes across all kinds.
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        level = (node.level or "").upper()
-        # PRD level should not have parents
-        if level == "PRD":
-            continue
+    Uses graph.orphaned_nodes() which returns all parentless nodes
+    that have no meaningful (non-satellite) children.
+    """
+    by_kind: dict[str, list] = {}
 
-        # Check for parent requirements
-        has_req_parent = False
-        for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT:
-                has_req_parent = True
-                break
+    for node in graph.orphaned_nodes():
+        kind_name = node.kind.value
+        if kind_name not in by_kind:
+            by_kind[kind_name] = []
+        by_kind[kind_name].append(node)
 
-        if not has_req_parent:
-            orphans.append(node)
+    total = sum(len(nodes) for nodes in by_kind.values())
 
-    if orphans:
-        print(f"Found {len(orphans)} orphaned requirements:")
-        print()
-        for node in sorted(orphans, key=lambda n: n.id):
-            loc = f"{node.source.path}:{node.source.line}" if node.source else "unknown"
-            print(f"  {node.id} ({node.level or '?'}) - {node.get_label()}")
-            print(f"    Location: {loc}")
+    if total:
+        print(f"Found {total} orphaned nodes:")
+        for kind_name in sorted(by_kind):
+            nodes = by_kind[kind_name]
+            print(f"\n  {kind_name} ({len(nodes)}):")
+            for node in sorted(nodes, key=lambda n: n.id):
+                loc = f"{node.source.path}:{node.source.line}" if node.source else "unknown"
+                detail = f" ({node.level or '?'})" if node.kind == NodeKind.REQUIREMENT else ""
+                print(f"    {node.id}{detail} - {node.get_label()}")
+                print(f"      Location: {loc}")
     else:
-        print("No orphaned requirements found.")
+        print("No orphaned nodes found.")
 
-    return 1 if orphans else 0
+    return 1 if total else 0
 
 
 def _analyze_coverage(graph: TraceGraph, args: argparse.Namespace) -> int:

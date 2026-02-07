@@ -52,6 +52,7 @@ class TestFullPipeline:
         assert graph.find_by_id("REQ-o00001") is not None
         assert graph.find_by_id("REQ-o00002") is not None
         assert graph.find_by_id("REQ-o00003") is not None
+        assert graph.find_by_id("REQ-o00004") is not None
 
     def test_pipeline_creates_assertions(self, integration_spec_dir):
         """Verify assertions are created as child nodes."""
@@ -135,6 +136,7 @@ class TestFullPipeline:
         # OPS requirements have parents, so not roots
         assert not graph.has_root("REQ-o00001")
         assert not graph.has_root("REQ-o00002")
+        assert not graph.has_root("REQ-o00004")
 
     def test_pipeline_node_counts(self, integration_spec_dir):
         """Verify expected node counts by type."""
@@ -156,8 +158,8 @@ class TestFullPipeline:
         requirements = list(graph.nodes_by_kind(NodeKind.REQUIREMENT))
         assertions = list(graph.nodes_by_kind(NodeKind.ASSERTION))
 
-        # 2 PRD + 3 OPS = 5 requirements
-        assert len(requirements) == 5
+        # 2 PRD + 4 OPS = 6 requirements
+        assert len(requirements) == 6
 
         # 3 assertions (REQ-p00001) + 2 assertions (REQ-p00002) = 5 assertions
         assert len(assertions) == 5

@@ -62,3 +62,6 @@
 | REQ-d00066 | Test Coverage Tool Implementation | 08-mcp-server.md | 6ac6b51f |
 | REQ-d00067 | Uncovered Assertions Tool Implementation | 08-mcp-server.md | 7044d63d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation | 08-mcp-server.md | c9d5ad87 |
+| REQ-d00069 | Indirect Coverage Source | 07-graph-architecture.md | ________ |
+| REQ-d00070 | Indirect Coverage Toggle Display | 07-graph-architecture.md | ________ |
+| REQ-d00071 | Unified Root vs Orphan Classification | 07-graph-architecture.md | ________ |

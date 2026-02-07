@@ -237,8 +237,12 @@ class TestBuilderContentTypes:
         assert "REQ-p00002" in children_string(parent)
         assert "REQ-p00001->REQ-p00002:refines" in outgoing_edges_string(parent)
 
-    def test_build_ignores_missing_targets(self):
-        """Builder handles references to non-existent targets gracefully."""
+    def test_REQ_d00071_B_build_ignores_missing_targets(self):
+        """REQ-d00071-B: Builder handles references to non-existent targets gracefully.
+
+        Node with broken implements reference has no parent and no meaningful
+        children, so it becomes an orphan under root vs orphan classification.
+        """
         # This should not raise an error
         graph = build_graph(
             make_requirement("REQ-o00001", level="OPS", implements=["REQ-NONEXISTENT"]),
@@ -246,8 +250,10 @@ class TestBuilderContentTypes:
 
         req = graph.find_by_id("REQ-o00001")
         assert req is not None
-        # Node should be a root since its parent doesn't exist
-        assert graph.has_root("REQ-o00001")
+        # Node has no meaningful children → orphan, not root
+        assert not graph.has_root("REQ-o00001")
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-o00001" in orphan_ids
 
     def test_node_content_fields_accessible(self):
         """Node content fields are accessible via get_field()."""
@@ -507,6 +513,277 @@ class TestTestToRequirementLinking:
         # Requirement should not have any test children
         req = graph.find_by_id("REQ-d00001")
         assert "test:" not in children_string(req)  # No test children at all
+
+
+class TestGeneralizedOrphanDetection:
+    """Tests for orphan detection across all node kinds.
+
+    Validates REQ-d00071-A: Root = parentless with meaningful children.
+    Validates REQ-d00071-B: Orphan = parentless with no meaningful children.
+    Validates REQ-d00071-C: Satellite kinds (ASSERTION, TEST_RESULT) don't count.
+    Validates REQ-d00071-D: Journey nodes follow same root/orphan rules.
+
+    Validates that TEST, TEST_RESULT, and CODE nodes are tracked as
+    orphan candidates, alongside the existing REQUIREMENT orphan detection.
+    """
+
+    def test_test_with_broken_validates_is_orphan(self):
+        """TEST referencing non-existent REQ is an orphan."""
+        graph = build_graph(
+            make_test_ref(
+                validates=["REQ-nonexistent"],
+                source_path="tests/test_foo.py",
+                function_name="test_something",
+            ),
+        )
+
+        orphans = list(graph.orphaned_nodes())
+        orphan_ids = {n.id for n in orphans}
+        assert any(n.kind == NodeKind.TEST for n in orphans)
+        assert "test:tests/test_foo.py::test_something" in orphan_ids
+
+    def test_test_with_valid_validates_not_orphan(self):
+        """TEST with resolved VALIDATES link is not an orphan."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                validates=["REQ-d00001"],
+                source_path="tests/test_foo.py",
+                function_name="test_something",
+            ),
+        )
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "test:tests/test_foo.py::test_something" not in orphan_ids
+
+    def test_result_without_parent_test_is_orphan(self):
+        """TEST_RESULT whose CONTAINS target doesn't exist is an orphan + broken ref."""
+        graph = build_graph(
+            make_test_result(
+                "result-orphan",
+                status="passed",
+                test_id="test:nonexistent::test_func",
+                name="test_func",
+            ),
+        )
+
+        orphans = list(graph.orphaned_nodes())
+        orphan_ids = {n.id for n in orphans}
+        assert "result-orphan" in orphan_ids
+        assert any(n.kind == NodeKind.TEST_RESULT for n in orphans)
+
+        # Also a broken reference
+        assert graph.has_broken_references()
+        broken_targets = {br.target_id for br in graph.broken_references()}
+        assert "test:nonexistent::test_func" in broken_targets
+
+    def test_result_without_test_id_is_orphan(self):
+        """TEST_RESULT with no test_id is an orphan (no link possible)."""
+        graph = build_graph(
+            make_test_result("result-no-parent", status="passed", test_id=None),
+        )
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "result-no-parent" in orphan_ids
+
+    def test_code_with_broken_implements_is_orphan(self):
+        """CODE referencing non-existent REQ is an orphan."""
+        graph = build_graph(
+            make_code_ref(
+                implements=["REQ-nonexistent"],
+                source_path="src/module.py",
+            ),
+        )
+
+        orphans = list(graph.orphaned_nodes())
+        orphan_ids = {n.id for n in orphans}
+        assert any(n.kind == NodeKind.CODE for n in orphans)
+        assert "code:src/module.py:1" in orphan_ids
+
+    def test_REQ_d00071_B_requirement_without_children_is_orphan(self):
+        """REQ-d00071-B: Parentless REQUIREMENT nodes without meaningful children are orphans.
+
+        Under root vs orphan classification, a parentless node must have at
+        least one non-satellite child (not ASSERTION or TEST_RESULT) to qualify
+        as a root. Nodes with no children at all are classified as orphans.
+        """
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD"),
+            make_requirement("REQ-o00001", level="OPS"),  # No implements, no children
+        )
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" in orphan_ids  # No children → orphan
+        assert "REQ-o00001" in orphan_ids  # No children → orphan
+
+    def test_result_linked_to_existing_test_not_orphan(self):
+        """TEST_RESULT with resolved CONTAINS edge is not an orphan."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                validates=["REQ-d00001"],
+                source_path="tests/test_module.py",
+                function_name="test_func",
+            ),
+            make_test_result(
+                "result-linked",
+                status="passed",
+                test_id="test:tests/test_module.py::test_func",
+                name="test_func",
+            ),
+        )
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "result-linked" not in orphan_ids
+
+    def test_REQ_d00071_C_req_with_only_assertions_is_orphan(self):
+        """REQ-d00071-C: Requirement with only ASSERTION children is an orphan.
+
+        Assertions are satellite kinds and don't count as meaningful children.
+        A parentless requirement whose only children are assertions should be
+        classified as an orphan, not a root.
+        """
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First assertion"},
+                    {"label": "B", "text": "Second assertion"},
+                ],
+            ),
+        )
+
+        # REQ-p00001 has assertion children but they are satellite kind
+        req = graph.find_by_id("REQ-p00001")
+        assert req is not None
+        # Assertions exist as children
+        child_kinds = {c.kind for c in req.iter_children()}
+        assert NodeKind.ASSERTION in child_kinds
+
+        # But requirement is still an orphan (assertions don't count)
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" in orphan_ids
+
+        # And NOT a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "REQ-p00001" not in root_ids
+
+    def test_REQ_d00071_A_req_with_child_req_is_root(self):
+        """REQ-d00071-A: Requirement with a child requirement is a root.
+
+        A parentless PRD requirement that has an OPS child implementing it
+        should be classified as a root (the OPS child is a meaningful,
+        non-satellite child).
+        """
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD"),
+            make_requirement("REQ-o00001", level="OPS", implements=["REQ-p00001"]),
+        )
+
+        # PRD has a meaningful child (OPS requirement)
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "REQ-p00001" in root_ids
+
+        # PRD is NOT an orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" not in orphan_ids
+
+    def test_REQ_d00071_C_test_with_only_results_is_orphan(self):
+        """REQ-d00071-C: TEST node with only TEST_RESULT children is an orphan.
+
+        TEST_RESULT is a satellite kind. A TEST node that has no validates
+        link to a requirement (so it's parentless) but has TEST_RESULT
+        children should still be classified as an orphan.
+        """
+        graph = build_graph(
+            # Create a TEST node with no validates (no parent link)
+            make_test_ref(
+                validates=[],
+                source_path="tests/test_standalone.py",
+                function_name="test_standalone_func",
+            ),
+            # Create a TEST_RESULT that links to the TEST via CONTAINS
+            make_test_result(
+                "result-standalone",
+                status="passed",
+                test_id="test:tests/test_standalone.py::test_standalone_func",
+                name="test_standalone_func",
+            ),
+        )
+
+        test_node = graph.find_by_id("test:tests/test_standalone.py::test_standalone_func")
+        assert test_node is not None
+        assert test_node.kind == NodeKind.TEST
+
+        # TEST_RESULT is a child of the TEST
+        child_kinds = {c.kind for c in test_node.iter_children()}
+        assert NodeKind.TEST_RESULT in child_kinds
+
+        # But TEST is still an orphan (TEST_RESULT is satellite)
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "test:tests/test_standalone.py::test_standalone_func" in orphan_ids
+
+        # And NOT a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "test:tests/test_standalone.py::test_standalone_func" not in root_ids
+
+    def test_REQ_d00071_D_journey_with_no_children_is_orphan(self):
+        """REQ-d00071-D: Standalone USER_JOURNEY with no children is an orphan.
+
+        A journey node that has no children at all should be classified as
+        an orphan under the unified root/orphan classification rules.
+        """
+        graph = build_graph(
+            make_journey("UJ-001", title="Login Flow", actor="User", goal="Sign in"),
+        )
+
+        journey = graph.find_by_id("UJ-001")
+        assert journey is not None
+        assert journey.kind == NodeKind.USER_JOURNEY
+
+        # No children at all
+        assert journey.child_count() == 0
+
+        # Journey is an orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "UJ-001" in orphan_ids
+
+        # And NOT a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "UJ-001" not in root_ids
+
+    def test_REQ_d00071_D_journey_with_req_children_is_root(self):
+        """REQ-d00071-D: Journey with a requirement child is a root.
+
+        A USER_JOURNEY that has a REQUIREMENT implementing it should be
+        classified as a root (the requirement child is non-satellite/meaningful).
+        """
+        graph = build_graph(
+            make_journey("UJ-001", title="Login Flow", actor="User", goal="Sign in"),
+            make_requirement(
+                "REQ-o00001",
+                level="OPS",
+                implements=["UJ-001"],
+            ),
+        )
+
+        journey = graph.find_by_id("UJ-001")
+        assert journey is not None
+        assert journey.kind == NodeKind.USER_JOURNEY
+
+        # Journey has a meaningful child (requirement)
+        assert journey.child_count() > 0
+        child_kinds = {c.kind for c in journey.iter_children()}
+        assert NodeKind.REQUIREMENT in child_kinds
+
+        # Journey is a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "UJ-001" in root_ids
+
+        # And NOT an orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "UJ-001" not in orphan_ids
 
 
 class TestCanonicalTestIds:

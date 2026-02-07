@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.48.0] - 2026-02-07
+
+### Changed
+
+- **Unified root vs orphan classification**: Parentless nodes are now classified as roots only when they have at least one meaningful (non-satellite) child. Nodes with only ASSERTION or TEST_RESULT children are classified as orphans. USER_JOURNEY nodes follow the same rule. This replaces the previous logic where all parentless REQUIREMENTs and all USER_JOURNEYs were unconditionally treated as roots.
+- **Simplified orphan detection in CLI**: Removed domain-level REQUIREMENT orphan loops from `analyze.py` and `health.py` — the unified graph-level classification now handles all node kinds.
+
+### Added
+
+- **REQ-d00071** specification: Formal requirement for unified root vs orphan classification with 4 assertions (A-D).
+- **`_SATELLITE_KINDS` constant**: Defines ASSERTION and TEST_RESULT as satellite kinds that don't count as meaningful children.
+
 ## [0.47.0] - 2026-02-06
 
 ### Added

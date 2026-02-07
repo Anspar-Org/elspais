@@ -34,9 +34,10 @@ def make_req(
 
 
 def build_simple_graph() -> TraceGraph:
-    """Build a simple graph with one requirement."""
+    """Build a simple graph with one root requirement and a child."""
     builder = GraphBuilder()
     builder.add_parsed_content(make_req("REQ-p00001", "Test Requirement"))
+    builder.add_parsed_content(make_req("REQ-o00001", "Child Req", implements=["REQ-p00001"]))
     return builder.build()
 
 

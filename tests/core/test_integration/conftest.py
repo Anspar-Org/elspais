@@ -83,6 +83,16 @@ The system SHALL display a logout button in the navigation.
 The system SHALL provide a password reset flow via email.
 
 *End* *REQ-o00003*
+
+---
+
+## REQ-o00004: Session Timeout
+
+**Level**: OPS | **Implements**: REQ-p00002-A | **Status**: Active
+
+The system SHALL timeout sessions after 30 minutes of inactivity.
+
+*End* *REQ-o00004*
 """
         )
 
