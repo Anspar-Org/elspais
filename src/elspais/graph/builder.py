@@ -1709,10 +1709,27 @@ class GraphBuilder:
         self._nodes[journey_id] = node
 
     def _add_code_ref(self, content: ParsedContent) -> None:
-        """Add code reference nodes."""
+        """Add code reference nodes.
+
+        Stores function_name and class_name from the parser's pre-scan
+        context on each CODE node. This metadata enables TEST→CODE
+        linking by function name matching.
+        """
         data = content.parsed_data
         source_ctx = getattr(content, "source_context", None)
         source_id = source_ctx.source_id if source_ctx else "code"
+
+        func_name = data.get("function_name")
+        class_name = data.get("class_name")
+        func_line = data.get("function_line", content.start_line)
+
+        # Build a descriptive label that includes function context
+        if func_name and class_name:
+            label = f"Code: {class_name}.{func_name} at {source_id}:{content.start_line}"
+        elif func_name:
+            label = f"Code: {func_name} at {source_id}:{content.start_line}"
+        else:
+            label = f"Code at {source_id}:{content.start_line}"
 
         for impl_ref in data.get("implements", []):
             code_id = f"code:{source_id}:{content.start_line}"
@@ -1720,13 +1737,20 @@ class GraphBuilder:
                 node = GraphNode(
                     id=code_id,
                     kind=NodeKind.CODE,
-                    label=f"Code at {source_id}:{content.start_line}",
+                    label=label,
                     source=SourceLocation(
                         path=source_id,
                         line=content.start_line,
                         end_line=content.end_line,
                     ),
                 )
+                # Store function context for TEST→CODE linking
+                if func_name:
+                    node.set_field("function_name", func_name)
+                if class_name:
+                    node.set_field("class_name", class_name)
+                if func_line:
+                    node.set_field("function_line", func_line)
                 self._nodes[code_id] = node
 
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))

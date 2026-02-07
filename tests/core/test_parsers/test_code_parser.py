@@ -684,3 +684,405 @@ class TestCodeParserMultipleRefs:
         assert len(val) == 2
         assert "REQ-d00001-A" in val
         assert "REQ-d00001-B" in val
+
+
+class TestCodeParserFunctionContext:
+    """Tests for Python function context tracking in parsed_data."""
+
+    def test_function_context_in_parsed_data(self):
+        """Implements comment inside a function gets function_name in parsed_data."""
+        parser = CodeParser()
+        lines = [
+            (1, "def authenticate():"),
+            (2, "    # Implements: REQ-p00001"),
+            (3, "    pass"),
+        ]
+        ctx = ParseContext(file_path="src/auth.py")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "authenticate"
+        assert pd["function_line"] == 1
+
+    def test_class_context_in_parsed_data(self):
+        """Implements comment inside a class method gets both class_name and function_name."""
+        parser = CodeParser()
+        lines = [
+            (1, "class MyClass:"),
+            (2, "    def method(self):"),
+            (3, "        # Implements: REQ-p00001"),
+            (4, "        pass"),
+        ]
+        ctx = ParseContext(file_path="src/auth.py")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "method"
+        assert pd["class_name"] == "MyClass"
+        assert pd["function_line"] == 2
+
+    def test_no_function_context_at_module_level(self):
+        """Implements comment at module level has function_name None."""
+        parser = CodeParser()
+        lines = [
+            (1, "# Implements: REQ-p00001"),
+            (2, ""),
+            (3, ""),
+            (4, ""),
+            (5, ""),
+            (6, ""),
+            (7, "x = 42"),
+        ]
+        ctx = ParseContext(file_path="src/module.py")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] is None
+
+    def test_forward_looking_comment_before_function(self):
+        """Implements comment above a function definition gets function_name via lookahead."""
+        parser = CodeParser()
+        lines = [
+            (1, "# Implements: REQ-p00001"),
+            (2, "def authenticate():"),
+            (3, "    pass"),
+        ]
+        ctx = ParseContext(file_path="src/auth.py")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "authenticate"
+        assert pd["function_line"] == 2
+
+    def test_async_function_context(self):
+        """Async def is detected correctly for function context."""
+        parser = CodeParser()
+        lines = [
+            (1, "async def handler(request):"),
+            (2, "    # Implements: REQ-p00001"),
+            (3, "    return response"),
+        ]
+        ctx = ParseContext(file_path="src/handlers.py")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "handler"
+        assert pd["function_line"] == 1
+
+
+class TestCodeParserMultiLanguageContext:
+    """Tests for non-Python language detection and function context."""
+
+    def test_javascript_function_detection(self):
+        """JS file with function keyword detects function context."""
+        parser = CodeParser()
+        lines = [
+            (1, "function authenticate(user) {"),
+            (2, "    // Implements: REQ-p00001"),
+            (3, "    return true;"),
+            (4, "}"),
+        ]
+        ctx = ParseContext(file_path="src/auth.js")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "authenticate"
+
+    def test_typescript_class_detection(self):
+        """TS file with class keyword detects class context."""
+        parser = CodeParser()
+        lines = [
+            (1, "class AuthService {"),
+            (2, "    // Implements: REQ-p00001"),
+            (3, "}"),
+        ]
+        ctx = ParseContext(file_path="src/auth.ts")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["class_name"] == "AuthService"
+
+    def test_go_function_detection(self):
+        """Go file with func keyword detects function context."""
+        parser = CodeParser()
+        lines = [
+            (1, "func ProcessRequest(w http.ResponseWriter, r *http.Request) {"),
+            (2, "    // Implements: REQ-p00001"),
+            (3, "}"),
+        ]
+        ctx = ParseContext(file_path="src/handler.go")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "ProcessRequest"
+
+    def test_rust_function_detection(self):
+        """Rust file with pub fn detects function context."""
+        parser = CodeParser()
+        lines = [
+            (1, "pub fn validate(input: &str) -> bool {"),
+            (2, "    // Implements: REQ-p00001"),
+            (3, "    true"),
+            (4, "}"),
+        ]
+        ctx = ParseContext(file_path="src/validator.rs")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "validate"
+
+    def test_unknown_extension_falls_back(self):
+        """Unknown file extension falls back to Python-style detection."""
+        parser = CodeParser()
+        lines = [
+            (1, "def fallback_func():"),
+            (2, "    # Implements: REQ-p00001"),
+            (3, "    pass"),
+        ]
+        ctx = ParseContext(file_path="src/script.xyz")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        # Unknown falls back to Python-style patterns, so def should be detected
+        assert pd["function_name"] == "fallback_func"
+
+
+class TestCodeParserLanguageDetection:
+    """Tests for CodeParser._detect_language static method."""
+
+    def test_python_extensions(self):
+        """Python file extensions map to 'python' language."""
+        assert CodeParser._detect_language("src/app.py") == "python"
+        assert CodeParser._detect_language("src/app.pyw") == "python"
+
+    def test_js_extensions(self):
+        """JS/TS file extensions map to 'js' language."""
+        assert CodeParser._detect_language("src/app.js") == "js"
+        assert CodeParser._detect_language("src/app.ts") == "js"
+        assert CodeParser._detect_language("src/app.jsx") == "js"
+        assert CodeParser._detect_language("src/app.tsx") == "js"
+
+    def test_go_extension(self):
+        """Go file extension maps to 'go' language."""
+        assert CodeParser._detect_language("src/main.go") == "go"
+
+    def test_rust_extension(self):
+        """Rust file extension maps to 'rust' language."""
+        assert CodeParser._detect_language("src/lib.rs") == "rust"
+
+    def test_c_family_extensions(self):
+        """C-family file extensions map to 'c' language."""
+        assert CodeParser._detect_language("src/main.c") == "c"
+        assert CodeParser._detect_language("src/main.cpp") == "c"
+        assert CodeParser._detect_language("src/Main.java") == "c"
+        assert CodeParser._detect_language("src/Main.cs") == "c"
+
+    def test_unknown_extension(self):
+        """Unknown file extensions map to 'unknown' language."""
+        assert CodeParser._detect_language("data/config.txt") == "unknown"
+        assert CodeParser._detect_language("docs/readme.md") == "unknown"
+
+
+class TestCodeParserBraceScope:
+    """Tests for brace-based scoping in C-family languages."""
+
+    def test_brace_scope_exits_function(self):
+        """After closing brace, next comment is outside function scope."""
+        parser = CodeParser()
+        lines = [
+            (1, "function auth() {"),
+            (2, "    // Implements: REQ-p00001"),
+            (3, "}"),
+            (4, "// Implements: REQ-p00002"),
+            (5, ""),
+        ]
+        ctx = ParseContext(file_path="src/auth.js")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 2
+        # First result inside function
+        assert results[0].parsed_data["function_name"] == "auth"
+        # Second result outside function (after closing brace)
+        assert results[1].parsed_data["function_name"] is None
+
+    def test_nested_braces(self):
+        """Function with nested non-function blocks still tracks function context."""
+        parser = CodeParser()
+        lines = [
+            (1, "function process() {"),
+            (2, "    let x = 1;"),
+            (3, "    {"),
+            (4, "        // Implements: REQ-p00001"),
+            (5, "    }"),
+            (6, "}"),
+        ]
+        ctx = ParseContext(file_path="src/process.js")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        pd = results[0].parsed_data
+        assert pd["function_name"] == "process"
+
+
+class TestBuilderCodeRefFunctionContext:
+    """Tests that the builder stores function metadata on CODE nodes."""
+
+    def test_code_node_stores_function_name(self):
+        """Builder stores function_name on CODE node from parsed_data."""
+        from elspais.graph.builder import GraphBuilder
+        from elspais.graph.parsers import ParsedContent
+        from tests.core.graph_test_helpers import MockSourceContext
+
+        builder = GraphBuilder()
+        content = ParsedContent(
+            content_type="code_ref",
+            start_line=10,
+            end_line=10,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "validates": [],
+                "function_name": "authenticate",
+                "class_name": None,
+                "function_line": 8,
+            },
+        )
+        content.source_context = MockSourceContext(source_id="src/auth.py")
+        builder.add_parsed_content(content)
+        graph = builder.build()
+        code_node = graph.find_by_id("code:src/auth.py:10")
+        assert code_node is not None
+        assert code_node.get_field("function_name") == "authenticate"
+        assert code_node.get_field("class_name") is None
+
+    def test_code_node_stores_class_and_function(self):
+        """Builder stores both class_name and function_name, and builds descriptive label."""
+        from elspais.graph.builder import GraphBuilder
+        from elspais.graph.parsers import ParsedContent
+        from tests.core.graph_test_helpers import MockSourceContext
+
+        builder = GraphBuilder()
+        content = ParsedContent(
+            content_type="code_ref",
+            start_line=20,
+            end_line=20,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "validates": [],
+                "function_name": "validate",
+                "class_name": "AuthService",
+                "function_line": 15,
+            },
+        )
+        content.source_context = MockSourceContext(source_id="src/auth.py")
+        builder.add_parsed_content(content)
+        graph = builder.build()
+        code_node = graph.find_by_id("code:src/auth.py:20")
+        assert code_node is not None
+        assert code_node.get_field("function_name") == "validate"
+        assert code_node.get_field("class_name") == "AuthService"
+        assert "AuthService.validate" in code_node.get_label()
+
+    def test_code_node_label_without_function(self):
+        """Builder creates simple label when no function context is present."""
+        from elspais.graph.builder import GraphBuilder
+        from elspais.graph.parsers import ParsedContent
+        from tests.core.graph_test_helpers import MockSourceContext
+
+        builder = GraphBuilder()
+        content = ParsedContent(
+            content_type="code_ref",
+            start_line=1,
+            end_line=1,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "validates": [],
+                "function_name": None,
+                "class_name": None,
+                "function_line": 0,
+            },
+        )
+        content.source_context = MockSourceContext(source_id="src/module.py")
+        builder.add_parsed_content(content)
+        graph = builder.build()
+        code_node = graph.find_by_id("code:src/module.py:1")
+        assert code_node is not None
+        assert code_node.get_label() == "Code at src/module.py:1"
+
+    def test_code_node_label_function_only(self):
+        """Builder creates label with function name when no class context."""
+        from elspais.graph.builder import GraphBuilder
+        from elspais.graph.parsers import ParsedContent
+        from tests.core.graph_test_helpers import MockSourceContext
+
+        builder = GraphBuilder()
+        content = ParsedContent(
+            content_type="code_ref",
+            start_line=5,
+            end_line=5,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "validates": [],
+                "function_name": "process",
+                "class_name": None,
+                "function_line": 3,
+            },
+        )
+        content.source_context = MockSourceContext(source_id="src/process.py")
+        builder.add_parsed_content(content)
+        graph = builder.build()
+        code_node = graph.find_by_id("code:src/process.py:5")
+        assert code_node is not None
+        assert code_node.get_label() == "Code: process at src/process.py:5"
+
+    def test_code_node_stores_function_line(self):
+        """Builder stores function_line field on CODE node."""
+        from elspais.graph.builder import GraphBuilder
+        from elspais.graph.parsers import ParsedContent
+        from tests.core.graph_test_helpers import MockSourceContext
+
+        builder = GraphBuilder()
+        content = ParsedContent(
+            content_type="code_ref",
+            start_line=25,
+            end_line=25,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "validates": [],
+                "function_name": "render",
+                "class_name": "View",
+                "function_line": 20,
+            },
+        )
+        content.source_context = MockSourceContext(source_id="src/view.py")
+        builder.add_parsed_content(content)
+        graph = builder.build()
+        code_node = graph.find_by_id("code:src/view.py:25")
+        assert code_node is not None
+        assert code_node.get_field("function_line") == 20
