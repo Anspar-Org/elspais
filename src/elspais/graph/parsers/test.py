@@ -15,9 +15,9 @@ from elspais.graph.parsers.config_helpers import is_empty_comment
 from elspais.utilities.reference_config import (
     ReferenceConfig,
     ReferenceResolver,
-    _build_comment_prefix_pattern,
     build_block_header_pattern,
     build_block_ref_pattern,
+    build_comment_pattern,
 )
 
 if TYPE_CHECKING:
@@ -159,46 +159,6 @@ class TestParser:
         flags = 0 if ref_config.case_sensitive else re.IGNORECASE
         return re.compile(full_pattern, flags)
 
-    def _build_test_comment_pattern(
-        self, pattern_config: PatternConfig, ref_config: ReferenceConfig
-    ) -> re.Pattern[str]:
-        """Build pattern for matching REQ references in test comments.
-
-        Test comments use "Tests" keyword WITHOUT colon: # Tests REQ-xxx
-        This differs from CodeParser which uses "Validates:" WITH colon.
-
-        Args:
-            pattern_config: Configuration for ID structure.
-            ref_config: Configuration for reference matching.
-
-        Returns:
-            Compiled regex pattern for matching test comment references.
-        """
-        # Build comment prefix pattern
-        comment_pattern = _build_comment_prefix_pattern(ref_config.comment_styles)
-
-        # Get validates keywords (includes "Tests")
-        keywords = ref_config.keywords.get("validates", ["Validates", "Tests"])
-        keyword_pattern = "|".join(re.escape(k) for k in keywords)
-
-        # Build ID pattern
-        prefix = pattern_config.prefix
-        sep_chars = "".join(re.escape(s) for s in ref_config.separators)
-
-        # Pattern for a single ID (may include assertion)
-        single_id = rf"{re.escape(prefix)}[{sep_chars}][A-Za-z0-9{sep_chars}]+"
-
-        # Full pattern: comment marker + keyword (NO colon) + space + refs
-        # This matches: # Tests REQ-xxx or # Test REQ-xxx
-        full_pattern = (
-            rf"{comment_pattern}\s*"
-            rf"(?:{keyword_pattern})s?\s+"  # keyword with optional 's', space (NO colon)
-            rf"(?P<refs>{single_id}(?:\s*,?\s*{single_id})*)"
-        )
-
-        flags = 0 if ref_config.case_sensitive else re.IGNORECASE
-        return re.compile(full_pattern, flags)
-
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],
@@ -224,7 +184,7 @@ class TestParser:
 
         # Build patterns dynamically based on config
         test_name_pattern = self._build_test_name_pattern(pattern_config, ref_config)
-        comment_pattern = self._build_test_comment_pattern(pattern_config, ref_config)
+        comment_pattern = build_comment_pattern(pattern_config, ref_config, "validates")
         block_header_pattern = build_block_header_pattern(ref_config, "validates")
         block_ref_pattern = build_block_ref_pattern(pattern_config, ref_config)
 

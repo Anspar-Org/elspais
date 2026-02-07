@@ -20,6 +20,7 @@ TOPIC_ORDER = [
     "hierarchy",
     "assertions",
     "traceability",
+    "linking",
     "validation",
     "git",
     "config",

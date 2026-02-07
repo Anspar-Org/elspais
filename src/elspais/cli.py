@@ -624,6 +624,7 @@ Available Topics:
   hierarchy    PRD → OPS → DEV levels and implements
   assertions   Writing testable assertions with SHALL
   traceability Linking requirements to code and tests
+  linking      How to link code and tests to requirements
   validation   Running validation and fixing issues
   git          Change detection and git integration
   config       Configuration file reference
@@ -647,6 +648,7 @@ Examples:
             "hierarchy",
             "assertions",
             "traceability",
+            "linking",
             "validation",
             "git",
             "config",

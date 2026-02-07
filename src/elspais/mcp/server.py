@@ -759,16 +759,35 @@ def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
 def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
     """Get all orphaned nodes (nodes with no parents).
 
-    Returns nodes that have been orphaned due to edge deletions.
+    Returns nodes that have been orphaned — parentless nodes that are
+    not roots. Includes all node kinds (REQUIREMENT, TEST, TEST_RESULT, CODE).
     """
-    orphans = []
+    orphans: list[dict[str, Any]] = []
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+
     for node in graph.orphaned_nodes():
         if node.kind == NodeKind.REQUIREMENT:
-            orphans.append(_serialize_requirement_summary(node))
+            entry = _serialize_requirement_summary(node)
+        else:
+            entry = {
+                "id": node.id,
+                "kind": node.kind.value,
+                "label": node.get_label(),
+            }
+            if node.source:
+                entry["source"] = f"{node.source.path}:{node.source.line}"
+        entry["kind"] = node.kind.value
+        orphans.append(entry)
+
+        kind_name = node.kind.value
+        if kind_name not in by_kind:
+            by_kind[kind_name] = []
+        by_kind[kind_name].append(entry)
 
     return {
         "orphans": orphans,
         "count": len(orphans),
+        "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
     }
 
 

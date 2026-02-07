@@ -432,10 +432,10 @@ def build_comment_pattern(
         rf"{re.escape(prefix)}{sep_pattern}[A-Za-z0-9{re.escape(''.join(ref_config.separators))}]+"
     )
 
-    # Full pattern: comment marker + keyword: + refs
+    # Full pattern: comment marker + keyword + optional colon + space + refs
     full_pattern = (
         rf"{comment_pattern}\s*"
-        rf"(?:{keyword_pattern}):\s*"
+        rf"(?:{keyword_pattern}):?\s+"
         rf"(?P<refs>{single_id}(?:\s*,\s*{single_id})*)"
     )
 
