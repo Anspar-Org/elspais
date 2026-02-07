@@ -1,61 +1,84 @@
-# MASTER PLAN — MCP get_requirement Round-Trip Fidelity
+# MASTER PLAN 8 — Agent-Assisted Linking Engine
 
-**CURRENT_ASSERTIONS**: REQ-d00062-B, REQ-d00064-B
+**Branch**: feature/CUR-514-viewtrace-port
+**Ticket**: CUR-240
+**CURRENT_ASSERTIONS**: REQ-o00065 (A-F), REQ-d00072 (A-F), REQ-d00073 (A-E), REQ-d00074 (A-D)
 
-## Context
+## Goal
 
-The MCP `get_requirement` tool must return enough data to reconstruct the original requirement from the graph (ignoring whitespace). Phases 1-5 (archived) added section extraction, REMAINDER child nodes, and body_text/remainder/source to the MCP serializer.
+Build a suggestion engine that analyzes unlinked tests and code files, then proposes requirement associations using heuristics (import analysis, function name matching, file path proximity, keyword overlap). Expose this through both a CLI command and MCP tools for AI agent consumption.
 
-**Goal**: Line numbers for document-order reconstruction. Flat children list. Parent edge kinds exposed.
+## Principle: Discovery + Action
 
-## Phase 6: Parser -- Line Numbers on Assertions and Sections
+Teams need to not just *see* what's unlinked (existing tools already do this via `get_orphaned_nodes()`, `get_uncovered_assertions()`), but *act on it* efficiently with intelligent suggestions.
 
-**File**: `src/elspais/graph/parsers/requirement.py`
+## Prerequisites
 
-- [x] Add `start_line` param to `_parse_requirement()`
-- [x] `_extract_assertions()`: accept `start_line`, compute `line = start_line + text[:match.start()].count('\n')` per assertion
-- [x] `_extract_sections()`: accept `start_line` + raw `text`, compute absolute line per section heading
-- [x] `claim_and_parse()`: pass `start_line` to `_parse_requirement()`
-- [x] Each assertion dict returns `{"label", "text", "line"}`
-- [x] Each section dict returns `{"heading", "content", "line"}`
-- [x] Verify: `pytest tests/core/test_parsers/test_requirement_parser.py` passes
+- MASTER_PLAN (linking convention documentation) should be completed first so conventions are documented before the tool enforces them.
 
-## Phase 7: Builder -- Source Locations + Document-Order Children
+## Implementation Steps
 
-**File**: `src/elspais/graph/builder.py`, `_add_requirement()`
+### Step 1: Agent-assisted linking command
 
-- [x] Set `source=SourceLocation(path, line)` on assertion nodes from `assertion["line"]`
-- [x] Set accurate `source=SourceLocation(path, line)` on REMAINDER section nodes from `section["line"]`
-- [x] Collect all children (assertions + sections) into one list, sort by line, then `add_child()` in order
-- [x] Verify: `pytest tests/mcp/test_mcp_core.py` passes
+**Files**: `src/elspais/commands/link_suggest.py` (new), `src/elspais/cli.py`
 
-## Phase 8: MCP Serializer -- Flat Children + Edge Kind on Parents
+Add an `elspais link suggest` command that analyzes unlinked tests and suggests requirement associations:
 
-**File**: `src/elspais/mcp/server.py`, `_serialize_requirement_full()`
+- [ ] `elspais link suggest` — scan all unlinked test files and print suggested links with confidence scores
+- [ ] `elspais link suggest --file <path>` — analyze a single file
+- [ ] `elspais link suggest --apply` — interactively apply suggestions (add `# Implements:` comments to files)
+- [ ] Suggestion heuristics:
+  - Import analysis: test imports module -> module has `# Implements: REQ-xxx` -> suggest REQ-xxx
+  - Function name matching: `test_build_graph` -> `build_graph()` implements REQ-xxx -> suggest REQ-xxx
+  - File path proximity: `tests/test_validator.py` -> `src/elspais/validation/` has requirement refs -> suggest those
+  - Keyword overlap: requirement title words appearing in test docstrings or function names
+- [ ] Output format: `SUGGEST: tests/test_foo.py::test_bar -> REQ-p00001-A (confidence: high, reason: imports foo which implements REQ-p00001-A)`
+- [ ] JSON output mode for programmatic consumption: `--format json`
 
-- [x] Replace separate `assertions`/`remainder`/`children` with one flat `children` list
-- [x] Each child entry includes `kind` ("assertion" | "remainder" | other), `id`, `line`, and kind-specific fields
-- [x] Add `edge_kind` field to each parent entry (from `node.iter_outgoing_edges()` target→kind map)
-- [x] Return dict: `{id, title, level, status, hash, body_text, children, parents, source}`
-- [x] Verify: `pytest tests/mcp/test_mcp_core.py` passes
+### Step 2: MCP integration for link suggestions
 
-## Phase 9: Tests
+**Files**: `src/elspais/mcp/tools/` (extend existing)
 
-- [x] Parser: assertions and sections include `line` key
-- [x] Builder: children iterate in document order (preamble before assertions before rationale)
-- [x] MCP: flat `children` list, `edge_kind` on parents
-- [x] Verify: full test suite passes
+Wire the link suggestion engine into MCP so AI agents can request and apply suggestions during coding sessions:
 
-## Phase 10: Commit
+- [ ] `suggest_links_for_file(file_path)` — return structured suggestions for a specific file
+- [ ] `apply_link(file_path, line, requirement_id)` — insert a `# Implements: REQ-xxx` comment at the specified location
+- [ ] `get_linking_convention()` — return the convention documentation as structured text for agent prompt injection
+- [ ] Integrate with existing `get_uncovered_assertions()` MCP tool to provide a complete workflow: discover gaps -> get suggestions -> apply links
 
-- [x] Update version in `pyproject.toml`
-- [x] Update CHANGELOG.md
-- [x] Update CLAUDE.md if needed
-- [x] Commit with assertion references
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| **NEW** `src/elspais/commands/link_suggest.py` | Suggestion engine + CLI command |
+| `src/elspais/cli.py` | Register `link suggest` subcommand |
+| `src/elspais/mcp/server.py` | New MCP tools wrapping suggestion engine |
+
+## What Stays the Same
+
+- TraceGraph, GraphNode, GraphBuilder structure
+- NodeKind, EdgeKind enums
+- Existing parsers (CodeParser, TestParser)
+- RollupMetrics, CoverageContribution
+- All existing MCP tools
+
+## Commit Strategy
+
+2 commits:
+1. **Linking suggestion engine + CLI command** (Step 1 + tests)
+2. **MCP integration** (Step 2 + end-to-end tests)
+
+## Verification
+
+1. `python -m pytest tests/ -x -q` — all pass
+2. `elspais link suggest` produces reasonable suggestions for fixture test files
+3. `elspais link suggest --apply` on a test file, rebuild graph, verify new coverage appears
+4. MCP `suggest_links_for_file()` returns structured suggestions
+5. End-to-end: MCP discover gaps -> get suggestions -> apply links workflow
 
 ## Archive
 
-- [x] Mark phase complete in MASTER_PLAN.md
-- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
+- [ ] Mark phase complete in MASTER_PLAN8.md
+- [ ] Archive completed plan: `mv MASTER_PLAN8.md ~/archive/YYYY-MM-DD/MASTER_PLAN8x.md`
 - [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase

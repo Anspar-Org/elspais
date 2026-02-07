@@ -342,6 +342,27 @@ Assertion keyword search enables AI agents to find assertions related to specifi
 
 ---
 
+## REQ-d00074: MCP Link Suggestion Tools
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065-D, REQ-o00064
+
+The MCP server SHALL provide link suggestion tools that expose the suggestion engine to AI agents.
+
+## Assertions
+
+A. `suggest_links(file_path?, limit?)` SHALL return structured link suggestions from the core engine, including source node, target requirement, confidence, and reason.
+B. `apply_link(file_path, line, requirement_id)` SHALL insert a `# Implements:` comment at the specified file location and refresh the graph afterward.
+C. Link suggestion tools SHALL consume the graph read-only via the core engine, not implement analysis logic directly.
+D. `apply_link()` SHALL validate that the target requirement exists in the graph before modifying files.
+
+## Rationale
+
+MCP exposure enables AI agents to discover and apply link suggestions during coding sessions, completing the workflow: discover gaps -> get suggestions -> apply links.
+
+*End* *MCP Link Suggestion Tools* | **Hash**: ________
+
+---
+
 ## Architecture Diagram
 
 ```text

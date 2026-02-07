@@ -11,6 +11,7 @@ __all__ = [
     "hash_cmd",
     "index",
     "init",
+    "link_suggest",
     "reformat_cmd",
     "rules_cmd",
     "trace",

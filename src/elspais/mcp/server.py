@@ -18,6 +18,7 @@
 # Implements: REQ-d00067-E, REQ-d00067-F
 # Implements: REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
 # Implements: REQ-d00068-E, REQ-d00068-F
+# Implements: REQ-d00074-A, REQ-d00074-B, REQ-d00074-C, REQ-d00074-D
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.
@@ -1464,6 +1465,82 @@ def _list_safety_branches_impl(repo_root: Path) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Link Suggestion (REQ-d00074)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _suggest_links_impl(
+    graph: TraceGraph,
+    working_dir: Path,
+    file_path: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Suggest requirement links for unlinked test nodes.
+
+    REQ-d00074-A: Returns structured suggestions from the core engine.
+    REQ-d00074-C: Delegates to core engine, no analysis logic here.
+    """
+    from elspais.graph.link_suggest import suggest_links
+
+    suggestions = suggest_links(
+        graph,
+        working_dir,
+        file_path=file_path,
+        limit=limit,
+    )
+    return {
+        "suggestions": [s.to_dict() for s in suggestions],
+        "count": len(suggestions),
+    }
+
+
+def _apply_link_impl(
+    state: dict[str, Any],
+    file_path: str,
+    line: int,
+    requirement_id: str,
+) -> dict[str, Any]:
+    """Apply a link by inserting a # Implements: comment.
+
+    REQ-d00074-B: Inserts comment and refreshes graph.
+    REQ-d00074-D: Validates target requirement exists before modifying.
+    """
+    from elspais.graph.link_suggest import apply_link_to_file
+
+    graph = state["graph"]
+    working_dir = state["working_dir"]
+
+    # Validate requirement exists
+    target = graph.find_by_id(requirement_id)
+    if target is None:
+        return {
+            "success": False,
+            "error": f"Requirement '{requirement_id}' not found in graph",
+        }
+
+    abs_path = working_dir / file_path
+    result = apply_link_to_file(abs_path, line, requirement_id)
+
+    if result is None:
+        return {
+            "success": False,
+            "error": f"Could not write to file: {file_path}",
+        }
+
+    # Refresh graph after file modification
+    _, new_graph = _refresh_graph(working_dir)
+    state["graph"] = new_graph
+
+    return {
+        "success": True,
+        "comment": result,
+        "file": file_path,
+        "line": line,
+        "requirement_id": requirement_id,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP Server Instructions
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1534,6 +1611,14 @@ The graph is the single source of truth - all tools read directly from it.
 - `find_assertions_by_keywords(keywords, match_all=True)` - Search assertion text
   - match_all=True requires ALL keywords, False requires ANY
   - Complements find_by_keywords() which searches requirement titles
+
+### Link Suggestion
+- `suggest_links(file_path?, limit?)` - Suggest requirement links for unlinked tests
+  - Uses heuristics: import chain, function name, file proximity, keyword overlap
+  - Returns suggestions with confidence scores and reasons
+- `apply_link(file_path, line, requirement_id)` - Insert # Implements: comment
+  - Validates requirement exists before modifying files
+  - Refreshes graph after insertion
 
 ## Requirement Levels
 
@@ -2191,6 +2276,61 @@ def create_server(
             List of branch names and count.
         """
         return _list_safety_branches_impl(_state["working_dir"])
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Link Suggestion Tools (REQ-d00074)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def suggest_links(
+        file_path: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Suggest requirement links for unlinked test nodes.
+
+        Analyzes unlinked TEST nodes and proposes requirement associations
+        using heuristics: import chain, function name matching, file path
+        proximity, and keyword overlap.
+
+        Args:
+            file_path: Optional file path to restrict analysis to.
+            limit: Maximum suggestions to return (default 50).
+
+        Returns:
+            List of suggestions with test_id, requirement_id, confidence, and reasons.
+        """
+        return _suggest_links_impl(
+            _state["graph"],
+            _state["working_dir"],
+            file_path=file_path,
+            limit=limit,
+        )
+
+    @mcp.tool()
+    def apply_link(
+        file_path: str,
+        line: int,
+        requirement_id: str,
+    ) -> dict[str, Any]:
+        """Apply a link suggestion by inserting a # Implements: comment.
+
+        Inserts a ``# Implements: <requirement_id>`` comment into the specified
+        file at the given line number. Refreshes the graph afterward.
+
+        Args:
+            file_path: Path to the file to modify (relative to repo root).
+            line: Line number to insert at (1-based). 0 means top of file.
+            requirement_id: Requirement ID to reference (e.g., 'REQ-p00001').
+
+        Returns:
+            Success status and the comment that was inserted.
+        """
+        return _apply_link_impl(
+            _state,
+            file_path=file_path,
+            line=line,
+            requirement_id=requirement_id,
+        )
 
     return mcp
 

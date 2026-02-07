@@ -21,6 +21,7 @@ from elspais.commands import (
     health,
     index,
     init,
+    link_suggest,
     reformat_cmd,
     rules_cmd,
     trace,
@@ -758,6 +759,61 @@ Tools:
         help="Transport type (default: stdio)",
     )
 
+    # link command
+    link_parser = subparsers.add_parser(
+        "link",
+        help="Link suggestion tools (suggest links between tests and requirements)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais link suggest                          # Scan all unlinked tests
+  elspais link suggest --file tests/test_foo.py # Single file
+  elspais link suggest --format json            # Machine-readable output
+  elspais link suggest --min-confidence high    # Only high-confidence
+  elspais link suggest --apply --dry-run        # Preview changes
+  elspais link suggest --apply                  # Apply suggestions
+""",
+    )
+    link_subparsers = link_parser.add_subparsers(dest="link_action", help="Link actions")
+
+    suggest_parser = link_subparsers.add_parser(
+        "suggest",
+        help="Suggest requirement links for unlinked tests",
+    )
+    suggest_parser.add_argument(
+        "--file",
+        type=Path,
+        help="Restrict analysis to a single file",
+        metavar="PATH",
+    )
+    suggest_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    suggest_parser.add_argument(
+        "--min-confidence",
+        choices=["high", "medium", "low"],
+        help="Minimum confidence band to show",
+    )
+    suggest_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum suggestions to return (default: 50)",
+    )
+    suggest_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply suggestions by inserting # Implements: comments",
+    )
+    suggest_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview changes without modifying files (use with --apply)",
+    )
+
     return parser
 
 
@@ -842,6 +898,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             return completion_command(args)
         elif args.command == "mcp":
             return mcp_command(args)
+        elif args.command == "link":
+            if getattr(args, "link_action", None) == "suggest":
+                return link_suggest.run(args)
+            else:
+                print("Usage: elspais link suggest [options]")
+                return 1
         else:
             parser.print_help()
             return 1

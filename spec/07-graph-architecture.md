@@ -270,6 +270,71 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 *End* *Unified Root vs Orphan Classification* | **Hash**: ________
 ---
 
+## REQ-o00065: Agent-Assisted Link Suggestion
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00050
+
+The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
+
+## Assertions
+
+A. The suggestion engine SHALL identify unlinked TEST nodes (those without REQUIREMENT parents via VALIDATES edges) as suggestion candidates.
+B. The suggestion engine SHALL score suggestions using multiple heuristics: import chain analysis, function name matching, file path proximity, and keyword overlap.
+C. Each suggestion SHALL include a source node, target requirement, confidence score (0.0-1.0), confidence band (high/medium/low), and human-readable reason.
+D. The suggestion engine SHALL be exposed through both CLI (`elspais link suggest`) and MCP tools (`suggest_links`).
+E. The suggestion engine SHALL operate read-only on the graph, producing suggestions without modifying graph state.
+F. The suggestion engine SHALL support applying suggestions by inserting `# Implements:` comments into source files.
+
+## Rationale
+
+Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close traceability gaps systematically.
+
+*End* *Agent-Assisted Link Suggestion* | **Hash**: ________
+---
+
+## REQ-d00072: Link Suggestion Core Engine
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065
+
+The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
+
+## Assertions
+
+A. `suggest_links(graph, repo_root, file_path?, limit?)` SHALL orchestrate all heuristics and return deduplicated `LinkSuggestion` instances sorted by confidence descending.
+B. The import chain heuristic SHALL trace TEST→import→CODE→REQ relationships using `extract_python_imports()` and `module_to_source_path()` from `utilities/import_analyzer.py`, scoring matches at 0.9.
+C. The function name heuristic SHALL match test function names to CODE nodes using `_extract_candidate_functions()` from `graph/test_code_linker.py`, scoring exact matches at 0.85 with decreasing scores for partial matches.
+D. The file path proximity heuristic SHALL map test file paths to source directories and find REQUIREMENTs linked to CODE in those directories, scoring at 0.6.
+E. The keyword overlap heuristic SHALL compare test name/docstring keywords against REQUIREMENT title keywords using `extract_keywords()` from `graph/annotators.py`, scoring at the overlap ratio capped at 0.5.
+F. `_deduplicate_suggestions()` SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
+
+## Rationale
+
+The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
+
+*End* *Link Suggestion Core Engine* | **Hash**: ________
+---
+
+## REQ-d00073: Link Suggestion CLI Command
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065-D
+
+The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
+
+## Assertions
+
+A. `elspais link suggest` SHALL scan all unlinked test nodes and print suggestions with confidence scores.
+B. `--file <path>` SHALL restrict analysis to a single file.
+C. `--format json` SHALL output suggestions as a JSON array for programmatic consumption.
+D. `--min-confidence high|medium|low` SHALL filter suggestions by confidence band (high >= 0.8, medium >= 0.5, low < 0.5).
+E. `--apply [--dry-run]` SHALL insert `# Implements:` comments into source files at the suggested locations, with dry-run previewing changes without writing.
+
+## Rationale
+
+CLI exposure enables both interactive use and CI pipeline integration. JSON output mode supports tooling and scripting workflows.
+
+*End* *Link Suggestion CLI Command* | **Hash**: ________
+---
+
 ## Architecture Diagram
 
 ```
