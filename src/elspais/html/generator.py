@@ -674,7 +674,7 @@ class HTMLGenerator:
                 "id": node.id,
                 "label": node.get_label(),
                 "uuid": node.uuid,
-                "level": node.level,
+                "level": (node.level or "").upper(),
                 "status": node.status,
                 "hash": node.hash,
                 "source": {

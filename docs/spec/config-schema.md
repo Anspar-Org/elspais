@@ -84,7 +84,7 @@ fields = [
     "id",           # Requirement ID (REQ-p00001)
     "title",        # Requirement title
     "status",       # Status (Active, Draft, Deprecated, etc.)
-    "level",        # Level (PRD, OPS, DEV)
+    "level",        # Config type key (e.g., prd, ops, dev)
     "implements",   # Parent requirement IDs
     "addresses",    # User journey IDs
     "hash",         # Content hash
@@ -118,11 +118,11 @@ Filters restrict which requirements appear in the report:
 # Include only specific statuses
 filters = { status = ["Active", "Draft"] }
 
-# Include only specific levels
-filters = { level = ["PRD", "OPS"] }
+# Include only specific levels (use config type keys)
+filters = { level = ["prd", "ops"] }
 
 # Combine filters (AND logic)
-filters = { status = ["Active"], level = ["DEV"] }
+filters = { status = ["Active"], level = ["dev"] }
 ```
 
 ## `[rules.metrics]` - Metrics Configuration

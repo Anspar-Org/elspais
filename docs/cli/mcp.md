@@ -83,7 +83,7 @@ Get full details for a single requirement.
   Returns:
     id              Requirement ID
     title           Requirement title
-    level           PRD, OPS, or DEV
+    level           Config type key (e.g., prd, ops, dev)
     status          Draft, Active, Deprecated, etc.
     hash            Content hash for change detection
     assertions      List of assertion objects {id, label, text}
@@ -129,7 +129,7 @@ Get information about the current workspace/repository.
 Get summary statistics for the project.
 
   Returns:
-    requirements_by_level   Count by PRD/OPS/DEV level
+    requirements_by_level   Count by config type key (e.g., prd/ops/dev)
     coverage                Coverage statistics:
       - full              Requirements with full coverage
       - partial           Requirements with partial coverage
