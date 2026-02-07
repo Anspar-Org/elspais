@@ -2452,9 +2452,9 @@ function showFile(filePath, lineNumber) {
     const modeToggle = document.getElementById('file-viewer-mode-toggle');
     if (isMarkdown) {
         modeToggle.style.display = 'flex';
-        state.fileViewMode = 'source';
+        state.fileViewMode = 'rendered';
         modeToggle.querySelectorAll('.file-viewer-mode-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.mode === 'source');
+            btn.classList.toggle('active', btn.dataset.mode === 'rendered');
         });
     } else {
         modeToggle.style.display = 'none';
@@ -2512,14 +2512,25 @@ function scrollAndFlashLine(container, lineNumber) {
             prev.classList.remove('highlighted');
             prev.style.backgroundColor = '';
             prev.style.transition = '';
+            var prevCells = prev.querySelectorAll('.line-num, .line-content');
+            for (var i = 0; i < prevCells.length; i++) {
+                prevCells[i].style.backgroundColor = '';
+                prevCells[i].style.transition = '';
+            }
         }
 
         var target = container.querySelector('.source-line[data-line="' + lineNumber + '"]');
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            target.classList.add('highlighted');
-            // Flash the child cells directly — table row backgrounds are hidden
-            // behind the opaque .line-num and .highlight cell backgrounds
+        if (!target) return;
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('highlighted');
+
+        // Flash after scroll completes — use scrollend event with timeout fallback
+        var fired = false;
+        function flash() {
+            if (fired) return;
+            fired = true;
+            // Flash child cells directly — table row bg is hidden behind cell bg
             var cells = target.querySelectorAll('.line-num, .line-content');
             for (var i = 0; i < cells.length; i++) {
                 cells[i].style.transition = 'none';
@@ -2532,6 +2543,14 @@ function scrollAndFlashLine(container, lineNumber) {
                 }
             }, 400);
         }
+
+        // scrollend fires when smooth scroll completes
+        container.addEventListener('scrollend', function onScrollEnd() {
+            container.removeEventListener('scrollend', onScrollEnd);
+            flash();
+        });
+        // Fallback: if no scroll needed or scrollend unsupported, flash after 800ms
+        setTimeout(flash, 800);
     }, 50);
 }
 
