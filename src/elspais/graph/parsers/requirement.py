@@ -191,7 +191,10 @@ class RequirementParser:
         # Extract level and status
         level_match = self.LEVEL_STATUS_PATTERN.search(text)
         if level_match:
-            data["level"] = level_match.group("level") or "Unknown"
+            raw_level = level_match.group("level") or "Unknown"
+            # Normalize level to canonical config type key
+            resolved = self.pattern_config.resolve_level(raw_level)
+            data["level"] = resolved if resolved is not None else raw_level
             data["status"] = level_match.group("status") or "Unknown"
             if level_match.group("implements"):
                 data["implements"] = self._parse_refs(level_match.group("implements"))

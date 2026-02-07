@@ -281,7 +281,14 @@ def build_graph(
                                 )
                                 builder.add_parsed_content(parsed_content)
 
-    return builder.build()
+    graph = builder.build()
+
+    # Annotate keywords on all nodes so keyword search tools work
+    from elspais.graph.annotators import annotate_keywords
+
+    annotate_keywords(graph)
+
+    return graph
 
 
 __all__ = ["build_graph"]

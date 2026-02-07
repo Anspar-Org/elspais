@@ -279,6 +279,16 @@ def _search(
                 if query_lower in title.lower():
                     match = True
 
+        if not match and field in ("body", "all"):
+            body = node.get_field("body_text", "")
+            if body:
+                if regex:
+                    if pattern.search(body):
+                        match = True
+                else:
+                    if query_lower in body.lower():
+                        match = True
+
         if not match and field in ("keywords", "all"):
             # Search in keywords field
             keywords = node.get_field("keywords", [])
@@ -402,7 +412,9 @@ def _get_workspace_info(working_dir: Path) -> dict[str, Any]:
     }
 
 
-def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]:
+def _get_project_summary(
+    graph: TraceGraph, working_dir: Path, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Get project summary statistics.
 
     REQ-o00061-B: Returns requirement counts by level, coverage statistics, and change metrics.
@@ -411,12 +423,13 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
     Args:
         graph: The TraceGraph to analyze.
         working_dir: The repository root directory.
+        config: Optional config dict for deriving level keys.
 
     Returns:
         Project summary dict.
     """
     # Use aggregate functions from annotators (REQ-o00061-C)
-    level_counts = count_by_level(graph)
+    level_counts = count_by_level(graph, config=config)
     coverage_stats = count_by_coverage(graph)
     change_metrics = count_by_git_status(graph)
 
@@ -1585,15 +1598,18 @@ def create_server(
     if working_dir is None:
         working_dir = Path.cwd()
 
+    # Load config for the working directory
+    config = get_config(start_path=working_dir, quiet=True)
+
     # Build initial graph if not provided
     if graph is None:
-        graph = build_graph(repo_root=working_dir)
+        graph = build_graph(config=config, repo_root=working_dir)
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools
-    _state = {"graph": graph, "working_dir": working_dir}
+    _state: dict[str, Any] = {"graph": graph, "working_dir": working_dir, "config": config}
 
     # ─────────────────────────────────────────────────────────────────────
     # Register Tools
@@ -1692,7 +1708,7 @@ def create_server(
         Returns:
             Project summary with counts, coverage, and change metrics.
         """
-        return _get_project_summary(_state["graph"], _state["working_dir"])
+        return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)
