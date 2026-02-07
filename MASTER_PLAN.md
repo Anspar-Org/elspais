@@ -1,118 +1,117 @@
-# MASTER PLAN — Indirect Coverage Toggle
+# MASTER PLAN — JNY Trace View Enhancements
 
-**Branch**: `feature/CUR-240-unified-test-results`
-**Ticket**: CUR-240
-**CURRENT_ASSERTIONS**: REQ-d00069-A, REQ-d00069-B, REQ-d00069-C, REQ-d00069-D, REQ-d00069-E, REQ-d00069-F, REQ-d00070-A, REQ-d00070-B, REQ-d00070-C, REQ-d00070-D, REQ-d00070-E
+**Branch**: `user-journeys`
+**Ticket**: CUR-837
+**CURRENT_ASSERTIONS**: REQ-o00050-C
 
 ## Goal
 
-Add a toggle to the trace view HTML that lets whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) count as covering all assertions. Currently these tests contribute zero coverage — only `has_failures` propagates. The toggle provides a "progress indicator" view alongside the strict traceability view.
+Wire up JNY→REQ linking in the trace view so user journeys connect to the requirements they address. Add an `Addresses:` field to JNY blocks (parsed into ADDRESSES edges), render those links as clickable badges on journey cards, and include JNY nodes in `elspais index regenerate` output.
 
-## Principle: Same pattern as INFERRED
+## Context
 
-The system already handles this for requirements: when `REQ-child implements REQ-parent` without assertion targets, it adds `INFERRED` coverage for all assertions (annotators.py:531-540). The new `INDIRECT` source follows the same logic for TEST nodes.
+User journeys (JNY nodes) appear in the trace view as island nodes with no connections to requirements. In the Callisto project, JNY→REQ associations are hand-maintained in INDEX.md but aren't parseable by the graph. The `EdgeKind.ADDRESSES` edge type already exists in `relations.py` but nothing creates these edges.
 
-## Edge Case Rules
+## What Already Exists
 
-### Case 1: Mixed direct + indirect
-
-REQ has 11 assertions. 3 have direct tests (assertion-targeted). 1 whole-req test also exists.
-
-| Mode | Coverage | Detail |
-|------|----------|--------|
-| Strict | 3/11 = 27% `partial` | Only assertion-targeted tests count |
-| Indirect | 11/11 = 100% `full` | Whole-req test covers all 11 |
-
-### Case 2: Multiple tests, one failing
-
-Assertion A targeted by 3 tests: test1 passes, test2 passes, test3 fails.
-
-- `has_failures = True` (any failure, **same in both modes**)
-- Assertion A is `validated` (at least one passing result)
-- Warning icon shows alongside coverage dot regardless of mode
-
-### Case 3: Whole-req test, mixed results
-
-REQ has 5 assertions. Whole-req test1 passes, whole-req test2 fails.
-
-| Mode | Coverage | validated | has_failures |
-|------|----------|-----------|-------------|
-| Strict | 0/5 = 0% `none` | 0 | True |
-| Indirect | 5/5 = 100% `full` | 5 | True |
-
-Display in indirect mode: `full` coverage + warning icon.
-
-### Case 4: No whole-req test, only assertion-specific
-
-REQ has 5 assertions. Tests target A, B, C (all pass). D, E untested.
-
-Both modes: 3/5 = 60% `partial`. Indirect mode only affects tests with empty `assertion_targets`.
+| Component | Status |
+|-----------|--------|
+| `EdgeKind.ADDRESSES` in `relations.py` | Exists, non-coverage |
+| `JourneyParser` in `parsers/journey.py` | Parses id/title/actor/goal only |
+| `_add_journey()` in `builder.py:1695` | Creates nodes, no edges |
+| `JourneyItem` in `html/generator.py:53` | No referenced_reqs field |
+| Trace view journey tab | Cards with search/grouping, no REQ links |
+| `elspais index regenerate` | REQ only, no JNY section |
 
 ## Implementation Steps
 
-### Step 1: Add `CoverageSource.INDIRECT` + dual metrics
+### Step 1: JourneyParser — Parse `Addresses:` field
 
-`src/elspais/graph/metrics.py`:
-- [ ] Add `INDIRECT = "indirect"` to `CoverageSource` enum
-- [ ] Add fields to `RollupMetrics`: `indirect_coverage_pct: float`, `validated_with_indirect: int`
-- [ ] Update `finalize()`: compute `indirect_coverage_pct` including INDIRECT source alongside existing `coverage_pct` (which excludes INDIRECT)
+`src/elspais/graph/parsers/journey.py`:
+- [x] Add `ADDRESSES_PATTERN` regex to match `Addresses: REQ-xxx, REQ-yyy`
+- [x] Extract addresses list in `_parse_journey()`, store in `data["addresses"]`
 
-### Step 2: Emit INDIRECT contributions in annotator
+Supports JNY block format:
+```markdown
+# JNY-Dev-Setup-01: Set Up Requirements for a New Feature
 
-`src/elspais/graph/annotators.py` (around line 488):
-- [ ] When TEST edge has `assertion_targets=[]`, add INDIRECT contributions for ALL assertion labels
-- [ ] Track `validated_indirect_labels`: when whole-req test passes, add all assertion labels
-- [ ] Set `metrics.validated_with_indirect` before finalize
+**Actor**: Sarah (Developer)
+**Goal**: Create a validated DEV requirement
+Addresses: REQ-p00012, REQ-d00042
+```
 
-### Step 3: Generator dual data attributes
+### Step 2: GraphBuilder — Create ADDRESSES edges from JNY→REQ
+
+`src/elspais/graph/builder.py`:
+- [x] In `_add_journey()` (~line 1709), queue pending links for each address ref:
+  `self._pending_links.append((journey_id, addr_ref, EdgeKind.ADDRESSES))`
+- [x] Existing `_resolve_pending_links()` handles target resolution and missing-target warnings
+
+### Step 3: JourneyItem — Add referenced requirements to HTML data
 
 `src/elspais/html/generator.py`:
-- [ ] Add `coverage_indirect: str` field to `TreeRow` dataclass
-- [ ] Compute from `indirect_coverage_pct` (same thresholds: 0=none, <100=partial, 100=full)
-- [ ] Pass through to template
+- [x] Add `referenced_reqs: list[str]` field to `JourneyItem` dataclass (~line 62)
+- [x] In `_collect_journeys()`, extract outgoing ADDRESSES edges from each journey node
+- [x] Pass `referenced_reqs` to `JourneyItem`
 
-### Step 4: Template + JS toggle
+### Step 4: Trace view template — Render linked REQs on journey cards
 
 `src/elspais/html/templates/trace_view.html.j2`:
-- [ ] Add `data-coverage-indirect="{{ row.coverage_indirect }}"` attribute on `<tr>`
-- [ ] Add toggle button in filter bar area
-- [ ] JS function: swap which `data-coverage*` attribute drives the coverage icon text and class
+- [x] **HTML**: Add `journey-refs` section to each card showing "Addresses: REQ-xxx" as clickable links
+- [x] **CSS**: Style `.journey-refs` as inline pill badges
+- [x] **JS**: Add `switchToReqTab(reqId)` — switches tab, scrolls to row, applies flash-highlight
+- [x] **Data attr**: Add `data-refs` to journey cards, update `filterJourneys()` to search it
 
-### Step 5: Tests
+### Step 5: Index regenerate — Add JNY section
 
-- [ ] `tests/core/test_coverage_metrics.py`: INDIRECT source, dual coverage computation, all 4 edge cases
-- [ ] Integration test: whole-req test → `coverage_pct=0`, `indirect_coverage_pct=100`
+`src/elspais/commands/index.py`:
+- [x] In `_regenerate_index()` (~line 142), add User Journeys table with columns: ID, Title, File, Addresses
+- [x] Populate Addresses column from outgoing ADDRESSES edges
+- [x] Update `_validate_index()` to also check JNY IDs
+
+### Step 6: Tests
+
+- [x] New tests for JourneyParser `Addresses:` parsing
+- [x] New tests for ADDRESSES edge creation in builder
+- [x] New tests for index regenerate JNY section
+- [x] Existing tests still pass: `pytest tests/core/test_parsers/test_journey_parser.py`
+
+### Step 7: Add `Addresses:` to Elspais JNY files
+
+- [x] Add `Addresses:` lines to the 17 journeys in `spec/journeys/*.md` referencing relevant REQs
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/elspais/graph/metrics.py` | Add `INDIRECT` enum, `indirect_coverage_pct`, `validated_with_indirect`, update `finalize()` |
-| `src/elspais/graph/annotators.py` | Add INDIRECT contributions for whole-req tests, track `validated_indirect_labels` |
-| `src/elspais/html/generator.py` | Add `coverage_indirect` to TreeRow, compute from `indirect_coverage_pct` |
-| `src/elspais/html/templates/trace_view.html.j2` | Add `data-coverage-indirect`, toggle button, JS toggle |
-| `tests/core/test_coverage_metrics.py` | Tests for INDIRECT source, dual coverage, edge cases |
+| `src/elspais/graph/parsers/journey.py` | Parse `Addresses:` field |
+| `src/elspais/graph/builder.py` | Queue ADDRESSES edges in `_add_journey()` |
+| `src/elspais/html/generator.py` | Add `referenced_reqs` to `JourneyItem` |
+| `src/elspais/html/templates/trace_view.html.j2` | Render REQ links on cards, click-to-navigate |
+| `src/elspais/commands/index.py` | Add JNY section to `regenerate`, validate JNY IDs |
+| `spec/journeys/*.md` | Add `Addresses:` lines to journey blocks |
 
 ## What Stays the Same
 
-- `coverage_pct` (strict) — existing behavior, no change to default display
-- `has_failures` — global boolean, same in both modes
-- DIRECT, EXPLICIT, INFERRED sources — unchanged
-- Default view shows strict coverage (toggle starts OFF)
-- All existing tests pass unchanged
+- `relations.py` — `EdgeKind.ADDRESSES` already exists
+- `GraphNode.py` — no new node kinds
+- `factory.py` — parsers already registered
+- `requirement.py` — REQ `Addresses:` field (REQ→JNY direction) is a separate concern
 
 ## Verification
 
-1. `python -m pytest tests/ -x -q` — all pass
-2. Run on fda-specs: `python -m elspais trace --view --embed-content --output /tmp/trace.html`
-3. REQ-d00087: `data-coverage="none"` + `data-coverage-indirect="full"`
-4. Toggle in browser switches coverage icons between strict and indirect
-5. Warning icon shows regardless of toggle state
-6. Existing elspais repo trace unchanged (toggle OFF = same as before)
+1. Add `Addresses: REQ-p00012` to JNY-Dev-Setup-01
+2. Build graph and confirm JNY-Dev-Setup-01 has outgoing ADDRESSES edge
+3. `elspais trace --view` — journey card shows clickable "Addresses: REQ-p00012"
+4. Click link — switches to requirements tab, highlights REQ-p00012
+5. Search "p00012" in journey search bar — matches JNY-Dev-Setup-01
+6. `elspais index regenerate` — JNY section appears with Addresses column
+7. `pytest tests/` — all pass
+8. `elspais validate` — no breakage
 
 ## Archive
 
-- [ ] Mark phase complete in MASTER_PLAN.md
-- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
-- [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
+- [x] Mark phase complete in MASTER_PLAN.md
+- [x] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
+- [x] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase

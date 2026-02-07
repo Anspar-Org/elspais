@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
 
 from elspais.graph import NodeKind
+from elspais.graph.relations import EdgeKind
 
 
 def run(args: argparse.Namespace) -> int:
@@ -66,32 +67,54 @@ def _validate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Nam
 
     # Parse IDs from INDEX.md
     content = index_path.read_text()
-    index_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
 
     # Get IDs from graph
-    graph_ids = set()
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        graph_ids.add(node.id)
+    graph_req_ids = {node.id for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    graph_jny_ids = {node.id for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
 
-    # Compare
-    missing = graph_ids - index_ids
-    extra = index_ids - graph_ids
+    # Compare requirements
+    missing_reqs = graph_req_ids - index_req_ids
+    extra_reqs = index_req_ids - graph_req_ids
 
-    if missing:
-        print(f"Missing from INDEX.md ({len(missing)}):")
-        for req_id in sorted(missing):
+    # Compare journeys
+    missing_jnys = graph_jny_ids - index_jny_ids
+    extra_jnys = index_jny_ids - graph_jny_ids
+
+    has_issues = False
+
+    if missing_reqs:
+        print(f"Missing requirements from INDEX.md ({len(missing_reqs)}):")
+        for req_id in sorted(missing_reqs):
             print(f"  {req_id}")
+        has_issues = True
 
-    if extra:
-        print(f"Extra in INDEX.md ({len(extra)}):")
-        for req_id in sorted(extra):
+    if extra_reqs:
+        print(f"Extra requirements in INDEX.md ({len(extra_reqs)}):")
+        for req_id in sorted(extra_reqs):
             print(f"  {req_id}")
+        has_issues = True
 
-    if not missing and not extra:
-        print(f"INDEX.md is up to date ({len(graph_ids)} requirements)")
+    if missing_jnys:
+        print(f"Missing journeys from INDEX.md ({len(missing_jnys)}):")
+        for jny_id in sorted(missing_jnys):
+            print(f"  {jny_id}")
+        has_issues = True
+
+    if extra_jnys:
+        print(f"Extra journeys in INDEX.md ({len(extra_jnys)}):")
+        for jny_id in sorted(extra_jnys):
+            print(f"  {jny_id}")
+        has_issues = True
+
+    if not has_issues:
+        req_n = len(graph_req_ids)
+        jny_n = len(graph_jny_ids)
+        print(f"INDEX.md is up to date ({req_n} requirements, {jny_n} journeys)")
         return 0
 
-    return 1 if missing or extra else 0
+    return 1
 
 
 def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
@@ -141,10 +164,38 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
 
         lines.append("")
 
+    # User Journeys section
+    journey_nodes = list(graph.nodes_by_kind(NodeKind.USER_JOURNEY))
+    if journey_nodes:
+        lines.append("## User Journeys (JNY)")
+        lines.append("")
+        lines.append("| ID | Title | Actor | File | Addresses |")
+        lines.append("|---|---|---|---|---|")
+
+        for node in sorted(journey_nodes, key=lambda n: n.id):
+            actor = node.get_field("actor") or ""
+            file_path = node.source.path if node.source else ""
+            if file_path:
+                for spec_dir in spec_dirs:
+                    try:
+                        file_path = Path(file_path).relative_to(spec_dir)
+                        break
+                    except ValueError:
+                        pass
+            # Extract addresses from incoming ADDRESSES edges
+            addresses = sorted(
+                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
+            )
+            addr_str = ", ".join(addresses)
+            lines.append(f"| {node.id} | {node.get_label()} | {actor} | {file_path} | {addr_str} |")
+
+        lines.append("")
+
     # Write to first spec dir
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
     output_path.write_text("\n".join(lines))
 
     req_count = sum(len(nodes) for nodes in by_level.values())
-    print(f"Generated {output_path} ({req_count} requirements)")
+    jny_count = len(journey_nodes)
+    print(f"Generated {output_path} ({req_count} requirements, {jny_count} journeys)")
     return 0

@@ -93,6 +93,7 @@ def make_journey(
     title: str = "",
     actor: str = "User",
     goal: str = "",
+    addresses: list[str] | None = None,
     source_path: str = "spec/journeys.md",
     start_line: int = 1,
     end_line: int = 10,
@@ -104,6 +105,7 @@ def make_journey(
         title: Journey title
         actor: Actor performing the journey
         goal: Journey goal
+        addresses: List of requirement IDs this journey addresses
         source_path: Source file path
         start_line: Start line in source
         end_line: End line in source
@@ -121,6 +123,7 @@ def make_journey(
             "title": title or journey_id,
             "actor": actor,
             "goal": goal,
+            "addresses": addresses or [],
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

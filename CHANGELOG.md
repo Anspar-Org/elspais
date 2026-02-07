@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.47.0] - 2026-02-06
+
+### Added
+
+- **JNY→REQ linking via `Addresses:` field**: User journeys can now reference the requirements they address using `Addresses: REQ-xxx, REQ-yyy` in the journey block. Parsed into `EdgeKind.ADDRESSES` edges in the traceability graph.
+- **Trace view journey cards show linked REQs**: Addressed requirements appear as clickable pill badges on journey cards. Clicking navigates to the requirement in the requirements tab with a flash highlight.
+- **Journey search includes addresses**: The journey tab search bar now matches against referenced requirement IDs.
+- **Index regenerate includes Addresses column**: `elspais index regenerate` now includes an Addresses column in the User Journeys section.
+- **Index validate checks JNY IDs**: `elspais index validate` now verifies that all JNY IDs in the graph appear in INDEX.md and vice versa.
+
 ## [0.46.0] - 2026-02-07
 
 ### Added
