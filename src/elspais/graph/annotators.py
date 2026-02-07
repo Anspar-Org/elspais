@@ -190,21 +190,32 @@ def annotate_implementation_files(
 # They follow the composable pattern: take a graph, return computed values.
 
 
-def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
+def count_by_level(
+    graph: TraceGraph,
+    config: dict[str, Any] | None = None,
+) -> dict[str, dict[str, int]]:
     """Count requirements by level, with and without deprecated.
 
     Args:
         graph: The TraceGraph to aggregate.
+        config: Optional config dict. If provided, derives level keys from
+                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
 
     Returns:
         Dict with 'active' (excludes Deprecated) and 'all' (includes Deprecated) counts
-        by level (PRD, OPS, DEV).
+        by level.
     """
     from elspais.graph import NodeKind
 
+    # Derive level keys from config or use hardcoded defaults
+    if config is not None:
+        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+    else:
+        level_keys = ["PRD", "OPS", "DEV"]
+
     counts: dict[str, dict[str, int]] = {
-        "active": {"PRD": 0, "OPS": 0, "DEV": 0},
-        "all": {"PRD": 0, "OPS": 0, "DEV": 0},
+        "active": dict.fromkeys(level_keys, 0),
+        "all": dict.fromkeys(level_keys, 0),
     }
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         level = node.get_field("level", "")
@@ -216,20 +227,33 @@ def count_by_level(graph: TraceGraph) -> dict[str, dict[str, int]]:
     return counts
 
 
-def group_by_level(graph: TraceGraph) -> dict[str, list[GraphNode]]:
+def group_by_level(
+    graph: TraceGraph,
+    config: dict[str, Any] | None = None,
+) -> dict[str, list[GraphNode]]:
     """Group requirements by level.
 
     Args:
         graph: The TraceGraph to query.
+        config: Optional config dict. If provided, derives level keys from
+                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
 
     Returns:
-        Dict mapping level (PRD, OPS, DEV, other) to list of requirement nodes.
+        Dict mapping level to list of requirement nodes, plus "other" for unrecognized.
     """
     from elspais.graph import NodeKind
 
-    groups: dict[str, list[GraphNode]] = {"PRD": [], "OPS": [], "DEV": [], "other": []}
+    # Derive level keys from config or use hardcoded defaults
+    if config is not None:
+        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+    else:
+        level_keys = ["PRD", "OPS", "DEV"]
+
+    groups: dict[str, list[GraphNode]] = {k: [] for k in level_keys}
+    groups["other"] = []
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        level = (node.get_field("level") or "").upper()
+        level = node.get_field("level") or ""
         if level in groups:
             groups[level].append(node)
         else:

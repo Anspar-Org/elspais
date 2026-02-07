@@ -81,21 +81,61 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
 
     REQ-d00064-B: Returns all fields including assertions and edges.
     REQ-d00064-C: Reads from node.get_field() and node.get_label().
+
+    Children are returned as a single flat list in document order,
+    each tagged with "kind" so the receiver can distinguish assertion
+    vs remainder vs other children without needing to re-sort.
+
+    Parents include "edge_kind" (IMPLEMENTS/REFINES) so the metadata
+    line can be reconstructed.
     """
-    # Get assertions from children
-    assertions = []
+    # Build flat children list in document order (iter_children preserves insertion order)
     children = []
     for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
-            assertions.append(_serialize_assertion(child))
+            children.append(
+                {
+                    "kind": "assertion",
+                    "id": child.id,
+                    "label": child.get_field("label"),
+                    "text": child.get_label(),
+                    "line": child.source.line if child.source else None,
+                }
+            )
+        elif child.kind == NodeKind.REMAINDER:
+            children.append(
+                {
+                    "kind": "remainder",
+                    "id": child.id,
+                    "heading": child.get_field("heading"),
+                    "text": child.get_field("text"),
+                    "line": child.source.line if child.source else None,
+                }
+            )
         else:
-            children.append(_serialize_requirement_summary(child))
+            children.append(
+                {
+                    "kind": child.kind.value,
+                    "id": child.id,
+                    "title": child.get_label(),
+                    "line": child.source.line if child.source else None,
+                }
+            )
 
-    # Get parents
+    # Build edge_kind map from incoming edges (parent -> this node direction)
+    # incoming edges have source=parent, target=this node
+    edge_map = {e.source.id: e.kind.value for e in node.iter_incoming_edges()}
+
+    # Get parents with edge_kind annotation
     parents = []
     for parent in node.iter_parents():
         if parent.kind == NodeKind.REQUIREMENT:
-            parents.append(_serialize_requirement_summary(parent))
+            parents.append(
+                {
+                    **_serialize_requirement_summary(parent),
+                    "edge_kind": edge_map.get(parent.id, "unknown"),
+                }
+            )
 
     return {
         "id": node.id,
@@ -103,9 +143,13 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
         "level": node.get_field("level"),
         "status": node.get_field("status"),
         "hash": node.get_field("hash"),
-        "assertions": assertions,
+        "body_text": node.get_field("body_text"),
         "children": children,
         "parents": parents,
+        "source": {
+            "path": node.source.path if node.source else None,
+            "line": node.source.line if node.source else None,
+        },
     }
 
 
@@ -235,6 +279,16 @@ def _search(
                 if query_lower in title.lower():
                     match = True
 
+        if not match and field in ("body", "all"):
+            body = node.get_field("body_text", "")
+            if body:
+                if regex:
+                    if pattern.search(body):
+                        match = True
+                else:
+                    if query_lower in body.lower():
+                        match = True
+
         if not match and field in ("keywords", "all"):
             # Search in keywords field
             keywords = node.get_field("keywords", [])
@@ -358,7 +412,9 @@ def _get_workspace_info(working_dir: Path) -> dict[str, Any]:
     }
 
 
-def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]:
+def _get_project_summary(
+    graph: TraceGraph, working_dir: Path, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Get project summary statistics.
 
     REQ-o00061-B: Returns requirement counts by level, coverage statistics, and change metrics.
@@ -367,12 +423,13 @@ def _get_project_summary(graph: TraceGraph, working_dir: Path) -> dict[str, Any]
     Args:
         graph: The TraceGraph to analyze.
         working_dir: The repository root directory.
+        config: Optional config dict for deriving level keys.
 
     Returns:
         Project summary dict.
     """
     # Use aggregate functions from annotators (REQ-o00061-C)
-    level_counts = count_by_level(graph)
+    level_counts = count_by_level(graph, config=config)
     coverage_stats = count_by_coverage(graph)
     change_metrics = count_by_git_status(graph)
 
@@ -1560,15 +1617,18 @@ def create_server(
     if working_dir is None:
         working_dir = Path.cwd()
 
+    # Load config for the working directory
+    config = get_config(start_path=working_dir, quiet=True)
+
     # Build initial graph if not provided
     if graph is None:
-        graph = build_graph(repo_root=working_dir)
+        graph = build_graph(config=config, repo_root=working_dir)
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools
-    _state = {"graph": graph, "working_dir": working_dir}
+    _state: dict[str, Any] = {"graph": graph, "working_dir": working_dir, "config": config}
 
     # ─────────────────────────────────────────────────────────────────────
     # Register Tools
@@ -1667,7 +1727,7 @@ def create_server(
         Returns:
             Project summary with counts, coverage, and change metrics.
         """
-        return _get_project_summary(_state["graph"], _state["working_dir"])
+        return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)

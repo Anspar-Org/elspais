@@ -95,10 +95,11 @@ class ReportSchema:
 ### Available Fields
 
 #### Requirement Fields
+
 - `id` - Requirement ID (e.g., "REQ-p00001")
 - `title` - Requirement title
 - `status` - Status (Active, Draft, Deprecated, etc.)
-- `level` - Level (PRD, OPS, DEV)
+- `level` - Config type key (e.g., `prd`, `ops`, `dev`)
 - `implements` - Parent requirement IDs
 - `addresses` - User journey IDs
 - `hash` - Content hash
@@ -106,6 +107,7 @@ class ReportSchema:
 - `line_number` - Line number in source
 
 #### Metric Fields
+
 - `total_assertions` - Total assertion count
 - `covered_assertions` - Covered assertion count
 - `total_tests` - Total test count

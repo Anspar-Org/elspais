@@ -142,7 +142,7 @@ class RequirementParser:
 
                 # Parse the requirement data
                 raw_text = "\n".join(t for _, t in req_lines)
-                parsed_data = self._parse_requirement(req_id, title, raw_text)
+                parsed_data = self._parse_requirement(req_id, title, raw_text, start_line)
 
                 yield ParsedContent(
                     content_type="requirement",
@@ -158,13 +158,16 @@ class RequirementParser:
             else:
                 i += 1
 
-    def _parse_requirement(self, req_id: str, title: str, text: str) -> dict[str, Any]:
+    def _parse_requirement(
+        self, req_id: str, title: str, text: str, start_line: int = 0
+    ) -> dict[str, Any]:
         """Parse requirement fields from text block.
 
         Args:
             req_id: Requirement ID.
             title: Requirement title.
             text: Full requirement text.
+            start_line: Line number where the requirement starts in the file.
 
         Returns:
             Dictionary of parsed requirement data.
@@ -188,7 +191,10 @@ class RequirementParser:
         # Extract level and status
         level_match = self.LEVEL_STATUS_PATTERN.search(text)
         if level_match:
-            data["level"] = level_match.group("level") or "Unknown"
+            raw_level = level_match.group("level") or "Unknown"
+            # Normalize level to canonical config type key
+            resolved = self.pattern_config.resolve_level(raw_level)
+            data["level"] = resolved if resolved is not None else raw_level
             data["status"] = level_match.group("status") or "Unknown"
             if level_match.group("implements"):
                 data["implements"] = self._parse_refs(level_match.group("implements"))
@@ -215,7 +221,10 @@ class RequirementParser:
         data["refines"] = self._expand_multi_assertion(data["refines"])
 
         # Extract assertions
-        data["assertions"] = self._extract_assertions(text)
+        data["assertions"] = self._extract_assertions(text, start_line)
+
+        # Extract non-normative sections from body_text (REQ-d00062-B, REQ-d00064-B)
+        data["sections"] = self._extract_sections(data["body_text"], start_line, text)
 
         # Extract hash
         end_match = self.END_MARKER_PATTERN.search(text)
@@ -272,8 +281,16 @@ class RequirementParser:
 
         return result
 
-    def _extract_assertions(self, text: str) -> list[dict[str, Any]]:
-        """Extract assertions from text."""
+    def _extract_assertions(self, text: str, start_line: int = 0) -> list[dict[str, Any]]:
+        """Extract assertions from text.
+
+        Args:
+            text: Full requirement text.
+            start_line: Line number where the requirement starts in the file.
+
+        Returns:
+            List of assertion dicts with label, text, and line number.
+        """
         assertions = []
 
         header_match = self.ASSERTIONS_HEADER_PATTERN.search(text)
@@ -298,10 +315,15 @@ class RequirementParser:
         for match in self.ASSERTION_LINE_PATTERN.finditer(assertions_text):
             label = match.group(1)
             assertion_text = match.group(2).strip()
+            # Compute absolute line number: use match.start(1) to point to the
+            # label character itself (not leading whitespace which may include \n)
+            abs_pos = start_pos + match.start(1)
+            line = start_line + text[:abs_pos].count("\n")
             assertions.append(
                 {
                     "label": label,
                     "text": assertion_text,
+                    "line": line,
                 }
             )
 
@@ -346,3 +368,110 @@ class RequirementParser:
             body_lines.pop()
 
         return "\n".join(body_lines)
+
+    # Pattern to split on ## headings (captures the heading name)
+    _SECTION_HEADER_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+
+    def _extract_sections(
+        self, body_text: str, start_line: int = 0, raw_text: str = ""
+    ) -> list[dict[str, Any]]:
+        """Extract named sections from body text.
+
+        Parses ## headings into separate sections. Content before the first
+        heading (minus the metadata line) goes into a "preamble" section.
+        The Assertions section is excluded (already parsed as assertion nodes).
+
+        Args:
+            body_text: The body text between header and footer.
+            start_line: Line number where the requirement starts in the file.
+            raw_text: Full raw requirement text (for computing line offsets).
+
+        Returns:
+            List of {"heading": str, "content": str, "line": int} dicts.
+            Empty sections are omitted.
+        """
+        if not body_text:
+            return []
+
+        # Compute the line offset where body_text begins within raw_text.
+        # body_text is extracted from raw_text by stripping header and footer,
+        # so we find where the first body line appears.
+        body_start_offset = 0
+        if raw_text and body_text:
+            # The header is line 0 of raw_text, body starts after that
+            # Find the body_text content in raw_text to get proper offset
+            first_body_line = body_text.split("\n")[0] if body_text else ""
+            raw_lines = raw_text.split("\n")
+            for i, rl in enumerate(raw_lines):
+                if rl == first_body_line and i > 0:
+                    body_start_offset = i
+                    break
+            else:
+                # Fallback: body starts on line 1 (after header)
+                body_start_offset = 1
+
+        sections: list[dict[str, Any]] = []
+        lines = body_text.split("\n")
+
+        current_heading: str | None = None
+        current_lines: list[str] = []
+        current_line_num = start_line + body_start_offset
+
+        # Track starting line for each section
+        section_start_line = current_line_num
+
+        for i, line in enumerate(lines):
+            match = self._SECTION_HEADER_RE.match(line)
+            if match:
+                # Flush previous section
+                self._flush_section(sections, current_heading, current_lines, section_start_line)
+                current_heading = match.group(1).strip()
+                current_lines = []
+                section_start_line = start_line + body_start_offset + i
+            else:
+                current_lines.append(line)
+
+        # Flush final section
+        self._flush_section(sections, current_heading, current_lines, section_start_line)
+
+        return sections
+
+    def _flush_section(
+        self,
+        sections: list[dict[str, Any]],
+        heading: str | None,
+        lines: list[str],
+        line_num: int = 0,
+    ) -> None:
+        """Flush accumulated lines into a section if non-empty.
+
+        For the preamble (heading=None), strips the metadata line
+        (**Level**: ... | **Status**: ...) since it's already parsed
+        into structured fields.
+
+        Skips the Assertions section (already parsed as nodes).
+        """
+        if heading is not None and heading.lower() == "assertions":
+            return
+
+        # Strip metadata line from preamble
+        if heading is None:
+            lines = [
+                ln
+                for ln in lines
+                if not self.LEVEL_STATUS_PATTERN.search(ln)
+                and not self.ALT_STATUS_PATTERN.search(ln)
+                and not self.IMPLEMENTS_PATTERN.search(ln)
+            ]
+
+        content = "\n".join(lines).strip()
+        if not content:
+            return
+
+        sections.append(
+            {
+                "heading": heading if heading is not None else "preamble",
+                "content": content,
+                "line": line_num,
+            }
+        )

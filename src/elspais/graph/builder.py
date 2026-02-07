@@ -1690,19 +1690,48 @@ class GraphBuilder:
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
 
+        # Collect all children (assertions + sections) with line numbers,
+        # then add in document order so iter_children() yields document order.
+        children_with_lines: list[tuple[int, GraphNode]] = []
+
         # Create assertion nodes
         for assertion in data.get("assertions", []):
             assertion_id = f"{req_id}-{assertion['label']}"
+            assertion_line = assertion.get("line", content.start_line)
             assertion_node = GraphNode(
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
                 label=assertion["text"],
+                source=SourceLocation(path=source_path, line=assertion_line),
             )
             assertion_node._content = {"label": assertion["label"]}
             self._nodes[assertion_id] = assertion_node
+            children_with_lines.append((assertion_line, assertion_node))
 
-            # Link assertion to parent requirement
-            node.add_child(assertion_node)
+        # Create REMAINDER child nodes from non-normative sections
+        # Each section (preamble, Rationale, Notes, etc.) becomes its own node
+        # so that the requirement can be reconstructed from the graph.
+        for idx, section in enumerate(data.get("sections", [])):
+            section_id = f"{req_id}:section:{idx}"
+            section_line = section.get("line", content.start_line)
+            section_node = GraphNode(
+                id=section_id,
+                kind=NodeKind.REMAINDER,
+                label=section["heading"],
+                source=SourceLocation(path=source_path, line=section_line),
+            )
+            section_node._content = {
+                "heading": section["heading"],
+                "text": section["content"],
+                "order": idx,
+            }
+            self._nodes[section_id] = section_node
+            children_with_lines.append((section_line, section_node))
+
+        # Add children in document order (sorted by line number)
+        children_with_lines.sort(key=lambda x: x[0])
+        for _line, child_node in children_with_lines:
+            node.add_child(child_node)
 
         # Queue implements/refines links for later resolution
         for impl_ref in data.get("implements", []):

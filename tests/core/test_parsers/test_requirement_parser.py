@@ -213,3 +213,84 @@ class TestRequirementParserEdgeCases:
         assert "REQ-p00001-A" in implements
         assert "REQ-p00001-B" in implements
         assert "REQ-p00001-C" in implements
+
+
+class TestRoundTripLineNumbers:
+    """Tests for round-trip fidelity: line numbers on assertions and sections."""
+
+    def test_assertions_include_line_numbers(self, parser):
+        """Assertions should include their absolute line number."""
+        lines = [
+            (10, "## REQ-p00001: Test Req"),
+            (11, "**Level**: PRD | **Status**: Active"),
+            (12, ""),
+            (13, "## Assertions"),
+            (14, ""),
+            (15, "A. SHALL do first thing."),
+            (16, "B. SHALL do second thing."),
+            (17, ""),
+            (18, "*End* *REQ-p00001*"),
+        ]
+        ctx = ParseContext(file_path="spec/prd.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        assertions = results[0].parsed_data["assertions"]
+        assert len(assertions) == 2
+        assert assertions[0]["label"] == "A"
+        assert assertions[0]["line"] == 15
+        assert assertions[1]["label"] == "B"
+        assert assertions[1]["line"] == 16
+
+    def test_sections_include_line_numbers(self, parser):
+        """Non-normative sections should include their line number."""
+        lines = [
+            (20, "## REQ-p00002: Sectioned Req"),
+            (21, "**Level**: PRD | **Status**: Active"),
+            (22, ""),
+            (23, "Some preamble text here."),
+            (24, ""),
+            (25, "## Rationale"),
+            (26, ""),
+            (27, "This is why we need it."),
+            (28, ""),
+            (29, "## Assertions"),
+            (30, ""),
+            (31, "A. SHALL exist."),
+            (32, ""),
+            (33, "*End* *REQ-p00002*"),
+        ]
+        ctx = ParseContext(file_path="spec/prd.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        sections = results[0].parsed_data["sections"]
+        # Should have preamble and Rationale (Assertions excluded)
+        headings = [s["heading"] for s in sections]
+        assert "preamble" in headings
+        assert "Rationale" in headings
+        # Each section has a line number
+        for section in sections:
+            assert "line" in section
+            assert isinstance(section["line"], int)
+
+    def test_assertion_line_zero_when_start_line_zero(self, parser):
+        """When start_line is 0 (default), lines should be relative offsets."""
+        lines = [
+            (0, "## REQ-p00001: Zero-based"),
+            (1, "**Level**: PRD | **Status**: Active"),
+            (2, ""),
+            (3, "## Assertions"),
+            (4, ""),
+            (5, "A. SHALL test."),
+            (6, ""),
+            (7, "*End* *REQ-p00001*"),
+        ]
+        ctx = ParseContext(file_path="spec/prd.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assertions = results[0].parsed_data["assertions"]
+        assert assertions[0]["line"] == 5

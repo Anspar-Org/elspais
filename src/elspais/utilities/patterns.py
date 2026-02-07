@@ -90,6 +90,23 @@ class PatternConfig:
                 return config
         return None
 
+    def resolve_level(self, raw_level: str) -> Optional[str]:
+        """Resolve raw level text to canonical type key.
+
+        Case-insensitive match against config type keys.
+
+        Args:
+            raw_level: Raw level text from spec file (e.g., "Dev", "PRD", "ops").
+
+        Returns:
+            Canonical type key (e.g., "dev", "prd", "ops") or None if unrecognized.
+        """
+        lower = raw_level.lower()
+        for key in self.types:
+            if key.lower() == lower:
+                return key
+        return None
+
     def get_all_type_ids(self) -> List[str]:
         """Get list of all type IDs."""
         return [config.get("id", "") for config in self.types.values()]

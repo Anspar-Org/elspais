@@ -284,6 +284,11 @@ def build_graph(
         source_roots = traceability_config.get("source_roots", None)
         link_tests_to_code(graph, repo_root, source_roots)
 
+    # Annotate keywords on all nodes so keyword search tools work
+    from elspais.graph.annotators import annotate_keywords
+
+    annotate_keywords(graph)
+
     return graph
 
 
