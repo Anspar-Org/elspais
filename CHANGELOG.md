@@ -28,6 +28,11 @@ All notable changes to elspais will be documented in this file.
 - **`CoverageSource.INDIRECT`**: New coverage source type for whole-requirement test contributions, alongside existing DIRECT, EXPLICIT, and INFERRED sources.
 - **Dual coverage metrics**: `RollupMetrics` now tracks both `coverage_pct` (strict, excludes indirect) and `indirect_coverage_pct` (includes indirect). `validated_with_indirect` counts assertions validated when including whole-req passing tests.
 - **`data-coverage-indirect` attribute**: Tree rows carry both strict and indirect coverage data for client-side toggle without page reload.
+- **JNY→REQ linking via `Addresses:` field**: User journeys can now reference the requirements they address using `Addresses: REQ-xxx, REQ-yyy` in the journey block. Parsed into `EdgeKind.ADDRESSES` edges in the traceability graph.
+- **Trace view journey cards show linked REQs**: Addressed requirements appear as clickable pill badges on journey cards. Clicking navigates to the requirement in the requirements tab with a flash highlight.
+- **Journey search includes addresses**: The journey tab search bar now matches against referenced requirement IDs.
+- **Index regenerate includes Addresses column**: `elspais index regenerate` now includes an Addresses column in the User Journeys section.
+- **Index validate checks JNY IDs**: `elspais index validate` now verifies that all JNY IDs in the graph appear in INDEX.md and vice versa.
 
 ## [0.46.0] - 2026-02-07
 

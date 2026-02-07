@@ -410,6 +410,40 @@ body {
     white-space: pre-wrap;
 }
 
+.journey-refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.journey-refs-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 600;
+    margin-right: 2px;
+    align-self: center;
+}
+
+.journey-ref-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #0d6efd;
+    background: #e7f1ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+
+.journey-ref-badge:hover {
+    background: #0d6efd;
+    color: #fff;
+}
+
 .no-journeys {
     text-align: center;
     padding: 48px;
@@ -1572,7 +1606,8 @@ body {
                  data-actor="{{ (journey.actor or '')|lower }}"
                  data-goal="{{ (journey.goal or '')|lower }}"
                  data-descriptor="{{ journey.descriptor|lower }}"
-                 data-file="{{ journey.file|lower }}">
+                 data-file="{{ journey.file|lower }}"
+                 data-refs="{{ journey.referenced_reqs|join(',')|lower }}">
                 <div class="journey-card-header">
                     <span class="journey-id">{{ journey.id }}</span>
                     <h3>{{ journey.title }}</h3>
@@ -1603,6 +1638,14 @@ body {
                         <span class="journey-meta-value">{{ journey.file }}</span>
                     </div>
                     {% endif %}
+                </div>
+                {% endif %}
+                {% if journey.referenced_reqs %}
+                <div class="journey-refs">
+                    <span class="journey-refs-label">Addresses:</span>
+                    {% for req_id in journey.referenced_reqs %}
+                    <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}</span>
+                    {% endfor %}
                 </div>
                 {% endif %}
                 {% if journey.description %}
@@ -2303,13 +2346,15 @@ function filterJourneys() {
         const goal = card.dataset.goal || '';
         const descriptor = card.dataset.descriptor || '';
         const file = card.dataset.file || '';
+        const refs = card.dataset.refs || '';
 
         const matches = id.includes(query) ||
                         title.includes(query) ||
                         actor.includes(query) ||
                         goal.includes(query) ||
                         descriptor.includes(query) ||
-                        file.includes(query);
+                        file.includes(query) ||
+                        refs.includes(query);
 
         card.classList.toggle('hidden', !matches);
         if (matches) visibleCount++;
@@ -2449,6 +2494,25 @@ function collapseAllJourneyGroups() {
         collapsedJourneyGroups.add(group.dataset.groupKey);
     });
     saveStateToCookie();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Journey → Requirement Navigation
+// ─────────────────────────────────────────────────────────────────────────────
+
+function switchToReqTab(reqId) {
+    switchTab('requirements');
+    setTimeout(function() {
+        var row = document.querySelector('tr.req-row[data-id="' + reqId + '"]');
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.transition = 'none';
+        row.style.backgroundColor = '#ffc107';
+        setTimeout(function() {
+            row.style.transition = 'background-color 1.5s ease';
+            row.style.backgroundColor = '';
+        }, 200);
+    }, 100);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

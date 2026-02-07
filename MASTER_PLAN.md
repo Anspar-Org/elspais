@@ -48,7 +48,7 @@ The codebase already supports multiple linking patterns (`# Implements:`, `REQ-x
 
 ## Archive
 
-- [ ] Mark phase complete in MASTER_PLAN.md
-- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
-- [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
+- [x] Mark phase complete in MASTER_PLAN.md
+- [x] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
+- [x] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase

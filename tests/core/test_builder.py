@@ -9,9 +9,11 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
     children_string,
+    incoming_edges_string,
     make_code_ref,
     make_journey,
     make_requirement,
@@ -982,3 +984,108 @@ class TestCanonicalTestIds:
 
         req = graph.find_by_id("REQ-d00001")
         assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)
+
+
+class TestAddressesEdges:
+    """Tests for ADDRESSES edge creation in GraphBuilder.
+
+    Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
+    linking including addresses.
+    """
+
+    def test_REQ_o00050_C_journey_addresses_creates_edge(self):
+        """JNY with Addresses: REQ-p00012 creates ADDRESSES edge to REQ node."""
+        graph = build_graph(
+            make_requirement("REQ-p00012", level="PRD", title="Product Requirement"),
+            make_journey(
+                "JNY-Dev-01",
+                title="Dev Workflow",
+                actor="Developer",
+                goal="Implement feature",
+                addresses=["REQ-p00012"],
+            ),
+        )
+
+        jny_node = graph.find_by_id("JNY-Dev-01")
+        req_node = graph.find_by_id("REQ-p00012")
+
+        assert jny_node is not None
+        assert req_node is not None
+
+        # The REQ node becomes the parent via target.link(source, edge_kind),
+        # so the JNY node has incoming ADDRESSES edges
+        edges = incoming_edges_string(jny_node)
+        assert "REQ-p00012->JNY-Dev-01:addresses" in edges
+
+        # Verify edge kind is ADDRESSES
+        found_addresses_edge = False
+        for edge in jny_node.iter_incoming_edges():
+            if edge.source.id == "REQ-p00012" and edge.kind == EdgeKind.ADDRESSES:
+                found_addresses_edge = True
+                break
+        assert found_addresses_edge, "Expected ADDRESSES edge from REQ-p00012 to JNY-Dev-01"
+
+    def test_REQ_o00050_C_journey_addresses_missing_target_broken_ref(self):
+        """JNY with Addresses: REQ-NONEXIST records broken reference."""
+        graph = build_graph(
+            make_journey(
+                "JNY-Dev-02",
+                title="Broken Ref Journey",
+                actor="Developer",
+                goal="Test broken ref",
+                addresses=["REQ-NONEXIST"],
+            ),
+        )
+
+        jny_node = graph.find_by_id("JNY-Dev-02")
+        assert jny_node is not None
+
+        # Should have no incoming edges since target doesn't exist
+        assert jny_node.parent_count() == 0
+
+        # Should have a broken reference recorded
+        assert graph.has_broken_references()
+        broken = [
+            br
+            for br in graph.broken_references()
+            if br.source_id == "JNY-Dev-02" and br.target_id == "REQ-NONEXIST"
+        ]
+        assert len(broken) == 1
+        assert broken[0].edge_kind == "addresses"
+
+    def test_REQ_o00050_C_journey_addresses_multiple_targets(self):
+        """JNY with multiple Addresses creates edges to all targets."""
+        graph = build_graph(
+            make_requirement("REQ-p00012", level="PRD"),
+            make_requirement("REQ-d00042", level="DEV"),
+            make_journey(
+                "JNY-Dev-03",
+                title="Multi Address Journey",
+                actor="Developer",
+                goal="Test multiple addresses",
+                addresses=["REQ-p00012", "REQ-d00042"],
+            ),
+        )
+
+        jny_node = graph.find_by_id("JNY-Dev-03")
+        assert jny_node is not None
+
+        edges = incoming_edges_string(jny_node)
+        assert "REQ-d00042->JNY-Dev-03:addresses" in edges
+        assert "REQ-p00012->JNY-Dev-03:addresses" in edges
+
+    def test_REQ_o00050_C_journey_is_orphan_without_children(self):
+        """JNY nodes without meaningful children are orphans (REQ-d00071)."""
+        graph = build_graph(
+            make_journey(
+                "JNY-Dev-04",
+                title="Orphan Journey",
+                actor="Developer",
+                goal="Verify orphan status",
+            ),
+        )
+
+        # Under unified root/orphan classification (REQ-d00071),
+        # parentless nodes need meaningful children to be roots
+        assert not graph.has_root("JNY-Dev-04")
+        assert graph.find_by_id("JNY-Dev-04") is not None

@@ -1758,6 +1758,10 @@ class GraphBuilder:
         # Implements: REQ-d00071-D
         self._orphan_candidates.add(journey_id)
 
+        # Queue addresses links for later resolution
+        for addr_ref in data.get("addresses", []):
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.ADDRESSES))
+
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
 

@@ -65,3 +65,25 @@
 | REQ-d00069 | Indirect Coverage Source | 07-graph-architecture.md | ________ |
 | REQ-d00070 | Indirect Coverage Toggle Display | 07-graph-architecture.md | ________ |
 | REQ-d00071 | Unified Root vs Orphan Classification | 07-graph-architecture.md | ________ |
+
+## User Journeys (JNY)
+
+| ID | Title | Actor | File |
+|---|---|---|---|
+| JNY-Dev-Setup-01 | Set Up Requirements for a New Feature | Sarah (Developer) | journeys/dev-team.md |
+| JNY-Dev-MCP-01 | Use AI Assistant to Query and Author Requirements | Sarah (Developer) | journeys/dev-team.md |
+| JNY-QA-Coverage-01 | Map Tests to Requirements for Coverage | Marcus (QA Engineer) | journeys/dev-team.md |
+| JNY-PM-Sprint-01 | Track Requirement Status During a Sprint | Elvira (Internal PM) | journeys/project-management.md |
+| JNY-PM-Review-01 | Run a Stakeholder Review Session | Elvira (Internal PM) | journeys/project-management.md |
+| JNY-PM-MultiRepo-01 | Coordinate Cross-Repository Requirements | Elvira (Internal PM) | journeys/project-management.md |
+| JNY-DevOps-CI-01 | Set Up CI/CD Requirement Validation | Alex (DevOps Engineer) | journeys/project-management.md |
+| JNY-Sponsor-PM-01 | Review Milestone Deliverables | Dr. Chen (Sponsor PM) | journeys/sponsor-oversight.md |
+| JNY-Sponsor-PM-02 | Filter Sponsor-Specific Requirements | Dr. Chen (Sponsor PM) | journeys/sponsor-oversight.md |
+| JNY-Auditor-Validate-01 | Conduct a Compliance Audit | Janet (Validation Consultant) | journeys/sponsor-oversight.md |
+| JNY-Auditor-Change-01 | Investigate Requirement Changes | Janet (Validation Consultant) | journeys/sponsor-oversight.md |
+| JNY-SponsorQA-Coverage-01 | Verify Test Coverage Before Release | Rita (Sponsor QA Lead) | journeys/quality-assurance.md |
+| JNY-SponsorQA-Review-01 | Provide Structured Feedback on Requirements | Rita (Sponsor QA Lead) | journeys/quality-assurance.md |
+| JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates | Rita (Sponsor QA Lead) | journeys/quality-assurance.md |
+| JNY-CEO-Dashboard-01 | Assess Project Health for a Board Meeting | Priya (CEO) | journeys/executive.md |
+| JNY-CEO-Sponsor-01 | Prepare Evidence for Sponsor Contract Renewal | Priya (CEO) | journeys/executive.md |
+| JNY-CEO-Audit-01 | Support a Regulatory Inspection | Priya (CEO) | journeys/executive.md |

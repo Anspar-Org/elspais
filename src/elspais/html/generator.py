@@ -10,7 +10,7 @@ Uses Jinja2 templates for rich interactive output.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -62,6 +62,7 @@ class JourneyItem:
     goal: str | None = None
     descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
     file: str = ""  # Source file path
+    referenced_reqs: list[str] = field(default_factory=list)  # REQs via ADDRESSES edges
 
 
 @dataclass
@@ -886,6 +887,7 @@ class HTMLGenerator:
         import re
 
         from elspais.graph import NodeKind
+        from elspais.graph.relations import EdgeKind
 
         journeys: list[JourneyItem] = []
 
@@ -911,6 +913,11 @@ class HTMLGenerator:
             if node.source:
                 file = Path(node.source.path).name
 
+            # Extract referenced requirements from incoming ADDRESSES edges
+            referenced_reqs = sorted(
+                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
+            )
+
             journeys.append(
                 JourneyItem(
                     id=node.id,
@@ -920,6 +927,7 @@ class HTMLGenerator:
                     goal=goal,
                     descriptor=descriptor,
                     file=file,
+                    referenced_reqs=referenced_reqs,
                 )
             )
 

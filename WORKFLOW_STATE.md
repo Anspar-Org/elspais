@@ -18,31 +18,31 @@ Document the linking conventions for developers and AI agents. See MASTER_PLAN.m
 
 ### 0. Identify Assertions
 
-- [ ] **ASSERTIONS**: Search spec/ for assertions related to the work being done
-- [ ] **CREATE IF MISSING**: If no applicable assertion exists, create one in the appropriate spec file
-- [ ] **RECORD**: Set `CURRENT_ASSERTIONS` in MASTER_PLAN.md (e.g., `CURRENT_ASSERTIONS: REQ-p00004-A, REQ-p00001-C`)
+- [x] **ASSERTIONS**: Search spec/ for assertions related to the work being done
+- [x] **CREATE IF MISSING**: If no applicable assertion exists, create one in the appropriate spec file
+- [x] **RECORD**: Set `CURRENT_ASSERTIONS` in MASTER_PLAN.md (e.g., `CURRENT_ASSERTIONS: REQ-p00004-A, REQ-p00001-C`)
 - All code changes, tests, and commits MUST reference one or more assertions from `CURRENT_ASSERTIONS`
 
 ### 1. Understand Current State
 
-- [ ] **EXPLORE**: Read MASTER_PLAN.md for task details
-- [ ] **BASELINE**: Ensure tests pass before changes
+- [x] **EXPLORE**: Read MASTER_PLAN.md for task details
+- [x] **BASELINE**: Ensure tests pass before changes
 
 ### 2. Incremental Implementation
 
-- [ ] **SMALL STEPS**: Complete one phase at a time
-- [ ] **PRESERVE BEHAVIOR**: No unintended changes
-- [ ] **ASSERTION REFERENCES**: Add `# Implements: REQ-xxx` comments to new/modified source files using IDs from `CURRENT_ASSERTIONS`
+- [x] **SMALL STEPS**: Complete one phase at a time
+- [x] **PRESERVE BEHAVIOR**: No unintended changes
+- [x] **ASSERTION REFERENCES**: Add `# Implements: REQ-xxx` comments to new/modified source files using IDs from `CURRENT_ASSERTIONS`
 
 ### 3. Write Tests
 
-- [ ] **TEST**: All tests still pass
-- [ ] **ASSERTION NAMES**: Test functions MUST include assertion IDs from `CURRENT_ASSERTIONS` in their names (e.g., `test_REQ_p00004_A_validates_hash`)
-- [ ] **CLASS DOCSTRINGS**: Test classes MUST include `Validates REQ-xxx-Y:` in their docstring
+- [x] **TEST**: All tests still pass
+- [x] **ASSERTION NAMES**: Test functions MUST include assertion IDs from `CURRENT_ASSERTIONS` in their names (e.g., `test_REQ_p00004_A_validates_hash`)
+- [x] **CLASS DOCSTRINGS**: Test classes MUST include `Validates REQ-xxx-Y:` in their docstring
 
 ### 4. Verification
 
-- [ ] **LINT**: Fix all lint errors
+- [x] **LINT**: Fix all lint errors
 
 ### 5. Commit
 
