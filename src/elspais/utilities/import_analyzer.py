@@ -21,6 +21,9 @@ def extract_python_imports(content: str) -> list[str]:
     Parses ``from X import Y`` and ``import X`` statements.
     Only extracts the module path (X), not individual names (Y).
 
+    Handles multi-line docstrings at module level by tracking triple-quote
+    state, so imports appearing after docstrings are correctly found.
+
     Args:
         content: Full text content of a Python file.
 
@@ -28,18 +31,39 @@ def extract_python_imports(content: str) -> list[str]:
         List of module paths (e.g., ["elspais.graph.annotators", "os.path"]).
     """
     modules: list[str] = []
+    in_docstring = False
+    docstring_delim = ""
 
     for line in content.splitlines():
         stripped = line.strip()
+
+        # Track multi-line docstring state
+        if in_docstring:
+            if docstring_delim in stripped:
+                in_docstring = False
+            continue
+
+        # Detect docstring start (triple quotes)
+        if stripped.startswith(('"""', "'''")):
+            delim = stripped[:3]
+            # Check if docstring opens and closes on same line
+            rest = stripped[3:]
+            if delim in rest:
+                # Single-line docstring like """text""" — skip it
+                continue
+            # Multi-line docstring starts here
+            in_docstring = True
+            docstring_delim = delim
+            continue
 
         # Skip comments and empty lines
         if not stripped or stripped.startswith("#"):
             continue
 
         # Stop at first non-import code (heuristic: imports are at top)
-        # But allow blank lines, comments, docstrings, __future__, TYPE_CHECKING
+        # But allow blank lines, comments, __future__, TYPE_CHECKING
         if (
-            not stripped.startswith(("import ", "from ", "#", '"', "'", "if ", ")"))
+            not stripped.startswith(("import ", "from ", "#", "if ", ")"))
             and stripped not in ("", ")")
             and "__future__" not in stripped
             and "TYPE_CHECKING" not in stripped

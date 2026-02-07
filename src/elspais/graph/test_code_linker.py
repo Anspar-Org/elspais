@@ -58,16 +58,22 @@ def _camel_to_snake(name: str) -> str:
 
 def _build_code_index(
     graph: TraceGraph,
+    repo_root: Path | None = None,
 ) -> dict[tuple[str, str], list[GraphNode]]:
     """Build index of CODE nodes by (normalized_path, function_name).
 
+    Paths are normalized to be relative to repo_root when possible.
+    This ensures they match the relative paths from module_to_source_path().
+
     Args:
         graph: The TraceGraph to index.
+        repo_root: Repository root for making paths relative.
 
     Returns:
         Dict mapping (normalized_path, function_name) to CODE nodes.
     """
     index: dict[tuple[str, str], list[GraphNode]] = {}
+    repo_root_str = _normalize_path(str(repo_root)) + "/" if repo_root else None
 
     for node in graph.nodes_by_kind(NodeKind.CODE):
         func_name = node.get_field("function_name")
@@ -75,6 +81,10 @@ def _build_code_index(
             continue
 
         path = _normalize_path(node.source.path)
+        # Make path relative to repo_root if it's absolute
+        if repo_root_str and path.startswith(repo_root_str):
+            path = path[len(repo_root_str) :]
+
         key = (path, func_name)
         if key not in index:
             index[key] = []
@@ -159,13 +169,14 @@ def link_tests_to_code(
         Number of TEST→CODE edges created.
     """
     # 1. Build CODE index: (normalized_path, function_name) → [CODE nodes]
-    code_index = _build_code_index(graph)
+    code_index = _build_code_index(graph, repo_root)
     if not code_index:
         return 0
 
+    repo_root_str = _normalize_path(str(repo_root)) + "/"
+
     # 2. Cache test file imports: file_path → list of resolved source paths
     import_cache: dict[str, list[str]] = {}
-    file_content_cache: dict[str, str] = {}
 
     edges_created = 0
 
@@ -181,10 +192,12 @@ def link_tests_to_code(
         if has_code_parent:
             continue
 
-        # Get test file path
+        # Get test file path (make relative to repo_root)
         if not test_node.source:
             continue
         test_path = _normalize_path(test_node.source.path)
+        if test_path.startswith(repo_root_str):
+            test_path = test_path[len(repo_root_str) :]
 
         # Cache imports for this test file
         if test_path not in import_cache:
@@ -192,7 +205,6 @@ def link_tests_to_code(
             if abs_path.is_file():
                 try:
                     content = abs_path.read_text(encoding="utf-8", errors="replace")
-                    file_content_cache[test_path] = content
                 except OSError:
                     import_cache[test_path] = []
                     continue

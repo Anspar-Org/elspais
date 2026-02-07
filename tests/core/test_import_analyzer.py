@@ -76,6 +76,58 @@ class TestExtractPythonImports:
         result = extract_python_imports(content)
         assert "elspais.graph.builder" in result
 
+    def test_imports_after_multiline_docstring(self):
+        """Imports after a multi-line docstring should be found."""
+        content = (
+            '"""Module docstring.\n'
+            "\n"
+            "Some description text here.\n"
+            '"""\n'
+            "\n"
+            "from pathlib import Path\n"
+            "import os\n"
+        )
+        result = extract_python_imports(content)
+        assert "pathlib" in result
+        assert "os" in result
+
+    def test_imports_after_comments_and_docstring(self):
+        """Real-world pattern: # Validates comments then docstring then imports."""
+        content = (
+            "# Validates REQ-p00060-A, REQ-p00060-B\n"
+            "# Validates REQ-d00060-A\n"
+            '"""Tests for MCP core tools.\n'
+            "\n"
+            "Tests REQ-o00060: MCP Core Query Tools\n"
+            "- get_graph_status()\n"
+            "- refresh_graph()\n"
+            '"""\n'
+            "\n"
+            "from pathlib import Path\n"
+            "from unittest.mock import patch\n"
+            "\n"
+            "import pytest\n"
+            "\n"
+            "from elspais.graph.builder import TraceGraph\n"
+        )
+        result = extract_python_imports(content)
+        assert "pathlib" in result
+        assert "unittest.mock" in result
+        assert "pytest" in result
+        assert "elspais.graph.builder" in result
+
+    def test_single_line_docstring_skipped(self):
+        """Single-line triple-quoted docstring doesn't break parsing."""
+        content = '"""Short docstring."""\n' "\n" "import os\n"
+        result = extract_python_imports(content)
+        assert "os" in result
+
+    def test_single_quote_docstring(self):
+        """Single-quote triple docstrings are handled too."""
+        content = "'''Module docs.\n" "\n" "Description.\n" "'''\n" "\n" "import os\n"
+        result = extract_python_imports(content)
+        assert "os" in result
+
 
 class TestModuleToSourcePath:
     def test_resolves_module_in_src(self, tmp_path):
