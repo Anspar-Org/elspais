@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
+from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.reference_config import (
     ReferenceConfig,
     ReferenceResolver,
     extract_ids_from_text,
 )
+from elspais.utilities.test_identity import build_test_id_from_result
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
@@ -30,7 +32,12 @@ class JUnitXMLParser:
     - Separator characters (- _ etc.)
     - Case sensitivity
     - Prefix requirements
+
+    Also implements the LineClaimingParser protocol via ``claim_and_parse()``
+    so it can be used in the standard ParserRegistry pipeline.
     """
+
+    priority = 90
 
     def __init__(
         self,
@@ -151,9 +158,8 @@ class JUnitXMLParser:
                 # Extract requirement references from test name or classname
                 validates = self._extract_req_ids(f"{classname} {name}", source_path)
 
-                # Generate stable TEST node ID from classname and name
-                # This allows multiple results to link to the same logical test
-                test_id = f"test:{classname}::{name}" if classname else f"test::{name}"
+                # Generate canonical TEST node ID using test_identity utility
+                test_id = build_test_id_from_result(classname, name)
 
                 result = {
                     "id": f"{source_path}:{classname}::{name}",
@@ -170,6 +176,34 @@ class JUnitXMLParser:
                 results.append(result)
 
         return results
+
+    def claim_and_parse(
+        self,
+        lines: list[tuple[int, str]],
+        context: ParseContext,
+    ) -> Iterator[ParsedContent]:
+        """Claim and parse JUnit XML content via the standard pipeline.
+
+        Reassembles lines into full XML content, delegates to ``parse()``,
+        and yields ``ParsedContent`` for each test result.
+
+        Args:
+            lines: List of (line_number, content) tuples.
+            context: Parsing context with file info.
+
+        Yields:
+            ParsedContent for each test result found.
+        """
+        content = "\n".join(text for _, text in lines)
+        results = self.parse(content, context.file_path)
+        for result in results:
+            yield ParsedContent(
+                content_type="test_result",
+                start_line=lines[0][0] if lines else 1,
+                end_line=lines[-1][0] if lines else 1,
+                raw_text="",
+                parsed_data=result,
+            )
 
     def _extract_req_ids(self, text: str, source_file: str | None = None) -> list[str]:
         """Extract requirement IDs from text.

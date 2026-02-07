@@ -206,6 +206,12 @@ class TestParser:
     ) -> Iterator[ParsedContent]:
         """Claim and parse test references.
 
+        Tracks function and class context so the builder can create
+        canonical TEST node IDs. Also supports file-level scope:
+        a ``# Tests REQ-xxx`` comment at module scope (before any
+        function/class) becomes the default for all test functions
+        in the file.
+
         Args:
             lines: List of (line_number, content) tuples.
             context: Parsing context.
@@ -222,10 +228,86 @@ class TestParser:
         block_header_pattern = build_block_header_pattern(ref_config, "validates")
         block_ref_pattern = build_block_ref_pattern(pattern_config, ref_config)
 
+        # Patterns for tracking function/class context
+        func_pattern = re.compile(r"^(\s*)def\s+(test_\w+)\s*\(")
+        class_pattern = re.compile(r"^(\s*)class\s+(Test\w*)\s*[:(]")
+
+        # Pre-scan to build function/class context map
+        # Maps line_number -> (function_name, class_name, function_line)
+        current_class: str | None = None
+        current_class_indent: int = -1
+        current_func: str | None = None
+        current_func_indent: int = -1
+        current_func_line: int = 0
+        # Whether we've seen any function or class definition yet
+        seen_def = False
+
+        # File-level default validates (# Tests REQ-xxx before any def/class)
+        file_default_validates: list[str] = []
+
+        # Context at each line
+        line_context: dict[int, tuple[str | None, str | None, int]] = {}
+
+        for ln, text in lines:
+            # Track class definitions
+            class_match = class_pattern.match(text)
+            if class_match:
+                indent = len(class_match.group(1))
+                current_class = class_match.group(2)
+                current_class_indent = indent
+                current_func = None
+                current_func_indent = -1
+                seen_def = True
+
+            # Track function definitions
+            func_match = func_pattern.match(text)
+            if func_match:
+                indent = len(func_match.group(1))
+                # If function indent <= class indent, we've left the class
+                if current_class and indent <= current_class_indent:
+                    current_class = None
+                    current_class_indent = -1
+                current_func = func_match.group(2)
+                current_func_indent = indent
+                current_func_line = ln
+                seen_def = True
+
+            # If a non-indented line that's not blank/comment, might exit class
+            stripped = text.strip()
+            if stripped and not stripped.startswith("#") and not class_match and not func_match:
+                actual_indent = len(text) - len(text.lstrip())
+                if current_class and actual_indent <= current_class_indent:
+                    current_class = None
+                    current_class_indent = -1
+                if current_func and actual_indent <= current_func_indent:
+                    current_func = None
+                    current_func_indent = -1
+
+            line_context[ln] = (current_func, current_class, current_func_line)
+
+            # Collect file-level default validates (before any def/class)
+            if not seen_def:
+                cm = comment_pattern.search(text)
+                if cm:
+                    refs_str = cm.group("refs")
+                    prefix = pattern_config.prefix
+                    for ref_match in re.finditer(
+                        rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+",
+                        refs_str,
+                        re.IGNORECASE,
+                    ):
+                        ref = ref_match.group(0).replace("_", "-")
+                        if ref.lower().startswith(prefix.lower() + "-"):
+                            ref = prefix + ref[len(prefix) :]
+                        if ref not in file_default_validates:
+                            file_default_validates.append(ref)
+
+        # Second pass: extract references with context
         i = 0
         while i < len(lines):
             ln, text = lines[i]
             validates: list[str] = []
+            func_name, class_name, func_line = line_context.get(ln, (None, None, 0))
 
             # Check for REQ in test function name
             name_match = test_name_pattern.search(text)
@@ -261,6 +343,10 @@ class TestParser:
                     raw_text=text,
                     parsed_data={
                         "validates": validates,
+                        "function_name": func_name,
+                        "class_name": class_name,
+                        "function_line": func_line,
+                        "file_default_validates": file_default_validates,
                     },
                 )
                 i += 1
@@ -298,6 +384,10 @@ class TestParser:
                         raw_text="\n".join(raw_lines),
                         parsed_data={
                             "validates": refs,
+                            "function_name": func_name,
+                            "class_name": class_name,
+                            "function_line": func_line,
+                            "file_default_validates": file_default_validates,
                         },
                     )
                 continue

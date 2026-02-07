@@ -1,62 +1,27 @@
-# Ralph Loop: Complete MASTER_PLAN.md
+# Coverage Improvement Loop
 
-## Your Mission
-
-Complete all remaining phases in `MASTER_PLAN.md`. Work systematically through each unchecked item.
-
-## Instructions
-
-1. **Read MASTER_PLAN.md** to find the first unchecked `[ ]` item
-2. **Complete that item** following the Workflow Steps
-3. **Mark it `[x]`** when done
-4. **Commit after each phase** with `[CUR-514]` prefix
-5. **Continue** until all phases are complete
-
-## Phase 6: Test Coverage Tools
-
-Implement these MCP tools in `src/elspais/mcp/server.py`:
-
-- `get_test_coverage(req_id)` - Find TEST nodes for a requirement
-- `get_uncovered_assertions(req_id=None)` - Find assertions without tests
-- `find_assertions_by_keywords(keywords, match_all)` - Search assertion text
-
-**Pattern**: Follow existing MCP tool implementations. Use `@mcp.tool()` decorator.
-
-## Phase 7: Comprehensive Assertion Coverage
-
-Use Phase 6 tools to improve test-requirement traceability:
-
-- Analyze test files, propose renames or new specs
-- Analyze source files, ensure requirement coverage
-- Track proposals in `docs/NEW_SPECS.md`
-- Target: >80% assertion coverage
-
-## Workflow Per Item
-
-```
-1. SPEC: Add/verify requirement in spec/
-2. TEST: Write tests with REQ naming (test_REQ_xxx_A_...)
-3. IMPL: Implement the feature
-4. DEBUG: Run pytest, verify pass
-5. COMMIT: git commit with [CUR-514] prefix
-```
-
-## Completion Signal
-
-When ALL items in MASTER_PLAN.md are checked `[x]`:
-
-```
-<promise>MASTER_PLAN COMPLETE</promise>
-```
-
-## Current State
-
-Check `MASTER_PLAN.md` for current progress. Check `git log --oneline -5` for recent work.
+You are improving traceability coverage for the elspais project. Your goal is to add `# Implements: REQ-xxx-Y` comments to source files and `# Validates: REQ-xxx-Y` comments to test files so that the MCP traceability graph reflects actual coverage.
 
 ## Rules
 
-- One phase section at a time
-- Commit after completing each major section (6.2, 6.3, 6.4, etc.)
-- Run `pytest` before committing
-- Don't skip the SPEC step - add requirements to `spec/08-mcp-server.md`
-- Use subagents for Phase 7 loops (test file analysis, code module analysis)
+1. Only touch Active requirements. Skip Draft review features REQ-d00001 to REQ-d00012 and REQ-p00007 to REQ-p00012.
+2. Use the elspais MCP tools: `get_uncovered_assertions`, `get_requirement`, `get_test_coverage` to find gaps.
+3. Read the requirement assertion text, then find the source code that implements it and the test that validates it.
+4. Add a SINGLE-LINE comment near the relevant code: `# Implements: REQ-xxx-Y` for source or `# Validates: REQ-xxx-Y` for tests.
+5. After each batch of additions, run `python -m pytest tests/ -q` to verify nothing breaks.
+6. Commit with message format: `[CUR-240] feat: Add traceability markers for REQ-xxx` with co-author line `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>`.
+7. Work through requirements in priority order: partially-covered first, then PRD, then OPS, then DEV.
+8. Each iteration: pick 1-3 requirements, add markers, test, commit.
+9. Re-check coverage with MCP after each commit.
+
+## Current State
+
+- REQ-p00002: 33 percent covered - A covered, B and C uncovered
+- REQ-p00004: 50 percent covered - A covered, B uncovered
+- All other Active requirements: 0 percent covered
+
+## When Done
+
+When you have covered all Active requirements you can find implementation or test code for, output:
+
+`COVERAGE COMPLETE`

@@ -19,6 +19,7 @@ from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind
+from elspais.utilities.test_identity import build_test_id
 
 
 @dataclass
@@ -1606,6 +1607,20 @@ class GraphBuilder:
         self._orphan_candidates: set[str] = set()
         self._broken_references: list[BrokenReference] = []
 
+    def _to_relative_path(self, source_id: str) -> str:
+        """Convert an absolute source path to a relative path.
+
+        Args:
+            source_id: Absolute or relative file path.
+
+        Returns:
+            Path relative to repo_root, or the original path if not under repo_root.
+        """
+        try:
+            return str(Path(source_id).relative_to(self.repo_root))
+        except ValueError:
+            return source_id
+
     def add_parsed_content(self, content: ParsedContent) -> None:
         """Add parsed content to the graph.
 
@@ -1717,39 +1732,62 @@ class GraphBuilder:
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
 
     def _add_test_ref(self, content: ParsedContent) -> None:
-        """Add test reference nodes."""
+        """Add test reference nodes.
+
+        Uses canonical test IDs when function/class context is available
+        from the parser. Falls back to line-based IDs for references
+        outside of functions.
+        """
         data = content.parsed_data
         source_ctx = getattr(content, "source_context", None)
         source_id = source_ctx.source_id if source_ctx else "test"
 
-        for val_ref in data.get("validates", []):
-            test_id = f"test:{source_id}:{content.start_line}"
-            if test_id not in self._nodes:
-                node = GraphNode(
-                    id=test_id,
-                    kind=NodeKind.TEST,
-                    label=f"Test at {source_id}:{content.start_line}",
-                    source=SourceLocation(
-                        path=source_id,
-                        line=content.start_line,
-                        end_line=content.end_line,
-                    ),
-                )
-                self._nodes[test_id] = node
+        # Compute relative path for canonical IDs
+        func_name = data.get("function_name")
+        class_name = data.get("class_name")
+        func_line = data.get("function_line", content.start_line)
 
+        if func_name:
+            # Canonical ID: test:relative_path::ClassName::function_name
+            rel_path = self._to_relative_path(source_id)
+            test_id = build_test_id(rel_path, func_name, class_name)
+            label = f"{class_name}::{func_name}" if class_name else func_name
+            source_line = func_line
+        else:
+            # Fallback: line-based ID for refs outside functions
+            test_id = f"test:{source_id}:{content.start_line}"
+            label = f"Test at {source_id}:{content.start_line}"
+            source_line = content.start_line
+
+        if test_id not in self._nodes:
+            node = GraphNode(
+                id=test_id,
+                kind=NodeKind.TEST,
+                label=label,
+                source=SourceLocation(
+                    path=source_id,
+                    line=source_line,
+                    end_line=content.end_line,
+                ),
+            )
+            self._nodes[test_id] = node
+
+        for val_ref in data.get("validates", []):
             self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
 
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
 
-        If the result has a test_id, auto-creates a TEST node if needed.
-        If validates list is present (extracted from test name), creates
-        VALIDATES edges from TEST to requirements/assertions.
+        Creates a TEST_RESULT node and queues a CONTAINS edge to the
+        referenced TEST node (via test_id). Does NOT auto-create TEST
+        nodes — if test_id doesn't exist at link resolution time, it
+        becomes a broken reference (same as Implements: REQ-nonexistent).
+
+        TEST nodes are created by the TestParser scanning actual test files.
         """
         data = content.parsed_data
         result_id = data["id"]
-        test_id = data.get("test_id")  # e.g., "test:classname::test_name"
-        validates = data.get("validates", [])  # REQs extracted from test name
+        test_id = data.get("test_id")  # e.g., "test:path::Class::func"
         source_ctx = getattr(content, "source_context", None)
         source_path = source_ctx.source_id if source_ctx else ""
 
@@ -1760,29 +1798,6 @@ class GraphBuilder:
         # e.g., "TestGraphBuilder" from "tests.core.test_builder.TestGraphBuilder"
         short_class = classname.split(".")[-1] if classname else ""
         label = f"{short_class}::{test_name}" if short_class else test_name
-
-        # Auto-create TEST node if test_id provided and doesn't exist yet
-        if test_id and test_id not in self._nodes:
-            test_node = GraphNode(
-                id=test_id,
-                kind=NodeKind.TEST,
-                label=label,
-                source=SourceLocation(
-                    path=source_path,
-                    line=content.start_line,
-                    end_line=content.end_line,
-                ),
-            )
-            test_node._content = {
-                "classname": classname,
-                "name": test_name,
-                "from_results": True,  # Indicates this TEST was auto-created
-            }
-            self._nodes[test_id] = test_node
-
-            # Queue VALIDATES edges from TEST → REQ/Assertion based on validates list
-            for req_id in validates:
-                self._pending_links.append((test_id, req_id, EdgeKind.VALIDATES))
 
         node = GraphNode(
             id=result_id,

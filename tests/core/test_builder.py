@@ -2,6 +2,8 @@
 # Validates REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 """Tests for Graph Builder - builds TraceGraph from parsed content."""
 
+from pathlib import Path
+
 import pytest
 
 from elspais.graph import NodeKind
@@ -304,8 +306,8 @@ class TestBuilderContentTypes:
 class TestTestToRequirementLinking:
     """Tests for linking tests to requirements via test names."""
 
-    def test_test_result_auto_creates_test_node(self):
-        """TEST_RESULT with test_id should auto-create TEST node if missing."""
+    def test_test_result_without_scanner_test_is_broken_ref(self):
+        """TEST_RESULT with test_id but no scanner TEST node creates a broken reference."""
         graph = build_graph(
             make_test_result(
                 "result-1",
@@ -316,39 +318,53 @@ class TestTestToRequirementLinking:
             ),
         )
 
-        # TEST node should be auto-created
+        # TEST node should NOT be auto-created
         test = graph.find_by_id("test:TestAuth::test_login")
-        assert test is not None
-        assert test.kind == NodeKind.TEST
-        assert test.get_field("from_results") is True
+        assert test is None
 
-        # Result should be linked to TEST
+        # Result should exist but have broken reference to test_id
         result = graph.find_by_id("result-1")
         assert result is not None
-        assert "test:TestAuth::test_login" in parents_string(result)
+        assert graph.has_broken_references()
+        broken = [
+            br for br in graph.broken_references() if br.target_id == "test:TestAuth::test_login"
+        ]
+        assert len(broken) == 1
 
     def test_test_with_req_in_name_validates_requirement(self):
-        """Test with REQ in name creates VALIDATES edge to requirement."""
+        """Scanner-created TEST linked to REQ, with TEST_RESULT child."""
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
+            # Scanner-created TEST node
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                function_name="test_REQ_d00001_login",
+                class_name="TestAuth",
+            ),
             make_test_result(
                 "result-1",
                 status="passed",
-                test_id="test:TestAuth::test_REQ_d00001_login",
+                test_id="test:tests/test_auth.py::TestAuth::test_REQ_d00001_login",
                 name="test_REQ_d00001_login",
-                classname="TestAuth",
-                validates=["REQ-d00001"],  # Extracted from name
+                classname="tests.test_auth.TestAuth",
             ),
+            repo_root=Path("."),
         )
 
         # TEST node should exist and be child of REQ
-        test = graph.find_by_id("test:TestAuth::test_REQ_d00001_login")
+        test = graph.find_by_id("test:tests/test_auth.py::TestAuth::test_REQ_d00001_login")
         assert test is not None
 
         # Test should be child of requirement via VALIDATES edge
         req = graph.find_by_id("REQ-d00001")
         assert req is not None
-        assert "test:TestAuth::test_REQ_d00001_login" in children_string(req)
+        assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in children_string(req)
+
+        # Result should be linked to TEST
+        result = graph.find_by_id("result-1")
+        assert result is not None
+        assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in parents_string(result)
 
     def test_test_with_assertion_in_name_validates_assertion(self):
         """Test with REQ-xxx-A in name creates VALIDATES edge with assertion_targets."""
@@ -361,81 +377,103 @@ class TestTestToRequirementLinking:
                     {"label": "B", "text": "User sees error on failure"},
                 ],
             ),
+            # Scanner-created TEST node with assertion reference
+            make_test_ref(
+                ["REQ-p00001-A"],
+                source_path="tests/test_auth.py",
+                function_name="test_REQ_p00001_A_login",
+                class_name="TestAuth",
+            ),
             make_test_result(
                 "result-1",
                 status="passed",
-                test_id="test:TestAuth::test_REQ_p00001_A_login",
+                test_id="test:tests/test_auth.py::TestAuth::test_REQ_p00001_A_login",
                 name="test_REQ_p00001_A_login",
-                classname="TestAuth",
-                validates=["REQ-p00001-A"],  # Assertion reference
+                classname="tests.test_auth.TestAuth",
             ),
+            repo_root=Path("."),
         )
 
         # TEST node should exist
-        test = graph.find_by_id("test:TestAuth::test_REQ_p00001_A_login")
+        test = graph.find_by_id("test:tests/test_auth.py::TestAuth::test_REQ_p00001_A_login")
         assert test is not None
 
         # Test should be linked to parent REQ with assertion_targets
         req = graph.find_by_id("REQ-p00001")
-        assert "test:TestAuth::test_REQ_p00001_A_login" in children_string(req)
+        assert "test:tests/test_auth.py::TestAuth::test_REQ_p00001_A_login" in children_string(req)
 
         # Verify edge has assertion_targets set
         for edge in req.iter_outgoing_edges():
-            if edge.target.id == "test:TestAuth::test_REQ_p00001_A_login":
+            if edge.target.id == "test:tests/test_auth.py::TestAuth::test_REQ_p00001_A_login":
                 assert edge.assertion_targets == ["A"]
                 break
         else:
             pytest.fail("Expected edge with assertion_targets not found")
 
     def test_test_with_multiple_reqs_validates_all(self):
-        """Test with multiple REQs in name creates VALIDATES edges to all."""
+        """Scanner TEST with multiple REQ refs validates all requirements."""
+        test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_REQ_d00002_combined"
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_requirement("REQ-d00002", level="DEV"),
+            # Scanner-created TEST node referencing both REQs
+            make_test_ref(
+                ["REQ-d00001", "REQ-d00002"],
+                source_path="tests/test_auth.py",
+                function_name="test_REQ_d00001_REQ_d00002_combined",
+                class_name="TestAuth",
+            ),
             make_test_result(
                 "result-1",
                 status="passed",
-                test_id="test:TestAuth::test_REQ_d00001_REQ_d00002_combined",
+                test_id=test_id,
                 name="test_REQ_d00001_REQ_d00002_combined",
-                classname="TestAuth",
-                validates=["REQ-d00001", "REQ-d00002"],
+                classname="tests.test_auth.TestAuth",
             ),
+            repo_root=Path("."),
         )
 
-        test = graph.find_by_id("test:TestAuth::test_REQ_d00001_REQ_d00002_combined")
+        test = graph.find_by_id(test_id)
         assert test is not None
 
         # Test should be child of both requirements
         req1 = graph.find_by_id("REQ-d00001")
         req2 = graph.find_by_id("REQ-d00002")
-        assert "test:TestAuth::test_REQ_d00001_REQ_d00002_combined" in children_string(req1)
-        assert "test:TestAuth::test_REQ_d00001_REQ_d00002_combined" in children_string(req2)
+        assert test_id in children_string(req1)
+        assert test_id in children_string(req2)
 
     def test_multiple_results_share_same_test_node(self):
-        """Multiple TEST_RESULTs with same test_id share one TEST node."""
+        """Multiple TEST_RESULTs with same test_id share one scanner-created TEST node."""
+        test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login"
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
+            # Scanner-created TEST node
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                function_name="test_REQ_d00001_login",
+                class_name="TestAuth",
+            ),
             make_test_result(
                 "result-run1",
                 status="passed",
-                test_id="test:TestAuth::test_REQ_d00001_login",
+                test_id=test_id,
                 name="test_REQ_d00001_login",
-                classname="TestAuth",
-                validates=["REQ-d00001"],
+                classname="tests.test_auth.TestAuth",
             ),
             make_test_result(
                 "result-run2",
                 status="failed",
-                test_id="test:TestAuth::test_REQ_d00001_login",
+                test_id=test_id,
                 name="test_REQ_d00001_login",
-                classname="TestAuth",
-                validates=["REQ-d00001"],
+                classname="tests.test_auth.TestAuth",
             ),
+            repo_root=Path("."),
         )
 
         # Should be exactly one TEST node
         test_nodes = list(graph.nodes_by_kind(NodeKind.TEST))
-        test_matching = [t for t in test_nodes if t.id == "test:TestAuth::test_REQ_d00001_login"]
+        test_matching = [t for t in test_nodes if t.id == test_id]
         assert len(test_matching) == 1
 
         # Both results should be children of that TEST
@@ -445,25 +483,150 @@ class TestTestToRequirementLinking:
         assert "result-run2" in children
 
     def test_test_without_req_in_name_is_orphan(self):
-        """Test without REQ in name should not link to any requirement."""
+        """Test result without matching scanner TEST creates broken reference."""
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_result(
                 "result-1",
                 status="passed",
-                test_id="test:TestMisc::test_something_else",
+                test_id="test:tests/test_misc.py::TestMisc::test_something_else",
                 name="test_something_else",
-                classname="TestMisc",
+                classname="tests.test_misc.TestMisc",
                 validates=[],  # No REQ references
             ),
         )
 
-        test = graph.find_by_id("test:TestMisc::test_something_else")
-        assert test is not None
+        # No auto-created TEST node
+        test = graph.find_by_id("test:tests/test_misc.py::TestMisc::test_something_else")
+        assert test is None
 
-        # Test should have no requirement parents
-        assert test.parent_count() == 0
+        # Result exists, but its reference to test_id is broken
+        result = graph.find_by_id("result-1")
+        assert result is not None
 
-        # Requirement should not have this test as child
+        # Requirement should not have any test children
         req = graph.find_by_id("REQ-d00001")
-        assert "test:TestMisc::test_something_else" not in children_string(req)
+        assert "test:" not in children_string(req)  # No test children at all
+
+
+class TestCanonicalTestIds:
+    """Tests for canonical TEST node ID generation from test_ref content."""
+
+    def test_REQ_d00054_A_canonical_id_with_function_name(self):
+        """Canonical ID uses :: separator with function name, no class."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                start_line=5,
+                function_name="test_REQ_d00001_validates",
+            ),
+            repo_root=Path("."),
+        )
+
+        test_node = graph.find_by_id("test:tests/test_auth.py::test_REQ_d00001_validates")
+        assert test_node is not None
+        assert test_node.kind == NodeKind.TEST
+
+        req = graph.find_by_id("REQ-d00001")
+        assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)
+
+    def test_REQ_d00054_A_canonical_id_with_class_and_function(self):
+        """Canonical ID includes ClassName when class_name is provided."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                start_line=10,
+                function_name="test_REQ_d00001_login",
+                class_name="TestAuth",
+            ),
+            repo_root=Path("."),
+        )
+
+        test_node = graph.find_by_id("test:tests/test_auth.py::TestAuth::test_REQ_d00001_login")
+        assert test_node is not None
+        assert test_node.kind == NodeKind.TEST
+
+        req = graph.find_by_id("REQ-d00001")
+        assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in children_string(req)
+
+    def test_REQ_d00054_A_fallback_to_line_based_id(self):
+        """Without function_name, falls back to line-based ID."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                start_line=5,
+            ),
+            repo_root=Path("."),
+        )
+
+        test_node = graph.find_by_id("test:tests/test_auth.py:5")
+        assert test_node is not None
+        assert test_node.kind == NodeKind.TEST
+
+        req = graph.find_by_id("REQ-d00001")
+        assert "test:tests/test_auth.py:5" in children_string(req)
+
+    def test_REQ_d00054_A_canonical_id_deduplicates(self):
+        """Two test_refs with same function/path but different validates create one TEST node."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_requirement("REQ-d00002", level="DEV"),
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="tests/test_auth.py",
+                start_line=5,
+                function_name="test_REQ_d00001_REQ_d00002_combined",
+            ),
+            make_test_ref(
+                ["REQ-d00002"],
+                source_path="tests/test_auth.py",
+                start_line=5,
+                function_name="test_REQ_d00001_REQ_d00002_combined",
+            ),
+            repo_root=Path("."),
+        )
+
+        # Only one TEST node should exist for this canonical ID
+        test_nodes = [
+            n
+            for n in graph.nodes_by_kind(NodeKind.TEST)
+            if n.id == "test:tests/test_auth.py::test_REQ_d00001_REQ_d00002_combined"
+        ]
+        assert len(test_nodes) == 1
+
+        # The single TEST node should validate both requirements
+        req1 = graph.find_by_id("REQ-d00001")
+        req2 = graph.find_by_id("REQ-d00002")
+        assert "test:tests/test_auth.py::test_REQ_d00001_REQ_d00002_combined" in children_string(
+            req1
+        )
+        assert "test:tests/test_auth.py::test_REQ_d00001_REQ_d00002_combined" in children_string(
+            req2
+        )
+
+    def test_REQ_d00054_A_canonical_id_relative_to_repo_root(self):
+        """Absolute source_path is converted to relative using repo_root."""
+        graph = build_graph(
+            make_requirement("REQ-d00001", level="DEV"),
+            make_test_ref(
+                ["REQ-d00001"],
+                source_path="/home/user/project/tests/test_auth.py",
+                start_line=10,
+                function_name="test_REQ_d00001_validates",
+            ),
+            repo_root=Path("/home/user/project"),
+        )
+
+        # The canonical ID should use the relative path
+        test_node = graph.find_by_id("test:tests/test_auth.py::test_REQ_d00001_validates")
+        assert test_node is not None
+        assert test_node.kind == NodeKind.TEST
+
+        req = graph.find_by_id("REQ-d00001")
+        assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)

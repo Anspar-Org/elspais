@@ -228,58 +228,44 @@ def build_graph(
                             builder.add_parsed_content(parsed_content)
 
             # 6b. Scan test result files (JUnit XML, pytest JSON)
+            # Uses standard pipeline: result parsers implement claim_and_parse()
+            # Each file type gets its own registry since result parsers consume
+            # the entire file content (not individual lines).
             result_files = testing_config.get("result_files", [])
             if result_files:
-                # Create parsers for result files (these have a different interface)
-                junit_parser = JUnitXMLParser(
-                    pattern_config=default_pattern_config,
-                    reference_resolver=default_reference_resolver,
-                    base_path=repo_root,
+                xml_registry = ParserRegistry()
+                xml_registry.register(
+                    JUnitXMLParser(
+                        pattern_config=default_pattern_config,
+                        reference_resolver=default_reference_resolver,
+                        base_path=repo_root,
+                    )
                 )
-                pytest_parser = PytestJSONParser(
-                    pattern_config=default_pattern_config,
-                    reference_resolver=default_reference_resolver,
-                    base_path=repo_root,
+                json_registry = ParserRegistry()
+                json_registry.register(
+                    PytestJSONParser(
+                        pattern_config=default_pattern_config,
+                        reference_resolver=default_reference_resolver,
+                        base_path=repo_root,
+                    )
                 )
 
                 for file_pattern in result_files:
-                    # Resolve glob pattern relative to repo_root
                     matched_files = glob(str(repo_root / file_pattern), recursive=True)
                     for file_path in matched_files:
                         path = Path(file_path)
-                        if path.is_file():
-                            content = path.read_text(encoding="utf-8")
-                            source_path = str(path)
-
-                            # Choose parser based on file extension
-                            results = []
-                            if path.suffix.lower() == ".xml":
-                                results = junit_parser.parse(content, source_path)
-                            elif path.suffix.lower() == ".json":
-                                results = pytest_parser.parse(content, source_path)
-
-                            # Convert results to ParsedContent for the builder
-                            for result in results:
-                                from elspais.graph.deserializer import (
-                                    DomainContext,
-                                    ParsedContentWithContext,
-                                )
-
-                                ctx = DomainContext(
-                                    source_type="file",
-                                    source_id=source_path,
-                                    metadata={"path": path},
-                                )
-
-                                parsed_content = ParsedContentWithContext(
-                                    content_type="test_result",
-                                    start_line=1,
-                                    end_line=1,
-                                    raw_text="",
-                                    parsed_data=result,
-                                    source_context=ctx,
-                                )
-                                builder.add_parsed_content(parsed_content)
+                        if not path.is_file():
+                            continue
+                        ext = path.suffix.lower()
+                        if ext == ".xml":
+                            registry = xml_registry
+                        elif ext == ".json":
+                            registry = json_registry
+                        else:
+                            continue
+                        domain_file = DomainFile(path)
+                        for parsed_content in domain_file.deserialize(registry):
+                            builder.add_parsed_content(parsed_content)
 
     return builder.build()
 

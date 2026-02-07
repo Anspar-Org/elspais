@@ -204,6 +204,49 @@ Using metrics dict as the extension point enables adding new annotations without
 *End* *Node Metrics as Extension Point* | **Hash**: 86ea9541
 ---
 
+## REQ-d00069: Indirect Coverage Source
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00051
+
+The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
+
+## Assertions
+
+A. `CoverageSource` enum SHALL include an `INDIRECT` value representing whole-requirement test coverage.
+B. `RollupMetrics` SHALL track `indirect_coverage_pct` as a separate percentage alongside strict `coverage_pct`.
+C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
+D. `RollupMetrics.finalize()` SHALL compute `indirect_coverage_pct` by including INDIRECT contributions alongside DIRECT, EXPLICIT, and INFERRED sources.
+E. The coverage annotator SHALL emit INDIRECT contributions for all assertion labels when a TEST edge has empty `assertion_targets`.
+F. When a whole-requirement test has passing results, the annotator SHALL count all assertions as validated for indirect mode.
+
+## Rationale
+
+Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
+
+*End* *Indirect Coverage Source* | **Hash**: ________
+---
+
+## REQ-d00070: Indirect Coverage Toggle Display
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00006
+
+The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
+
+## Assertions
+
+A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_coverage_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
+B. The template SHALL render a `data-coverage-indirect` attribute on each requirement row.
+C. The template SHALL include a toggle control in the filter bar area to switch between strict and indirect coverage views.
+D. The default display SHALL show strict coverage (toggle OFF).
+E. The `has_failures` warning indicator SHALL display regardless of toggle state.
+
+## Rationale
+
+Users need both a strict traceability view (only assertion-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
+
+*End* *Indirect Coverage Toggle Display* | **Hash**: ________
+---
+
 ## Architecture Diagram
 
 ```

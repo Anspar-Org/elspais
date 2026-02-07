@@ -162,6 +162,9 @@ def make_test_ref(
     source_path: str = "tests/test_module.py",
     start_line: int = 1,
     end_line: int = 10,
+    function_name: str | None = None,
+    class_name: str | None = None,
+    function_line: int | None = None,
 ) -> ParsedContent:
     """Factory for creating test references.
 
@@ -170,18 +173,29 @@ def make_test_ref(
         source_path: Source file path
         start_line: Start line in source
         end_line: End line in source
+        function_name: Optional test function name for canonical IDs
+        class_name: Optional test class name for canonical IDs
+        function_line: Optional line of the function def
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
     """
+    parsed_data: dict = {
+        "validates": validates,
+    }
+    if function_name is not None:
+        parsed_data["function_name"] = function_name
+    if class_name is not None:
+        parsed_data["class_name"] = class_name
+    if function_line is not None:
+        parsed_data["function_line"] = function_line
+
     content = ParsedContent(
         content_type="test_ref",
         start_line=start_line,
         end_line=end_line,
         raw_text="",
-        parsed_data={
-            "validates": validates,
-        },
+        parsed_data=parsed_data,
     )
     content.source_context = MockSourceContext(source_id=source_path)
     return content

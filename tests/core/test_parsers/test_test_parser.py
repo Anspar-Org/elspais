@@ -204,3 +204,113 @@ class TestTestParserCustomConfig:
         assert len(results) == 1
         # Should normalize underscores to hyphens in output
         assert "REQ-d00101" in results[0].parsed_data["validates"]
+
+
+class TestTestParserFunctionTracking:
+    """Tests for function/class context tracking in TestParser.
+
+    REQ-d00054-A: TestParser tracks function_name, class_name,
+    function_line, and file_default_validates in parsed_data.
+    """
+
+    def test_REQ_d00054_A_tracks_function_name(self):
+        """Function name is captured from the enclosing def statement."""
+        parser = TestParser()
+        lines = [
+            (1, "def test_REQ_p00001_foo():"),
+            (2, "    assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 1
+        assert results[0].parsed_data["function_name"] == "test_REQ_p00001_foo"
+
+    def test_REQ_d00054_A_tracks_class_name(self):
+        """Both class and function names are captured for methods in a test class."""
+        parser = TestParser()
+        lines = [
+            (1, "class TestFoo:"),
+            (2, "    def test_REQ_p00001_bar(self):"),
+            (3, "        assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 1
+        assert results[0].parsed_data["class_name"] == "TestFoo"
+        assert results[0].parsed_data["function_name"] == "test_REQ_p00001_bar"
+
+    def test_REQ_d00054_A_no_function_context_for_module_comment(self):
+        """Module-level comments have no function or class context."""
+        parser = TestParser()
+        lines = [
+            (1, "# Tests REQ-p00001"),
+            (2, ""),
+            (3, "def test_unrelated():"),
+            (4, "    pass"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        # The module-level comment should produce a result
+        module_result = [r for r in results if r.start_line == 1]
+        assert len(module_result) == 1
+        assert module_result[0].parsed_data["function_name"] is None
+        assert module_result[0].parsed_data["class_name"] is None
+
+    def test_REQ_d00054_A_file_default_validates(self):
+        """File-level REQ comment populates file_default_validates for all items."""
+        parser = TestParser()
+        lines = [
+            (1, "# Tests REQ-p00001"),
+            (2, ""),
+            (3, "class TestFoo:"),
+            (4, "    def test_REQ_p00002_bar(self):"),
+            (5, "        assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        # All results should carry the file-level default
+        for result in results:
+            assert "REQ-p00001" in result.parsed_data["file_default_validates"]
+
+    def test_REQ_d00054_A_function_line_tracks_def_line(self):
+        """function_line is the line number of the def statement, not the REQ reference."""
+        parser = TestParser()
+        lines = [
+            (1, "def test_something():"),
+            (2, "    # Tests REQ-p00001"),
+            (3, "    assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 1
+        # function_line should be line 1 (the def), not line 2 (the comment)
+        assert results[0].parsed_data["function_line"] == 1
+        assert results[0].start_line == 2
+
+    def test_REQ_d00054_A_comment_ref_inside_function(self):
+        """A comment reference inside a function body gets the function context."""
+        parser = TestParser()
+        lines = [
+            (1, "class TestFoo:"),
+            (2, "    def test_something(self):"),
+            (3, "        # Tests REQ-d00001"),
+            (4, "        assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 1
+        assert results[0].parsed_data["function_name"] == "test_something"
+        assert results[0].parsed_data["class_name"] == "TestFoo"
+        assert "REQ-d00001" in results[0].parsed_data["validates"]

@@ -132,7 +132,7 @@ class TestJUnitXMLParserReqExtraction:
 
         results = parser.parse(xml, "results.xml")
 
-        assert results[0]["test_id"] == "test:tests.test_auth.TestLogin::test_user_can_login"
+        assert results[0]["test_id"] == "test:tests/test_auth.py::TestLogin::test_user_can_login"
 
     def test_generates_test_id_without_classname(self):
         """Generates test_id even without classname."""
@@ -144,8 +144,8 @@ class TestJUnitXMLParserReqExtraction:
 
         results = parser.parse(xml, "results.xml")
 
-        # Without classname, format is "test::test_name"
-        assert results[0]["test_id"] == "test::test_something"
+        # Without classname, module path is empty
+        assert results[0]["test_id"] == "test:::test_something"
 
 
 class TestJUnitXMLParserEdgeCases:

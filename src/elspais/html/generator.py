@@ -343,6 +343,7 @@ class HTMLGenerator:
 
         rows: list[TreeRow] = []
         visited_at_depth: dict[tuple[str, int, str | None], bool] = {}
+        visited_node_ids: set[str] = set()  # Track all rendered node IDs
 
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""
@@ -530,6 +531,7 @@ class HTMLGenerator:
                         break
 
             rows.append(row)
+            visited_node_ids.add(node.id)
 
             # Traverse children - requirements first, then code/tests
             # First, aggregate all assertion targets per child to avoid duplicates
@@ -592,11 +594,81 @@ class HTMLGenerator:
             if root.kind == NodeKind.REQUIREMENT:
                 traverse(root, 0, None)
 
-        # Add orphan TEST_RESULT nodes (those without TEST parents)
-        # These appear as root-level items in the tree
+        # Add unvisited TEST nodes (orphan or not reached from root traversal)
+        # These appear as root-level items with their TEST_RESULT children
+        for node in self.graph.nodes_by_kind(NodeKind.TEST):
+            if node.id in visited_node_ids:
+                continue
+
+            source_file = node.source.path if node.source else ""
+            source_line = node.source.line if node.source else 0
+
+            row = TreeRow(
+                id=f"{node.id}_0_root",
+                display_id=node.id,
+                title=node.get_label() or "",
+                level="",
+                status="",
+                coverage="none",
+                topic="",
+                depth=0,
+                parent_id=None,
+                assertions=[],
+                is_leaf=False,
+                is_changed=False,
+                is_uncommitted=False,
+                is_roadmap=False,
+                is_code=False,
+                is_test=True,
+                is_test_result=False,
+                has_children=has_test_result_children(node),
+                has_failures=False,
+                is_associated=False,
+                source_file=source_file,
+                source_line=source_line,
+                result_status="",
+            )
+            rows.append(row)
+            visited_node_ids.add(node.id)
+
+            # Render TEST_RESULT children under this TEST node
+            for child in node.iter_children():
+                if child.kind == NodeKind.TEST_RESULT:
+                    child_source_file = child.source.path if child.source else ""
+                    child_source_line = child.source.line if child.source else 0
+                    child_result_status = (child.get_field("status", "") or "").lower()
+
+                    child_row = TreeRow(
+                        id=f"{child.id}_1_{node.id}",
+                        display_id=child.id,
+                        title=child.get_label() or "",
+                        level="",
+                        status="",
+                        coverage="none",
+                        topic="",
+                        depth=1,
+                        parent_id=row.id,
+                        assertions=[],
+                        is_leaf=True,
+                        is_changed=False,
+                        is_uncommitted=False,
+                        is_roadmap=False,
+                        is_code=False,
+                        is_test=False,
+                        is_test_result=True,
+                        has_children=False,
+                        has_failures=child_result_status in ("failed", "fail", "failure", "error"),
+                        is_associated=False,
+                        source_file=child_source_file,
+                        source_line=child_source_line,
+                        result_status=child_result_status,
+                    )
+                    rows.append(child_row)
+                    visited_node_ids.add(child.id)
+
+        # Add orphan TEST_RESULT nodes (not visited via any TEST parent)
         for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
-            # Skip if already visited (has a TEST parent)
-            if node.parent_count() > 0:
+            if node.id in visited_node_ids:
                 continue
 
             source_file = node.source.path if node.source else ""
@@ -606,7 +678,6 @@ class HTMLGenerator:
             # Create a short display ID from test name
             test_name = node.get_field("name", "") or ""
             classname = node.get_field("classname", "") or ""
-            # Use just test name as display ID, or extract from classname
             if test_name:
                 display_id = test_name
             elif classname:
