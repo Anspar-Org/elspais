@@ -785,6 +785,81 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "UJ-001" not in orphan_ids
 
+    def test_REQ_d00071_C_custom_satellite_kinds_override(self):
+        """REQ-d00071-C: Custom satellite_kinds adds CODE as satellite.
+
+        When satellite_kinds includes 'code', a PRD with only a CODE child
+        should be classified as an orphan (CODE is satellite), not a root.
+        """
+        builder = GraphBuilder(satellite_kinds=["assertion", "result", "code"])
+        builder.add_parsed_content(
+            make_requirement("REQ-p00001", level="PRD"),
+        )
+        builder.add_parsed_content(
+            make_code_ref(
+                implements=["REQ-p00001"],
+                source_path="src/auth.py",
+            ),
+        )
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-p00001")
+        assert req is not None
+        # CODE is a child
+        child_kinds = {c.kind for c in req.iter_children()}
+        assert NodeKind.CODE in child_kinds
+
+        # But with CODE as satellite, PRD is an orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" in orphan_ids
+
+        # And NOT a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "REQ-p00001" not in root_ids
+
+    def test_REQ_d00071_C_default_satellite_kinds_unchanged(self):
+        """REQ-d00071-C: Default satellite_kinds matches original behavior.
+
+        When no satellite_kinds parameter is passed, the builder defaults
+        to ASSERTION and TEST_RESULT as satellite kinds. A PRD with only
+        assertion children should be classified as an orphan.
+        """
+        builder = GraphBuilder()
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First assertion"},
+                    {"label": "B", "text": "Second assertion"},
+                ],
+            ),
+        )
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-p00001")
+        assert req is not None
+        # Assertions exist as children
+        child_kinds = {c.kind for c in req.iter_children()}
+        assert NodeKind.ASSERTION in child_kinds
+
+        # Assertions are satellite by default, so PRD is orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" in orphan_ids
+
+        # And NOT a root
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "REQ-p00001" not in root_ids
+
+    def test_REQ_d00071_C_invalid_satellite_kind_raises_error(self):
+        """REQ-d00071-C: Invalid satellite kind string raises ValueError.
+
+        Passing an unrecognized string to satellite_kinds should raise
+        a ValueError when NodeKind tries to parse it.
+        """
+        with pytest.raises(ValueError):
+            GraphBuilder(satellite_kinds=["bogus"])
+
 
 class TestCanonicalTestIds:
     """Tests for canonical TEST node ID generation from test_ref content."""

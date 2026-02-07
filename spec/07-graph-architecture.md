@@ -259,7 +259,7 @@ A. The graph builder SHALL classify a parentless node as a root only when it has
 
 B. The graph builder SHALL classify a parentless node as an orphan when it has no children whose kind is not a satellite kind.
 
-C. ASSERTION and TEST_RESULT node kinds SHALL be defined as satellite kinds that do not count as meaningful children for root vs orphan classification.
+C. Satellite node kinds SHALL be configurable via `[graph].satellite_kinds` in `.elspais.toml`, defaulting to ASSERTION and TEST_RESULT.
 
 D. USER_JOURNEY nodes SHALL follow the same root vs orphan classification rules as REQUIREMENT nodes.
 

@@ -79,6 +79,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "validation": {
         "hash_mode": "normalized-text",
     },
+    "graph": {
+        "satellite_kinds": ["assertion", "result"],
+    },
 }
 
 

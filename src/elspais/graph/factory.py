@@ -157,7 +157,11 @@ def build_graph(
 
     # 4. Build graph from all spec directories
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
-    builder = GraphBuilder(repo_root=repo_root, hash_mode=hash_mode)
+    graph_config = config.get("graph", {})
+    satellite_kinds = graph_config.get("satellite_kinds", None)
+    builder = GraphBuilder(
+        repo_root=repo_root, hash_mode=hash_mode, satellite_kinds=satellite_kinds
+    )
 
     # Get ignore configuration for filtering spec files
     ignore_config = get_ignore_config(config)

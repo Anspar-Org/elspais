@@ -23,9 +23,9 @@ from elspais.graph.relations import EdgeKind
 from elspais.utilities.test_identity import build_test_id
 
 # Implements: REQ-d00071-C
-# Satellite kinds: children of these types don't count as "meaningful"
-# for determining root vs orphan status
-_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
+# Default satellite kinds: children of these types don't count as "meaningful"
+# for determining root vs orphan status. Configurable via [graph].satellite_kinds.
+_DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
 
 
 @dataclass
@@ -41,6 +41,7 @@ class TraceGraph:
 
     repo_root: Path = field(default_factory=Path.cwd)
     hash_mode: str = field(default="normalized-text")
+    satellite_kinds: frozenset = field(default_factory=lambda: _DEFAULT_SATELLITE_KINDS)
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -1598,15 +1599,27 @@ class GraphBuilder:
         3. Post-construction, all access should use get_field()/set_field()
     """
 
-    def __init__(self, repo_root: Path | None = None, hash_mode: str = "normalized-text") -> None:
+    def __init__(
+        self,
+        repo_root: Path | None = None,
+        hash_mode: str = "normalized-text",
+        satellite_kinds: list[str] | None = None,
+    ) -> None:
         """Initialize the graph builder.
 
         Args:
             repo_root: Repository root path.
             hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+            satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
+                that don't count as meaningful children for root/orphan
+                classification. Defaults to ASSERTION and TEST_RESULT.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        if satellite_kinds is not None:
+            self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
+        else:
+            self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
         # Detection: track orphan candidates and broken references
@@ -1938,14 +1951,18 @@ class GraphBuilder:
         root_ids = set()
         for node_id in self._orphan_candidates:
             node = self._nodes.get(node_id)
-            if node and any(c.kind not in _SATELLITE_KINDS for c in node.iter_children()):
+            if node and any(c.kind not in self.satellite_kinds for c in node.iter_children()):
                 roots.append(node)
                 root_ids.add(node_id)
 
         # Final orphan set: candidates that aren't roots
         orphaned_ids = self._orphan_candidates - root_ids
 
-        graph = TraceGraph(repo_root=self.repo_root, hash_mode=self.hash_mode)
+        graph = TraceGraph(
+            repo_root=self.repo_root,
+            hash_mode=self.hash_mode,
+            satellite_kinds=self.satellite_kinds,
+        )
         graph._roots = roots
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
