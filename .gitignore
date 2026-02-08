@@ -80,3 +80,9 @@ Thumbs.db
 traceability_graph.html
 traceability_graph.md
 traceability_matrix.html
+
+# Ephemeral planning/workflow docs
+MASTER_PLAN*.md
+WORKFLOW_STATE.md
+GOLDPLATING_FIX_PLAN.md
+GOLD_PLATING_REPORT.md
