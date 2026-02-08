@@ -359,7 +359,7 @@ D. `apply_link()` SHALL validate that the target requirement exists in the graph
 
 MCP exposure enables AI agents to discover and apply link suggestions during coding sessions, completing the workflow: discover gaps -> get suggestions -> apply links.
 
-*End* *MCP Link Suggestion Tools* | **Hash**: ________
+*End* *MCP Link Suggestion Tools* | **Hash**: e438ff5e
 
 ---
 

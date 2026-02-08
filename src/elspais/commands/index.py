@@ -1,4 +1,5 @@
 # Implements: REQ-int-d00003 (CLI Extension)
+# Implements: REQ-d00052-G
 """
 elspais.commands.index - INDEX.md management command.
 
@@ -193,7 +194,7 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
 
     # Write to first spec dir
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
-    output_path.write_text("\n".join(lines))
+    output_path.write_text("\n".join(lines), encoding="utf-8")
 
     req_count = sum(len(nodes) for nodes in by_level.values())
     jny_count = len(journey_nodes)

@@ -1,6 +1,6 @@
 # Implements: REQ-int-d00003 (CLI Extension)
 # Implements: REQ-p00001-B, REQ-p00003-A, REQ-p00003-B
-# Implements: REQ-d00052-B, REQ-d00052-C
+# Implements: REQ-d00052-B, REQ-d00052-C, REQ-d00052-G
 """
 elspais.commands.trace - Generate traceability matrix command.
 
@@ -414,7 +414,7 @@ def run(args: argparse.Namespace) -> int:
             return 1
 
         output_path = args.output or Path("traceability_view.html")
-        Path(output_path).write_text(content)
+        Path(output_path).write_text(content, encoding="utf-8")
 
         if not getattr(args, "quiet", False):
             print(f"Generated: {output_path}", file=sys.stderr)
@@ -426,7 +426,7 @@ def run(args: argparse.Namespace) -> int:
 
         output = json.dumps(serialize_graph(graph), indent=2)
         if args.output:
-            Path(args.output).write_text(output)
+            Path(args.output).write_text(output, encoding="utf-8")
             if not getattr(args, "quiet", False):
                 print(f"Generated: {args.output}", file=sys.stderr)
         else:
@@ -446,11 +446,11 @@ def run(args: argparse.Namespace) -> int:
         md_path = output_base.with_suffix(".md")
         csv_path = output_base.with_suffix(".csv")
 
-        with open(md_path, "w") as f:
+        with open(md_path, "w", encoding="utf-8") as f:
             for line in format_markdown(graph, preset):
                 f.write(line + "\n")
 
-        with open(csv_path, "w") as f:
+        with open(csv_path, "w", encoding="utf-8") as f:
             for line in format_csv(graph, preset):
                 f.write(line + "\n")
 
@@ -476,7 +476,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Stream output line by line
     if output_path:
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             for line in line_generator:
                 f.write(line + "\n")
         if not getattr(args, "quiet", False):

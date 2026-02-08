@@ -132,12 +132,13 @@ C. CSV generator SHALL iterate graph.all_nodes() for flat output.
 D. Generators SHALL NOT create Dict[str, TraceViewRequirement] or similar intermediate structures.
 E. Generators SHALL read node.metrics for display information, not recompute it.
 F. Generators SHALL use aggregate functions from annotators module for statistics.
+G. All file write operations in output commands SHALL specify explicit `encoding="utf-8"` for cross-platform portability.
 
 ## Rationale
 
 Direct graph consumption eliminates data structure conversion overhead and ensures consistency.
 
-*End* *Output Generators Consume Graph Directly* | **Hash**: 8dc48cec
+*End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
 ---
 
 ## REQ-d00053: No Duplicate Library Functions
@@ -223,7 +224,7 @@ F. When a whole-requirement test has passing results, the annotator SHALL count 
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-*End* *Indirect Coverage Source* | **Hash**: ________
+*End* *Indirect Coverage Source* | **Hash**: 168446ae
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -244,7 +245,7 @@ E. The `has_failures` warning indicator SHALL display regardless of toggle state
 
 Users need both a strict traceability view (only assertion-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: ________
+*End* *Indirect Coverage Toggle Display* | **Hash**: d483becb
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
@@ -267,7 +268,7 @@ D. USER_JOURNEY nodes SHALL follow the same root vs orphan classification rules 
 
 Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally treated as roots, even when disconnected from the rest of the graph. A PRD with only assertions but no OPS/DEV implementations is effectively orphaned — it anchors no subgraph. Unifying the classification rule across all node kinds simplifies the logic and produces more accurate orphan detection.
 
-*End* *Unified Root vs Orphan Classification* | **Hash**: ________
+*End* *Unified Root vs Orphan Classification* | **Hash**: 46d2a3e2
 ---
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
@@ -289,7 +290,7 @@ F. The suggestion engine SHALL support applying suggestions by inserting `# Impl
 
 Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close traceability gaps systematically.
 
-*End* *Agent-Assisted Link Suggestion* | **Hash**: ________
+*End* *Agent-Assisted Link Suggestion* | **Hash**: 7c449e0c
 ---
 
 ## REQ-d00072: Link Suggestion Core Engine
@@ -311,7 +312,7 @@ F. `_deduplicate_suggestions()` SHALL merge suggestions for the same (test, requ
 
 The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
 
-*End* *Link Suggestion Core Engine* | **Hash**: ________
+*End* *Link Suggestion Core Engine* | **Hash**: 2cd50cdc
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -332,7 +333,7 @@ E. `--apply [--dry-run]` SHALL insert `# Implements:` comments into source files
 
 CLI exposure enables both interactive use and CI pipeline integration. JSON output mode supports tooling and scripting workflows.
 
-*End* *Link Suggestion CLI Command* | **Hash**: ________
+*End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
 ---
 
 ## Architecture Diagram

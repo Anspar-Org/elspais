@@ -1,3 +1,4 @@
+# Implements: REQ-d00052-G
 """
 elspais.commands.init - Initialize configuration command.
 
@@ -72,7 +73,7 @@ def run(args: argparse.Namespace) -> int:
     config_content = generate_config(project_type, associated_prefix)
 
     # Write file
-    config_path.write_text(config_content)
+    config_path.write_text(config_content, encoding="utf-8")
     print(f"Created configuration: {config_path}")
 
     return 0
@@ -104,7 +105,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
         print("Use --force to overwrite.")
         return 1
 
-    example_path.write_text(EXAMPLE_REQUIREMENT)
+    example_path.write_text(EXAMPLE_REQUIREMENT, encoding="utf-8")
     print(f"Created example requirement: {example_path}")
     print()
     print("Next steps:")
