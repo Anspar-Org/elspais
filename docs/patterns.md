@@ -34,6 +34,7 @@ leading_zeros = true
 ```
 
 **Examples:**
+
 - `REQ-p00001` - Product requirement
 - `REQ-o00015` - Operations requirement
 - `REQ-d00127` - Development requirement
@@ -64,6 +65,7 @@ leading_zeros = true
 ```
 
 **Examples:**
+
 - `REQ-CAL-p00001` - Callisto product requirement
 - `REQ-XYZ-d00042` - XYZ associated dev requirement
 - `REQ-p00001` - Core requirement (no associated prefix)
@@ -87,6 +89,7 @@ leading_zeros = true
 ```
 
 **Examples:**
+
 - `PRD-00001` - Product requirement
 - `OPS-00042` - Operations requirement
 - `DEV-00127` - Development requirement
@@ -109,6 +112,7 @@ leading_zeros = false
 ```
 
 **Examples:**
+
 - `PROJ-1` - First requirement
 - `PROJ-42` - Requirement 42
 - `PROJ-1234` - Requirement 1234
@@ -130,6 +134,7 @@ max_length = 32
 ```
 
 **Examples:**
+
 - `REQ-UserAuthentication`
 - `REQ-DataExport`
 - `REQ-AuditLog`
@@ -152,6 +157,7 @@ pattern = "[A-Z]{2}[0-9]{3}"  # 2 letters + 3 digits
 ```
 
 **Examples:**
+
 - `REQ-PAB123` - Product requirement AB123
 - `REQ-DXY456` - Dev requirement XY456
 

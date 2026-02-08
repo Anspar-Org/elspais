@@ -1,0 +1,2842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requirements Traceability</title>
+    <style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSS STYLES - Trace View
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    background: #f8f9fa;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Header
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.header-stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    user-select: none;
+}
+
+.stat-badge:hover {
+    opacity: 0.85;
+    transform: scale(1.02);
+}
+
+.stat-badge.active {
+    /* When filter is active (hiding that level), show hollow/outline appearance */
+    box-shadow: inset 0 0 0 2px currentColor;
+    background: transparent !important;
+}
+
+/* Level badges need dark text when active (background becomes transparent) */
+.stat-badge.prd.active { color: #212529; }
+.stat-badge.ops.active { color: #fd7e14; }
+.stat-badge.dev.active { color: #20c997; }
+.stat-badge.core.active { color: #0d6efd; }
+
+.stat-badge.prd { background: #212529; color: white; }
+.stat-badge.ops { background: #fd7e14; color: white; }
+.stat-badge.dev { background: #20c997; color: white; }
+.stat-badge.core { background: #0d6efd; color: white; }
+.stat-badge.code {
+    background: #6c757d;
+    color: white;
+}
+.stat-badge.code.active {
+    color: #6c757d;
+}
+.stat-badge.tests {
+    background: #198754;
+    color: white;
+}
+.stat-badge.tests.active {
+    color: #198754;
+}
+.stat-badge.results {
+    background: #6610f2;
+    color: white;
+}
+.stat-badge.results.active {
+    color: #6610f2;
+}
+.stat-badge.associated {
+    background: #6f42c1;
+    color: white;
+}
+.stat-badge.associated.active {
+    color: #6f42c1;
+}
+
+.assertion-summary {
+    font-size: 0.85em;
+    color: #6c757d;
+    padding: 4px 0;
+    border-top: 1px solid #dee2e6;
+    margin-top: 8px;
+}
+.assertion-summary strong {
+    color: #212529;
+}
+
+.header-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.version-badge {
+    padding: 4px 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.legend-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.legend-btn:hover {
+    background: #5a6268;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Toolbar
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.toolbar {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-group {
+    display: flex;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.btn-group .btn {
+    border: none;
+    border-right: 1px solid #dee2e6;
+    background: white;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn-group .btn:last-child {
+    border-right: none;
+}
+
+.btn-group .btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-group .btn.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: #495057;
+    cursor: pointer;
+}
+
+.toggle-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-icon {
+    padding: 8px 12px;
+}
+
+.counter {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tabs
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tabs {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+}
+
+.tab {
+    padding: 12px 24px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #6c757d;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.tab:hover {
+    color: #495057;
+}
+
+.tab.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Journey Cards */
+.journey-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.journey-search {
+    flex: 1;
+    max-width: 400px;
+}
+
+.journey-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.journey-search input:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+.journey-count {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.journey-list {
+    display: grid;
+    gap: 16px;
+    padding: 16px 0;
+}
+
+.journey-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 20px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.journey-card:hover {
+    border-color: #4299e1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.journey-card.hidden {
+    display: none;
+}
+
+.journey-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.journey-card .journey-id {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    color: white;
+    background: #6c757d;
+    padding: 4px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.journey-card h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.journey-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.journey-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.journey-meta-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.journey-meta-value {
+    font-size: 0.875rem;
+    color: #212529;
+}
+
+.journey-card .journey-description {
+    font-size: 0.875rem;
+    color: #495057;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.journey-refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.journey-refs-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 600;
+    margin-right: 2px;
+    align-self: center;
+}
+
+.journey-ref-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #0d6efd;
+    background: #e7f1ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+
+.journey-ref-badge:hover {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.no-journeys {
+    text-align: center;
+    padding: 48px;
+    color: #6c757d;
+}
+
+/* Journey Grouping */
+.journey-group-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.journey-group-controls label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.journey-group-controls select {
+    padding: 6px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    background: white;
+    cursor: pointer;
+}
+
+.journey-group-controls select:focus {
+    outline: none;
+    border-color: #4299e1;
+}
+
+.journey-group {
+    margin-bottom: 24px;
+}
+
+.journey-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(to right, #e9ecef, #f8f9fa);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.journey-group-header:hover {
+    background: linear-gradient(to right, #dee2e6, #e9ecef);
+}
+
+.journey-group-header .expand-icon {
+    font-size: 0.75rem;
+    color: #6c757d;
+    transition: transform 0.2s;
+    width: 16px;
+}
+
+.journey-group.collapsed .expand-icon {
+    transform: rotate(-90deg);
+}
+
+.journey-group-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    flex: 1;
+}
+
+.journey-group-count {
+    font-size: 0.75rem;
+    color: #6c757d;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.journey-group-cards {
+    display: grid;
+    gap: 12px;
+    padding-left: 0;
+}
+
+.journey-group.collapsed .journey-group-cards {
+    display: none;
+}
+
+/* Compact card variant for grouped view */
+.journey-card.compact {
+    padding: 14px 16px;
+}
+
+.journey-card.compact .journey-card-header {
+    margin-bottom: 8px;
+}
+
+.journey-card.compact h3 {
+    font-size: 1rem;
+}
+
+.journey-card.compact .journey-description {
+    font-size: 0.8rem;
+    max-height: 80px;
+    overflow: hidden;
+    position: relative;
+}
+
+.journey-card.compact .journey-description::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, white);
+}
+
+.journey-card.compact.expanded .journey-description {
+    max-height: none;
+}
+
+.journey-card.compact.expanded .journey-description::after {
+    display: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Main Content
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.main-content {
+    padding: 24px;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 16px;
+}
+
+.table-container {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Traceability Table
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.trace-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.trace-table th {
+    background: #f8f9fa;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.trace-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f1f3f4;
+    vertical-align: middle;
+}
+
+.trace-table tr:hover {
+    background: #f8f9fa;
+}
+
+.trace-table tr.hidden {
+    display: none;
+}
+
+/* Column widths */
+.col-id { width: 180px; }
+.col-title { min-width: 200px; }
+.col-level { width: 70px; }
+.col-status { width: 100px; }
+.col-cov { width: 60px; text-align: center; }
+.col-topic { width: 180px; }
+
+/* Filter inputs in header */
+.filter-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-top: 6px;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-top: 6px;
+    background: white;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tree Structure
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tree-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tree-indent {
+    display: inline-block;
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.tree-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #6c757d;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    font-size: 10px;
+}
+
+.tree-toggle:hover {
+    color: #495057;
+}
+
+.tree-toggle.collapsed::before {
+    content: "▶";
+}
+
+.tree-toggle.expanded::before {
+    content: "▼";
+}
+
+.tree-toggle.leaf {
+    visibility: hidden;
+}
+
+.req-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.875rem;
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.req-id:hover {
+    text-decoration: underline;
+}
+
+.file-link {
+    color: #198754;
+    text-decoration: none;
+}
+
+.file-link:hover {
+    text-decoration: underline;
+}
+
+.assertion-badges {
+    display: flex;
+    gap: 2px;
+    margin-left: 4px;
+}
+
+.assertion-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: #e7f1ff;
+    color: #0d6efd;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Status Badges
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.draft {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.status-badge.active {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.status-badge.deprecated {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.status-badge.proposed {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.change-indicator {
+    color: #fd7e14;
+    font-size: 0.75rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Coverage Indicators
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.coverage-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.coverage-icon {
+    font-size: 1rem;
+}
+
+.coverage-icon.none { color: #adb5bd; }
+.coverage-icon.partial { color: #6c757d; }
+.coverage-icon.full { color: #212529; }
+
+.warning-icon {
+    color: #ffc107;
+    font-size: 0.875rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Topic Tags
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.topic-tag {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Code Node Rows
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.code-row {
+    background: #f8f9fa;
+}
+
+.code-row td {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.code-icon {
+    color: #6c757d;
+    margin-right: 4px;
+}
+
+.test-row {
+    background: #f0fff4;  /* Light green tint for tests */
+}
+
+.test-row td {
+    font-size: 0.8rem;
+    color: #198754;
+}
+
+.test-icon {
+    margin-right: 4px;
+}
+
+/* Test Result Rows */
+.result-row {
+    background: #f8f9fa;
+}
+
+.result-row td {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.result-row.passed {
+    background: #d1e7dd;
+}
+
+.result-row.passed td {
+    color: #0f5132;
+}
+
+.result-row.failed {
+    background: #f8d7da;
+}
+
+.result-row.failed td {
+    color: #842029;
+}
+
+.result-row.error {
+    background: #fff3cd;
+}
+
+.result-row.error td {
+    color: #664d03;
+}
+
+.result-row.skipped {
+    background: #e2e3e5;
+}
+
+.result-row.skipped td {
+    color: #41464b;
+}
+
+.result-icon {
+    margin-right: 4px;
+}
+
+.result-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.result-badge.passed {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.result-badge.failed {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.result-badge.error {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.result-badge.skipped {
+    background: #e2e3e5;
+    color: #41464b;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Legend Modal
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+}
+
+.modal-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.legend-section {
+    margin-bottom: 20px;
+}
+
+.legend-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 4px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 0.875rem;
+}
+
+.legend-icon {
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Responsive
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .toolbar-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .split-layout {
+        flex-direction: column !important;
+    }
+
+    .file-viewer-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-left: none !important;
+        border-top: 1px solid #e9ecef;
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Split Layout & File Viewer Panel
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.split-layout {
+    display: flex;
+    height: calc(100vh - 140px);
+    overflow: hidden;
+}
+
+.split-layout > .main-content {
+    flex: 1;
+    min-width: 350px;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.split-layout > .main-content.full-width {
+    /* When file viewer is closed */
+}
+
+.split-divider {
+    width: 5px;
+    background: #e9ecef;
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s;
+    display: none; /* hidden until panel opens */
+}
+
+.split-divider:hover,
+.split-divider.dragging {
+    background: #0d6efd;
+}
+
+.split-divider::after {
+    content: '···';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    color: #6c757d;
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.file-viewer-panel {
+    width: 50%;
+    max-width: 60%;
+    min-width: 300px;
+    display: none; /* hidden until a file is clicked */
+    flex-direction: column;
+    background: white;
+    border-left: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+.file-viewer-panel.open {
+    display: flex;
+}
+
+.file-viewer-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.file-viewer-path {
+    flex: 1;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.8rem;
+    color: #495057;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-viewer-lang {
+    font-size: 0.7rem;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.file-viewer-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    color: #495057;
+    font-size: 0.8rem;
+    transition: background 0.15s;
+}
+
+.file-viewer-btn:hover {
+    background: #e9ecef;
+}
+
+.file-viewer-close {
+    font-size: 1.2rem;
+    line-height: 1;
+    font-weight: bold;
+    color: #6c757d;
+}
+
+.file-viewer-close:hover {
+    color: #dc3545;
+}
+
+.file-viewer-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0;
+}
+
+/* Line-numbered source display */
+.source-lines {
+    display: table;
+    width: 100%;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.source-line {
+    display: table-row;
+}
+
+.source-line:hover {
+    background: #f0f4ff;
+}
+
+.source-line.highlighted {
+    background: #fff3cd;
+}
+
+.source-line.highlighted:hover {
+    background: #ffe69c;
+}
+
+.line-num {
+    display: table-cell;
+    width: 1px; /* shrink to content */
+    min-width: 40px;
+    padding: 0 12px 0 8px;
+    text-align: right;
+    color: #adb5bd;
+    user-select: none;
+    white-space: nowrap;
+    vertical-align: top;
+    border-right: 1px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+.line-content {
+    display: table-cell;
+    padding: 0 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    tab-size: 4;
+}
+
+.line-content.rendered-line {
+    white-space: normal;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.line-content.rendered-line p {
+    margin: 0;
+    display: inline;
+}
+
+.line-content.rendered-line h1,
+.line-content.rendered-line h2,
+.line-content.rendered-line h3 {
+    margin: 0;
+    display: inline;
+    font-size: inherit;
+}
+
+.line-content.rendered-line h1 { font-size: 1.4em; }
+.line-content.rendered-line h2 { font-size: 1.2em; }
+.line-content.rendered-line h3 { font-size: 1.1em; }
+
+.line-content.rendered-line code {
+    background: #f1f3f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+/* Markdown rendered view (full-page, no longer used but kept for fallback) */
+.file-viewer-rendered {
+    padding: 16px 24px;
+    line-height: 1.6;
+}
+
+.file-viewer-rendered h1,
+.file-viewer-rendered h2,
+.file-viewer-rendered h3 {
+    margin: 16px 0 8px;
+    color: #212529;
+}
+
+.file-viewer-rendered p {
+    margin: 8px 0;
+}
+
+.file-viewer-rendered code {
+    background: #f1f3f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.file-viewer-rendered pre {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.file-viewer-rendered pre code {
+    background: none;
+    padding: 0;
+}
+
+/* View mode toggle for markdown files */
+.file-viewer-mode-toggle {
+    display: flex;
+    gap: 2px;
+    background: #e9ecef;
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.file-viewer-mode-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    color: #495057;
+    transition: all 0.15s;
+}
+
+.file-viewer-mode-btn.active {
+    background: white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Pygments syntax highlighting theme */
+{% if pygments_css %}
+{{ pygments_css }}
+{% endif %}
+
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<header class="header">
+    <h1 class="header-title">Requirements Traceability</h1>
+
+    <div class="header-stats">
+        <span class="stat-badge prd" id="badge-prd" onclick="toggleLevelFilter('PRD')" title="Click to filter PRD only">PRD: {{ stats.prd_count }}</span>
+        <span class="stat-badge ops" id="badge-ops" onclick="toggleLevelFilter('OPS')" title="Click to filter OPS only">OPS: {{ stats.ops_count }}</span>
+        <span class="stat-badge dev" id="badge-dev" onclick="toggleLevelFilter('DEV')" title="Click to filter DEV only">DEV: {{ stats.dev_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge code" id="badge-code" onclick="toggleFilter('code')" title="Click to hide code nodes">Code: {{ stats.code_count }}</span>
+        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">Tests: {{ stats.test_count }}</span>
+        {% if stats.test_result_count > 0 %}
+        <span class="stat-badge results" id="badge-results" onclick="toggleFilter('results')" title="Click to show test results">Results: {{ stats.test_passed_count }}✓ {{ stats.test_failed_count }}✗</span>
+        {% endif %}
+        <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
+    </div>
+
+    <div class="assertion-summary">
+        Assertions: <strong>{{ stats.assertion_count }}</strong> unique |
+        Implemented: <strong>{{ stats.assertions_implemented }}</strong> |
+        Tested: <strong>{{ stats.assertions_tested }}</strong> |
+        Validated: <strong>{{ stats.assertions_validated }}</strong>
+    </div>
+
+    <div class="header-meta">
+        <span class="version-badge">v{{ version }}</span>
+        <button class="legend-btn" onclick="toggleLegend()">
+            <span>ℹ</span> Legend
+        </button>
+        <button class="legend-btn" onclick="clearAllCookies()" title="Clear saved preferences">
+            <span>🍪</span> Reset
+        </button>
+    </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOOLBAR
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="toolbar">
+    <!-- View Mode -->
+    <div class="btn-group" role="group">
+        <button class="btn" data-view="flat" onclick="setViewMode('flat')">Flat View</button>
+        <button class="btn active" data-view="hierarchical" onclick="setViewMode('hierarchical')">Hierarchical View</button>
+    </div>
+
+    <!-- Git Filters -->
+    <div class="btn-group" role="group">
+        <button class="btn" id="btn-uncommitted" onclick="toggleFilter('uncommitted')">Uncommitted</button>
+        <button class="btn" id="btn-changed" onclick="toggleFilter('changed')">Changed vs Main</button>
+    </div>
+
+    <!-- Content Toggles -->
+    <div class="toggle-group">
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-leaf" onchange="applyFilters()">
+            <span>🌿 Leaf Only</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-deprecated" onchange="applyFilters()">
+            <span>Include deprecated</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-roadmap" onchange="applyFilters()">
+            <span>Include roadmap</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-code" onchange="applyFilters()">
+            <span>Show code refs</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-indirect" onchange="toggleIndirectCoverage()">
+            <span>Indirect coverage</span>
+        </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="toolbar-actions">
+        <button class="btn btn-icon" onclick="expandAll()" title="Expand All">▼ Expand All</button>
+        <button class="btn btn-icon" onclick="collapseAll()" title="Collapse All">▶ Collapse All</button>
+        <button class="btn" onclick="clearFilters()">Clear</button>
+        <span class="counter" id="counter">Showing {{ stats.total_count }} of {{ stats.total_count }} requirements</span>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TABS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="tabs">
+    <button class="tab active" data-tab="requirements" onclick="switchTab('requirements')">Requirements</button>
+    <button class="tab" data-tab="journeys" onclick="switchTab('journeys')">User Journeys</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SPLIT LAYOUT: MAIN CONTENT + FILE VIEWER
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="split-layout" id="split-layout">
+<main class="main-content" id="main-content">
+    <!-- Requirements Tab Content -->
+    <div class="tab-content active" id="content-requirements">
+        <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
+
+        <div class="table-container">
+        <table class="trace-table" id="trace-table">
+            <thead>
+                <tr>
+                    <th class="col-id">
+                        ID
+                        <input type="text" class="filter-input" id="filter-id" placeholder="e.g. p00001" oninput="applyFilters()">
+                    </th>
+                    <th class="col-title">
+                        TITLE
+                        <input type="text" class="filter-input" id="filter-title" placeholder="Search title..." oninput="applyFilters()">
+                    </th>
+                    <th class="col-level">
+                        LEVEL
+                        <select class="filter-select" id="filter-level" onchange="applyFilters()">
+                            <option value="">All</option>
+                            <option value="PRD">PRD</option>
+                            <option value="OPS">OPS</option>
+                            <option value="DEV">DEV</option>
+                        </select>
+                    </th>
+                    <th class="col-status">
+                        STATUS
+                        <select class="filter-select" id="filter-status" onchange="applyFilters()">
+                            <option value="">All</option>
+                            {% for status in statuses %}
+                            <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </th>
+                    <th class="col-cov">
+                        COV
+                        <select class="filter-select" id="filter-cov" onchange="applyFilters()">
+                            <option value="">All</option>
+                            <option value="none">○ None</option>
+                            <option value="partial">◐ Partial</option>
+                            <option value="full">● Full</option>
+                        </select>
+                    </th>
+                    <th class="col-topic">
+                        TOPIC
+                        <select class="filter-select" id="filter-topic" onchange="applyFilters()">
+                            <option value="">All</option>
+                            {% for topic in topics %}
+                            <option value="{{ topic }}">{{ topic }}</option>
+                            {% endfor %}
+                        </select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                {% for row in rows %}
+                <tr class="req-row {{ 'code-row' if row.is_code else '' }}{{ 'test-row' if row.is_test else '' }}{{ 'result-row ' + row.result_status if row.is_test_result else '' }}"
+                    data-id="{{ row.id }}"
+                    data-parent="{{ row.parent_id or '' }}"
+                    data-level="{{ row.level }}"
+                    data-status="{{ row.status }}"
+                    data-coverage="{{ row.coverage }}"
+                    data-coverage-indirect="{{ row.coverage_indirect }}"
+                    data-topic="{{ row.topic }}"
+                    data-depth="{{ row.depth }}"
+                    data-is-leaf="{{ 'true' if row.is_leaf else 'false' }}"
+                    data-is-changed="{{ 'true' if row.is_changed else 'false' }}"
+                    data-is-uncommitted="{{ 'true' if row.is_uncommitted else 'false' }}"
+                    data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
+                    data-is-code="{{ 'true' if row.is_code else 'false' }}"
+                    data-is-test="{{ 'true' if row.is_test else 'false' }}"
+                    data-is-test-result="{{ 'true' if row.is_test_result else 'false' }}"
+                    data-result-status="{{ row.result_status }}"
+                    data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
+                    data-has-children="{{ 'true' if row.has_children else 'false' }}"
+                    data-source-file="{{ row.source_file }}"
+                    data-source-line="{{ row.source_line }}">
+                    <td class="col-id">
+                        <div class="tree-cell">
+                            {% for i in range(row.depth) %}
+                            <span class="tree-indent"></span>
+                            {% endfor %}
+                            <button class="tree-toggle {{ 'expanded' if row.has_children else 'leaf' }}"
+                                    onclick="toggleNode('{{ row.id }}')"
+                                    data-node-id="{{ row.id }}"></button>
+                            {% if row.is_code %}
+                            <span class="code-icon">📄</span>
+                            {% elif row.is_test %}
+                            <span class="test-icon">🧪</span>
+                            {% elif row.is_test_result %}
+                            <span class="result-icon">{% if row.result_status == 'passed' %}✅{% elif row.result_status in ['failed', 'failure'] %}❌{% elif row.result_status == 'error' %}⚠️{% elif row.result_status == 'skipped' %}⏭️{% else %}📋{% endif %}</span>
+                            {% endif %}
+                            {% if row.source_file %}
+                            <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="req-id" title="Open in VS Code: {{ row.source_file }}:{{ row.source_line }}">{{ row.display_id | replace('REQ-', '') }}</a>
+                            {% else %}
+                            <span class="req-id">{{ row.display_id | replace('REQ-', '') }}</span>
+                            {% endif %}
+                            {% if row.assertions %}
+                            <span class="assertion-badges">
+                                {% for a in row.assertions %}
+                                <span class="assertion-badge">{{ a }}</span>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="col-title">
+                        {% if row.is_test_result %}
+                        {% if row.source_file %}
+                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
+                        {% else %}
+                        {{ row.title }}
+                        {% endif %}
+                        <span class="result-badge {{ row.result_status }}">{{ row.result_status }}</span>
+                        {% elif (row.is_test or row.is_code) and row.source_file %}
+                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
+                        {% else %}
+                        {{ row.title }}
+                        {% endif %}
+                    </td>
+                    <td class="col-level">{{ row.level }}</td>
+                    <td class="col-status">
+                        {% if row.status %}
+                        <span class="status-badge {{ row.status|lower }}">
+                            {{ row.status }}
+                            {% if row.is_changed %}<span class="change-indicator">◆</span>{% endif %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="col-cov">
+                        <div class="coverage-cell">
+                            {% if row.coverage == 'full' %}
+                            <span class="coverage-icon full">●</span>
+                            {% elif row.coverage == 'partial' %}
+                            <span class="coverage-icon partial">◐</span>
+                            {% else %}
+                            <span class="coverage-icon none">○</span>
+                            {% endif %}
+                            {% if row.has_failures %}
+                            <span class="warning-icon">⚡</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="col-topic">
+                        <span class="topic-tag">{{ row.topic }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- User Journeys Tab Content -->
+    <div class="tab-content" id="content-journeys">
+        <h2 class="section-title">User Journeys</h2>
+        {% if journeys %}
+        <div class="journey-toolbar">
+            <div class="journey-search">
+                <input type="text" id="journey-search" placeholder="Search journeys by ID, title, actor, or goal..." oninput="filterJourneys()">
+            </div>
+            <div class="journey-group-controls">
+                <label for="journey-group-by">Group by:</label>
+                <select id="journey-group-by" onchange="regroupJourneys()">
+                    <option value="none">None</option>
+                    <option value="descriptor">Descriptor</option>
+                    <option value="actor">Actor</option>
+                    <option value="file">File</option>
+                </select>
+            </div>
+            <div class="journey-count">
+                <span id="journey-visible-count">{{ journeys|length }}</span> of {{ journeys|length }} journeys
+            </div>
+        </div>
+        <div class="journey-list" id="journey-list">
+            {% for journey in journeys %}
+            <div class="journey-card"
+                 data-id="{{ journey.id|lower }}"
+                 data-title="{{ journey.title|lower }}"
+                 data-actor="{{ (journey.actor or '')|lower }}"
+                 data-goal="{{ (journey.goal or '')|lower }}"
+                 data-descriptor="{{ journey.descriptor|lower }}"
+                 data-file="{{ journey.file|lower }}"
+                 data-refs="{{ journey.referenced_reqs|join(',')|lower }}">
+                <div class="journey-card-header">
+                    <span class="journey-id">{{ journey.id }}</span>
+                    <h3>{{ journey.title }}</h3>
+                </div>
+                {% if journey.actor or journey.goal or journey.descriptor or journey.file %}
+                <div class="journey-meta">
+                    {% if journey.descriptor %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Topic</span>
+                        <span class="journey-meta-value">{{ journey.descriptor }}</span>
+                    </div>
+                    {% endif %}
+                    {% if journey.actor %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Actor</span>
+                        <span class="journey-meta-value">{{ journey.actor }}</span>
+                    </div>
+                    {% endif %}
+                    {% if journey.goal %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Goal</span>
+                        <span class="journey-meta-value">{{ journey.goal }}</span>
+                    </div>
+                    {% endif %}
+                    {% if journey.file %}
+                    <div class="journey-meta-item">
+                        <span class="journey-meta-label">Source</span>
+                        <span class="journey-meta-value">{{ journey.file }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if journey.referenced_reqs %}
+                <div class="journey-refs">
+                    <span class="journey-refs-label">Addresses:</span>
+                    {% for req_id in journey.referenced_reqs %}
+                    <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if journey.description %}
+                <div class="journey-description">{{ journey.description }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-journeys">
+            <p>No user journeys found in specification files.</p>
+            <p style="font-size: 0.875rem; margin-top: 8px;">User journeys are defined with <code>## JNY-xxx: Title</code> headers in spec files.</p>
+            <p style="font-size: 0.8rem; margin-top: 12px; color: #868e96;">
+                Example format:<br>
+                <code style="display: block; margin-top: 8px; padding: 12px; background: #f1f3f5; border-radius: 4px; text-align: left;">
+## JNY-LOGIN-01: User Login<br>
+**Actor**: End User<br>
+**Goal**: Access the system securely<br><br>
+Steps...<br><br>
+*End* *JNY-LOGIN-01*
+                </code>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     RESIZABLE DIVIDER + FILE VIEWER PANEL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="split-divider" id="split-divider"></div>
+
+<aside class="file-viewer-panel" id="file-viewer-panel">
+    <div class="file-viewer-header">
+        <span class="file-viewer-path" id="file-viewer-path">No file selected</span>
+        <span class="file-viewer-lang" id="file-viewer-lang"></span>
+        <div class="file-viewer-mode-toggle" id="file-viewer-mode-toggle" style="display:none;">
+            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
+            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
+        </div>
+        <a class="file-viewer-btn" id="file-viewer-vscode" href="#" title="Open in VS Code">VS Code</a>
+        <button class="file-viewer-btn file-viewer-close" onclick="closeFileViewer()" title="Close panel">&times;</button>
+    </div>
+    <div class="file-viewer-body" id="file-viewer-body">
+        <!-- File content rendered here by JavaScript -->
+    </div>
+</aside>
+
+</div><!-- end split-layout -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     LEGEND MODAL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="modal-overlay" id="legend-modal" onclick="closeLegendOnOverlay(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 class="modal-title">Legend</h3>
+            <button class="modal-close" onclick="toggleLegend()">&times;</button>
+        </div>
+
+        <div class="legend-section">
+            <h4>Coverage Status</h4>
+            <div class="legend-item">
+                <span class="legend-icon">○</span>
+                <span>No implementations - no code references this requirement</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">◐</span>
+                <span>Partial - some assertions have code implementations</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon">●</span>
+                <span>Full - all assertions have code implementations</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-icon" style="color: #ffc107;">⚡</span>
+                <span>Test failures or warnings detected</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Change Indicators</h4>
+            <div class="legend-item">
+                <span class="legend-icon" style="color: #fd7e14;">◆</span>
+                <span>Changed vs remote main branch</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Assertion Badges</h4>
+            <div class="legend-item">
+                <span class="legend-icon"><span class="assertion-badge">A</span></span>
+                <span>Implements specific assertion(s) from parent requirement</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Status Badges</h4>
+            <div class="legend-item">
+                <span class="status-badge draft">DRAFT</span>
+                <span>Work in progress</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge active">ACTIVE</span>
+                <span>Approved and active</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge deprecated">DEPRECATED</span>
+                <span>No longer applicable</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <h4>Levels</h4>
+            <div class="legend-item">
+                <span class="stat-badge prd" style="font-size: 0.75rem;">PRD</span>
+                <span>Product Requirements - business-level needs</span>
+            </div>
+            <div class="legend-item">
+                <span class="stat-badge ops" style="font-size: 0.75rem;">OPS</span>
+                <span>Operations Requirements - operational constraints</span>
+            </div>
+            <div class="legend-item">
+                <span class="stat-badge dev" style="font-size: 0.75rem;">DEV</span>
+                <span>Development Requirements - technical specifications</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     EMBEDDED DATA
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<script type="application/json" id="tree-data">
+{{ tree_data | tojson }}
+</script>
+
+<script type="application/json" id="source-files">
+{{ source_files | tojson }}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+
+const state = {
+    viewMode: 'hierarchical',
+    activeFilters: {
+        uncommitted: false,
+        changed: false,
+        code: false,
+        tests: false,
+        results: false,
+        associated: false,
+        core: false,
+        levelPrd: false,
+        levelOps: false,
+        levelDev: false
+    },
+    collapsedNodes: new Set(),
+    totalCount: {{ stats.total_count }},
+    activeTab: 'requirements',
+    treeData: JSON.parse(document.getElementById('tree-data').textContent),
+    sourceFiles: JSON.parse(document.getElementById('source-files').textContent),
+    fileViewerOpen: false,
+    currentFile: null,
+    fileViewMode: 'source', // 'source' or 'rendered'
+    splitRatio: 50, // percentage width for file viewer
+    indirectCoverage: false // show indirect (whole-req test) coverage
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cookie Persistence
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COOKIE_NAME = 'elspais_trace_view_state';
+const COOKIE_DAYS = 30;
+
+function saveStateToCookie() {
+    const journeyGroupBy = document.getElementById('journey-group-by');
+    const journeySearch = document.getElementById('journey-search');
+
+    const stateToSave = {
+        viewMode: state.viewMode,
+        activeFilters: state.activeFilters,
+        collapsedNodes: Array.from(state.collapsedNodes),  // Convert Set to Array for JSON
+        toggleLeaf: document.getElementById('toggle-leaf').checked,
+        toggleDeprecated: document.getElementById('toggle-deprecated').checked,
+        toggleRoadmap: document.getElementById('toggle-roadmap').checked,
+        toggleCode: document.getElementById('toggle-code').checked,
+        toggleIndirect: state.indirectCoverage,
+        filterLevel: document.getElementById('filter-level').value,
+        filterStatus: document.getElementById('filter-status').value,
+        filterCov: document.getElementById('filter-cov').value,
+        filterTopic: document.getElementById('filter-topic').value,
+        activeTab: state.activeTab,
+        // Journey state
+        journeyGroupBy: journeyGroupBy ? journeyGroupBy.value : 'none',
+        journeySearch: journeySearch ? journeySearch.value : '',
+        collapsedJourneyGroups: Array.from(collapsedJourneyGroups),
+        // File viewer state
+        splitRatio: state.splitRatio
+    };
+    const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
+    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateToSave))}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function loadStateFromCookie() {
+    const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
+    if (!match) return null;
+    try {
+        return JSON.parse(decodeURIComponent(match[2]));
+    } catch {
+        return null;
+    }
+}
+
+function restoreState() {
+    const saved = loadStateFromCookie();
+    if (!saved) return;
+
+    // Restore view mode
+    if (saved.viewMode) {
+        state.viewMode = saved.viewMode;
+        document.querySelectorAll('[data-view]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === saved.viewMode);
+        });
+        document.getElementById('view-mode-label').textContent =
+            saved.viewMode === 'flat' ? 'Flat View' : 'Hierarchical View';
+    }
+
+    // Restore active filters
+    if (saved.activeFilters) {
+        Object.assign(state.activeFilters, saved.activeFilters);
+        Object.keys(state.activeFilters).forEach(key => {
+            const btn = document.getElementById('btn-' + key);
+            if (btn) btn.classList.toggle('active', state.activeFilters[key]);
+        });
+        // Update level badges
+        document.getElementById('badge-prd')?.classList.toggle('active', state.activeFilters.levelPrd);
+        document.getElementById('badge-ops')?.classList.toggle('active', state.activeFilters.levelOps);
+        document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
+        document.getElementById('badge-code')?.classList.toggle('active', state.activeFilters.code);
+        document.getElementById('badge-tests')?.classList.toggle('active', state.activeFilters.tests);
+        document.getElementById('badge-results')?.classList.toggle('active', state.activeFilters.results);
+        document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
+        document.getElementById('badge-core')?.classList.toggle('active', state.activeFilters.core);
+    }
+
+    // Restore checkboxes
+    if (saved.toggleLeaf !== undefined) document.getElementById('toggle-leaf').checked = saved.toggleLeaf;
+    if (saved.toggleDeprecated !== undefined) document.getElementById('toggle-deprecated').checked = saved.toggleDeprecated;
+    if (saved.toggleRoadmap !== undefined) document.getElementById('toggle-roadmap').checked = saved.toggleRoadmap;
+    if (saved.toggleCode !== undefined) document.getElementById('toggle-code').checked = saved.toggleCode;
+    if (saved.toggleIndirect !== undefined) {
+        state.indirectCoverage = saved.toggleIndirect;
+        document.getElementById('toggle-indirect').checked = saved.toggleIndirect;
+        if (saved.toggleIndirect) toggleIndirectCoverage();
+    }
+
+    // Restore dropdowns
+    if (saved.filterLevel) document.getElementById('filter-level').value = saved.filterLevel;
+    if (saved.filterStatus) document.getElementById('filter-status').value = saved.filterStatus;
+    if (saved.filterCov) document.getElementById('filter-cov').value = saved.filterCov;
+    if (saved.filterTopic) document.getElementById('filter-topic').value = saved.filterTopic;
+
+    // Restore tab
+    if (saved.activeTab) {
+        state.activeTab = saved.activeTab;
+        switchTab(saved.activeTab, false);
+    }
+
+    // Restore collapsed nodes (tree expand/collapse state)
+    if (saved.collapsedNodes && Array.isArray(saved.collapsedNodes)) {
+        state.collapsedNodes = new Set(saved.collapsedNodes);
+        // Update toggle button visuals
+        document.querySelectorAll('.tree-toggle').forEach(toggle => {
+            const nodeId = toggle.dataset.nodeId;
+            if (state.collapsedNodes.has(nodeId)) {
+                toggle.classList.remove('expanded');
+                toggle.classList.add('collapsed');
+            } else if (!toggle.classList.contains('leaf')) {
+                toggle.classList.remove('collapsed');
+                toggle.classList.add('expanded');
+            }
+        });
+    }
+
+    // Restore journey state
+    if (saved.collapsedJourneyGroups && Array.isArray(saved.collapsedJourneyGroups)) {
+        collapsedJourneyGroups = new Set(saved.collapsedJourneyGroups);
+    }
+    if (saved.journeySearch) {
+        const journeySearch = document.getElementById('journey-search');
+        if (journeySearch) journeySearch.value = saved.journeySearch;
+    }
+    if (saved.journeyGroupBy) {
+        const journeyGroupBy = document.getElementById('journey-group-by');
+        if (journeyGroupBy) {
+            journeyGroupBy.value = saved.journeyGroupBy;
+            // Apply grouping after DOM is ready
+            setTimeout(() => regroupJourneys(), 0);
+        }
+    }
+
+    // Restore file viewer split ratio
+    if (saved.splitRatio) {
+        state.splitRatio = saved.splitRatio;
+    }
+}
+
+function clearAllCookies() {
+    document.cookie = `${COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    // Reset to defaults
+    state.viewMode = 'hierarchical';
+    state.activeFilters = {
+        uncommitted: false, changed: false, code: false, tests: false, results: false, associated: false, core: false,
+        levelPrd: false, levelOps: false, levelDev: false
+    };
+    state.collapsedNodes.clear();
+    state.activeTab = 'requirements';
+
+    // Reset UI
+    document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === 'hierarchical');
+    });
+    document.querySelectorAll('.stat-badge').forEach(badge => badge.classList.remove('active'));
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        if (!btn.dataset.view) btn.classList.remove('active');
+    });
+    document.getElementById('toggle-leaf').checked = false;
+    document.getElementById('toggle-deprecated').checked = false;
+    document.getElementById('toggle-roadmap').checked = false;
+    document.getElementById('toggle-code').checked = false;
+    document.getElementById('filter-id').value = '';
+    document.getElementById('filter-title').value = '';
+    document.getElementById('filter-level').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-cov').value = '';
+    document.getElementById('filter-topic').value = '';
+
+    switchTab('requirements', false);
+    collapseAll();
+    alert('Preferences cleared! Page reset to defaults.');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// View Mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setViewMode(mode) {
+    state.viewMode = mode;
+
+    // Update button states
+    document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === mode);
+    });
+
+    // Update label
+    document.getElementById('view-mode-label').textContent =
+        mode === 'flat' ? 'Flat View' : 'Hierarchical View';
+
+    applyFilters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter Toggles
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleIndirectCoverage() {
+    state.indirectCoverage = document.getElementById('toggle-indirect').checked;
+
+    // Update coverage icons to reflect the active mode
+    document.querySelectorAll('#table-body .req-row').forEach(row => {
+        const cov = state.indirectCoverage ? row.dataset.coverageIndirect : row.dataset.coverage;
+        const icon = row.querySelector('.coverage-icon');
+        if (icon) {
+            icon.className = 'coverage-icon ' + cov;
+            if (cov === 'full') icon.textContent = '\u25CF';       // ●
+            else if (cov === 'partial') icon.textContent = '\u25D0'; // ◐
+            else icon.textContent = '\u25CB';                        // ○
+        }
+    });
+
+    applyFilters();
+    saveStateToCookie();
+}
+
+function toggleFilter(filter) {
+    state.activeFilters[filter] = !state.activeFilters[filter];
+
+    const btn = document.getElementById('btn-' + filter);
+    if (btn) btn.classList.toggle('active', state.activeFilters[filter]);
+
+    // Also update badges for files/associated
+    const badge = document.getElementById('badge-' + filter);
+    if (badge) badge.classList.toggle('active', state.activeFilters[filter]);
+
+    applyFilters();
+    saveStateToCookie();
+}
+
+function toggleLevelFilter(level) {
+    const key = 'level' + level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+    state.activeFilters[key] = !state.activeFilters[key];
+
+    // Update badge visual
+    const badge = document.getElementById('badge-' + level.toLowerCase());
+    if (badge) badge.classList.toggle('active', state.activeFilters[key]);
+
+    // Clear dropdown when badge filters are used (badges hide, dropdown shows - they conflict)
+    const anyBadgeActive = state.activeFilters.levelPrd || state.activeFilters.levelOps || state.activeFilters.levelDev;
+    if (anyBadgeActive) {
+        document.getElementById('filter-level').value = '';
+    }
+
+    applyFilters();
+    saveStateToCookie();
+}
+
+function clearFilters() {
+    // Reset all filters
+    state.activeFilters = {
+        uncommitted: false, changed: false, code: false, tests: false, results: false, associated: false, core: false,
+        levelPrd: false, levelOps: false, levelDev: false
+    };
+
+    // Remove active class from buttons and badges
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        if (!btn.dataset.view) btn.classList.remove('active');
+    });
+    document.querySelectorAll('.stat-badge').forEach(badge => badge.classList.remove('active'));
+
+    document.getElementById('filter-id').value = '';
+    document.getElementById('filter-title').value = '';
+    document.getElementById('filter-level').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-cov').value = '';
+    document.getElementById('filter-topic').value = '';
+
+    document.getElementById('toggle-leaf').checked = false;
+    document.getElementById('toggle-deprecated').checked = false;
+    document.getElementById('toggle-roadmap').checked = false;
+    document.getElementById('toggle-code').checked = false;
+    document.getElementById('toggle-indirect').checked = false;
+    state.indirectCoverage = false;
+    toggleIndirectCoverage(); // Reset coverage icons to strict mode
+
+    applyFilters();
+    saveStateToCookie();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apply Filters
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+    const rows = document.querySelectorAll('#table-body .req-row');
+    const filterIdValue = document.getElementById('filter-id').value.toLowerCase();
+    const filterTitleValue = document.getElementById('filter-title').value.toLowerCase();
+    const filterLevelValue = document.getElementById('filter-level').value;
+    const filterStatusValue = document.getElementById('filter-status').value;
+    const filterCovValue = document.getElementById('filter-cov').value;
+    const filterTopicValue = document.getElementById('filter-topic').value;
+
+    const leafOnly = document.getElementById('toggle-leaf').checked;
+    const includeDeprecated = document.getElementById('toggle-deprecated').checked;
+    const includeRoadmap = document.getElementById('toggle-roadmap').checked;
+    const showCode = document.getElementById('toggle-code').checked;
+
+    // Check if any level badge filters are active
+    const levelBadgeFiltersActive = state.activeFilters.levelPrd ||
+                                     state.activeFilters.levelOps ||
+                                     state.activeFilters.levelDev;
+
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const id = row.dataset.id.toLowerCase();
+        const level = row.dataset.level;
+        const status = row.dataset.status;
+        const coverage = state.indirectCoverage ? row.dataset.coverageIndirect : row.dataset.coverage;
+        const topic = row.dataset.topic;
+        const title = row.querySelector('.col-title')?.textContent.toLowerCase() || '';
+        const isLeaf = row.dataset.isLeaf === 'true';
+        const isChanged = row.dataset.isChanged === 'true';
+        const isUncommitted = row.dataset.isUncommitted === 'true';
+        const isRoadmap = row.dataset.isRoadmap === 'true';
+        const isCode = row.dataset.isCode === 'true';
+        const isTest = row.dataset.isTest === 'true';
+        const isTestResult = row.dataset.isTestResult === 'true';
+        const isAssociated = row.dataset.isAssociated === 'true';
+        const depth = parseInt(row.dataset.depth);
+        const parentId = row.dataset.parent;
+        const isImplNode = isCode || isTest || isTestResult;  // Implementation/evidence nodes
+
+        let visible = true;
+
+        // Code badge filter - HIDE logic: code visible by default, hide when badge is active
+        if (isCode && state.activeFilters.code) {
+            visible = false;
+        }
+
+        // Tests badge filter - HIDE logic: tests visible by default, hide when badge is active
+        if (isTest && state.activeFilters.tests) {
+            visible = false;
+        }
+
+        // Results badge filter - SHOW logic: results hidden by default, show when badge is active
+        if (isTestResult && !state.activeFilters.results) {
+            visible = false;
+        }
+
+        // Text filters
+        if (filterIdValue && !id.includes(filterIdValue)) visible = false;
+        if (filterTitleValue && !title.includes(filterTitleValue)) visible = false;
+
+        // Dropdown filters (level dropdown is separate from badge filters)
+        if (filterLevelValue && !levelBadgeFiltersActive && level !== filterLevelValue) visible = false;
+        if (filterStatusValue && status !== filterStatusValue) visible = false;
+        if (filterCovValue && coverage !== filterCovValue) visible = false;
+        if (filterTopicValue && topic !== filterTopicValue) visible = false;
+
+        // Level badge filters (HIDE logic - hide if that level's filter is active)
+        if (!isImplNode) {
+            if (state.activeFilters.levelPrd && level === 'PRD') visible = false;
+            if (state.activeFilters.levelOps && level === 'OPS') visible = false;
+            if (state.activeFilters.levelDev && level === 'DEV') visible = false;
+            // Associated filter - same HIDE logic as level filters
+            if (state.activeFilters.associated && isAssociated) visible = false;
+            // Core filter - HIDE logic: hide non-associated (core) requirements
+            if (state.activeFilters.core && !isAssociated) visible = false;
+        }
+
+        // Toggle filters
+        if (leafOnly && !isLeaf && !isImplNode) visible = false;
+        if (!includeDeprecated && status === 'DEPRECATED') visible = false;
+        if (!includeRoadmap && isRoadmap) visible = false;
+
+        // Git filters
+        if (state.activeFilters.uncommitted && !isUncommitted) visible = false;
+        if (state.activeFilters.changed && !isChanged) visible = false;
+
+        // Hierarchical mode: hide if parent is collapsed
+        if (state.viewMode === 'hierarchical' && parentId && depth > 0) {
+            if (isParentCollapsed(parentId)) {
+                visible = false;
+            }
+        }
+
+        // Flat mode: reset indentation visually
+        if (state.viewMode === 'flat') {
+            // In flat mode, all rows are at depth 0 visually
+            // We keep the data but hide tree structure
+            row.querySelectorAll('.tree-indent').forEach(indent => {
+                indent.style.display = 'none';
+            });
+            row.querySelector('.tree-toggle')?.classList.add('leaf');
+        } else {
+            row.querySelectorAll('.tree-indent').forEach(indent => {
+                indent.style.display = '';
+            });
+            const toggle = row.querySelector('.tree-toggle');
+            if (toggle && row.dataset.hasChildren === 'true') {
+                toggle.classList.remove('leaf');
+            }
+        }
+
+        row.classList.toggle('hidden', !visible);
+        if (visible && !isImplNode) visibleCount++;  // Only count requirements, not code/test
+    });
+
+    updateCounter(visibleCount);
+    saveStateToCookie();
+}
+
+function isParentCollapsed(parentId) {
+    if (!parentId) return false;
+    if (state.collapsedNodes.has(parentId)) return true;
+
+    // Check ancestors
+    const parentRow = document.querySelector(`[data-id="${parentId}"]`);
+    if (parentRow && parentRow.dataset.parent) {
+        return isParentCollapsed(parentRow.dataset.parent);
+    }
+    return false;
+}
+
+function updateCounter(count) {
+    document.getElementById('counter').textContent =
+        `Showing ${count} of ${state.totalCount} requirements`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tree Expand/Collapse
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleNode(nodeId) {
+    const toggle = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!toggle) return;
+
+    if (state.collapsedNodes.has(nodeId)) {
+        state.collapsedNodes.delete(nodeId);
+        toggle.classList.remove('collapsed');
+        toggle.classList.add('expanded');
+    } else {
+        state.collapsedNodes.add(nodeId);
+        toggle.classList.remove('expanded');
+        toggle.classList.add('collapsed');
+    }
+
+    applyFilters();
+}
+
+function expandAll() {
+    state.collapsedNodes.clear();
+    document.querySelectorAll('.tree-toggle').forEach(toggle => {
+        if (!toggle.classList.contains('leaf')) {
+            toggle.classList.remove('collapsed');
+            toggle.classList.add('expanded');
+        }
+    });
+    applyFilters();
+}
+
+function collapseAll() {
+    document.querySelectorAll('.tree-toggle').forEach(toggle => {
+        if (!toggle.classList.contains('leaf')) {
+            const nodeId = toggle.dataset.nodeId;
+            state.collapsedNodes.add(nodeId);
+            toggle.classList.remove('expanded');
+            toggle.classList.add('collapsed');
+        }
+    });
+    applyFilters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────────────────────────
+
+function switchTab(tabName, save = true) {
+    state.activeTab = tabName;
+
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    // Switch tab content visibility
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    const activeContent = document.getElementById('content-' + tabName);
+    if (activeContent) {
+        activeContent.classList.add('active');
+    }
+
+    if (save) {
+        saveStateToCookie();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Journey Filtering and Grouping
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Store original card order for ungrouping
+let originalJourneyCards = null;
+let collapsedJourneyGroups = new Set();
+
+function filterJourneys() {
+    const searchInput = document.getElementById('journey-search');
+    const query = searchInput.value.toLowerCase().trim();
+
+    // Filter both ungrouped cards and cards within groups
+    const allCards = document.querySelectorAll('.journey-card');
+    let visibleCount = 0;
+
+    allCards.forEach(card => {
+        if (!query) {
+            card.classList.remove('hidden');
+            visibleCount++;
+            return;
+        }
+
+        const id = card.dataset.id || '';
+        const title = card.dataset.title || '';
+        const actor = card.dataset.actor || '';
+        const goal = card.dataset.goal || '';
+        const descriptor = card.dataset.descriptor || '';
+        const file = card.dataset.file || '';
+        const refs = card.dataset.refs || '';
+
+        const matches = id.includes(query) ||
+                        title.includes(query) ||
+                        actor.includes(query) ||
+                        goal.includes(query) ||
+                        descriptor.includes(query) ||
+                        file.includes(query) ||
+                        refs.includes(query);
+
+        card.classList.toggle('hidden', !matches);
+        if (matches) visibleCount++;
+    });
+
+    // Update group counts if grouped
+    updateGroupCounts();
+
+    // Update visible count
+    const countEl = document.getElementById('journey-visible-count');
+    if (countEl) {
+        countEl.textContent = visibleCount;
+    }
+
+    saveStateToCookie();
+}
+
+function updateGroupCounts() {
+    const groups = document.querySelectorAll('.journey-group');
+    groups.forEach(group => {
+        const visibleCards = group.querySelectorAll('.journey-card:not(.hidden)');
+        const countEl = group.querySelector('.journey-group-count');
+        if (countEl) {
+            countEl.textContent = visibleCards.length;
+        }
+        // Hide group if no visible cards
+        group.style.display = visibleCards.length === 0 ? 'none' : '';
+    });
+}
+
+function regroupJourneys() {
+    const groupBy = document.getElementById('journey-group-by').value;
+    const journeyList = document.getElementById('journey-list');
+
+    // Store original cards on first grouping
+    if (!originalJourneyCards) {
+        originalJourneyCards = Array.from(journeyList.querySelectorAll('.journey-card'));
+    }
+
+    // Clear current content
+    journeyList.innerHTML = '';
+
+    if (groupBy === 'none') {
+        // Restore ungrouped view
+        originalJourneyCards.forEach(card => {
+            card.classList.remove('compact');
+            journeyList.appendChild(card);
+        });
+    } else {
+        // Group cards by selected attribute
+        const groups = new Map();
+
+        originalJourneyCards.forEach(card => {
+            let key = card.dataset[groupBy] || '(none)';
+            // Capitalize first letter
+            if (key !== '(none)') {
+                key = key.charAt(0).toUpperCase() + key.slice(1);
+            }
+
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key).push(card);
+        });
+
+        // Sort groups alphabetically, but put (none) last
+        const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+            if (a === '(none)') return 1;
+            if (b === '(none)') return -1;
+            return a.localeCompare(b);
+        });
+
+        // Create group elements
+        sortedKeys.forEach(key => {
+            const cards = groups.get(key);
+            const groupEl = document.createElement('div');
+            groupEl.className = 'journey-group';
+            groupEl.dataset.groupKey = key.toLowerCase();
+
+            // Check if this group was previously collapsed
+            if (collapsedJourneyGroups.has(key.toLowerCase())) {
+                groupEl.classList.add('collapsed');
+            }
+
+            const header = document.createElement('div');
+            header.className = 'journey-group-header';
+            header.onclick = () => toggleJourneyGroup(groupEl);
+            header.innerHTML = `
+                <span class="expand-icon">▼</span>
+                <h4>${key}</h4>
+                <span class="journey-group-count">${cards.length}</span>
+            `;
+
+            const cardsContainer = document.createElement('div');
+            cardsContainer.className = 'journey-group-cards';
+
+            cards.forEach(card => {
+                card.classList.add('compact');
+                cardsContainer.appendChild(card);
+            });
+
+            groupEl.appendChild(header);
+            groupEl.appendChild(cardsContainer);
+            journeyList.appendChild(groupEl);
+        });
+    }
+
+    // Re-apply search filter
+    filterJourneys();
+    saveStateToCookie();
+}
+
+function toggleJourneyGroup(groupEl) {
+    groupEl.classList.toggle('collapsed');
+    const key = groupEl.dataset.groupKey;
+
+    if (groupEl.classList.contains('collapsed')) {
+        collapsedJourneyGroups.add(key);
+    } else {
+        collapsedJourneyGroups.delete(key);
+    }
+
+    saveStateToCookie();
+}
+
+function expandAllJourneyGroups() {
+    document.querySelectorAll('.journey-group').forEach(group => {
+        group.classList.remove('collapsed');
+    });
+    collapsedJourneyGroups.clear();
+    saveStateToCookie();
+}
+
+function collapseAllJourneyGroups() {
+    document.querySelectorAll('.journey-group').forEach(group => {
+        group.classList.add('collapsed');
+        collapsedJourneyGroups.add(group.dataset.groupKey);
+    });
+    saveStateToCookie();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Journey → Requirement Navigation
+// ─────────────────────────────────────────────────────────────────────────────
+
+function switchToReqTab(reqId) {
+    switchTab('requirements');
+    setTimeout(function() {
+        var row = document.querySelector('tr.req-row[data-id="' + reqId + '"]');
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.transition = 'none';
+        row.style.backgroundColor = '#ffc107';
+        setTimeout(function() {
+            row.style.transition = 'background-color 1.5s ease';
+            row.style.backgroundColor = '';
+        }, 200);
+    }, 100);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File Viewer Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showFile(filePath, lineNumber) {
+    const fileData = state.sourceFiles[filePath];
+    if (!fileData) {
+        // No embedded content for this file
+        const panel = document.getElementById('file-viewer-panel');
+        const body = document.getElementById('file-viewer-body');
+        document.getElementById('file-viewer-path').textContent = filePath.split('/').pop();
+        document.getElementById('file-viewer-path').title = filePath;
+        document.getElementById('file-viewer-lang').textContent = '';
+        document.getElementById('file-viewer-mode-toggle').style.display = 'none';
+        body.innerHTML = '<div style="padding:24px;color:#6c757d;text-align:center;">' +
+            'File content not available.<br>Regenerate with <code>--embed-content</code> to enable inline viewing.</div>';
+        openFileViewer();
+        return;
+    }
+
+    state.currentFile = filePath;
+    const fileName = filePath.split('/').pop();
+    const isMarkdown = fileName.endsWith('.md');
+
+    // Update header
+    document.getElementById('file-viewer-path').textContent = fileName;
+    document.getElementById('file-viewer-path').title = filePath;
+    document.getElementById('file-viewer-lang').textContent = fileData.language || '';
+    document.getElementById('file-viewer-vscode').href =
+        'vscode://file/' + filePath + ':' + (lineNumber || 1) + ':1';
+
+    // Show mode toggle for markdown files
+    const modeToggle = document.getElementById('file-viewer-mode-toggle');
+    if (isMarkdown) {
+        modeToggle.style.display = 'flex';
+        state.fileViewMode = 'rendered';
+        modeToggle.querySelectorAll('.file-viewer-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === 'rendered');
+        });
+    } else {
+        modeToggle.style.display = 'none';
+        state.fileViewMode = 'source';
+    }
+
+    // Render file content
+    renderFileContent(fileData, lineNumber);
+    openFileViewer();
+}
+
+function renderFileContent(fileData, lineNumber) {
+    const body = document.getElementById('file-viewer-body');
+
+    if (state.fileViewMode === 'rendered' && state.currentFile && state.currentFile.endsWith('.md')) {
+        // Rendered markdown view with line numbers
+        const rawLines = fileData.raw.split('\n');
+        let html = '<div class="source-lines">';
+        for (let i = 0; i < rawLines.length; i++) {
+            const num = i + 1;
+            const renderedLine = renderMarkdown(rawLines[i]);
+            html += '<div class="source-line" data-line="' + num + '">' +
+                '<span class="line-num">' + num + '</span>' +
+                '<div class="line-content rendered-line">' + renderedLine + '</div>' +
+                '</div>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+        scrollAndFlashLine(body, lineNumber);
+        return;
+    }
+
+    // Source view with line numbers and syntax highlighting
+    const lines = fileData.lines;
+    let html = '<div class="source-lines">';
+
+    for (let i = 0; i < lines.length; i++) {
+        const num = i + 1;
+        html += '<div class="source-line" data-line="' + num + '">' +
+            '<span class="line-num">' + num + '</span>' +
+            '<code class="line-content highlight">' + (lines[i] || '') + '</code>' +
+            '</div>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+    scrollAndFlashLine(body, lineNumber);
+}
+
+function scrollAndFlashLine(container, lineNumber) {
+    if (!lineNumber) return;
+    setTimeout(function() {
+        // Clear any previous highlight
+        var prev = container.querySelector('.source-line.highlighted');
+        if (prev) {
+            prev.classList.remove('highlighted');
+            prev.style.backgroundColor = '';
+            prev.style.transition = '';
+            var prevCells = prev.querySelectorAll('.line-num, .line-content');
+            for (var i = 0; i < prevCells.length; i++) {
+                prevCells[i].style.backgroundColor = '';
+                prevCells[i].style.transition = '';
+            }
+        }
+
+        var target = container.querySelector('.source-line[data-line="' + lineNumber + '"]');
+        if (!target) return;
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('highlighted');
+
+        // Flash after scroll completes — use scrollend event with timeout fallback
+        var fired = false;
+        function flash() {
+            if (fired) return;
+            fired = true;
+            // Flash child cells directly — table row bg is hidden behind cell bg
+            var cells = target.querySelectorAll('.line-num, .line-content');
+            for (var i = 0; i < cells.length; i++) {
+                cells[i].style.transition = 'none';
+                cells[i].style.backgroundColor = '#ffc107';
+            }
+            setTimeout(function() {
+                for (var i = 0; i < cells.length; i++) {
+                    cells[i].style.transition = 'background-color 1s ease-out';
+                    cells[i].style.backgroundColor = '';
+                }
+            }, 400);
+        }
+
+        // scrollend fires when smooth scroll completes
+        container.addEventListener('scrollend', function onScrollEnd() {
+            container.removeEventListener('scrollend', onScrollEnd);
+            flash();
+        });
+        // Fallback: if no scroll needed or scrollend unsupported, flash after 800ms
+        setTimeout(flash, 800);
+    }, 50);
+}
+
+function openFileViewer() {
+    const panel = document.getElementById('file-viewer-panel');
+    const divider = document.getElementById('split-divider');
+    panel.classList.add('open');
+    divider.style.display = 'block';
+    state.fileViewerOpen = true;
+    // Apply saved split ratio
+    panel.style.width = state.splitRatio + '%';
+    saveStateToCookie();
+}
+
+function closeFileViewer() {
+    const panel = document.getElementById('file-viewer-panel');
+    const divider = document.getElementById('split-divider');
+    panel.classList.remove('open');
+    divider.style.display = 'none';
+    state.fileViewerOpen = false;
+    state.currentFile = null;
+    saveStateToCookie();
+}
+
+function setFileViewMode(mode) {
+    state.fileViewMode = mode;
+    document.querySelectorAll('#file-viewer-mode-toggle .file-viewer-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+
+    // Re-render with current file
+    if (state.currentFile) {
+        const fileData = state.sourceFiles[state.currentFile];
+        if (fileData) {
+            renderFileContent(fileData, null);
+        }
+    }
+}
+
+function renderMarkdown(text) {
+    // Simple markdown to HTML renderer for inline display
+    let html = text
+        // Escape HTML first
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // Headers
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bold and italic
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Horizontal rules
+        .replace(/^---+$/gm, '<hr>')
+        // List items
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        // Paragraphs (double newline)
+        .replace(/\n\n/g, '</p><p>')
+        // Single newlines to <br>
+        .replace(/\n/g, '<br>');
+
+    return '<p>' + html + '</p>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intercept File Links
+// ─────────────────────────────────────────────────────────────────────────────
+
+function interceptFileLinks() {
+    // Only intercept if we have source files embedded
+    if (!state.sourceFiles || Object.keys(state.sourceFiles).length === 0) return;
+
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('a[href^="vscode://file/"]');
+        if (!link) return;
+
+        e.preventDefault();
+        const href = link.getAttribute('href');
+        // Parse vscode://file/PATH:LINE:COL
+        const match = href.match(/^vscode:\/\/file\/(.+?)(?::(\d+))?(?::(\d+))?$/);
+        if (match) {
+            const filePath = match[1];
+            const lineNum = match[2] ? parseInt(match[2], 10) : 1;
+            showFile(filePath, lineNum);
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resizable Divider
+// ─────────────────────────────────────────────────────────────────────────────
+
+(function() {
+    const divider = document.getElementById('split-divider');
+    const layout = document.getElementById('split-layout');
+    const panel = document.getElementById('file-viewer-panel');
+    let isDragging = false;
+
+    divider.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        const layoutRect = layout.getBoundingClientRect();
+        const totalWidth = layoutRect.width;
+        const mouseX = e.clientX - layoutRect.left;
+        // Calculate panel width as percentage (panel is on the right)
+        const panelPct = Math.max(15, Math.min(75, ((totalWidth - mouseX) / totalWidth) * 100));
+        panel.style.width = panelPct + '%';
+        state.splitRatio = panelPct;
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        saveStateToCookie();
+    });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legend Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleLegend() {
+    const modal = document.getElementById('legend-modal');
+    modal.classList.toggle('visible');
+}
+
+function closeLegendOnOverlay(event) {
+    if (event.target === event.currentTarget) {
+        toggleLegend();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyboard Shortcuts
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        // Escape closes file viewer first, then legend modal
+        if (state.fileViewerOpen) {
+            closeFileViewer();
+        } else {
+            const modal = document.getElementById('legend-modal');
+            if (modal.classList.contains('visible')) {
+                toggleLegend();
+            }
+        }
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Initialize
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if there's saved state to restore
+    const hasSavedState = loadStateFromCookie();
+
+    if (hasSavedState) {
+        // Restore saved state from cookie (includes collapsed nodes)
+        restoreState();
+    } else {
+        // No saved state - start with tree collapsed (default state)
+        collapseAll();
+    }
+
+    // Set up file link interception for inline viewer
+    interceptFileLinks();
+
+    // Apply filters (this will also save state)
+    applyFilters();
+});
+</script>
+
+</body>
+</html>

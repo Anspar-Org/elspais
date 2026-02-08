@@ -12,7 +12,7 @@ C. Removed - was duplicate of A.
 
 bcrypt is resistant to GPU-based attacks.
 
-*End* *Password Hashing* | **Hash**: c3d4e5f6
+*End* *Password Hashing* | **Hash**: 2f7c9b91
 ---
 
 # REQ-d00002: Session Token Generation
@@ -25,5 +25,5 @@ A. Tokens SHALL be cryptographically random using secure PRNG.
 B. Tokens SHALL be at least 256 bits in length.
 C. Tokens SHALL be stored hashed in the database.
 
-*End* *Session Token Generation* | **Hash**: d4e5f6g7
+*End* *Session Token Generation* | **Hash**: 3274b592
 ---

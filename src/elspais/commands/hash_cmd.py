@@ -1,226 +1,228 @@
+# Implements: REQ-int-d00003 (CLI Extension)
 """
-elspais.commands.hash_cmd - Hash management command.
+elspais.commands.hash_cmd - Manage requirement hashes.
 
-Verify and update requirement hashes.
+Uses the graph-based system for hash verification and updates.
 """
+
+from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.hasher import calculate_hash, verify_hash
-from elspais.core.models import Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+from elspais.graph import NodeKind
 
 
 def run(args: argparse.Namespace) -> int:
-    """Run the hash command."""
-    if not args.hash_action:
-        print("Usage: elspais hash {verify|update}")
+    """Run the hash command.
+
+    Subcommands:
+    - verify: Check hashes match content
+    - update: Recalculate and update hashes
+    """
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+    )
+
+    action = getattr(args, "hash_action", None)
+
+    if action == "verify":
+        return _verify_hashes(graph, args)
+    elif action == "update":
+        return _update_hashes(graph, args)
+    else:
+        print("Usage: elspais hash <verify|update>", file=sys.stderr)
         return 1
 
-    if args.hash_action == "verify":
-        return run_verify(args)
-    elif args.hash_action == "update":
-        return run_update(args)
 
-    return 1
+def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
+
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
+
+    Args:
+        node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+
+    Returns:
+        Computed hash string, or None if no hashable content.
+    """
+    from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = node.get_field("body_text", "")
+        if not body:
+            return None
+        return calculate_hash(body)
 
 
-def run_verify(args: argparse.Namespace) -> int:
-    """Verify all requirement hashes."""
-    config, requirements = load_requirements(args)
-    if not requirements:
-        return 1
-
-    hash_length = config.get("validation", {}).get("hash_length", 8)
-    algorithm = config.get("validation", {}).get("hash_algorithm", "sha256")
+def _verify_hashes(graph, args) -> int:
+    """Verify all hashes match content."""
+    hash_mode = getattr(graph, "hash_mode", "full-text")
 
     mismatches = []
     missing = []
 
-    for req_id, req in requirements.items():
-        if not req.hash:
-            missing.append(req_id)
-        else:
-            expected = calculate_hash(req.body, length=hash_length, algorithm=algorithm)
-            if not verify_hash(req.body, req.hash, length=hash_length, algorithm=algorithm):
-                mismatches.append((req_id, req.hash, expected))
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        stored_hash = node.hash
+        if not stored_hash:
+            missing.append(node.id)
+            continue
+
+        computed = _compute_hash_for_node(node, hash_mode)
+        if computed and computed != stored_hash:
+            mismatches.append(
+                {
+                    "id": node.id,
+                    "stored": stored_hash,
+                    "computed": computed,
+                }
+            )
 
     # Report results
-    if missing:
-        print(f"Missing hashes: {len(missing)}")
-        for req_id in missing:
-            print(f"  - {req_id}")
+    if not getattr(args, "quiet", False):
+        if missing:
+            print(f"Missing hashes: {len(missing)}")
+            for req_id in missing[:10]:  # Show first 10
+                print(f"  {req_id}")
+            if len(missing) > 10:
+                print(f"  ... and {len(missing) - 10} more")
 
-    if mismatches:
-        print(f"\nHash mismatches: {len(mismatches)}")
-        for req_id, current, expected in mismatches:
-            print(f"  - {req_id}: {current} (expected: {expected})")
+        if mismatches:
+            print(f"Hash mismatches: {len(mismatches)}")
+            for m in mismatches[:10]:
+                print(f"  {m['id']}: stored={m['stored']} computed={m['computed']}")
+            if len(mismatches) > 10:
+                print(f"  ... and {len(mismatches) - 10} more")
 
-    if not missing and not mismatches:
-        print(f"✓ All {len(requirements)} hashes verified")
-        return 0
+        if not missing and not mismatches:
+            print("All hashes valid")
+        elif missing or mismatches:
+            print("Run 'elspais hash update' to fix.", file=sys.stderr)
 
     return 1 if mismatches else 0
 
 
-def run_update(args: argparse.Namespace) -> int:
-    """Update requirement hashes."""
-    config, requirements = load_requirements(args)
-    if not requirements:
-        return 1
+def _update_hashes(graph, args) -> int:
+    """Update hashes in spec files.
 
-    hash_length = config.get("validation", {}).get("hash_length", 8)
-    algorithm = config.get("validation", {}).get("hash_algorithm", "sha256")
+    Finds requirements with mismatched hashes and updates them.
+    Supports --dry-run to preview changes without applying them.
+    Supports --req-id to update a specific requirement only.
+    """
+    from pathlib import Path
 
-    # Filter to specific requirement if specified
-    if args.req_id:
-        if args.req_id not in requirements:
-            print(f"Requirement not found: {args.req_id}")
-            return 1
-        requirements = {args.req_id: requirements[args.req_id]}
+    from elspais.utilities.spec_writer import update_hash_in_file
+
+    dry_run = getattr(args, "dry_run", False)
+    target_req_id = getattr(args, "req_id", None)
+    json_output = getattr(args, "json_output", False)
+    hash_mode = getattr(graph, "hash_mode", "full-text")
+
+    # Get repo root from graph or default to cwd
+    repo_root = getattr(graph, "_repo_root", None) or Path.cwd()
 
     updates = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        # Filter to specific requirement if requested
+        if target_req_id and node.id != target_req_id:
+            continue
 
-    for req_id, req in requirements.items():
-        expected = calculate_hash(req.body, length=hash_length, algorithm=algorithm)
-        if req.hash != expected:
-            updates.append((req_id, req, expected))
+        stored_hash = node.hash
+        computed_hash = _compute_hash_for_node(node, hash_mode)
 
-    if not updates:
-        print("All hashes are up to date")
+        # Skip if no hashable content
+        if not computed_hash:
+            continue
+
+        # Check if hash needs updating
+        if stored_hash != computed_hash:
+            # Get file path from source location
+            source = node.source
+            if source is None:
+                continue
+
+            file_path = Path(repo_root) / source.path
+
+            updates.append(
+                {
+                    "id": node.id,
+                    "old_hash": stored_hash or "(none)",
+                    "new_hash": computed_hash,
+                    "file": str(file_path),
+                }
+            )
+
+    # Handle dry run
+    if dry_run:
+        if json_output:
+            import json
+
+            print(json.dumps({"updates": updates, "count": len(updates)}, indent=2))
+        else:
+            if not updates:
+                print("All hashes are up to date.")
+            else:
+                print(f"Would update {len(updates)} hash(es):")
+                for u in updates:
+                    print(f"  {u['id']}: {u['old_hash']} -> {u['new_hash']}")
         return 0
 
-    # Show or apply updates
-    if args.dry_run:
-        print(f"Would update {len(updates)} hashes:")
-        for req_id, req, new_hash in updates:
-            old_hash = req.hash or "(none)"
-            print(f"  {req_id}: {old_hash} -> {new_hash}")
+    # Apply updates
+    updated_count = 0
+    failed_count = 0
+    for u in updates:
+        error = update_hash_in_file(
+            file_path=Path(u["file"]),
+            req_id=u["id"],
+            new_hash=u["new_hash"],
+        )
+        if error is None:
+            updated_count += 1
+            if not json_output:
+                print(f"Updated {u['id']}: {u['old_hash']} -> {u['new_hash']}")
+        else:
+            failed_count += 1
+            if not json_output:
+                print(f"Warning: {error}", file=sys.stderr)
+
+    if json_output:
+        import json
+
+        print(
+            json.dumps(
+                {"updated": updated_count, "failed": failed_count, "total": len(updates)},
+                indent=2,
+            )
+        )
     else:
-        print(f"Updating {len(updates)} hashes...")
-        for req_id, req, new_hash in updates:
-            result = update_hash_in_file(req, new_hash)
-            if result["updated"]:
-                print(f"  ✓ {req_id}")
-                old_hash = result["old_hash"] or "(none)"
-                print(f"    [INFO] Hash: {old_hash} -> {result['new_hash']}")
-                if result["title_fixed"]:
-                    print(f"    [INFO] Title fixed: \"{result['old_title']}\" -> \"{req.title}\"")
-            else:
-                print(f"  ✗ {req_id}")
-                print("    [WARN] Could not find End marker to update")
+        if updated_count == 0 and failed_count == 0:
+            print("No hashes needed updating.")
+        else:
+            parts = []
+            if updated_count:
+                parts.append(f"Updated {updated_count} hash(es).")
+            if failed_count:
+                parts.append(f"{failed_count} failed (see warnings above).")
+            print(" ".join(parts))
 
     return 0
-
-
-def load_requirements(args: argparse.Namespace) -> tuple:
-    """Load configuration and requirements."""
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
-    else:
-        config = DEFAULT_CONFIG
-
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found", file=sys.stderr)
-        return config, {}
-
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-
-    try:
-        requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
-    except Exception as e:
-        print(f"Error parsing requirements: {e}", file=sys.stderr)
-        return config, {}
-
-    return config, requirements
-
-
-def update_hash_in_file(req: Requirement, new_hash: str) -> dict:
-    """Update the hash in the requirement's source file.
-
-    Finds the End marker by the old hash value, then replaces the entire line
-    with the correct title and new hash. This handles cases where the End
-    marker title doesn't match the header title.
-
-    Args:
-        req: Requirement object with file_path, title, and hash
-        new_hash: New hash value to write
-
-    Returns:
-        Dict with change info:
-          - 'updated': bool - whether file was modified
-          - 'old_hash': str - previous hash (or None)
-          - 'new_hash': str - new hash value
-          - 'title_fixed': bool - whether title was corrected
-          - 'old_title': str - previous title (if different)
-    """
-    import re
-
-    result = {
-        "updated": False,
-        "old_hash": req.hash,
-        "new_hash": new_hash,
-        "title_fixed": False,
-        "old_title": None,
-    }
-
-    if not req.file_path:
-        return result
-
-    content = req.file_path.read_text(encoding="utf-8")
-    new_end_line = f"*End* *{req.title}* | **Hash**: {new_hash}"
-
-    if req.hash:
-        # Strategy: Try title first (most specific), then hash if title not found
-        # This handles both: (1) normal case, (2) mismatched title case
-
-        # First try: match by correct title (handles case where titles match)
-        pattern_by_title = (
-            rf"^\*End\*\s+\*{re.escape(req.title)}\*\s*\|\s*\*\*Hash\*\*:\s*[a-fA-F0-9]+\s*$"
-        )
-        if re.search(pattern_by_title, content, re.MULTILINE):
-            content, count = re.subn(pattern_by_title, new_end_line, content, flags=re.MULTILINE)
-            if count > 0:
-                result["updated"] = True
-        else:
-            # Second try: find by hash value (handles mismatched title)
-            # Pattern: *End* *AnyTitle* | **Hash**: oldhash
-            pattern_by_hash = (
-                rf"^\*End\*\s+\*([^*]+)\*\s*\|\s*\*\*Hash\*\*:\s*{re.escape(req.hash)}\s*$"
-            )
-            match = re.search(pattern_by_hash, content, re.MULTILINE)
-
-            if match:
-                old_title = match.group(1)
-                if old_title != req.title:
-                    result["title_fixed"] = True
-                    result["old_title"] = old_title
-
-                # Replace entire line (only first match to avoid affecting other reqs)
-                content = re.sub(
-                    pattern_by_hash, new_end_line, content, count=1, flags=re.MULTILINE
-                )
-                result["updated"] = True
-    else:
-        # Add hash to end marker (no existing hash)
-        # Pattern: *End* *Title* (without hash)
-        pattern = rf"^(\*End\*\s+\*{re.escape(req.title)}\*)(?!\s*\|\s*\*\*Hash\*\*)\s*$"
-        content, count = re.subn(pattern, new_end_line, content, flags=re.MULTILINE)
-        if count > 0:
-            result["updated"] = True
-
-    if result["updated"]:
-        req.file_path.write_text(content, encoding="utf-8")
-
-    return result

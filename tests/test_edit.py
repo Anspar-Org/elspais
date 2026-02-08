@@ -1,11 +1,10 @@
+# elspais: expected-broken-links 3
+# Validates REQ-o00063-A, REQ-o00063-B
 """
 Tests for the edit command.
 """
 
-import json
 from pathlib import Path
-
-import pytest
 
 
 class TestModifyImplements:
@@ -16,7 +15,8 @@ class TestModifyImplements:
         from elspais.commands.edit import modify_implements
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -25,7 +25,8 @@ Body text here.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_implements(spec_file, "REQ-d00001", ["p00002"])
 
@@ -43,7 +44,8 @@ Body text here.
         from elspais.commands.edit import modify_implements
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -52,7 +54,8 @@ Body text here.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_implements(spec_file, "REQ-d00001", ["p00002", "p00003"])
 
@@ -65,7 +68,8 @@ Body text here.
         from elspais.commands.edit import modify_implements
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -74,7 +78,8 @@ Body text here.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_implements(spec_file, "REQ-d00001", [])
 
@@ -111,7 +116,8 @@ Body text here.
         from elspais.commands.edit import modify_implements
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -120,7 +126,8 @@ Body text here.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_implements(spec_file, "REQ-d00099", ["p00002"])
 
@@ -136,7 +143,8 @@ class TestModifyStatus:
         from elspais.commands.edit import modify_status
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Draft | **Implements**: p00001
@@ -145,7 +153,8 @@ Body text here.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_status(spec_file, "REQ-d00001", "Active")
 
@@ -188,7 +197,8 @@ class TestModifyImplementsEdgeCases:
         from elspais.commands.edit import modify_implements
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: No Implements Field
 
 **Level**: DEV | **Status**: Active
@@ -197,7 +207,8 @@ Body text here.
 
 *End* *No Implements Field* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_implements(spec_file, "REQ-d00001", ["p00002"])
 
@@ -213,7 +224,8 @@ class TestModifyStatusEdgeCases:
         from elspais.commands.edit import modify_status
 
         spec_file = tmp_path / "dev-core.md"
-        spec_file.write_text("""
+        spec_file.write_text(
+            """
 # REQ-d00001: No Status Field
 
 **Level**: DEV | **Implements**: p00001
@@ -222,7 +234,8 @@ Body text here.
 
 *End* *No Status Field* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         result = modify_status(spec_file, "REQ-d00001", "Active")
 
@@ -238,7 +251,8 @@ class TestMoveRequirement:
         from elspais.commands.edit import move_requirement
 
         source_file = tmp_path / "dev-core.md"
-        source_file.write_text("""
+        source_file.write_text(
+            """
 # REQ-d00001: First Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -256,10 +270,12 @@ Second body.
 
 *End* *Second Requirement* | **Hash**: test5678
 ---
-""")
+"""
+        )
 
         dest_file = tmp_path / "dev-features.md"
-        dest_file.write_text("""
+        dest_file.write_text(
+            """
 # REQ-d00010: Existing Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00002
@@ -268,7 +284,8 @@ Existing body.
 
 *End* *Existing Requirement* | **Hash**: existabc
 ---
-""")
+"""
+        )
 
         result = move_requirement(source_file, dest_file, "REQ-d00001")
 
@@ -318,7 +335,8 @@ Body text.
         from elspais.commands.edit import move_requirement
 
         source_file = tmp_path / "dev-core.md"
-        source_file.write_text("""
+        source_file.write_text(
+            """
 # REQ-d00001: Test Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -327,7 +345,8 @@ Body text.
 
 *End* *Test Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         dest_file = tmp_path / "new-file.md"
         assert not dest_file.exists()
@@ -343,7 +362,8 @@ Body text.
         from elspais.commands.edit import move_requirement
 
         source_file = tmp_path / "dev-core.md"
-        source_file.write_text("""
+        source_file.write_text(
+            """
 # REQ-d00001: Only Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -352,7 +372,8 @@ Body text.
 
 *End* *Only Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         dest_file = tmp_path / "dev-features.md"
         dest_file.write_text("")
@@ -369,7 +390,8 @@ Body text.
         from elspais.commands.edit import move_requirement
 
         source_file = tmp_path / "dev-core.md"
-        source_file.write_text("""
+        source_file.write_text(
+            """
 # REQ-d00001: Existing Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -378,7 +400,8 @@ Body text.
 
 *End* *Existing Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         dest_file = tmp_path / "dev-features.md"
         dest_file.write_text("")
@@ -399,7 +422,8 @@ class TestFindRequirementInFiles:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "prd-core.md").write_text("""
+        (spec_dir / "prd-core.md").write_text(
+            """
 # REQ-p00001: PRD Requirement
 
 **Level**: PRD | **Status**: Active
@@ -408,9 +432,11 @@ PRD body.
 
 *End* *PRD Requirement* | **Hash**: prd12345
 ---
-""")
+"""
+        )
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: DEV Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -419,7 +445,8 @@ DEV body.
 
 *End* *DEV Requirement* | **Hash**: dev12345
 ---
-""")
+"""
+        )
 
         result = find_requirement_in_files(spec_dir, "REQ-d00001")
 
@@ -434,7 +461,8 @@ DEV body.
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: DEV Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -443,7 +471,8 @@ DEV body.
 
 *End* *DEV Requirement* | **Hash**: dev12345
 ---
-""")
+"""
+        )
 
         result = find_requirement_in_files(spec_dir, "REQ-d00099")
 
@@ -460,7 +489,8 @@ class TestValidateImplementsReferences:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "prd-core.md").write_text("""
+        (spec_dir / "prd-core.md").write_text(
+            """
 # REQ-p00001: PRD Requirement
 
 **Level**: PRD | **Status**: Active | **Implements**: -
@@ -469,9 +499,11 @@ PRD body.
 
 *End* *PRD Requirement* | **Hash**: prd12345
 ---
-""")
+"""
+        )
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: DEV Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -480,7 +512,8 @@ DEV body.
 
 *End* *DEV Requirement* | **Hash**: dev12345
 ---
-""")
+"""
+        )
 
         # Valid reference - should succeed
         changes_valid = [
@@ -495,7 +528,9 @@ DEV body.
         ]
         results = batch_edit(spec_dir, changes_invalid, validate_refs=True)
         assert results[0]["success"] is False
-        assert "invalid" in results[0]["error"].lower() or "not found" in results[0]["error"].lower()
+        assert (
+            "invalid" in results[0]["error"].lower() or "not found" in results[0]["error"].lower()
+        )
 
     def test_batch_edit_no_validation_by_default(self, tmp_path: Path):
         """Test that batch edit doesn't validate by default."""
@@ -504,7 +539,8 @@ DEV body.
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: DEV Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -513,7 +549,8 @@ DEV body.
 
 *End* *DEV Requirement* | **Hash**: dev12345
 ---
-""")
+"""
+        )
 
         # Invalid reference - should succeed when validate_refs=False (default)
         changes = [
@@ -533,7 +570,8 @@ class TestBatchEdit:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: First Requirement
 
 **Level**: DEV | **Status**: Draft | **Implements**: p00001
@@ -551,7 +589,8 @@ Second body.
 
 *End* *Second Requirement* | **Hash**: test5678
 ---
-""")
+"""
+        )
 
         changes = [
             {"req_id": "REQ-d00001", "implements": ["p00002"]},
@@ -574,7 +613,8 @@ Second body.
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        (spec_dir / "dev-core.md").write_text("""
+        (spec_dir / "dev-core.md").write_text(
+            """
 # REQ-d00001: Movable Requirement
 
 **Level**: DEV | **Status**: Active | **Implements**: p00001
@@ -583,7 +623,8 @@ Body text.
 
 *End* *Movable Requirement* | **Hash**: test1234
 ---
-""")
+"""
+        )
 
         (spec_dir / "dev-features.md").write_text("")
 

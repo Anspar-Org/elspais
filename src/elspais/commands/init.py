@@ -1,3 +1,4 @@
+# Implements: REQ-d00052-G
 """
 elspais.commands.init - Initialize configuration command.
 
@@ -7,6 +8,36 @@ Creates .elspais.toml configuration file.
 import argparse
 from pathlib import Path
 from typing import Optional
+
+# Example requirement template for --template flag
+EXAMPLE_REQUIREMENT = """# REQ-d00001: Example Requirement Title
+
+**Level**: Dev | **Status**: Draft | **Implements**: -
+
+## Assertions
+
+A. The system SHALL demonstrate the assertion format.
+B. The system SHALL show proper use of SHALL language.
+
+## Rationale
+
+This is an example requirement demonstrating the proper format.
+Delete this file after reviewing the structure.
+
+---
+
+**Format Notes** (delete this section):
+
+- **Title line**: `# REQ-{type}{id}: Title` where type is p/o/d for PRD/OPS/DEV
+- **Metadata line**: Level, Status, and Implements (use `-` for top-level reqs)
+- **Assertions**: Labeled A-Z, each using SHALL for required behavior
+- **Rationale**: Optional explanation section (non-normative)
+- **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais hash update`
+
+Run `elspais format` for more templates and `elspais validate` to check this file.
+
+*End* *Example Requirement Title* | **Hash**: 00000000
+"""
 
 
 def run(args: argparse.Namespace) -> int:
@@ -19,6 +50,10 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Exit code (0 for success)
     """
+    # Handle --template flag separately
+    if getattr(args, "template", False):
+        return create_template_requirement(args)
+
     config_path = Path.cwd() / ".elspais.toml"
 
     if config_path.exists() and not args.force:
@@ -38,8 +73,46 @@ def run(args: argparse.Namespace) -> int:
     config_content = generate_config(project_type, associated_prefix)
 
     # Write file
-    config_path.write_text(config_content)
+    config_path.write_text(config_content, encoding="utf-8")
     print(f"Created configuration: {config_path}")
+
+    return 0
+
+
+def create_template_requirement(args: argparse.Namespace) -> int:
+    """Create an example requirement file in the spec directory."""
+    from elspais.config import load_config
+
+    # Try to load config to find spec directory
+    try:
+        config = load_config(args.config if hasattr(args, "config") else None)
+        spec_dir_name = config.get("directories", {}).get("spec", "spec")
+    except Exception:
+        spec_dir_name = "spec"
+
+    spec_dir = Path.cwd() / spec_dir_name
+
+    # Create spec directory if it doesn't exist
+    if not spec_dir.exists():
+        spec_dir.mkdir(parents=True)
+        print(f"Created directory: {spec_dir}")
+
+    # Create example file
+    example_path = spec_dir / "EXAMPLE-requirement.md"
+
+    if example_path.exists() and not getattr(args, "force", False):
+        print(f"Example file already exists: {example_path}")
+        print("Use --force to overwrite.")
+        return 1
+
+    example_path.write_text(EXAMPLE_REQUIREMENT, encoding="utf-8")
+    print(f"Created example requirement: {example_path}")
+    print()
+    print("Next steps:")
+    print("  1. Review the example to understand the format")
+    print("  2. Delete or rename it when creating real requirements")
+    print("  3. Run `elspais validate` to check format compliance")
+    print("  4. Run `elspais hash update` to compute content hashes")
 
     return 0
 
@@ -91,11 +164,9 @@ format = "uppercase"
 separator = "-"
 
 [rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
-]
+dev = ["dev", "ops", "prd"]
+ops = ["ops", "prd"]
+prd = ["prd"]
 cross_repo_implements = true
 allow_orphans = true  # More permissive for associated development
 
@@ -115,7 +186,6 @@ type = "core"
 [directories]
 spec = "spec"
 docs = "docs"
-database = "database"
 code = ["src", "apps", "packages"]
 
 [patterns]
@@ -138,6 +208,11 @@ length = 3
 format = "uppercase"
 separator = "-"
 
+[patterns.assertions]
+label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
+# max_count = 26           # Defaults to style maximum (26 for uppercase, 100 for numeric)
+# zero_pad = false         # For numeric styles: "01" vs "1"
+
 [spec]
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
@@ -148,11 +223,9 @@ skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 "dev-*.md" = "dev"
 
 [rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
-]
+dev = ["dev", "ops", "prd"]
+ops = ["ops", "prd"]
+prd = ["prd"]
 allow_circular = false
 allow_orphans = false
 
@@ -163,15 +236,20 @@ require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
-[validation]
-hash_algorithm = "sha256"
-hash_length = 8
+[testing]
+enabled = false
+test_dirs = ["tests"]
+patterns = ["test_*.py", "*_test.py"]
+# result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
+reference_keyword = "Validates"
 
-[traceability]
-output_formats = ["markdown", "html"]
-scan_patterns = [
-    "database/**/*.sql",
-    "src/**/*.py",
-    "apps/**/*.dart",
-]
+[ignore]
+# Global patterns applied everywhere
+global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+# Additional patterns for spec file scanning
+spec = ["README.md", "INDEX.md", "drafts/**"]
+# Additional patterns for code scanning
+code = ["*_test.py", "conftest.py", "test_*.py"]
+# Additional patterns for test scanning
+test = ["fixtures/**", "__snapshots__"]
 """

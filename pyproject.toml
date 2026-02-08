@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.11.2"
+version = "0.51.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,8 +25,8 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
     "Typing :: Typed",
 ]
-# Zero external dependencies - uses only Python standard library
-dependencies = []
+# Minimal dependency: tomlkit for correct TOML parsing and round-trip editing
+dependencies = ["tomlkit>=0.12"]
 
 [project.optional-dependencies]
 dev = [
@@ -38,20 +38,25 @@ dev = [
 ]
 binary = ["pyinstaller>=6.0"]
 mcp = ["mcp>=1.0"]
+# Shell tab-completion support (bash, zsh, fish, tcsh)
+completion = ["argcomplete>=3.0"]
 # REQ-int-d00002-B: HTML generation requires jinja2
-trace-view = ["jinja2>=3.0"]
+trace-view = ["jinja2>=3.0", "pygments>=2.0"]
 # REQ-int-d00002-C: Review server requires flask
 trace-review = [
     "jinja2>=3.0",
+    "pygments>=2.0",
     "flask>=2.0",
     "flask-cors>=4.0",
 ]
 # All optional features
 all = [
     "jinja2>=3.0",
+    "pygments>=2.0",
     "flask>=2.0",
     "flask-cors>=4.0",
     "mcp>=1.0",
+    "argcomplete>=3.0",
 ]
 
 [project.scripts]
@@ -66,6 +71,10 @@ Changelog = "https://github.com/anspar/elspais/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/elspais"]
+
+# Include CLI documentation files in the wheel
+[tool.hatch.build.targets.wheel.force-include]
+"docs/cli" = "elspais/docs/cli"
 
 # REQ-int-d00001-D: Bundle Jinja2 templates for trace-view
 [tool.hatch.build.targets.wheel.shared-data]
@@ -85,7 +94,7 @@ include = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --ignore=tests/_obsolete"
 
 [tool.black]
 line-length = 100

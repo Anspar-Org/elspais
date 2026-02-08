@@ -212,9 +212,6 @@ allow_circular = false
 # Require all requirements to implement something (except root PRD)
 allow_orphans = false
 
-# Maximum implementation chain depth
-max_depth = 5
-
 # Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
 
@@ -367,6 +364,46 @@ pre_commit = true
 
 # Validate REQ references in commit-msg hook
 commit_msg = true
+
+#──────────────────────────────────────────────────────────────────────────────
+# UNIFIED REFERENCE CONFIGURATION (v0.10.0+)
+# Used by: CodeParser, TestParser, JUnitXMLParser, PytestJSONParser
+#──────────────────────────────────────────────────────────────────────────────
+
+[references.defaults]
+# Separator characters accepted between ID components (e.g., REQ-p00001 or REQ_p00001)
+separators = ["-", "_"]
+
+# Case-sensitive matching (false = REQ, req, Req all match)
+case_sensitive = false
+
+# Whether the prefix (e.g., "REQ") is required (false = p00001 alone won't match)
+prefix_optional = false
+
+# Comment styles to recognize for reference extraction
+comment_styles = ["#", "//", "--"]
+
+# Keywords for different reference types
+[references.defaults.keywords]
+implements = ["Implements", "IMPLEMENTS"]
+validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
+refines = ["Refines", "REFINES"]
+
+# Override: Python files (underscore only, hash comments)
+[[references.overrides]]
+match = "*.py"
+separators = ["_"]
+comment_styles = ["#"]
+
+# Override: TypeScript/JavaScript files
+[[references.overrides]]
+match = "*.{ts,tsx,js,jsx}"
+comment_styles = ["//"]
+
+# Override: Legacy test directory (prefix not required for backward compat)
+[[references.overrides]]
+match = "tests/legacy/**"
+prefix_optional = true
 ```
 
 ## Environment Variable Overrides

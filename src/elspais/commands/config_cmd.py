@@ -7,15 +7,13 @@ View and modify .elspais.toml configuration.
 import argparse
 import json
 import sys
+from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import (
-    find_config_file,
-    load_config,
-    parse_toml,
-)
+import tomlkit
+
+from elspais.config import DEFAULT_CONFIG, find_config_file, load_config, parse_toml_document
 
 
 def run(args: argparse.Namespace) -> int:
@@ -57,7 +55,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         print("No configuration file found. Run 'elspais init' to create one.")
         return 1
 
-    config = load_config(config_path)
+    config = load_config(config_path).get_raw()
     section = getattr(args, "section", None)
 
     if section:
@@ -83,14 +81,16 @@ def cmd_get(args: argparse.Namespace) -> int:
         print("No configuration file found.", file=sys.stderr)
         return 1
 
-    config = load_config(config_path)
+    config_loader = load_config(config_path)
     key = args.key
 
-    value = _get_by_path(config, key)
+    # Use ConfigLoader.get() for dot-notation access
+    value = config_loader.get(key)
     if value is None:
-        # Check if it's truly None vs not found
+        # Check if it's truly None vs not found using raw dict
+        raw = config_loader.get_raw()
         parts = key.split(".")
-        current = config
+        current = raw
         for part in parts[:-1]:
             if part not in current:
                 print(f"Key not found: {key}", file=sys.stderr)
@@ -122,8 +122,8 @@ def cmd_set(args: argparse.Namespace) -> int:
     # Parse value with type inference
     parsed_value = _parse_cli_value(value)
 
-    # Load existing user config (not merged with defaults)
-    user_config = _load_user_config(config_path)
+    # Load existing user config as TOMLDocument for round-trip editing
+    user_config = _load_user_config_doc(config_path)
 
     # Set the value
     _set_by_path(user_config, key, parsed_value)
@@ -146,7 +146,7 @@ def cmd_unset(args: argparse.Namespace) -> int:
         return 1
 
     key = args.key
-    user_config = _load_user_config(config_path)
+    user_config = _load_user_config_doc(config_path)
 
     if not _unset_by_path(user_config, key):
         print(f"Key not found: {key}", file=sys.stderr)
@@ -170,7 +170,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     key = args.key
     value = _parse_cli_value(args.value)
 
-    user_config = _load_user_config(config_path)
+    user_config = _load_user_config_doc(config_path)
 
     # Get or create the array
     current = _get_by_path(user_config, key)
@@ -211,11 +211,11 @@ def cmd_remove(args: argparse.Namespace) -> int:
     key = args.key
     value = _parse_cli_value(args.value)
 
-    user_config = _load_user_config(config_path)
+    user_config = _load_user_config_doc(config_path)
     merged_config = load_config(config_path)
 
-    # Get current merged value to see what's there
-    current = _get_by_path(merged_config, key)
+    # Get current merged value using ConfigLoader.get() for dot-notation access
+    current = merged_config.get(key)
 
     if current is None or not isinstance(current, list):
         print(f"Error: {key} is not an array or doesn't exist", file=sys.stderr)
@@ -262,31 +262,36 @@ def _get_config_path(args: argparse.Namespace) -> Optional[Path]:
     return find_config_file(Path.cwd())
 
 
-def _load_user_config(config_path: Path) -> Dict[str, Any]:
-    """Load user configuration without merging with defaults."""
+def _load_user_config_doc(config_path: Path) -> tomlkit.TOMLDocument:
+    """Load user configuration as TOMLDocument for round-trip editing.
+
+    Preserves comments, whitespace, and formatting so that writing
+    back only changes the modified fields.
+    """
+    # Implements: REQ-p00002-A
     if config_path.exists():
-        return parse_toml(config_path.read_text(encoding="utf-8"))
-    return {}
+        return parse_toml_document(config_path.read_text(encoding="utf-8"))
+    return tomlkit.document()
 
 
-def _get_by_path(config: Dict[str, Any], path: str) -> Any:
+def _get_by_path(config: Any, path: str) -> Any:
     """Get a value from config using dot-notation path."""
     parts = path.split(".")
     current = config
     for part in parts:
-        if not isinstance(current, dict) or part not in current:
+        if not isinstance(current, (dict, MutableMapping)) or part not in current:
             return None
         current = current[part]
     return current
 
 
-def _set_by_path(config: Dict[str, Any], path: str, value: Any) -> None:
+def _set_by_path(config: Any, path: str, value: Any) -> None:
     """Set a value in config using dot-notation path."""
     parts = path.split(".")
     current = config
     for part in parts[:-1]:
         if part not in current:
-            current[part] = {}
+            current[part] = tomlkit.table()
         current = current[part]
     current[parts[-1]] = value
 
@@ -408,94 +413,11 @@ def _print_section(section: Dict[str, Any], path: str, indent: int = 0) -> None:
         _print_section(value, new_path)
 
 
-def _write_config(config_path: Path, config: Dict[str, Any]) -> None:
-    """Write configuration to TOML file."""
-    content = serialize_toml(config)
+def _write_config(config_path: Path, config: Any) -> None:
+    """Write configuration to TOML file.
+
+    Accepts a TOMLDocument (preserves formatting) or plain dict.
+    """
+    # Implements: REQ-p00002-A
+    content = tomlkit.dumps(config)
     config_path.write_text(content, encoding="utf-8")
-
-
-def serialize_toml(config: Dict[str, Any], prefix: str = "") -> str:
-    """
-    Serialize a dictionary to TOML format.
-
-    Args:
-        config: Configuration dictionary
-        prefix: Section prefix for nested tables
-
-    Returns:
-        TOML formatted string
-    """
-    lines: List[str] = []
-
-    # Separate simple values and nested tables
-    simple_items: List[Tuple[str, Any]] = []
-    nested_items: List[Tuple[str, Dict]] = []
-
-    for key, value in config.items():
-        if isinstance(value, dict) and not _is_inline_table(value):
-            nested_items.append((key, value))
-        else:
-            simple_items.append((key, value))
-
-    # Write simple items
-    for key, value in simple_items:
-        lines.append(f"{key} = {_serialize_value(value)}")
-
-    # Write nested tables
-    for key, value in nested_items:
-        section_name = f"{prefix}.{key}" if prefix else key
-        lines.append("")
-        lines.append(f"[{section_name}]")
-        nested_content = serialize_toml(value, section_name)
-        # Remove leading newline from nested content
-        nested_content = nested_content.lstrip("\n")
-        if nested_content:
-            lines.append(nested_content)
-
-    result = "\n".join(lines)
-    # Clean up multiple consecutive empty lines
-    while "\n\n\n" in result:
-        result = result.replace("\n\n\n", "\n\n")
-    return result
-
-
-def _is_inline_table(value: Dict) -> bool:
-    """Check if a dict should be serialized as inline table."""
-    # Use inline for simple, small tables without nested dicts
-    if len(value) > 4:
-        return False
-    for v in value.values():
-        if isinstance(v, dict):
-            return False
-        if isinstance(v, list) and len(v) > 3:
-            return False
-    return True
-
-
-def _serialize_value(value: Any) -> str:
-    """Serialize a single value to TOML format."""
-    if value is None:
-        return '""'  # TOML doesn't have null, use empty string
-    elif isinstance(value, bool):
-        return "true" if value else "false"
-    elif isinstance(value, int):
-        return str(value)
-    elif isinstance(value, float):
-        return str(value)
-    elif isinstance(value, str):
-        # Escape quotes and backslashes
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    elif isinstance(value, list):
-        items = [_serialize_value(v) for v in value]
-        # Check if it fits on one line
-        single_line = f"[{', '.join(items)}]"
-        if len(single_line) < 80:
-            return single_line
-        # Multi-line format
-        return "[\n    " + ",\n    ".join(items) + ",\n]"
-    elif isinstance(value, dict):
-        items = [f"{k} = {_serialize_value(v)}" for k, v in value.items()]
-        return "{ " + ", ".join(items) + " }"
-    else:
-        return str(value)

@@ -3,10 +3,17 @@ elspais.commands - CLI command implementations
 """
 
 __all__ = [
-    "validate",
-    "trace",
+    "analyze",
+    "changed",
+    "config_cmd",
+    "edit",
+    "example_cmd",
     "hash_cmd",
     "index",
-    "analyze",
     "init",
+    "link_suggest",
+    "reformat_cmd",
+    "rules_cmd",
+    "trace",
+    "validate",
 ]

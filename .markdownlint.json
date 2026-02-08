@@ -1,9 +1,49 @@
 {
+  // Heading increment: Disabled because spec files use ### for requirement
+  // headers under # document title (skipping h2 intentionally).
+  "MD001": false,
+
+  // Heading style: Disabled because spec files use *End* *Title* markers
+  // that markdownlint misidentifies as setext-style headings.
+  "MD003": false,
+
   // Line length: Disabled because modern viewers wrap dynamically.
   // Hard breaks at 80 chars create awkward formatting in rendered output.
   "MD013": false,
 
   // Duplicate headings: Disabled because changelogs naturally repeat
   // section headings (### Added, ### Fixed, ### Changed) per version.
-  "MD024": false
+  "MD024": false,
+
+  // Multiple H1 headings: Disabled because requirement spec files use
+  // # for each requirement ID which is intentional.
+  "MD025": false,
+
+  // Ordered list prefix: Disabled because CLAUDE.md uses semantic numbering
+  // (8, 9, 10, etc.) for stable references even when items are added/removed.
+  "MD029": false,
+
+  // Fenced code blocks surrounded by blank lines: Disabled because spec
+  // files embed code examples within structured requirement blocks.
+  "MD031": false,
+
+  // Lists surrounded by blank lines: Disabled because requirement spec
+  // files place acceptance criteria lists directly after body text.
+  "MD032": false,
+
+  // Emphasis as heading: Disabled because *italics* are sometimes used
+  // intentionally for stylistic sub-sections, not as heading replacements.
+  "MD036": false,
+
+  // Fenced code language: Disabled because some spec examples use
+  // generic fenced blocks without specifying a language.
+  "MD040": false,
+
+  // Trailing newline: Disabled because file ending style varies
+  // across editors and does not affect content.
+  "MD047": false,
+
+  // Table column style: Disabled because pipe spacing style is a preference
+  // and does not affect rendering or readability.
+  "MD060": false
 }

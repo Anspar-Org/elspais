@@ -1,4 +1,8 @@
-"""Allow running as: python -m elspais.mcp"""
+"""Entry point for running elspais MCP server directly.
+
+Usage:
+    python -m elspais.mcp
+"""
 
 from elspais.mcp.server import run_server
 

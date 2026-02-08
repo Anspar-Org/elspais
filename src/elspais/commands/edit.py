@@ -1,3 +1,4 @@
+# Implements: REQ-o00063-A, REQ-o00063-B
 """
 elspais.commands.edit - Edit requirements command.
 
@@ -6,20 +7,22 @@ Provides functionality to modify requirements in-place:
 - Change Status
 - Move requirements between files
 - Batch operations via JSON
+
+File I/O is delegated to ``utilities.spec_writer``.
 """
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from elspais.utilities.spec_writer import modify_implements, modify_status, move_requirement
+
 
 def run(args: argparse.Namespace) -> int:
     """Run the edit command."""
-    from elspais.config.defaults import DEFAULT_CONFIG
-    from elspais.config.loader import find_config_file, get_spec_directories, load_config
+    from elspais.config import DEFAULT_CONFIG, find_config_file, get_spec_directories, load_config
 
     # Load configuration
     config_path = args.config if hasattr(args, "config") else None
@@ -50,7 +53,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
-        return run_single_edit(args, base_spec_dir, dry_run)
+        return run_single_edit(args, base_spec_dir, dry_run, validate_refs)
 
     print("Error: Must specify --req-id or --from-json", file=sys.stderr)
     return 1
@@ -95,7 +98,9 @@ def run_batch_edit(
     return 0
 
 
-def run_single_edit(args: argparse.Namespace, spec_dir: Path, dry_run: bool) -> int:
+def run_single_edit(
+    args: argparse.Namespace, spec_dir: Path, dry_run: bool, validate_refs: bool = False
+) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
 
@@ -108,9 +113,28 @@ def run_single_edit(args: argparse.Namespace, spec_dir: Path, dry_run: bool) -> 
     file_path = location["file_path"]
     results = []
 
+    # Collect valid refs if validation is enabled
+    valid_refs: Optional[set] = None
+    if validate_refs:
+        valid_refs = collect_all_req_ids(spec_dir)
+
     # Apply implements change
     if hasattr(args, "implements") and args.implements is not None:
         impl_list = [i.strip() for i in args.implements.split(",")]
+
+        # Validate references if enabled
+        if validate_refs and valid_refs:
+            invalid_refs = []
+            for ref in impl_list:
+                if ref not in valid_refs and f"REQ-{ref}" not in valid_refs:
+                    invalid_refs.append(ref)
+            if invalid_refs:
+                print(
+                    f"Error: Invalid implements references: {', '.join(invalid_refs)}",
+                    file=sys.stderr,
+                )
+                return 1
+
         result = modify_implements(file_path, req_id, impl_list, dry_run=dry_run)
         results.append(("implements", result))
 
@@ -156,12 +180,11 @@ def find_requirement_in_files(
     Returns:
         Dict with file_path, req_id, line_number, or None if not found
     """
-    # Pattern to match requirement header
-    pattern = re.compile(rf"^#\s*{re.escape(req_id)}:", re.MULTILINE)
+    from elspais.utilities.patterns import find_req_header
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
-        match = pattern.search(content)
+        match = find_req_header(content, req_id)
         if match:
             # Count line number
             line_number = content[: match.start()].count("\n") + 1
@@ -172,218 +195,6 @@ def find_requirement_in_files(
             }
 
     return None
-
-
-def modify_implements(
-    file_path: Path,
-    req_id: str,
-    new_implements: List[str],
-    dry_run: bool = False,
-) -> Dict[str, Any]:
-    """
-    Modify the Implements field of a requirement.
-
-    Args:
-        file_path: Path to the spec file
-        req_id: Requirement ID to modify
-        new_implements: New list of implements references (empty = set to "-")
-        dry_run: If True, don't actually modify the file
-
-    Returns:
-        Dict with success, old_implements, new_implements, error
-    """
-    content = file_path.read_text()
-
-    # Find the requirement header
-    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
-    req_match = req_pattern.search(content)
-
-    if not req_match:
-        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
-
-    # Find the **Implements**: field after the header
-    start_pos = req_match.end()
-    search_region = content[start_pos : start_pos + 500]
-
-    impl_pattern = re.compile(r"(\*\*Implements\*\*:\s*)([^|\n]+)")
-    impl_match = impl_pattern.search(search_region)
-
-    if not impl_match:
-        return {"success": False, "error": f"Could not find **Implements** for {req_id}"}
-
-    # Extract old value
-    old_value = impl_match.group(2).strip()
-    old_implements = [v.strip() for v in old_value.split(",")] if old_value != "-" else []
-
-    # Build new value
-    if new_implements:
-        new_value = ", ".join(new_implements)
-    else:
-        new_value = "-"
-
-    # Calculate absolute positions
-    abs_start = start_pos + impl_match.start()
-    abs_end = start_pos + impl_match.end()
-
-    old_line = impl_match.group(0)
-    new_line = impl_match.group(1) + new_value
-
-    if old_line == new_line:
-        return {
-            "success": True,
-            "old_implements": old_implements,
-            "new_implements": new_implements,
-            "no_change": True,
-            "dry_run": dry_run,
-        }
-
-    # Apply change
-    new_content = content[:abs_start] + new_line + content[abs_end:]
-
-    if not dry_run:
-        file_path.write_text(new_content)
-
-    return {
-        "success": True,
-        "old_implements": old_implements,
-        "new_implements": new_implements,
-        "dry_run": dry_run,
-    }
-
-
-def modify_status(
-    file_path: Path,
-    req_id: str,
-    new_status: str,
-    dry_run: bool = False,
-) -> Dict[str, Any]:
-    """
-    Modify the Status field of a requirement.
-
-    Args:
-        file_path: Path to the spec file
-        req_id: Requirement ID to modify
-        new_status: New status value
-        dry_run: If True, don't actually modify the file
-
-    Returns:
-        Dict with success, old_status, new_status, error
-    """
-    content = file_path.read_text()
-
-    # Find the requirement header
-    req_pattern = re.compile(rf"^(#\s*{re.escape(req_id)}:[^\n]*\n)", re.MULTILINE)
-    req_match = req_pattern.search(content)
-
-    if not req_match:
-        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
-
-    # Find the **Status**: field after the header
-    start_pos = req_match.end()
-    search_region = content[start_pos : start_pos + 500]
-
-    status_pattern = re.compile(r"(\*\*Status\*\*:\s*)(\w+)")
-    status_match = status_pattern.search(search_region)
-
-    if not status_match:
-        return {"success": False, "error": f"Could not find **Status** for {req_id}"}
-
-    old_status = status_match.group(2)
-
-    if old_status == new_status:
-        return {
-            "success": True,
-            "old_status": old_status,
-            "new_status": new_status,
-            "no_change": True,
-            "dry_run": dry_run,
-        }
-
-    # Calculate absolute positions
-    abs_start = start_pos + status_match.start()
-    abs_end = start_pos + status_match.end()
-
-    new_line = status_match.group(1) + new_status
-
-    # Apply change
-    new_content = content[:abs_start] + new_line + content[abs_end:]
-
-    if not dry_run:
-        file_path.write_text(new_content)
-
-    return {
-        "success": True,
-        "old_status": old_status,
-        "new_status": new_status,
-        "dry_run": dry_run,
-    }
-
-
-def move_requirement(
-    source_file: Path,
-    dest_file: Path,
-    req_id: str,
-    dry_run: bool = False,
-) -> Dict[str, Any]:
-    """
-    Move a requirement from one file to another.
-
-    Args:
-        source_file: Source spec file
-        dest_file: Destination spec file
-        req_id: Requirement ID to move
-        dry_run: If True, don't actually modify files
-
-    Returns:
-        Dict with success, source_file, dest_file, error
-    """
-    source_content = source_file.read_text()
-
-    # Find the requirement block
-    # Pattern: # REQ-xxx: title ... *End* *title* | **Hash**: xxx\n---
-    req_pattern = re.compile(
-        rf"(^#\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
-        re.MULTILINE | re.DOTALL,
-    )
-
-    req_match = req_pattern.search(source_content)
-
-    if not req_match:
-        return {"success": False, "error": f"Requirement {req_id} not found in {source_file}"}
-
-    req_block = req_match.group(0)
-
-    # Ensure block ends with separator
-    if not req_block.endswith("---\n"):
-        req_block = req_block.rstrip() + "\n---\n"
-
-    # Remove from source
-    new_source_content = source_content[: req_match.start()] + source_content[req_match.end() :]
-    # Clean up extra blank lines
-    new_source_content = re.sub(r"\n{3,}", "\n\n", new_source_content)
-
-    # Add to destination
-    dest_content = dest_file.read_text() if dest_file.exists() else ""
-    if dest_content and not dest_content.endswith("\n"):
-        dest_content += "\n"
-    if dest_content and not dest_content.endswith("\n\n"):
-        dest_content += "\n"
-    new_dest_content = dest_content + req_block
-
-    # Check if source will be empty after move
-    source_empty = len(new_source_content.strip()) == 0
-
-    if not dry_run:
-        source_file.write_text(new_source_content)
-        dest_file.write_text(new_dest_content)
-
-    return {
-        "success": True,
-        "source_file": str(source_file),
-        "dest_file": str(dest_file),
-        "source_empty": source_empty,
-        "dry_run": dry_run,
-    }
 
 
 def collect_all_req_ids(spec_dir: Path) -> set:
@@ -399,7 +210,7 @@ def collect_all_req_ids(spec_dir: Path) -> set:
     import re
 
     req_ids = set()
-    pattern = re.compile(r"^#\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
+    pattern = re.compile(r"^#+\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()

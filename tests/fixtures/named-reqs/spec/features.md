@@ -13,7 +13,7 @@ The system shall authenticate users securely.
 - OAuth support
 - MFA option
 
-*End* *User Authentication* | **Hash**: named001
+*End* *User Authentication* | **Hash**: 153ca958
 ---
 
 ### REQ-DataExport: Data Export
@@ -27,7 +27,7 @@ Users can export their data.
 - CSV format
 - PDF format
 
-*End* *Data Export* | **Hash**: named002
+*End* *Data Export* | **Hash**: f972feda
 ---
 
 ### REQ-AuditLog: Audit Logging
@@ -41,5 +41,5 @@ All actions are logged for audit.
 - Timestamp recorded
 - User ID recorded
 
-*End* *Audit Logging* | **Hash**: named003
+*End* *Audit Logging* | **Hash**: 7dea4909
 ---

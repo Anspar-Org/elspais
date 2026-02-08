@@ -20,6 +20,7 @@ class TestingConfig:
         patterns: File patterns to match test files (e.g., "*_test.py")
         result_files: Glob patterns for test result files (JUnit XML, pytest JSON)
         reference_patterns: Regex patterns to extract requirement IDs from tests
+        reference_keyword: Keyword for test references (default: "Validates")
     """
 
     enabled: bool = False
@@ -27,6 +28,7 @@ class TestingConfig:
     patterns: List[str] = field(default_factory=list)
     result_files: List[str] = field(default_factory=list)
     reference_patterns: List[str] = field(default_factory=list)
+    reference_keyword: str = "Validates"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TestingConfig":
@@ -45,4 +47,5 @@ class TestingConfig:
             patterns=data.get("patterns", []),
             result_files=data.get("result_files", []),
             reference_patterns=data.get("reference_patterns", []),
+            reference_keyword=data.get("reference_keyword", "Validates"),
         )

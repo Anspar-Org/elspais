@@ -1,1 +1,1 @@
-"""Tests for elspais.mcp module."""
+"""MCP server tests."""

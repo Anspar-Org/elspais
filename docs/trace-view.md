@@ -8,7 +8,7 @@ This guide covers the enhanced traceability visualization features available in 
 
 ```bash
 pip install elspais[trace-view]
-```
+```text
 
 This installs Jinja2 for template-based HTML generation.
 
@@ -16,7 +16,7 @@ This installs Jinja2 for template-based HTML generation.
 
 ```bash
 pip install elspais[trace-review]
-```
+```text
 
 This adds Flask and Flask-CORS for the collaborative review server.
 
@@ -24,7 +24,7 @@ This adds Flask and Flask-CORS for the collaborative review server.
 
 ```bash
 pip install elspais[all]
-```
+```text
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ elspais trace --server
 
 # Generate HTML with embedded content
 elspais trace --view --embed-content -o trace.html
-```
+```text
 
 ## CLI Options
 
@@ -73,7 +73,7 @@ elspais trace --view --edit-mode -o trace.html
 
 # Include sponsor repository requirements
 elspais trace --view --mode combined -o trace.html
-```
+```text
 
 ## Review Server
 
@@ -87,7 +87,7 @@ elspais trace --server
 
 # Custom port
 elspais trace --server --port 3000
-```
+```text
 
 ### API Endpoints
 
@@ -111,6 +111,7 @@ The server exposes these endpoints:
 ### Data Storage
 
 Review data is stored in `.elspais/reviews/`:
+
 - `comments.json` - Thread and comment data
 - `flags.json` - Review flags
 - `status_requests.json` - Status change requests
@@ -164,24 +165,26 @@ elspais reformat-with-claude --mode combined
 
 # Reformat only local requirements
 elspais reformat-with-claude --mode local-only
-```
+```text
 
 ### Format Transformation
 
 Converts from:
+
 ```markdown
 **Acceptance Criteria**:
 - The system does X
 - The system provides Y
-```
+```text
 
 To:
+
 ```markdown
 ## Assertions
 
 A. The system SHALL do X.
 B. The system SHALL provide Y.
-```
+```text
 
 ### Options
 
@@ -209,7 +212,7 @@ See [Commands Reference](commands.md#reformat-with-claude) for detailed document
 
 ### Package Structure
 
-```
+```text
 src/elspais/trace_view/
 ├── __init__.py          # Public API
 ├── models.py            # TraceViewRequirement adapter
@@ -230,7 +233,7 @@ src/elspais/trace_view/
     ├── storage.py      # JSON persistence
     ├── branches.py     # Git branch management
     └── server.py       # Flask application
-```
+```text
 
 ### TraceViewRequirement
 
@@ -252,7 +255,7 @@ tv_req.git_info = GitChangeInfo(
 # Access properties
 print(tv_req.display_filename)  # Relative path
 print(tv_req.is_roadmap)        # True if in roadmap/
-```
+```text
 
 ### Coverage Calculation
 
@@ -273,37 +276,40 @@ print(f"PRD: {counts['PRD']}, Dev: {counts['Dev']}")
 
 # Find orphans (no parent)
 orphans = find_orphaned_requirements(requirements)
-```
+```text
 
 ## Troubleshooting
 
 ### Missing Dependencies
 
-```
+```text
 ImportError: trace-view features require jinja2
 Install with: pip install elspais[trace-view]
-```
+```text
 
 Install the required extras.
 
 ### Server Won't Start
 
 Check port availability:
+
 ```bash
 lsof -i :8080
-```
+```text
 
 Use a different port:
+
 ```bash
 elspais trace --server --port 3001
-```
+```text
 
 ### Template Not Found
 
 Ensure package data is installed correctly:
+
 ```bash
 pip install -e ".[trace-view]"
-```
+```text
 
 ## Requirements
 

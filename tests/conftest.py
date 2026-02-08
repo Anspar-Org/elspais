@@ -2,7 +2,6 @@
 pytest configuration and shared fixtures for elspais tests.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Generator
@@ -89,7 +88,7 @@ def temp_project(tmp_path: Path) -> Generator[Path, None, None]:
 @pytest.fixture
 def sample_requirement_text() -> str:
     """Return sample requirement markdown text."""
-    return '''### REQ-p00001: Sample Requirement
+    return """### REQ-p00001: Sample Requirement
 
 **Level**: PRD | **Status**: Active
 
@@ -100,7 +99,7 @@ The system SHALL do something.
 - Criterion 2
 
 *End* *Sample Requirement* | **Hash**: test1234
----'''
+---"""
 
 
 @pytest.fixture

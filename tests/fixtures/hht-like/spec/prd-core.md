@@ -18,7 +18,7 @@ The system SHALL provide secure user authentication to verify user identity befo
 - Account lockout after 5 failed attempts
 - Session timeout after 30 minutes of inactivity
 
-*End* *User Authentication* | **Hash**: a1b2c3d4
+*End* *User Authentication* | **Hash**: d18171fc
 ---
 
 ### REQ-p00002: Data Privacy
@@ -35,7 +35,7 @@ The system SHALL protect user data in accordance with GDPR and HIPAA requirement
 - Users can request data export
 - Users can request data deletion
 
-*End* *Data Privacy* | **Hash**: e5f6g7h8
+*End* *Data Privacy* | **Hash**: 38a6a60a
 ---
 
 ### REQ-p00003: Audit Logging
@@ -52,5 +52,5 @@ The system SHALL maintain comprehensive audit logs for all security-relevant eve
 - Logs are tamper-evident
 - Logs are retained for 7 years
 
-*End* *Audit Logging* | **Hash**: i9j0k1l2
+*End* *Audit Logging* | **Hash**: f2c44ef9
 ---

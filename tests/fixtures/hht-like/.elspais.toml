@@ -50,7 +50,6 @@ allowed_implements = [
 ]
 allow_circular = false
 allow_orphans = false
-max_depth = 5
 
 [rules.format]
 require_hash = true

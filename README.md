@@ -7,7 +7,7 @@
 
 ## Features
 
-- **Zero Dependencies**: Core CLI uses only Python 3.9+ standard library
+- **Minimal Dependencies**: Core CLI requires only `tomlkit` (pure Python, no transitive deps)
 - **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
 - **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
 - **Multi-Repository**: Link requirements across core and associated repositories
@@ -48,7 +48,7 @@ FROM python:3.11-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install elspais (10-100x faster than pip)
-RUN uv pip install --system --no-cache elspais==0.9.3
+RUN uv pip install --system --no-cache elspais==0.24.3
 ```
 
 ```yaml
@@ -57,7 +57,7 @@ RUN uv pip install --system --no-cache elspais==0.9.3
   uses: astral-sh/setup-uv@v2
 
 - name: Install elspais
-  run: uv pip install --system elspais==0.9.3
+  run: uv pip install --system elspais==0.24.3
 ```
 
 **Note:** For regulated/medical software projects, always pin the exact version for reproducibility.
@@ -375,7 +375,7 @@ For reproducible builds, pin the version in your project:
 
 ```bash
 # .github/versions.env
-ELSPAIS_VERSION=0.1.0
+ELSPAIS_VERSION=0.24.3
 ```
 
 ```yaml

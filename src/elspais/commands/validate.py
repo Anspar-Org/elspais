@@ -1,449 +1,257 @@
+# Implements: REQ-int-d00003 (CLI Extension)
 """
-elspais.commands.validate - Validate requirements command.
+elspais.commands.validate - Validate requirements format and relationships.
 
-Validates requirements format, links, and hashes.
+Uses the graph-based system for validation. Commands only work with graph data.
+Supports --fix to auto-fix certain issues (hashes, status).
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.hasher import calculate_hash, verify_hash
-from elspais.core.models import ParseWarning, Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
-from elspais.core.rules import RuleEngine, RulesConfig, RuleViolation, Severity
-from elspais.sponsors import get_sponsor_spec_directories
-from elspais.testing.config import TestingConfig
+if TYPE_CHECKING:
+    pass
+
+from elspais.graph import NodeKind
+
+
+def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
+
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
+
+    Args:
+        node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+
+    Returns:
+        Computed hash string, or None if no hashable content.
+    """
+    from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = node.get_field("body_text", "")
+        if not body:
+            return None
+        return calculate_hash(body)
 
 
 def run(args: argparse.Namespace) -> int:
+    """Run the validate command.
+
+    Uses graph factory to build TraceGraph, then validates requirements.
+    Supports --fix to auto-fix certain issues.
     """
-    Run the validate command.
+    from elspais.graph.factory import build_graph
 
-    Args:
-        args: Parsed command line arguments
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    fix_mode = getattr(args, "fix", False)
+    dry_run = getattr(args, "dry_run", False)
 
-    Returns:
-        Exit code (0 for success, 1 for validation errors)
-    """
-    # Find and load configuration
-    config = load_configuration(args)
-    if config is None:
-        return 1
+    # Get repo root from spec_dir or cwd
+    repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    # Determine spec directories (can be string or list)
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found", file=sys.stderr)
-        return 1
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        repo_root=repo_root,
+    )
 
-    # Add sponsor spec directories if mode is "combined" and include_associated is enabled
-    mode = getattr(args, "mode", "combined")
-    include_associated = config.get("traceability", {}).get("include_associated", True)
+    # Collect validation issues
+    errors = []
+    warnings = []
+    fixable = []  # Issues that can be auto-fixed
 
-    if mode == "combined" and include_associated:
-        base_path = find_project_root(spec_dirs)
-        sponsor_dirs = get_sponsor_spec_directories(config, base_path)
-        if sponsor_dirs:
-            spec_dirs = list(spec_dirs) + sponsor_dirs
-            if not args.quiet:
-                for sponsor_dir in sponsor_dirs:
-                    print(f"Including sponsor specs: {sponsor_dir}")
-
-    if not args.quiet:
-        if len(spec_dirs) == 1:
-            print(f"Validating requirements in: {spec_dirs[0]}")
-        else:
-            print(f"Validating requirements in: {', '.join(str(d) for d in spec_dirs)}")
-
-    # Parse requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    skip_files = spec_config.get("skip_files", [])
-
-    try:
-        parse_result = parser.parse_directories(spec_dirs, skip_files=skip_files)
-        requirements = dict(parse_result)  # ParseResult supports dict-like access
-    except Exception as e:
-        print(f"Error parsing requirements: {e}", file=sys.stderr)
-        return 1
-
-    if not requirements:
-        print("No requirements found.", file=sys.stderr)
-        return 1
-
-    if not args.quiet:
-        print(f"Found {len(requirements)} requirements")
-
-    # Run validation
-    rules_config = RulesConfig.from_dict(config.get("rules", {}))
-    engine = RuleEngine(rules_config)
-
-    violations = engine.validate(requirements)
-
-    # Add hash validation
-    hash_violations = validate_hashes(requirements, config)
-    violations.extend(hash_violations)
-
-    # Add broken link validation
-    link_violations = validate_links(requirements, args, config)
-    violations.extend(link_violations)
-
-    # Add parser warnings (duplicates, etc.) as violations
-    parse_violations = convert_parse_warnings_to_violations(parse_result.warnings)
-    violations.extend(parse_violations)
-
-    # Filter skipped rules
-    if args.skip_rule:
-        violations = [
-            v for v in violations if not any(skip in v.rule_name for skip in args.skip_rule)
-        ]
-
-    # JSON output mode - output and exit
-    if getattr(args, "json", False):
-        # Test mapping (if enabled)
-        test_data = None
-        testing_config = TestingConfig.from_dict(config.get("testing", {}))
-        if should_scan_tests(args, testing_config):
-            from elspais.testing.mapper import TestMapper
-
-            base_path = find_project_root(spec_dirs)
-            ignore_dirs = config.get("directories", {}).get("ignore", [])
-            mapper = TestMapper(testing_config)
-            test_data = mapper.map_tests(
-                requirement_ids=set(requirements.keys()),
-                base_path=base_path,
-                ignore=ignore_dirs,
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        # Implements: REQ-p00002-B
+        # Check for orphan requirements (no parents except roots)
+        if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
+            warnings.append(
+                {
+                    "rule": "hierarchy.orphan",
+                    "id": node.id,
+                    "message": f"Requirement {node.id} has no parent (orphan)",
+                }
             )
 
-        print(format_requirements_json(requirements, violations, test_data))
-        errors = [v for v in violations if v.severity == Severity.ERROR]
-        return 1 if errors else 0
+        # Implements: REQ-p00002-C
+        # Check for hash presence and correctness
+        hash_mode = getattr(graph, "hash_mode", "full-text")
+        computed_hash = _compute_hash_for_node(node, hash_mode)
+        stored_hash = node.hash
 
-    # Report results
-    errors = [v for v in violations if v.severity == Severity.ERROR]
-    warnings = [v for v in violations if v.severity == Severity.WARNING]
-    infos = [v for v in violations if v.severity == Severity.INFO]
+        if computed_hash:
+            if not stored_hash:
+                # Missing hash - fixable
+                issue = {
+                    "rule": "hash.missing",
+                    "id": node.id,
+                    "message": f"Requirement {node.id} is missing a hash",
+                    "fixable": True,
+                    "fix_type": "hash",
+                    "computed_hash": computed_hash,
+                    "file": str(repo_root / node.source.path) if node.source else None,
+                }
+                warnings.append(issue)
+                if issue["file"]:
+                    fixable.append(issue)
+            elif stored_hash != computed_hash:
+                # Hash mismatch - fixable
+                issue = {
+                    "rule": "hash.mismatch",
+                    "id": node.id,
+                    "message": f"Requirement {node.id} hash mismatch: "
+                    f"stored={stored_hash} computed={computed_hash}",
+                    "fixable": True,
+                    "fix_type": "hash",
+                    "computed_hash": computed_hash,
+                    "file": str(repo_root / node.source.path) if node.source else None,
+                }
+                warnings.append(issue)
+                if issue["file"]:
+                    fixable.append(issue)
+        elif not stored_hash:
+            # No hashable content and no hash
+            warnings.append(
+                {
+                    "rule": "hash.missing",
+                    "id": node.id,
+                    "message": f"Requirement {node.id} is missing a hash",
+                }
+            )
 
-    if violations and not args.quiet:
-        print()
-        for violation in sorted(violations, key=lambda v: (v.severity.value, v.requirement_id)):
-            print(violation)
-            print()
+    # Filter by skip rules
+    skip_rules = getattr(args, "skip_rule", None) or []
+    if skip_rules:
+        import fnmatch
 
-    # Summary
-    if not args.quiet:
-        print("─" * 60)
-        valid_count = len(requirements) - len({v.requirement_id for v in errors})
-        print(f"✓ {valid_count}/{len(requirements)} requirements valid")
+        errors = [e for e in errors if not any(fnmatch.fnmatch(e["rule"], p) for p in skip_rules)]
+        warnings = [
+            w for w in warnings if not any(fnmatch.fnmatch(w["rule"], p) for p in skip_rules)
+        ]
+        fixable = [f for f in fixable if not any(fnmatch.fnmatch(f["rule"], p) for p in skip_rules)]
+
+    # Handle --fix mode
+    fixed_count = 0
+    if fix_mode and fixable:
+        fixed_count = _apply_fixes(fixable, dry_run)
+
+    # Count requirements
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+
+    # Output results
+    if getattr(args, "json", False):
+        result = {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "requirements_count": req_count,
+            "fixed_count": fixed_count if fix_mode else 0,
+        }
+        print(json.dumps(result, indent=2))
+    else:
+        if not getattr(args, "quiet", False):
+            print(f"Validated {req_count} requirements")
+
+        # Show fix results
+        if fix_mode:
+            if dry_run:
+                if fixable:
+                    print(f"Would fix {len(fixable)} issue(s):")
+                    for f in fixable:
+                        print(f"  {f['id']}: {f['rule']}")
+                else:
+                    print("No fixable issues found.")
+            else:
+                if fixed_count > 0:
+                    print(f"Fixed {fixed_count} issue(s)")
+
+        for err in errors:
+            print(f"ERROR [{err['rule']}] {err['id']}: {err['message']}", file=sys.stderr)
+
+        # Only show unfixed warnings
+        unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
+        for warn in unfixed_warnings:
+            print(
+                f"WARNING [{warn['rule']}] {warn['id']}: {warn['message']}",
+                file=sys.stderr,
+            )
 
         if errors:
-            print(f"❌ {len(errors)} errors")
-        if warnings:
-            print(f"⚠️  {len(warnings)} warnings")
-        if infos and getattr(args, "verbose", False):
-            print(f"ℹ️  {len(infos)} info")
-
-    # Return error if there are errors
-    if errors:
-        return 1
-
-    if not args.quiet and not violations:
-        print("✓ All requirements valid")
-
-    return 0
-
-
-def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
-    """Load configuration from file or use defaults."""
-    if args.config:
-        config_path = args.config
-    else:
-        config_path = find_config_file(Path.cwd())
-
-    if config_path and config_path.exists():
-        try:
-            return load_config(config_path)
-        except Exception as e:
-            print(f"Error loading config: {e}", file=sys.stderr)
-            return None
-    else:
-        # Use defaults
-        return DEFAULT_CONFIG
-
-
-def should_scan_tests(args: argparse.Namespace, config: TestingConfig) -> bool:
-    """
-    Determine if test scanning should run based on args and config.
-
-    Args:
-        args: Command line arguments
-        config: Testing configuration
-
-    Returns:
-        True if test scanning should run
-    """
-    if getattr(args, "no_tests", False):
-        return False
-    if getattr(args, "tests", False):
-        return True
-    return config.enabled
-
-
-def find_project_root(spec_dirs: List[Path]) -> Path:
-    """
-    Find the project root from spec directories.
-
-    Looks for .elspais.toml or .git directory above spec dirs.
-
-    Args:
-        spec_dirs: List of spec directories
-
-    Returns:
-        Project root path
-    """
-    if not spec_dirs:
-        return Path.cwd()
-
-    # Start from first spec dir and look upward
-    current = spec_dirs[0].resolve()
-    while current != current.parent:
-        if (current / ".elspais.toml").exists():
-            return current
-        if (current / ".git").exists():
-            return current
-        current = current.parent
-
-    return Path.cwd()
-
-
-def validate_hashes(requirements: Dict[str, Requirement], config: Dict) -> List[RuleViolation]:
-    """Validate requirement hashes."""
-    violations = []
-    hash_length = config.get("validation", {}).get("hash_length", 8)
-    algorithm = config.get("validation", {}).get("hash_algorithm", "sha256")
-
-    for req_id, req in requirements.items():
-        if req.hash:
-            # Verify hash matches content
-            expected_hash = calculate_hash(req.body, length=hash_length, algorithm=algorithm)
-            if not verify_hash(req.body, req.hash, length=hash_length, algorithm=algorithm):
-                violations.append(
-                    RuleViolation(
-                        rule_name="hash.mismatch",
-                        requirement_id=req_id,
-                        message=f"Hash mismatch: expected {expected_hash}, found {req.hash}",
-                        severity=Severity.WARNING,
-                        location=req.location(),
-                    )
-                )
-
-    return violations
-
-
-def validate_links(
-    requirements: Dict[str, Requirement],
-    args: argparse.Namespace,
-    config: Dict,
-) -> List[RuleViolation]:
-    """Validate requirement links (implements references)."""
-    violations = []
-
-    # Load core requirements if this is an associated repo
-    core_requirements = {}
-    core_path = args.core_repo or config.get("core", {}).get("path")
-    if core_path:
-        core_requirements = load_requirements_from_repo(Path(core_path), config)
-
-    all_requirements = {**core_requirements, **requirements}
-    all_ids = set(all_requirements.keys())
-
-    # Build set of all valid short IDs too
-    short_ids = set()
-    for req_id in all_ids:
-        # Add various shortened forms
-        parts = req_id.split("-")
-        if len(parts) >= 2:
-            # REQ-p00001 -> p00001
-            short_ids.add("-".join(parts[1:]))
-            # REQ-CAL-p00001 -> CAL-p00001
-            if len(parts) >= 3:
-                short_ids.add("-".join(parts[2:]))
-                short_ids.add("-".join(parts[1:]))
-
-    for req_id, req in requirements.items():
-        for impl_id in req.implements:
-            # Check if reference is valid
-            if impl_id not in all_ids and impl_id not in short_ids:
-                violations.append(
-                    RuleViolation(
-                        rule_name="link.broken",
-                        requirement_id=req_id,
-                        message=f"Implements reference not found: {impl_id}",
-                        severity=Severity.ERROR,
-                        location=req.location(),
-                    )
-                )
-
-    return violations
-
-
-def convert_parse_warnings_to_violations(
-    warnings: List[ParseWarning],
-) -> List[RuleViolation]:
-    """Convert parser warnings (like duplicates) to rule violations.
-
-    The parser detects duplicate REQ IDs and generates ParseWarning objects.
-    This function converts them to RuleViolation objects so they appear in
-    validation output.
-
-    Args:
-        warnings: List of ParseWarning objects from parser
-
-    Returns:
-        List of RuleViolation objects for duplicate IDs
-    """
-    violations = []
-    for warning in warnings:
-        if "duplicate" in warning.message.lower():
-            violations.append(
-                RuleViolation(
-                    rule_name="id.duplicate",
-                    requirement_id=warning.requirement_id,
-                    message=warning.message,
-                    severity=Severity.ERROR,
-                    location=f"{warning.file_path}:{warning.line_number}",
-                )
+            print(
+                f"\n{len(errors)} errors, {len(unfixed_warnings)} warnings",
+                file=sys.stderr,
             )
-    return violations
+        elif unfixed_warnings:
+            print(f"\n{len(unfixed_warnings)} warnings", file=sys.stderr)
+
+    return 1 if errors else 0
 
 
-def load_requirements_from_repo(repo_path: Path, config: Dict) -> Dict[str, Requirement]:
-    """Load requirements from any repository path.
-
-    Args:
-        repo_path: Path to the repository root
-        config: Configuration dict (used as fallback if repo has no config)
-
-    Returns:
-        Dict mapping requirement ID to Requirement object
-    """
-    if not repo_path.exists():
-        return {}
-
-    # Find repo config
-    repo_config_path = repo_path / ".elspais.toml"
-    if repo_config_path.exists():
-        repo_config = load_config(repo_config_path)
-    else:
-        repo_config = config  # Use same config
-
-    spec_dir = repo_path / repo_config.get("directories", {}).get("spec", "spec")
-    if not spec_dir.exists():
-        return {}
-
-    pattern_config = PatternConfig.from_dict(repo_config.get("patterns", {}))
-    spec_config = repo_config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    skip_files = spec_config.get("skip_files", [])
-
-    try:
-        return parser.parse_directory(spec_dir, skip_files=skip_files)
-    except Exception:
-        return {}
-
-
-def format_requirements_json(
-    requirements: Dict[str, Requirement],
-    violations: List[RuleViolation],
-    test_data: Optional[Any] = None,
-) -> str:
-    """
-    Format requirements as JSON in hht_diary compatible format.
+def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
+    """Apply fixes to spec files.
 
     Args:
-        requirements: Dictionary of requirement ID to Requirement
-        violations: List of rule violations for error metadata
-        test_data: Optional TestMappingResult with test coverage data
+        fixable: List of fixable issues with fix metadata.
+        dry_run: If True, don't actually modify files.
 
     Returns:
-        JSON string with requirement data
+        Number of issues fixed.
     """
-    # Build violation lookup for cycle/conflict detection
-    violation_by_req: Dict[str, List[RuleViolation]] = {}
-    for v in violations:
-        if v.requirement_id not in violation_by_req:
-            violation_by_req[v.requirement_id] = []
-        violation_by_req[v.requirement_id].append(v)
+    if dry_run:
+        return 0
 
-    output = {}
-    for req_id, req in requirements.items():
-        req_violations = violation_by_req.get(req_id, [])
+    from elspais.mcp.file_mutations import add_status_to_file, update_hash_in_file
 
-        # Check for specific violation types
-        is_cycle = any("cycle" in v.rule_name.lower() for v in req_violations)
+    fixed = 0
+    for issue in fixable:
+        fix_type = issue.get("fix_type")
+        file_path = issue.get("file")
 
-        # Use the model's is_conflict flag directly, or check violations for older behavior
-        is_conflict = req.is_conflict or any(
-            "conflict" in v.rule_name.lower() or "duplicate" in v.rule_name.lower()
-            for v in req_violations
-        )
-        conflict_with = req.conflict_with if req.conflict_with else None
-        cycle_path = None
+        if not file_path:
+            continue
 
-        # Also check violations for additional context
-        for v in req_violations:
-            if "duplicate" in v.rule_name.lower() and not conflict_with:
-                # Try to extract conflicting ID from message
-                conflict_with = v.message
-            if "cycle" in v.rule_name.lower():
-                cycle_path = v.message
+        if fix_type == "hash":
+            # Fix hash (missing or mismatch)
+            error = update_hash_in_file(
+                file_path=Path(file_path),
+                req_id=issue["id"],
+                new_hash=issue["computed_hash"],
+            )
+            if error is None:
+                fixed += 1
+            else:
+                print(f"Warning: {error}", file=sys.stderr)
 
-        # Build requirement data matching hht_diary format
-        # Note: req_id includes __conflict suffix for conflicts to avoid key collision
-        output[req_id] = {
-            "title": req.title,
-            "status": req.status,
-            "level": req.level,
-            "body": req.body.strip(),
-            "rationale": (req.rationale or "").strip(),
-            "file": req.file_path.name if req.file_path else "",
-            "filePath": str(req.file_path) if req.file_path else "",
-            "line": req.line_number or 0,
-            "implements": req.implements,
-            "hash": req.hash or "",
-            "subdir": req.subdir,
-            "isConflict": is_conflict,
-            "conflictWith": conflict_with,
-            "isCycle": is_cycle,
-            "cyclePath": cycle_path,
-        }
+        elif fix_type == "status":
+            # Add missing status
+            error = add_status_to_file(
+                file_path=Path(file_path),
+                req_id=issue["id"],
+                status=issue.get("status", "Active"),
+            )
+            if error is None:
+                fixed += 1
+            else:
+                print(f"Warning: {error}", file=sys.stderr)
 
-        # Include assertions if present
-        if req.assertions:
-            output[req_id]["assertions"] = [
-                {"label": a.label, "text": a.text, "isPlaceholder": a.is_placeholder}
-                for a in req.assertions
-            ]
-
-        # Include test data if available
-        if test_data and req_id in test_data.requirement_data:
-            td = test_data.requirement_data[req_id]
-            output[req_id]["test_count"] = td.test_count
-            output[req_id]["test_passed"] = td.test_passed
-            output[req_id]["test_result_files"] = td.test_result_files
-        else:
-            # Default values when no test data
-            output[req_id]["test_count"] = 0
-            output[req_id]["test_passed"] = 0
-            output[req_id]["test_result_files"] = []
-
-    return json.dumps(output, indent=2)
+    return fixed

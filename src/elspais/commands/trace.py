@@ -1,366 +1,488 @@
 # Implements: REQ-int-d00003 (CLI Extension)
+# Implements: REQ-p00001-B, REQ-p00003-A, REQ-p00003-B
+# Implements: REQ-d00052-B, REQ-d00052-C, REQ-d00052-G
 """
 elspais.commands.trace - Generate traceability matrix command.
 
-Supports both basic matrix generation and enhanced trace-view features.
+Uses the graph-based system to generate traceability reports in various formats.
+Commands only work with graph data (zero file I/O for reading requirements).
+
+OUTPUT FORMATS:
+- markdown: Table with columns based on report preset
+- csv: Same columns, comma-separated with proper escaping
+- html: Basic styled HTML table
+- json: Full requirement data including body, assertions, hash, file_path
+- both: Generates both markdown and csv (legacy mode)
+
+REPORT PRESETS (--report):
+- minimal: ID, Title, Status only (quick overview)
+- standard: ID, Title, Level, Status, Implements (default)
+- full: All fields including Body, Assertions, Hash, Code/Test refs
+
+INTERACTIVE VIEW (--view):
+- Uses elspais.html.HTMLGenerator
+- Generates interactive HTML with collapsible hierarchy
+- Default output: traceability_view.html
 """
 
-import argparse
-import sys
-from pathlib import Path
-from typing import Dict, List
+from __future__ import annotations
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.models import Requirement
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+import argparse
+import json
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Iterator
+
+if TYPE_CHECKING:
+    from elspais.graph.builder import TraceGraph
+
+from elspais.graph import NodeKind
+
+
+@dataclass
+class ReportPreset:
+    """Configuration for a report preset."""
+
+    name: str
+    columns: list[str]
+    include_body: bool = False
+    include_assertions: bool = False
+    include_code_refs: bool = False
+    include_test_refs: bool = False
+
+
+# Define report presets
+REPORT_PRESETS = {
+    "minimal": ReportPreset(
+        name="minimal",
+        columns=["id", "title", "status"],
+    ),
+    "standard": ReportPreset(
+        name="standard",
+        columns=["id", "title", "level", "status", "implements"],
+    ),
+    "full": ReportPreset(
+        name="full",
+        columns=["id", "title", "level", "status", "implements", "hash", "file"],
+        include_body=True,
+        include_assertions=True,
+        include_code_refs=True,
+        include_test_refs=True,
+    ),
+}
+
+DEFAULT_PRESET = "standard"
+
+
+def _get_node_data(node, graph: TraceGraph) -> dict:
+    """Extract data from a node for use in formatters."""
+    # Get implements IDs via parent iteration
+    impl_ids = []
+    for parent in node.iter_parents():
+        if parent.kind == NodeKind.REQUIREMENT:
+            impl_ids.append(parent.id)
+
+    # Get code references (CODE nodes that implement this requirement)
+    code_refs = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.CODE:
+            code_refs.append(child.id)
+
+    # Get test references (TEST nodes that validate this requirement)
+    test_refs = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.TEST:
+            test_refs.append(child.id)
+
+    # Get assertions
+    assertions = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append(
+                {"label": child.get_field("label", ""), "text": child.get_label() or ""}
+            )
+
+    return {
+        "id": node.id,
+        "title": node.get_label() or "",
+        "level": node.level or "",
+        "status": node.status or "",
+        "implements": impl_ids,
+        "hash": node.hash or "",
+        "file": node.source.path if node.source else "",
+        "body": node.get_field("body", "") or "",
+        "assertions": assertions,
+        "code_refs": code_refs,
+        "test_refs": test_refs,
+    }
+
+
+def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+    """Generate markdown table. Streams one node at a time."""
+    if preset is None:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+
+    yield "# Traceability Matrix"
+    yield ""
+
+    # Build header based on preset columns
+    column_headers = {
+        "id": "ID",
+        "title": "Title",
+        "level": "Level",
+        "status": "Status",
+        "implements": "Implements",
+        "hash": "Hash",
+        "file": "File",
+    }
+    headers = [column_headers.get(col, col.title()) for col in preset.columns]
+    yield "| " + " | ".join(headers) + " |"
+    yield "|" + "|".join(["----"] * len(headers)) + "|"
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        data = _get_node_data(node, graph)
+        row_values = []
+        for col in preset.columns:
+            if col == "implements":
+                row_values.append(", ".join(data["implements"]) or "-")
+            else:
+                row_values.append(str(data.get(col, "")))
+        yield "| " + " | ".join(row_values) + " |"
+
+        # For full preset, add body and assertions after the row
+        if preset.include_body and data["body"]:
+            yield ""
+            yield "<details><summary>Body</summary>"
+            yield ""
+            yield data["body"]
+            yield ""
+            yield "</details>"
+
+        if preset.include_assertions and data["assertions"]:
+            yield ""
+            yield f"<details><summary>Assertions ({len(data['assertions'])})</summary>"
+            yield ""
+            for a in data["assertions"]:
+                yield f"- **{a['label']}**: {a['text']}"
+            yield ""
+            yield "</details>"
+
+        if preset.include_code_refs and data["code_refs"]:
+            yield ""
+            yield f"<details><summary>Code Refs ({len(data['code_refs'])})</summary>"
+            yield ""
+            for ref in data["code_refs"]:
+                yield f"- `{ref}`"
+            yield ""
+            yield "</details>"
+
+        if preset.include_test_refs and data["test_refs"]:
+            yield ""
+            yield f"<details><summary>Test Refs ({len(data['test_refs'])})</summary>"
+            yield ""
+            for ref in data["test_refs"]:
+                yield f"- `{ref}`"
+            yield ""
+            yield "</details>"
+
+
+def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+    """Generate CSV. Streams one node at a time."""
+    if preset is None:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+
+    def escape(s: str) -> str:
+        if "," in s or '"' in s or "\n" in s:
+            return '"' + s.replace('"', '""') + '"'
+        return s
+
+    # Build header based on preset columns
+    base_columns = list(preset.columns)
+    extra_columns = []
+    if preset.include_assertions:
+        extra_columns.append("assertions")
+    if preset.include_code_refs:
+        extra_columns.append("code_refs")
+    if preset.include_test_refs:
+        extra_columns.append("test_refs")
+
+    yield ",".join(base_columns + extra_columns)
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        data = _get_node_data(node, graph)
+        row_values = []
+        for col in base_columns:
+            if col == "implements":
+                row_values.append(escape(";".join(data["implements"])))
+            else:
+                row_values.append(escape(str(data.get(col, ""))))
+
+        # Add extra columns for full preset
+        if preset.include_assertions:
+            assertions_str = "; ".join(f"{a['label']}: {a['text']}" for a in data["assertions"])
+            row_values.append(escape(assertions_str))
+        if preset.include_code_refs:
+            row_values.append(escape(";".join(data["code_refs"])))
+        if preset.include_test_refs:
+            row_values.append(escape(";".join(data["test_refs"])))
+
+        yield ",".join(row_values)
+
+
+def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+    """Generate basic HTML table. Streams one node at a time."""
+    if preset is None:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+
+    def escape_html(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    yield "<!DOCTYPE html>"
+    yield "<html><head><style>"
+    yield "table { border-collapse: collapse; width: 100%; }"
+    yield "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }"
+    yield "th { background-color: #4CAF50; color: white; }"
+    yield "tr:nth-child(even) { background-color: #f2f2f2; }"
+    yield ".assertions, .refs { font-size: 0.9em; color: #666; }"
+    yield ".assertion-label { font-weight: bold; }"
+    yield "details { margin: 5px 0; }"
+    yield "summary { cursor: pointer; color: #4CAF50; }"
+    yield "</style></head><body>"
+    yield "<h1>Traceability Matrix</h1>"
+
+    # Build header based on preset columns
+    column_headers = {
+        "id": "ID",
+        "title": "Title",
+        "level": "Level",
+        "status": "Status",
+        "implements": "Implements",
+        "hash": "Hash",
+        "file": "File",
+    }
+    headers = [column_headers.get(col, col.title()) for col in preset.columns]
+
+    # Add extra columns for full preset
+    if preset.include_assertions:
+        headers.append("Assertions")
+    if preset.include_code_refs:
+        headers.append("Code Refs")
+    if preset.include_test_refs:
+        headers.append("Test Refs")
+
+    yield "<table>"
+    yield "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        data = _get_node_data(node, graph)
+        cells = []
+        for col in preset.columns:
+            if col == "implements":
+                impl_str = ", ".join(data["implements"]) or "-"
+                cells.append(f"<td>{escape_html(impl_str)}</td>")
+            elif col == "title":
+                cells.append(f"<td>{escape_html(data['title'])}</td>")
+            else:
+                cells.append(f"<td>{escape_html(str(data.get(col, '')))}</td>")
+
+        # Add extra columns for full preset
+        if preset.include_assertions:
+            if data["assertions"]:
+                assertion_html = "<br>".join(
+                    f"<span class='assertion-label'>{a['label']}:</span> {escape_html(a['text'])}"
+                    for a in data["assertions"]
+                )
+                cells.append(f"<td class='assertions'>{assertion_html}</td>")
+            else:
+                cells.append("<td>-</td>")
+
+        if preset.include_code_refs:
+            if data["code_refs"]:
+                refs_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in data["code_refs"])
+                cells.append(f"<td class='refs'>{refs_html}</td>")
+            else:
+                cells.append("<td>-</td>")
+
+        if preset.include_test_refs:
+            if data["test_refs"]:
+                refs_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in data["test_refs"])
+                cells.append(f"<td class='refs'>{refs_html}</td>")
+            else:
+                cells.append("<td>-</td>")
+
+        yield f"<tr>{''.join(cells)}</tr>"
+
+    yield "</table></body></html>"
+
+
+def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+    """Generate JSON array. Streams one node at a time."""
+    if preset is None:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+
+    yield "["
+    first = True
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not first:
+            yield ","
+        first = False
+
+        data = _get_node_data(node, graph)
+
+        # Build node dict based on preset columns
+        node_dict: dict = {}
+        for col in preset.columns:
+            if col == "file":
+                node_dict["source"] = {
+                    "path": node.source.path if node.source else None,
+                    "line": node.source.line if node.source else None,
+                }
+            else:
+                node_dict[col] = data.get(col)
+
+        # Add extra fields for full preset
+        if preset.include_body:
+            node_dict["body"] = data["body"]
+        if preset.include_assertions:
+            node_dict["assertions"] = data["assertions"]
+        if preset.include_code_refs:
+            node_dict["code_refs"] = data["code_refs"]
+        if preset.include_test_refs:
+            node_dict["test_refs"] = data["test_refs"]
+
+        yield json.dumps(node_dict, indent=2)
+    yield "]"
+
+
+# Implements: REQ-p00006-A
+def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str = "") -> str:
+    """Generate interactive HTML via HTMLGenerator."""
+    try:
+        from elspais.html import HTMLGenerator
+    except ImportError as err:
+        raise ImportError(
+            "HTMLGenerator requires the trace-view extra. "
+            "Install with: pip install elspais[trace-view]"
+        ) from err
+    generator = HTMLGenerator(graph, base_path=base_path)
+    return generator.generate(embed_content=embed_content)
 
 
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
-    REQ-int-d00003-C: Existing elspais trace --format html behavior SHALL be preserved.
+    Uses graph factory to build TraceGraph, then streams output in requested format.
     """
-    # Check if enhanced trace-view features are requested
-    use_trace_view = (
-        getattr(args, "view", False)
-        or getattr(args, "embed_content", False)
-        or getattr(args, "edit_mode", False)
-        or getattr(args, "review_mode", False)
-        or getattr(args, "server", False)
+    # Handle not-implemented features
+    for flag in ("edit_mode", "review_mode", "server"):
+        if getattr(args, flag, False):
+            print(f"Error: --{flag.replace('_', '-')} not yet implemented", file=sys.stderr)
+            return 1
+
+    # Parse --report preset
+    report_name = getattr(args, "report", None)
+    if report_name:
+        if report_name not in REPORT_PRESETS:
+            available = ", ".join(REPORT_PRESETS.keys())
+            print(f"Error: Unknown report preset '{report_name}'", file=sys.stderr)
+            print(f"Available presets: {available}", file=sys.stderr)
+            return 1
+        preset = REPORT_PRESETS[report_name]
+    else:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+
+    # Build graph using factory
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
     )
 
-    if use_trace_view:
-        return run_trace_view(args)
+    # Handle --view mode (interactive HTML)
+    if getattr(args, "view", False):
+        try:
+            # Get absolute base path for VS Code links
+            base_path = str(Path.cwd().resolve())
+            content = format_view(graph, getattr(args, "embed_content", False), base_path=base_path)
+        except ImportError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
-    # Original basic trace functionality
-    return run_basic_trace(args)
+        output_path = args.output or Path("traceability_view.html")
+        Path(output_path).write_text(content, encoding="utf-8")
 
+        if not getattr(args, "quiet", False):
+            print(f"Generated: {output_path}", file=sys.stderr)
+        return 0
 
-def run_basic_trace(args: argparse.Namespace) -> int:
-    """Run basic trace matrix generation (original behavior)."""
-    # Load configuration
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
-    else:
-        config = DEFAULT_CONFIG
+    # Handle --graph-json mode
+    if getattr(args, "graph_json", False):
+        from elspais.graph.serialize import serialize_graph
 
-    # Get spec directories
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found", file=sys.stderr)
-        return 1
-
-    # Parse requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    spec_config = config.get("spec", {})
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
-
-    if not requirements:
-        print("No requirements found.")
-        return 1
-
-    # Determine output format
-    output_format = args.format
-
-    # Generate output
-    if output_format in ["markdown", "both"]:
-        md_output = generate_markdown_matrix(requirements)
+        output = json.dumps(serialize_graph(graph), indent=2)
         if args.output:
-            if output_format == "markdown":
-                output_path = args.output
-            else:
-                output_path = args.output.with_suffix(".md")
+            Path(args.output).write_text(output, encoding="utf-8")
+            if not getattr(args, "quiet", False):
+                print(f"Generated: {args.output}", file=sys.stderr)
         else:
-            output_path = Path("traceability.md")
-        output_path.write_text(md_output)
-        print(f"Generated: {output_path}")
+            print(output)
+        return 0
 
-    if output_format in ["html", "both"]:
-        html_output = generate_html_matrix(requirements)
-        if args.output:
-            if output_format == "html":
-                output_path = args.output
-            else:
-                output_path = args.output.with_suffix(".html")
-        else:
-            output_path = Path("traceability.html")
-        output_path.write_text(html_output)
-        print(f"Generated: {output_path}")
+    # Select formatter based on format
+    fmt = getattr(args, "format", "markdown")
 
-    if output_format == "csv":
-        csv_output = generate_csv_matrix(requirements)
-        output_path = args.output or Path("traceability.csv")
-        output_path.write_text(csv_output)
-        print(f"Generated: {output_path}")
+    # Handle legacy "both" format
+    if fmt == "both":
+        # Generate both markdown and csv
+        output_base = args.output or Path("traceability")
+        if isinstance(output_base, str):
+            output_base = Path(output_base)
 
-    return 0
+        md_path = output_base.with_suffix(".md")
+        csv_path = output_base.with_suffix(".csv")
 
+        with open(md_path, "w", encoding="utf-8") as f:
+            for line in format_markdown(graph, preset):
+                f.write(line + "\n")
 
-def run_trace_view(args: argparse.Namespace) -> int:
-    """Run enhanced trace-view features.
+        with open(csv_path, "w", encoding="utf-8") as f:
+            for line in format_csv(graph, preset):
+                f.write(line + "\n")
 
-    REQ-int-d00003-A: Trace-view features SHALL be accessible via elspais trace command.
-    REQ-int-d00003-B: New flags SHALL include: --view, --embed-content, --edit-mode,
-                      --review-mode, --server.
-    """
-    # Check if starting review server
-    if args.server:
-        return run_review_server(args)
+        if not getattr(args, "quiet", False):
+            print(f"Generated: {md_path}", file=sys.stderr)
+            print(f"Generated: {csv_path}", file=sys.stderr)
+        return 0
 
-    # Import trace_view (requires jinja2)
-    try:
-        from elspais.trace_view import TraceViewGenerator
-    except ImportError as e:
-        print("Error: trace-view features require additional dependencies.", file=sys.stderr)
-        print("Install with: pip install elspais[trace-view]", file=sys.stderr)
-        if args.verbose if hasattr(args, "verbose") else False:
-            print(f"Import error: {e}", file=sys.stderr)
+    # Single format output
+    formatters = {
+        "markdown": format_markdown,
+        "csv": format_csv,
+        "html": format_html,
+        "json": format_json,
+    }
+
+    if fmt not in formatters:
+        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
         return 1
 
-    # Load configuration
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
+    line_generator = formatters[fmt](graph, preset)
+    output_path = args.output
+
+    # Stream output line by line
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            for line in line_generator:
+                f.write(line + "\n")
+        if not getattr(args, "quiet", False):
+            print(f"Generated: {output_path}", file=sys.stderr)
     else:
-        config = DEFAULT_CONFIG
-
-    # Determine spec directory
-    spec_dir = args.spec_dir
-    if not spec_dir:
-        spec_dirs = get_spec_directories(None, config)
-        spec_dir = spec_dirs[0] if spec_dirs else Path.cwd() / "spec"
-
-    repo_root = spec_dir.parent if spec_dir.name == "spec" else spec_dir.parent.parent
-
-    # Get implementation directories from config
-    impl_dirs = []
-    dirs_config = config.get("directories", {})
-    code_dirs = dirs_config.get("code", [])
-    for code_dir in code_dirs:
-        impl_path = repo_root / code_dir
-        if impl_path.exists():
-            impl_dirs.append(impl_path)
-
-    # Create generator
-    generator = TraceViewGenerator(
-        spec_dir=spec_dir,
-        impl_dirs=impl_dirs,
-        sponsor=getattr(args, "sponsor", None),
-        mode=getattr(args, "mode", "core"),
-        repo_root=repo_root,
-        config=config,
-    )
-
-    # Determine output format
-    # --view implies HTML
-    output_format = "html" if args.view else args.format
-    if output_format == "both":
-        output_format = "html"
-
-    # Determine output file
-    output_file = args.output
-    if output_file is None:
-        if output_format == "html":
-            output_file = Path("traceability_matrix.html")
-        elif output_format == "csv":
-            output_file = Path("traceability_matrix.csv")
-        else:
-            output_file = Path("traceability_matrix.md")
-
-    # Generate
-    quiet = getattr(args, "quiet", False)
-    generator.generate(
-        format=output_format,
-        output_file=output_file,
-        embed_content=getattr(args, "embed_content", False),
-        edit_mode=getattr(args, "edit_mode", False),
-        review_mode=getattr(args, "review_mode", False),
-        quiet=quiet,
-    )
+        for line in line_generator:
+            print(line)
 
     return 0
-
-
-def run_review_server(args: argparse.Namespace) -> int:
-    """Start the review server.
-
-    REQ-int-d00002-C: Review server SHALL require flask, flask-cors via
-                      elspais[trace-review] extra.
-    """
-    try:
-        from elspais.trace_view.review import FLASK_AVAILABLE, create_app
-    except ImportError:
-        print("Error: Review server requires additional dependencies.", file=sys.stderr)
-        print("Install with: pip install elspais[trace-review]", file=sys.stderr)
-        return 1
-
-    if not FLASK_AVAILABLE:
-        print("Error: Review server requires Flask.", file=sys.stderr)
-        print("Install with: pip install elspais[trace-review]", file=sys.stderr)
-        return 1
-
-    # Determine repo root
-    spec_dir = args.spec_dir
-    if spec_dir:
-        repo_root = spec_dir.parent if spec_dir.name == "spec" else spec_dir.parent.parent
-    else:
-        repo_root = Path.cwd()
-
-    port = getattr(args, "port", 8080)
-
-    print(
-        f"""
-======================================
-  elspais Review Server
-======================================
-
-Repository: {repo_root}
-Server:     http://localhost:{port}
-
-Press Ctrl+C to stop
-"""
-    )
-
-    app = create_app(repo_root, auto_sync=True)
-    try:
-        app.run(host="0.0.0.0", port=port, debug=False)
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
-
-    return 0
-
-
-def generate_markdown_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate Markdown traceability matrix."""
-    lines = ["# Traceability Matrix", "", "## Requirements Hierarchy", ""]
-
-    # Group by type
-    prd_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["PRD", "PRODUCT"]}
-    ops_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["OPS", "OPERATIONS"]}
-    dev_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["DEV", "DEVELOPMENT"]}
-
-    # PRD table
-    if prd_reqs:
-        lines.extend(["### Product Requirements", ""])
-        lines.append("| ID | Title | Status | Implemented By |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(prd_reqs.items()):
-            impl_by = find_implementers(req_id, requirements)
-            impl_str = ", ".join(impl_by) if impl_by else "-"
-            lines.append(f"| {req_id} | {req.title} | {req.status} | {impl_str} |")
-        lines.append("")
-
-    # OPS table
-    if ops_reqs:
-        lines.extend(["### Operations Requirements", ""])
-        lines.append("| ID | Title | Implements | Status |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(ops_reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            lines.append(f"| {req_id} | {req.title} | {impl_str} | {req.status} |")
-        lines.append("")
-
-    # DEV table
-    if dev_reqs:
-        lines.extend(["### Development Requirements", ""])
-        lines.append("| ID | Title | Implements | Status |")
-        lines.append("|---|---|---|---|")
-        for req_id, req in sorted(dev_reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            lines.append(f"| {req_id} | {req.title} | {impl_str} | {req.status} |")
-        lines.append("")
-
-    lines.extend(["---", "*Generated by elspais*"])
-    return "\n".join(lines)
-
-
-def generate_html_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate HTML traceability matrix."""
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Traceability Matrix</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-        th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
-        th { background: #f5f5f5; }
-        tr:hover { background: #f9f9f9; }
-        .status-active { color: green; }
-        .status-draft { color: orange; }
-        .status-deprecated { color: red; }
-    </style>
-</head>
-<body>
-    <h1>Traceability Matrix</h1>
-"""
-
-    # Group by type
-    prd_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["PRD", "PRODUCT"]}
-    ops_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["OPS", "OPERATIONS"]}
-    dev_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["DEV", "DEVELOPMENT"]}
-
-    for title, reqs in [
-        ("Product Requirements", prd_reqs),
-        ("Operations Requirements", ops_reqs),
-        ("Development Requirements", dev_reqs),
-    ]:
-        if not reqs:
-            continue
-
-        html += f"    <h2>{title}</h2>\n"
-        html += "    <table>\n"
-        html += "        <tr><th>ID</th><th>Title</th><th>Implements</th><th>Status</th></tr>\n"
-
-        for req_id, req in sorted(reqs.items()):
-            impl_str = ", ".join(req.implements) if req.implements else "-"
-            status_class = f"status-{req.status.lower()}"
-            subdir_attr = f'data-subdir="{req.subdir}"'
-            html += (
-                f"        <tr {subdir_attr}><td>{req_id}</td><td>{req.title}</td>"
-                f'<td>{impl_str}</td><td class="{status_class}">{req.status}</td></tr>\n'
-            )
-
-        html += "    </table>\n"
-
-    html += """    <hr>
-    <p><em>Generated by elspais</em></p>
-</body>
-</html>"""
-    return html
-
-
-def generate_csv_matrix(requirements: Dict[str, Requirement]) -> str:
-    """Generate CSV traceability matrix."""
-    lines = ["ID,Title,Level,Status,Implements,Subdir"]
-
-    for req_id, req in sorted(requirements.items()):
-        impl_str = ";".join(req.implements) if req.implements else ""
-        title = req.title.replace('"', '""')
-        lines.append(
-            f'"{req_id}","{title}","{req.level}","{req.status}","{impl_str}","{req.subdir}"'
-        )
-
-    return "\n".join(lines)
-
-
-def find_implementers(req_id: str, requirements: Dict[str, Requirement]) -> List[str]:
-    """Find requirements that implement the given requirement."""
-    implementers = []
-    short_id = req_id.split("-")[-1] if "-" in req_id else req_id
-
-    for other_id, other_req in requirements.items():
-        for impl in other_req.implements:
-            if impl == req_id or impl == short_id or impl.endswith(short_id):
-                implementers.append(other_id)
-                break
-
-    return implementers

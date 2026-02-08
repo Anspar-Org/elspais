@@ -1,203 +1,237 @@
-"""
-tests/test_doc_sync.py - Documentation-Implementation Synchronization Tests
+"""Tests for documentation files and markdown renderer.
 
-These tests verify that documentation matches the actual implementation,
-preventing drift between docs and code.
+Ensures docs/cli/ files exist, have required sections, and that the
+markdown renderer handles all expected patterns correctly.
 """
 
-import re
+from __future__ import annotations
+
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-# Project root
-PROJECT_ROOT = Path(__file__).parent.parent
-README = PROJECT_ROOT / "README.md"
-DOCS_DIR = PROJECT_ROOT / "docs"
-CONFIG_DOCS = DOCS_DIR / "configuration.md"
-RULES_DOCS = DOCS_DIR / "rules.md"
+from elspais.utilities.docs_loader import (
+    TOPIC_ORDER,
+    find_docs_dir,
+    get_available_topics,
+    load_all_topics,
+    load_topic,
+)
+from elspais.utilities.md_renderer import MarkdownRenderer, render_markdown
 
 
-class TestCLIDocumentation:
-    """Tests that CLI commands and options are documented."""
+class TestDocsExistence:
+    """Test that all documentation files exist."""
 
-    def test_all_cli_commands_in_readme(self):
-        """Verify all CLI subcommands are listed in README."""
-        # Get commands from CLI
+    def test_docs_dir_found(self):
+        """docs/cli directory should be locatable."""
+        docs_dir = find_docs_dir()
+        assert docs_dir is not None, "docs/cli directory not found"
+        assert docs_dir.is_dir(), f"{docs_dir} is not a directory"
+
+    @pytest.mark.parametrize("topic", TOPIC_ORDER)
+    def test_topic_file_exists(self, topic: str):
+        """Each topic should have a corresponding markdown file."""
+        docs_dir = find_docs_dir()
+        assert docs_dir is not None
+        topic_file = docs_dir / f"{topic}.md"
+        assert topic_file.is_file(), f"Missing documentation file: {topic}.md"
+
+    def test_all_topics_available(self):
+        """get_available_topics should return all expected topics."""
+        available = get_available_topics()
+        assert set(available) == set(TOPIC_ORDER), f"Expected topics {TOPIC_ORDER}, got {available}"
+
+
+class TestDocsContent:
+    """Test that documentation files have required content."""
+
+    @pytest.mark.parametrize("topic", TOPIC_ORDER)
+    def test_topic_has_heading(self, topic: str):
+        """Each topic file should start with a level-1 heading."""
+        content = load_topic(topic)
+        assert content is not None, f"Could not load {topic}"
+        lines = [line.strip() for line in content.split("\n") if line.strip()]
+        assert len(lines) > 0, f"{topic}.md is empty"
+        assert lines[0].startswith("# "), f"{topic}.md should start with # heading"
+
+    @pytest.mark.parametrize("topic", TOPIC_ORDER)
+    def test_topic_has_subheadings(self, topic: str):
+        """Each topic file should have at least one ## subheading."""
+        content = load_topic(topic)
+        assert content is not None
+        assert "## " in content, f"{topic}.md should have at least one ## subheading"
+
+    def test_quickstart_has_essential_sections(self):
+        """quickstart.md should have initialize, validate, and next steps."""
+        content = load_topic("quickstart")
+        assert content is not None
+        assert "Initialize" in content, "quickstart should mention initialization"
+        assert "elspais init" in content, "quickstart should show init command"
+        assert "elspais validate" in content, "quickstart should show validate command"
+
+    def test_format_has_structure_section(self):
+        """format.md should explain requirement structure."""
+        content = load_topic("format")
+        assert content is not None
+        assert "REQ-" in content, "format should show REQ- ID pattern"
+        assert "Level" in content, "format should explain Level field"
+        assert "Hash" in content, "format should explain Hash"
+
+    def test_hierarchy_has_levels(self):
+        """hierarchy.md should explain PRD, OPS, DEV."""
+        content = load_topic("hierarchy")
+        assert content is not None
+        assert "PRD" in content, "hierarchy should mention PRD"
+        assert "OPS" in content, "hierarchy should mention OPS"
+        assert "DEV" in content, "hierarchy should mention DEV"
+
+    def test_assertions_has_keywords(self):
+        """assertions.md should explain normative keywords."""
+        content = load_topic("assertions")
+        assert content is not None
+        assert "SHALL" in content, "assertions should explain SHALL"
+        assert "SHALL NOT" in content, "assertions should explain SHALL NOT"
+
+    def test_commands_has_all_commands(self):
+        """commands.md should document all CLI commands."""
+        content = load_topic("commands")
+        assert content is not None
+        # Check for key commands
+        for cmd in ["validate", "trace", "hash", "edit", "config", "init"]:
+            assert f"## {cmd}" in content, f"commands should document {cmd}"
+        # Check for global options
+        assert "Global Options" in content, "commands should have global options"
+
+    def test_all_topics_concatenation(self):
+        """load_all_topics should return all topics concatenated."""
+        all_content = load_all_topics()
+        assert len(all_content) > 0, "load_all_topics returned empty"
+        # Should contain content from all topics
+        for topic in TOPIC_ORDER:
+            topic_content = load_topic(topic)
+            assert topic_content is not None
+            # First heading from each topic should appear in all_content
+            first_line = topic_content.strip().split("\n")[0]
+            assert first_line in all_content, f"all_topics missing content from {topic}"
+
+
+class TestMarkdownRenderer:
+    """Test markdown-to-ANSI rendering."""
+
+    def test_render_heading(self):
+        """Level-1 heading should render with box borders."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("# My Title")
+        assert "═" in result, "Heading should have box border"
+        assert "My Title" in result
+
+    def test_render_heading_no_color(self):
+        """Heading without color should have no ANSI codes."""
+        renderer = MarkdownRenderer(use_color=False)
+        result = renderer.render("# My Title")
+        assert "\033[" not in result, "Should have no ANSI codes"
+        assert "My Title" in result
+
+    def test_render_subheading(self):
+        """Level-2 heading should render with underline."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("## Subheading")
+        assert "─" in result, "Subheading should have underline"
+        assert "Subheading" in result
+
+    def test_render_code_block(self):
+        """Code blocks should be indented and dimmed."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("```\ncode here\n```")
+        # Code block content should be present
+        assert "code here" in result
+        # Should have DIM escape code when colors enabled
+        assert "\033[2m" in result, "Code should be dimmed"
+
+    def test_render_bold(self):
+        """Bold text should use BOLD escape code."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("This is **bold** text")
+        assert "\033[1m" in result, "Bold should use BOLD code"
+        assert "bold" in result
+
+    def test_render_inline_code(self):
+        """Inline code should use CYAN."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("Use `command` here")
+        assert "\033[36m" in result, "Inline code should be CYAN"
+        assert "command" in result
+
+    def test_render_command_with_comment(self):
+        """Command lines with comments should have green $ and dim comment."""
+        renderer = MarkdownRenderer(use_color=True)
+        result = renderer.render("  $ elspais init  # Creates config")
+        assert "\033[32m" in result, "$ should be green"
+        assert "\033[2m" in result, "Comment should be dim"
+
+    def test_convenience_function_auto_color(self):
+        """render_markdown should auto-detect TTY."""
+        # When forced off, should have no ANSI codes
+        result = render_markdown("# Test", use_color=False)
+        assert "\033[" not in result
+
+    def test_render_preserves_blank_lines(self):
+        """Blank lines in content should be preserved."""
+        content = "# Title\n\nParagraph one.\n\nParagraph two."
+        result = render_markdown(content, use_color=False)
+        # Should have blank lines between content
+        assert "\n\n" in result or result.count("\n") >= 4
+
+
+class TestCLIIntegration:
+    """Test CLI docs command integration."""
+
+    def test_docs_quickstart(self):
+        """elspais docs quickstart should succeed."""
         result = subprocess.run(
-            [sys.executable, "-m", "elspais", "--help"],
+            [sys.executable, "-m", "elspais", "docs", "quickstart", "--plain"],
             capture_output=True,
             text=True,
-            cwd=PROJECT_ROOT,
+            timeout=10,
         )
-        assert result.returncode == 0, f"CLI help failed: {result.stderr}"
+        assert result.returncode == 0, f"Failed: {result.stderr}"
+        assert "ELSPAIS" in result.stdout
 
-        # Parse commands from help output (after "Commands:" section)
-        help_text = result.stdout
-        commands_section = help_text.split("Commands:")[1] if "Commands:" in help_text else ""
+    def test_docs_all(self):
+        """elspais docs all should show all topics."""
+        result = subprocess.run(
+            [sys.executable, "-m", "elspais", "docs", "all", "--plain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, f"Failed: {result.stderr}"
+        # Should contain headings from multiple topics
+        assert "QUICK START" in result.stdout
+        assert "HIERARCHY" in result.stdout
+        assert "CONFIGURATION" in result.stdout
 
-        # Extract command names (first word on each line in commands section)
-        cli_commands = set()
-        for line in commands_section.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("-"):
-                cmd = line.split()[0] if line.split() else ""
-                if cmd and cmd.isalpha():
-                    cli_commands.add(cmd)
+    def test_docs_plain_no_ansi(self):
+        """--plain should produce output without ANSI codes."""
+        result = subprocess.run(
+            [sys.executable, "-m", "elspais", "docs", "format", "--plain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0
+        assert "\033[" not in result.stdout, "Plain output should have no ANSI codes"
 
-        # Check README contains each command
-        readme_text = README.read_text()
-
-        missing = []
-        for cmd in cli_commands:
-            # Look for command in the CLI reference section
-            if f"  {cmd}" not in readme_text and f" {cmd} " not in readme_text:
-                missing.append(cmd)
-
-        assert not missing, f"Commands missing from README: {missing}"
-
-    def test_edit_command_documented(self):
-        """Verify the edit command is documented in README."""
-        readme_text = README.read_text()
-        assert "edit" in readme_text.lower(), "edit command should be documented in README"
-
-    def test_global_options_documented(self):
-        """Verify global CLI options are documented."""
-        readme_text = README.read_text()
-
-        expected_options = ["--config", "--spec-dir", "--verbose", "--quiet", "--version"]
-        for opt in expected_options:
-            assert opt in readme_text, f"Global option {opt} not documented in README"
-
-
-class TestConfigurationDocumentation:
-    """Tests that configuration options are documented."""
-
-    def test_no_deprecated_require_acceptance_in_docs(self):
-        """Verify deprecated require_acceptance is not in docs."""
-        for doc_file in DOCS_DIR.glob("*.md"):
-            content = doc_file.read_text()
-            # Allow it only in historical context or explicit deprecation notice
-            occurrences = content.count("require_acceptance")
-            if occurrences > 0:
-                # Check if it's in a deprecation context
-                assert "deprecated" in content.lower() or "legacy" in content.lower(), \
-                    f"Found require_acceptance in {doc_file.name} without deprecation context"
-
-    def test_no_deprecated_require_acceptance_in_code(self):
-        """Verify deprecated require_acceptance is not used in production code."""
-        from elspais.config.defaults import DEFAULT_CONFIG
-
-        # Flatten config to string for easy search
-        config_str = str(DEFAULT_CONFIG)
-        assert "require_acceptance" not in config_str, \
-            "require_acceptance should not be in DEFAULT_CONFIG"
-
-    def test_require_assertions_in_defaults(self):
-        """Verify require_assertions is the current config option."""
-        from elspais.config.defaults import DEFAULT_CONFIG
-
-        format_rules = DEFAULT_CONFIG.get("rules", {}).get("format", {})
-        assert "require_assertions" in format_rules, \
-            "require_assertions should be in DEFAULT_CONFIG"
-
-    def test_id_template_default_matches_docs(self):
-        """Verify id_template default in docs matches defaults.py."""
-        from elspais.config.defaults import DEFAULT_CONFIG
-
-        actual_default = DEFAULT_CONFIG.get("patterns", {}).get("id_template", "")
-        doc_content = CONFIG_DOCS.read_text()
-
-        # The documented default should match actual
-        assert actual_default in doc_content, \
-            f"Default id_template '{actual_default}' not found in docs/configuration.md"
-
-
-class TestRulesDocumentation:
-    """Tests that validation rules are documented."""
-
-    def test_core_rules_documented(self):
-        """Verify core rule concepts are documented in rules.md."""
-        rules_content = RULES_DOCS.read_text()
-
-        # Check that key rule concepts are documented
-        # The actual rule names may appear in different formats in docs
-        required_concepts = [
-            ("hierarchy", "implements"),  # hierarchy.implements - allowed relationships
-            ("hierarchy", "circular"),    # hierarchy.circular - cycle detection
-            ("hierarchy", "orphan"),      # hierarchy.orphan - orphaned requirements
-            ("hash", "mismatch"),         # hash.mismatch - hash verification
-            ("link", "broken"),           # link.broken - broken references
-            ("format", "require_assertions"),  # format.require_assertions
-            ("format", "labels_unique"),  # format.labels_unique
-            ("format", "labels_sequential"),  # format.labels_sequential
-        ]
-
-        missing = []
-        for category, concept in required_concepts:
-            # Check if both category and concept appear in docs
-            # They may be in different formats: [category.concept], category.concept, etc.
-            if category not in rules_content.lower() or concept not in rules_content.lower():
-                missing.append(f"{category}.{concept}")
-
-        assert not missing, f"Rule concepts not documented in rules.md: {missing}"
-
-    def test_format_status_valid_documented(self):
-        """Verify format.status_valid rule is documented."""
-        rules_content = RULES_DOCS.read_text()
-        assert "status_valid" in rules_content, \
-            "format.status_valid rule should be documented"
-
-
-class TestInitCommand:
-    """Tests for init command documentation."""
-
-    def test_init_associated_syntax_correct(self):
-        """Verify init command syntax for associated repos is correct."""
-        readme_text = README.read_text()
-
-        # The correct syntax uses --associated-prefix flag
-        assert "--associated-prefix" in readme_text, \
-            "README should show --associated-prefix flag for init command"
-
-        # Should NOT have the incorrect "init --type associated CAL" syntax
-        incorrect_pattern = r"init\s+--type\s+associated\s+[A-Z]{2,4}\s"
-        assert not re.search(incorrect_pattern, readme_text), \
-            "README has incorrect init syntax (CAL should be --associated-prefix CAL)"
-
-    def test_init_templates_use_current_config(self):
-        """Verify init command templates use current config options."""
-        from elspais.commands.init import generate_config
-
-        core_config = generate_config("core")
-        associated_config = generate_config("associated", "TEST")
-
-        # Should use require_assertions, not require_acceptance
-        assert "require_assertions" in core_config, \
-            "Core template should use require_assertions"
-        assert "require_acceptance" not in core_config, \
-            "Core template should not use deprecated require_acceptance"
-
-        assert "require_assertions" in associated_config, \
-            "Associated template should use require_assertions"
-
-
-class TestUnimplementedFeatures:
-    """Tests that unimplemented features are marked as such."""
-
-    def test_combined_flag_marked_as_planned(self):
-        """Verify --combined flag is marked as planned/unimplemented."""
-        multi_repo_docs = DOCS_DIR / "multi-repo.md"
-        content = multi_repo_docs.read_text()
-
-        # If --combined is mentioned, it should be marked as planned
-        if "--combined" in content:
-            assert "planned" in content.lower() or "not yet" in content.lower(), \
-                "--combined flag should be marked as planned/not yet implemented"
-
-
-# Run verification as standalone script too
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    @pytest.mark.parametrize("topic", TOPIC_ORDER)
+    def test_each_topic_loads(self, topic: str):
+        """Each topic should be loadable via CLI."""
+        result = subprocess.run(
+            [sys.executable, "-m", "elspais", "docs", topic, "--plain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, f"Failed for {topic}: {result.stderr}"
+        assert len(result.stdout) > 100, f"{topic} output too short"

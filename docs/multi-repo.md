@@ -42,7 +42,7 @@ path = "../core-platform"
 
 ## Directory Structure
 
-```
+```text
 organization/
 ├── core-platform/           # Core repository
 │   ├── .elspais.toml       # type = "core"
@@ -105,7 +105,7 @@ elspais validate
 
 ### Validation Output
 
-```
+```text
 ✓ Validating associated requirements (CAL)
 ✓ Loading core requirements from ../core-platform
 ✓ 15 associated requirements found
@@ -139,6 +139,7 @@ elspais reformat-with-claude --start-req REQ-p00001 --mode combined
 ```
 
 **Mode Options**:
+
 - `combined` (default): Load both local and core/associated repository requirements
 - `core-only`: Load only core/associated repository requirements
 - `local-only`: Load only local requirements, ignore cross-repository dependencies
@@ -205,7 +206,7 @@ cross_repo_implements = true
 
 Alternative to config, create a `.core-repo` file:
 
-```
+```text
 ../core-platform
 ```
 

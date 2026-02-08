@@ -1,3 +1,4 @@
+# Implements: REQ-p00001-A
 """
 elspais.cli - Command-line interface.
 
@@ -15,9 +16,12 @@ from elspais.commands import (
     changed,
     config_cmd,
     edit,
+    example_cmd,
     hash_cmd,
+    health,
     index,
     init,
+    link_suggest,
     reformat_cmd,
     rules_cmd,
     trace,
@@ -40,8 +44,17 @@ Examples:
   elspais hash update           # Update all requirement hashes
   elspais changed               # Show uncommitted spec changes
   elspais analyze hierarchy     # Show requirement hierarchy tree
-  elspais config show           # View current configuration
-  elspais init                  # Create .elspais.toml configuration
+
+Configuration:
+  elspais init                  # Create .elspais.toml in current directory
+  elspais config path           # Show config file location
+  elspais config show           # View all settings
+  elspais config --help         # Configuration guide with examples
+
+Documentation:
+  elspais example               # Quick requirement format reference
+  elspais example --full        # Full specification document
+  elspais completion            # Shell tab-completion setup
 
 For detailed command help: elspais <command> --help
         """,
@@ -104,13 +117,12 @@ Common rules to skip:
     validate_parser.add_argument(
         "--fix",
         action="store_true",
-        help="Auto-fix fixable issues",
+        help="Auto-fix issues that can be corrected programmatically (hashes, status)",
     )
     validate_parser.add_argument(
-        "--core-repo",
-        type=Path,
-        help="Path to core repository (for associated repo validation)",
-        metavar="PATH",
+        "--dry-run",
+        action="store_true",
+        help="Show what would be fixed without making changes (use with --fix)",
     )
     validate_parser.add_argument(
         "--skip-rule",
@@ -124,21 +136,59 @@ Common rules to skip:
         action="store_true",
         help="Output requirements as JSON (hht_diary compatible format)",
     )
-    validate_parser.add_argument(
+    # NOTE: --tests, --no-tests, --mode removed (dead code - never implemented)
+
+    # health command
+    health_parser = subparsers.add_parser(
+        "health",
+        help="Check repository and configuration health",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais health              # Run all health checks
+  elspais health --config     # Check config only
+  elspais health --spec       # Check spec files only
+  elspais health --code       # Check code references only
+  elspais health --tests      # Check test mappings only
+  elspais health -j           # Output JSON for tooling
+  elspais health -v           # Verbose output with details
+
+Checks performed:
+  CONFIG: TOML syntax, required fields, pattern tokens, hierarchy rules, paths
+  SPEC:   File parsing, duplicate IDs, reference resolution, orphans
+  CODE:   Code→REQ reference validation, coverage statistics
+  TESTS:  Test→REQ mappings, result status, coverage statistics
+""",
+    )
+    health_parser.add_argument(
+        "--config",
+        dest="config_only",
+        action="store_true",
+        help="Run configuration checks only",
+    )
+    health_parser.add_argument(
+        "--spec",
+        dest="spec_only",
+        action="store_true",
+        help="Run spec file checks only",
+    )
+    health_parser.add_argument(
+        "--code",
+        dest="code_only",
+        action="store_true",
+        help="Run code reference checks only",
+    )
+    health_parser.add_argument(
         "--tests",
+        dest="tests_only",
         action="store_true",
-        help="Force test scanning even if disabled in config",
+        help="Run test mapping checks only",
     )
-    validate_parser.add_argument(
-        "--no-tests",
+    health_parser.add_argument(
+        "-j",
+        "--json",
         action="store_true",
-        help="Skip test scanning",
-    )
-    validate_parser.add_argument(
-        "--mode",
-        choices=["core", "combined"],
-        default="combined",
-        help="Scope: core (this repo only), combined (include sponsor repos)",
+        help="Output as JSON",
     )
 
     # trace command
@@ -184,23 +234,19 @@ Common rules to skip:
         action="store_true",
         help="Start review server (requires trace-review extra)",
     )
+    # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
+    # Graph-based trace options
     trace_parser.add_argument(
-        "--port",
-        type=int,
-        default=8080,
-        help="Port for review server (default: 8080)",
+        "--graph-json",
+        action="store_true",
+        help="Output graph structure as JSON",
     )
     trace_parser.add_argument(
-        "--mode",
-        choices=["core", "sponsor", "combined"],
-        default="core",
-        help="Report mode: core, sponsor, or combined (default: core)",
+        "--report",
+        choices=["minimal", "standard", "full"],
+        help="Report preset to use (default: standard)",
     )
-    trace_parser.add_argument(
-        "--sponsor",
-        help="Sponsor name for sponsor-specific reports",
-        metavar="NAME",
-    )
+    # NOTE: --depth removed (dead code - never implemented)
 
     # hash command
     hash_parser = subparsers.add_parser(
@@ -320,6 +366,38 @@ Common rules to skip:
         action="store_true",
         help="Overwrite existing configuration",
     )
+    init_parser.add_argument(
+        "--template",
+        action="store_true",
+        help="Create an example requirement file in spec/",
+    )
+
+    # example command
+    example_parser = subparsers.add_parser(
+        "example",
+        help="Display requirement format examples and templates",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Subcommands:
+  elspais example             Quick reference (default)
+  elspais example requirement Full requirement template with all sections
+  elspais example journey     User journey template
+  elspais example assertion   Assertion rules and examples
+  elspais example ids         Show ID patterns from current config
+  elspais example --full      Display spec/requirements-spec.md (if exists)
+""",
+    )
+    example_parser.add_argument(
+        "example_type",
+        nargs="?",
+        choices=["requirement", "journey", "assertion", "ids"],
+        help="Example type to display",
+    )
+    example_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Display the full requirements specification file",
+    )
 
     # edit command
     edit_parser = subparsers.add_parser(
@@ -334,7 +412,7 @@ Examples:
   elspais edit --from-json edits.json
 
 JSON batch format:
-  {"edits": [{"req_id": "...", "status": "...", "implements": [...]}]}
+  [{"req_id": "...", "status": "...", "implements": [...]}]
 """,
     )
     edit_parser.add_argument(
@@ -377,6 +455,39 @@ JSON batch format:
     config_parser = subparsers.add_parser(
         "config",
         help="View and modify configuration (show, get, set, ...)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Configuration File:
+  elspais looks for .elspais.toml in the current directory or parent directories.
+  Create one with: elspais init
+
+  Location: elspais config path
+  View all: elspais config show
+
+Quick Start (.elspais.toml):
+  [project]
+  name = "my-project"
+  spec_dir = "spec"              # Where requirement files live
+
+  [patterns]
+  prefix = "REQ"                 # Requirement ID prefix
+  separator = "-"                # ID separator (REQ-p00001)
+
+  [rules]
+  strict_mode = false            # Strict implements semantics
+
+  [rules.hierarchy]
+  allowed = ["dev -> ops, prd", "ops -> prd"]
+
+Common Commands:
+  elspais config show            # View current config
+  elspais config get patterns.prefix
+  elspais config set project.name "MyApp"
+  elspais config path            # Show config file location
+
+Full Documentation:
+  See docs/configuration.md for all options.
+""",
     )
     config_subparsers = config_parser.add_subparsers(dest="config_action")
 
@@ -494,51 +605,107 @@ JSON batch format:
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
 
-    # reformat-with-claude command
-    reformat_parser = subparsers.add_parser(
+    # reformat-with-claude command (NOT YET IMPLEMENTED - placeholder for future feature)
+    subparsers.add_parser(
         "reformat-with-claude",
-        help="Reformat requirements using AI (Acceptance Criteria -> Assertions)",
+        help="[NOT IMPLEMENTED] Reformat requirements using AI (Acceptance Criteria -> Assertions)",
     )
-    reformat_parser.add_argument(
-        "--start-req",
-        help="Starting requirement ID (default: all PRD requirements)",
-        metavar="ID",
+    # NOTE: All arguments removed - command not yet implemented
+    # See src/elspais/commands/reformat_cmd.py for planned features
+
+    # docs command - comprehensive user documentation
+    docs_parser = subparsers.add_parser(
+        "docs",
+        help="Read the user guide (topics: quickstart, format, hierarchy, ...)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Available Topics:
+  quickstart   Getting started with elspais (default)
+  format       Requirement file format and structure
+  hierarchy    PRD → OPS → DEV levels and implements
+  assertions   Writing testable assertions with SHALL
+  traceability Linking requirements to code and tests
+  linking      How to link code and tests to requirements
+  validation   Running validation and fixing issues
+  git          Change detection and git integration
+  config       Configuration file reference
+  mcp          MCP server for AI integration
+  all          Show complete documentation
+
+Examples:
+  elspais docs                  # Quick start guide
+  elspais docs format           # Requirement format reference
+  elspais docs all              # Complete documentation
+  elspais docs all --no-pager   # Disable pager
+""",
     )
-    reformat_parser.add_argument(
-        "--depth",
-        type=int,
-        help="Maximum traversal depth (default: unlimited)",
+    docs_parser.add_argument(
+        "topic",
+        nargs="?",
+        default="quickstart",
+        choices=[
+            "quickstart",
+            "format",
+            "hierarchy",
+            "assertions",
+            "traceability",
+            "linking",
+            "validation",
+            "git",
+            "config",
+            "commands",
+            "health",
+            "mcp",
+            "all",
+        ],
+        help="Documentation topic (default: quickstart)",
     )
-    reformat_parser.add_argument(
-        "--dry-run",
+    docs_parser.add_argument(
+        "--plain",
         action="store_true",
-        help="Preview changes without applying",
+        help="Plain text output (no ANSI colors)",
     )
-    reformat_parser.add_argument(
-        "--backup",
+    docs_parser.add_argument(
+        "--no-pager",
         action="store_true",
-        help="Create .bak files before editing",
+        help="Disable paging (print directly to stdout)",
     )
-    reformat_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Reformat even if already in new format",
+
+    # completion command - shell tab-completion setup
+    completion_parser = subparsers.add_parser(
+        "completion",
+        help="Generate shell tab-completion scripts",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Shell Completion Setup:
+
+  First, install the completion extra:
+    pip install elspais[completion]
+
+  Bash (add to ~/.bashrc):
+    eval "$(register-python-argcomplete elspais)"
+
+  Zsh (add to ~/.zshrc):
+    autoload -U bashcompinit
+    bashcompinit
+    eval "$(register-python-argcomplete elspais)"
+
+  Fish (add to ~/.config/fish/config.fish):
+    register-python-argcomplete --shell fish elspais | source
+
+  Tcsh (add to ~/.tcshrc):
+    eval `register-python-argcomplete --shell tcsh elspais`
+
+  Global activation (for all argcomplete-enabled tools):
+    activate-global-python-argcomplete
+
+After adding the appropriate line, restart your shell or source the config file.
+""",
     )
-    reformat_parser.add_argument(
-        "--fix-line-breaks",
-        action="store_true",
-        help="Normalize line breaks (remove extra blank lines)",
-    )
-    reformat_parser.add_argument(
-        "--line-breaks-only",
-        action="store_true",
-        help="Only fix line breaks, skip AI-based reformatting",
-    )
-    reformat_parser.add_argument(
-        "--mode",
-        choices=["combined", "core-only", "local-only"],
-        default="combined",
-        help="Which repos to include in hierarchy (default: combined)",
+    completion_parser.add_argument(
+        "--shell",
+        choices=["bash", "zsh", "fish", "tcsh"],
+        help="Generate script for specific shell",
     )
 
     # mcp command
@@ -592,6 +759,61 @@ Tools:
         help="Transport type (default: stdio)",
     )
 
+    # link command
+    link_parser = subparsers.add_parser(
+        "link",
+        help="Link suggestion tools (suggest links between tests and requirements)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais link suggest                          # Scan all unlinked tests
+  elspais link suggest --file tests/test_foo.py # Single file
+  elspais link suggest --format json            # Machine-readable output
+  elspais link suggest --min-confidence high    # Only high-confidence
+  elspais link suggest --apply --dry-run        # Preview changes
+  elspais link suggest --apply                  # Apply suggestions
+""",
+    )
+    link_subparsers = link_parser.add_subparsers(dest="link_action", help="Link actions")
+
+    suggest_parser = link_subparsers.add_parser(
+        "suggest",
+        help="Suggest requirement links for unlinked tests",
+    )
+    suggest_parser.add_argument(
+        "--file",
+        type=Path,
+        help="Restrict analysis to a single file",
+        metavar="PATH",
+    )
+    suggest_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    suggest_parser.add_argument(
+        "--min-confidence",
+        choices=["high", "medium", "low"],
+        help="Minimum confidence band to show",
+    )
+    suggest_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum suggestions to return (default: 50)",
+    )
+    suggest_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply suggestions by inserting # Implements: comments",
+    )
+    suggest_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview changes without modifying files (use with --apply)",
+    )
+
     return parser
 
 
@@ -606,6 +828,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         Exit code (0 for success, non-zero for failure)
     """
     parser = create_parser()
+
+    # Enable shell tab-completion if argcomplete is installed
+    # Install with: pip install elspais[completion]
+    # Then activate: eval "$(register-python-argcomplete elspais)"
+    try:
+        import argcomplete
+
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
+
     args = parser.parse_args(argv)
 
     # Handle no command
@@ -613,10 +846,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.print_help()
         return 0
 
+    # Auto-detect git repository root and change to it
+    # This ensures elspais works the same from any subdirectory
+    import os
+
+    from elspais.config import find_git_root
+
+    original_cwd = Path.cwd()
+    git_root = find_git_root(original_cwd)
+
+    if git_root and git_root != original_cwd:
+        os.chdir(git_root)
+        if args.verbose:
+            print(f"Working from repository root: {git_root}", file=sys.stderr)
+    elif not git_root and args.verbose:
+        print("Warning: Not in a git repository", file=sys.stderr)
+
     try:
         # Dispatch to command handlers
         if args.command == "validate":
             return validate.run(args)
+        elif args.command == "health":
+            return health.run(args)
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "hash":
@@ -631,6 +882,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return version_command(args)
         elif args.command == "init":
             return init.run(args)
+        elif args.command == "example":
+            return example_cmd.run(args)
         elif args.command == "edit":
             return edit.run(args)
         elif args.command == "config":
@@ -639,8 +892,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             return rules_cmd.run(args)
         elif args.command == "reformat-with-claude":
             return reformat_cmd.run(args)
+        elif args.command == "docs":
+            return docs_command(args)
+        elif args.command == "completion":
+            return completion_command(args)
         elif args.command == "mcp":
             return mcp_command(args)
+        elif args.command == "link":
+            if getattr(args, "link_action", None) == "suggest":
+                return link_suggest.run(args)
+            else:
+                print("Usage: elspais link suggest [options]")
+                return 1
         else:
             parser.print_help()
             return 1
@@ -653,6 +916,105 @@ def main(argv: Optional[List[str]] = None) -> int:
             raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def docs_command(args: argparse.Namespace) -> int:
+    """Handle docs command - display user documentation from markdown files."""
+    import pydoc
+
+    from elspais.utilities.docs_loader import load_all_topics, load_topic
+    from elspais.utilities.md_renderer import render_markdown
+
+    topic = args.topic
+    use_pager = not args.no_pager and sys.stdout.isatty()
+    use_color = not args.plain and sys.stdout.isatty()
+
+    # Load content from markdown files
+    if topic == "all":
+        content = load_all_topics()
+    else:
+        content = load_topic(topic)
+
+    if content is None:
+        print(f"Error: Documentation not found for topic '{topic}'", file=sys.stderr)
+        print("Documentation files may not be installed correctly.", file=sys.stderr)
+        return 1
+
+    # Render markdown to ANSI and display
+    output = render_markdown(content, use_color=use_color)
+
+    if use_pager:
+        pydoc.pager(output)
+    else:
+        print(output)
+
+    return 0
+
+
+def completion_command(args: argparse.Namespace) -> int:
+    """Handle completion command - generate shell completion scripts."""
+    import importlib.util
+
+    if importlib.util.find_spec("argcomplete") is None:
+        print("Error: argcomplete not installed.", file=sys.stderr)
+        print("Install with: pip install elspais[completion]", file=sys.stderr)
+        return 1
+
+    shell = args.shell
+
+    if shell:
+        # Generate script for specific shell
+        import subprocess
+
+        shell_flag = f"--shell={shell}" if shell in ("fish", "tcsh") else ""
+        cmd = ["register-python-argcomplete"]
+        if shell_flag:
+            cmd.append(shell_flag)
+        cmd.append("elspais")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(result.stdout)
+            else:
+                print(f"Error generating completion script: {result.stderr}", file=sys.stderr)
+                return 1
+        except FileNotFoundError:
+            print("Error: register-python-argcomplete not found.", file=sys.stderr)
+            print("Make sure argcomplete is properly installed.", file=sys.stderr)
+            return 1
+    else:
+        # Show setup instructions
+        print(
+            """
+Shell Completion Setup for elspais
+===================================
+
+Bash (add to ~/.bashrc):
+  eval "$(register-python-argcomplete elspais)"
+
+Zsh (add to ~/.zshrc):
+  autoload -U bashcompinit
+  bashcompinit
+  eval "$(register-python-argcomplete elspais)"
+
+Fish (add to ~/.config/fish/config.fish):
+  register-python-argcomplete --shell fish elspais | source
+
+Tcsh (add to ~/.tcshrc):
+  eval `register-python-argcomplete --shell tcsh elspais`
+
+Generate script for a specific shell:
+  elspais completion --shell bash
+  elspais completion --shell zsh
+  elspais completion --shell fish
+  elspais completion --shell tcsh
+
+After adding the line, restart your shell or source the config file.
+"""
+        )
+
+    return 0
 
 
 def version_command(args: argparse.Namespace) -> int:

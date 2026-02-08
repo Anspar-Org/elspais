@@ -1,147 +1,148 @@
+# Implements: REQ-int-d00003 (CLI Extension)
+# Implements: REQ-d00052-G
 """
 elspais.commands.index - INDEX.md management command.
+
+Uses graph-based system:
+- `elspais index validate` - Validate INDEX.md accuracy
+- `elspais index regenerate` - Regenerate INDEX.md from requirements
 """
 
-import argparse
-from pathlib import Path
+from __future__ import annotations
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, get_spec_directories, load_config
-from elspais.core.parser import RequirementParser
-from elspais.core.patterns import PatternConfig
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from elspais.graph.builder import TraceGraph
+
+from elspais.graph import NodeKind
+from elspais.graph.relations import EdgeKind
 
 
 def run(args: argparse.Namespace) -> int:
     """Run the index command."""
-    if not args.index_action:
-        print("Usage: elspais index {validate|regenerate}")
-        return 1
+    from elspais.config import get_config, get_spec_directories
+    from elspais.graph.factory import build_graph
 
-    if args.index_action == "validate":
-        return run_validate(args)
-    elif args.index_action == "regenerate":
-        return run_regenerate(args)
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
 
-    return 1
+    config = get_config(config_path)
+    spec_dirs = get_spec_directories(spec_dir, config)
 
+    graph = build_graph(
+        config=config,
+        spec_dirs=spec_dirs if spec_dir else None,
+        config_path=config_path,
+    )
 
-def run_validate(args: argparse.Namespace) -> int:
-    """Validate INDEX.md accuracy."""
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
+    action = getattr(args, "index_action", None)
+
+    if action == "validate":
+        return _validate_index(graph, spec_dirs, args)
+    elif action == "regenerate":
+        return _regenerate_index(graph, spec_dirs, args)
     else:
-        config = DEFAULT_CONFIG
-
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found")
+        print("Usage: elspais index <validate|regenerate>", file=sys.stderr)
         return 1
 
-    spec_config = config.get("spec", {})
-    # Use first spec directory for INDEX.md location
-    index_file = spec_dirs[0] / spec_config.get("index_file", "INDEX.md")
 
-    if not index_file.exists():
-        print(f"INDEX.md not found: {index_file}")
+def _validate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+    """Validate INDEX.md against graph requirements."""
+    # Find INDEX.md
+    index_path = None
+    for spec_dir in spec_dirs:
+        candidate = spec_dir / "INDEX.md"
+        if candidate.exists():
+            index_path = candidate
+            break
+
+    if not index_path:
+        print("No INDEX.md found in spec directories.")
+        print("Run 'elspais index regenerate' to create one.")
         return 1
 
-    # Parse all requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    # Parse IDs from INDEX.md
+    content = index_path.read_text()
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
 
-    # Parse INDEX.md to find listed requirements
-    index_content = index_file.read_text(encoding="utf-8")
-    indexed_ids = set()
+    # Get IDs from graph
+    graph_req_ids = {node.id for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    graph_jny_ids = {node.id for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
 
-    import re
+    # Compare requirements
+    missing_reqs = graph_req_ids - index_req_ids
+    extra_reqs = index_req_ids - graph_req_ids
 
-    for match in re.finditer(r"\|\s*([A-Z]+-(?:[A-Z]+-)?[a-zA-Z]?\d+)\s*\|", index_content):
-        indexed_ids.add(match.group(1))
+    # Compare journeys
+    missing_jnys = graph_jny_ids - index_jny_ids
+    extra_jnys = index_jny_ids - graph_jny_ids
 
-    # Compare
-    actual_ids = set(requirements.keys())
-    missing = actual_ids - indexed_ids
-    extra = indexed_ids - actual_ids
+    has_issues = False
 
-    if missing:
-        print(f"Missing from INDEX.md ({len(missing)}):")
-        for req_id in sorted(missing):
-            print(f"  - {req_id}")
+    if missing_reqs:
+        print(f"Missing requirements from INDEX.md ({len(missing_reqs)}):")
+        for req_id in sorted(missing_reqs):
+            print(f"  {req_id}")
+        has_issues = True
 
-    if extra:
-        print(f"\nExtra in INDEX.md ({len(extra)}):")
-        for req_id in sorted(extra):
-            print(f"  - {req_id}")
+    if extra_reqs:
+        print(f"Extra requirements in INDEX.md ({len(extra_reqs)}):")
+        for req_id in sorted(extra_reqs):
+            print(f"  {req_id}")
+        has_issues = True
 
-    if not missing and not extra:
-        print(f"✓ INDEX.md is accurate ({len(actual_ids)} requirements)")
+    if missing_jnys:
+        print(f"Missing journeys from INDEX.md ({len(missing_jnys)}):")
+        for jny_id in sorted(missing_jnys):
+            print(f"  {jny_id}")
+        has_issues = True
+
+    if extra_jnys:
+        print(f"Extra journeys in INDEX.md ({len(extra_jnys)}):")
+        for jny_id in sorted(extra_jnys):
+            print(f"  {jny_id}")
+        has_issues = True
+
+    if not has_issues:
+        req_n = len(graph_req_ids)
+        jny_n = len(graph_jny_ids)
+        print(f"INDEX.md is up to date ({req_n} requirements, {jny_n} journeys)")
         return 0
 
     return 1
 
 
-def run_regenerate(args: argparse.Namespace) -> int:
-    """Regenerate INDEX.md from requirements."""
-    config_path = args.config or find_config_file(Path.cwd())
-    if config_path and config_path.exists():
-        config = load_config(config_path)
-    else:
-        config = DEFAULT_CONFIG
+def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+    """Regenerate INDEX.md from graph requirements."""
+    # Group by level
+    by_level = {"PRD": [], "OPS": [], "DEV": [], "other": []}
 
-    spec_dirs = get_spec_directories(args.spec_dir, config)
-    if not spec_dirs:
-        print("Error: No spec directories found")
-        return 1
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        level = (node.level or "").upper()
+        if level in by_level:
+            by_level[level].append(node)
+        else:
+            by_level["other"].append(node)
 
-    spec_config = config.get("spec", {})
-    # Use first spec directory for INDEX.md location
-    index_file = spec_dirs[0] / spec_config.get("index_file", "INDEX.md")
+    # Generate markdown
+    lines = ["# Requirements Index", ""]
 
-    # Parse all requirements
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
-    no_reference_values = spec_config.get("no_reference_values")
-    skip_files = spec_config.get("skip_files", [])
-    parser = RequirementParser(pattern_config, no_reference_values=no_reference_values)
-    requirements = parser.parse_directories(spec_dirs, skip_files=skip_files)
+    level_names = {
+        "PRD": "Product Requirements (PRD)",
+        "OPS": "Operations Requirements (OPS)",
+        "DEV": "Development Requirements (DEV)",
+        "other": "Other Requirements",
+    }
 
-    if not requirements:
-        print("No requirements found")
-        return 1
-
-    # Generate INDEX.md
-    content = generate_index(requirements, config)
-    index_file.write_text(content, encoding="utf-8")
-
-    print(f"Regenerated: {index_file}")
-    print(f"  {len(requirements)} requirements indexed")
-
-    return 0
-
-
-def generate_index(requirements: dict, config: dict) -> str:
-    """Generate INDEX.md content."""
-    lines = [
-        "# Requirements Index",
-        "",
-        "This file provides a complete index of all requirements.",
-        "",
-    ]
-
-    # Group by type
-    prd_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["PRD", "PRODUCT"]}
-    ops_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["OPS", "OPERATIONS"]}
-    dev_reqs = {k: v for k, v in requirements.items() if v.level.upper() in ["DEV", "DEVELOPMENT"]}
-
-    for title, reqs in [
-        ("Product Requirements (PRD)", prd_reqs),
-        ("Operations Requirements (OPS)", ops_reqs),
-        ("Development Requirements (DEV)", dev_reqs),
-    ]:
-        if not reqs:
+    for level, title in level_names.items():
+        nodes = by_level[level]
+        if not nodes:
             continue
 
         lines.append(f"## {title}")
@@ -149,19 +150,53 @@ def generate_index(requirements: dict, config: dict) -> str:
         lines.append("| ID | Title | File | Hash |")
         lines.append("|---|---|---|---|")
 
-        for req_id, req in sorted(reqs.items()):
-            file_name = req.file_path.name if req.file_path else "-"
-            hash_val = req.hash or "-"
-            lines.append(f"| {req_id} | {req.title} | {file_name} | {hash_val} |")
+        for node in sorted(nodes, key=lambda n: n.id):
+            file_path = node.source.path if node.source else ""
+            # Make path relative
+            if file_path:
+                for spec_dir in spec_dirs:
+                    try:
+                        file_path = Path(file_path).relative_to(spec_dir)
+                        break
+                    except ValueError:
+                        pass
+            hash_val = node.hash or ""
+            lines.append(f"| {node.id} | {node.get_label()} | {file_path} | {hash_val} |")
 
         lines.append("")
 
-    lines.extend(
-        [
-            "---",
-            "",
-            "*Generated by elspais*",
-        ]
-    )
+    # User Journeys section
+    journey_nodes = list(graph.nodes_by_kind(NodeKind.USER_JOURNEY))
+    if journey_nodes:
+        lines.append("## User Journeys (JNY)")
+        lines.append("")
+        lines.append("| ID | Title | Actor | File | Addresses |")
+        lines.append("|---|---|---|---|---|")
 
-    return "\n".join(lines)
+        for node in sorted(journey_nodes, key=lambda n: n.id):
+            actor = node.get_field("actor") or ""
+            file_path = node.source.path if node.source else ""
+            if file_path:
+                for spec_dir in spec_dirs:
+                    try:
+                        file_path = Path(file_path).relative_to(spec_dir)
+                        break
+                    except ValueError:
+                        pass
+            # Extract addresses from incoming ADDRESSES edges
+            addresses = sorted(
+                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
+            )
+            addr_str = ", ".join(addresses)
+            lines.append(f"| {node.id} | {node.get_label()} | {actor} | {file_path} | {addr_str} |")
+
+        lines.append("")
+
+    # Write to first spec dir
+    output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+
+    req_count = sum(len(nodes) for nodes in by_level.values())
+    jny_count = len(journey_nodes)
+    print(f"Generated {output_path} ({req_count} requirements, {jny_count} journeys)")
+    return 0

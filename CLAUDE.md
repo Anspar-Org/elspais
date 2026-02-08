@@ -2,217 +2,75 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Also read**: `AGENT_DESIGN_PRINCIPLES.md` for architectural directives and mandatory practices.
+
 ## Overview
 
-elspais is a zero-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
+elspais is a minimal-dependency Python requirements validation and traceability tool. It validates requirement formats, checks hierarchy relationships, generates traceability matrices, and supports multi-repository requirement management with configurable ID patterns.
 
-## Commands
+## Full documentation
 
-```bash
-# Install in development mode
-pip install -e ".[dev]"
+Full specifications are contained in spec/ and docs/. Don't read more than is necessary for the task.
 
-# Run all tests
-pytest
+**IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
+**IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
 
-# Run a single test file
-pytest tests/test_parser.py
+**Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.9+ stdlib for everything else.
+**Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
+**Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
+**Configuration System** (`config/__init__.py`) almost all parsible content is configurable.
+**Format Validation** (`validation/format.py`)
+**Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files.
+**Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.
+**Coverage Source Tracking**: `RollupMetrics` tracks where coverage originates via `direct_covered`, `explicit_covered`, `inferred_covered`:
+**Multi-Assertion Syntax**: `Implements: REQ-p00001-A-B-C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`.
+**Associated Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
+**Optional Dependencies**: Advanced features are available via pip extras:
 
-# Run a specific test
-pytest tests/test_parser.py::test_function_name -v
+- `elspais[trace-view]`: HTML generation with Jinja2
+- `elspais[trace-review]`: Flask-based review server
+- `elspais[all]`: All optional features
+- Missing dependencies produce clear installation instructions.
+**NodeKind.REMAINDER**: Unclaimed file content (not requirements).
+**File-Based Documentation** (`elspais docs [topic]`): User documentation loaded from `docs/cli/*.md` files:
+- **Single Source of Truth**: Markdown files in `docs/cli/` are the canonical docs
+**Unified Traceability Graph**: a unified DAG structure representing the full traceability graph. `GraphNode` supports multiple parents (DAG), typed content (requirement, assertion, code, test, result, journey), and mutable metrics for accumulation. `TraceGraphBuilder` constructs graphs from requirements with automatic hierarchy linking.
+**Parser Plugin System**: The `parsers/` module provides a `SpecParser` protocol for extracting nodes from various sources. Built-in parsers handle requirements, user journeys, code references (`# Implements:`), test files (REQ-xxx patterns), JUnit XML, and pytest JSON. Custom parsers can be registered via module paths in config.
+**Iterator-Only Graph API**: The graph uses an iterator-only API to prevent accidental list materialization:
+  - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`. Use `set_id()` for ID mutations.
+  - **TraceGraph**: Use `iter_roots()` for traversal. Use `root_count()`, `has_root()` for checks. Internal storage uses `_roots`, `_index` prefixed attributes.
+  - **UUID for GUI**: Each node has a stable `uuid` (32-char hex) for DOM IDs and API endpoints.
+**Node Mutation API**: TraceGraph provides mutation methods with full undo support
+**Assertion Mutation API**: TraceGraph provides assertion-specific mutations
+**Edge Mutation API**: TraceGraph provides edge (relationship) mutations
+**MCP Tools** (`elspais[mcp]`): The MCP server provides tools to explore and manipulate the graph for a system
+**Unified References Configuration** (`[references]`): Configurable reference parsing for all parser types
 
-# Run with coverage
-pytest --cov=elspais
+**Multi-Language Comment Support:**
 
-# Type checking
-mypy src/elspais
-
-# Linting
-ruff check src/elspais
-black --check src/elspais
-
-# CLI usage
-elspais validate           # Validate requirements
-elspais trace --format html  # Generate traceability matrix
-elspais hash update         # Update requirement hashes
-elspais changed            # Show uncommitted changes to spec files
-elspais changed --json     # Output changes as JSON
-
-# trace-view enhanced features (requires pip install elspais[trace-view])
-elspais trace --view                 # Generate interactive HTML view
-elspais trace --view --embed-content # Embed full requirement content
-elspais trace --view --edit-mode     # Enable client-side editing
-elspais trace --view --review-mode   # Enable collaborative review
-
-# Review server (requires pip install elspais[trace-review])
-elspais trace --server               # Start Flask review server on port 8080
-elspais trace --server --port 3000   # Start on custom port
-
-# AI-assisted requirement reformatting
-elspais reformat-with-claude --dry-run              # Preview reformatting
-elspais reformat-with-claude --backup               # Create backups before changes
-elspais reformat-with-claude --start-req X          # Start from requirement X
-elspais reformat-with-claude --mode combined        # Cross-repo hierarchy support
-elspais reformat-with-claude --mode local-only      # Only local requirements
-```
-
-## Architecture
-
-### Core Package Structure (`src/elspais/`)
-
-- **cli.py**: Entry point, argparse-based CLI dispatcher
-- **core/**: Core domain logic
-  - **models.py**: Dataclasses (`Requirement` with `is_conflict`/`conflict_with` fields, `ParsedRequirement`, `RequirementType`, `Assertion`, `ParseResult`, `ParseWarning`, `ContentRule`)
-  - **parser.py**: `RequirementParser` - parses Markdown requirement files using regex patterns, extracts `## Assertions` section, returns `ParseResult` with warnings
-  - **patterns.py**: `PatternValidator`, `PatternConfig` - configurable ID pattern matching (supports HHT-style `REQ-p00001`, Jira-style `PROJ-123`, named `REQ-UserAuth`, assertion IDs `REQ-p00001-A`, etc.)
-  - **rules.py**: `RuleEngine`, `RulesConfig`, `FormatConfig` - validation rules for hierarchy, format, assertions, and traceability
-  - **hasher.py**: SHA-256 content hashing for change detection
-  - **content_rules.py**: Content rule loading and parsing (AI agent guidance)
-  - **git.py**: Git-based change detection (`get_git_changes`, `get_modified_files`, `detect_moved_requirements`) for tracking uncommitted changes and moved requirements
-- **config/**: Configuration handling
-  - **loader.py**: TOML parser (zero-dependency), config file discovery, environment variable overrides
-  - **defaults.py**: Default configuration values
-- **commands/**: CLI command implementations (validate, trace, hash_cmd, index, analyze, changed, init, edit, config_cmd, rules_cmd, reformat_cmd)
-- **testing/**: Test mapping and coverage functionality
-  - **config.py**: `TestingConfig` - configuration for test scanning
-  - **scanner.py**: `TestScanner` - scans test files for requirement references (REQ-xxxxx patterns)
-  - **result_parser.py**: `ResultParser` - parses JUnit XML and pytest JSON test results
-  - **mapper.py**: `TestMapper` - orchestrates scanning and result mapping for coverage analysis
-- **sponsors/**: Sponsor/associated repository configuration loading
-  - **\_\_init\_\_.py**: `Sponsor`, `SponsorsConfig` dataclasses, zero-dependency YAML parser, `load_sponsors_config()`, `resolve_sponsor_spec_dir()`, `get_sponsor_spec_directories()` for multi-repo spec scanning
-- **mcp/**: Model Context Protocol server (optional, requires `elspais[mcp]`)
-  - **server.py**: MCP server implementation
-  - **context.py**: Context management for MCP resources
-  - **serializers.py**: Serialization helpers for MCP responses
-- **trace_view/**: Enhanced traceability visualization (optional, requires `elspais[trace-view]`)
-  - **models.py**: `TraceViewRequirement` adapter wrapping `core.models.Requirement`, `TestInfo`, `GitChangeInfo`
-  - **coverage.py**: Coverage calculation (`calculate_coverage`, `count_by_level`, `find_orphaned_requirements`)
-  - **scanning.py**: Implementation file scanning (`scan_implementation_files`)
-  - **generators/**: Output format generators
-    - **base.py**: `TraceViewGenerator` - abstract base with HTML, CSV, Markdown support
-    - **markdown.py**: Markdown matrix generation
-    - **csv.py**: CSV export
-  - **html/**: HTML generation (requires jinja2)
-    - **generator.py**: `HTMLGenerator` with Jinja2 templates
-    - **templates/**: Jinja2 template files
-    - **static/**: CSS and JavaScript assets
-  - **review/**: Collaborative review system (requires flask)
-    - **models.py**: `Comment`, `Thread`, `ReviewFlag`, `StatusRequest` dataclasses
-    - **storage.py**: JSON-based comment persistence
-    - **branches.py**: Git branch management for reviews
-    - **server.py**: Flask REST API (`create_app`)
-    - **position.py**: Position resolution for diff-based comments
-    - **status.py**: Requirement status modification
-- **reformat/**: AI-assisted requirement reformatting
-  - **detector.py**: `detect_format`, `needs_reformatting`, `FormatAnalysis` - detects old vs new format
-  - **transformer.py**: `reformat_requirement`, `assemble_new_format` - Claude CLI integration
-  - **prompts.py**: System prompts and JSON schema for Claude
-  - **line_breaks.py**: `normalize_line_breaks`, `fix_requirement_line_breaks`
-  - **hierarchy.py**: `RequirementNode`, `build_hierarchy`, `traverse_top_down`
-
-### Key Design Patterns
-
-1. **Zero Dependencies**: Uses only Python 3.9+ stdlib. Custom TOML parser in `config/loader.py`.
-
-2. **Configurable Patterns**: ID patterns defined via template tokens (`{prefix}`, `{type}`, `{associated}`, `{id}`). The `PatternValidator` builds regex dynamically from config.
-
-3. **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
-
-4. **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes.
-
-5. **ParseResult API**: Parser returns `ParseResult` containing both requirements and warnings, enabling resilient parsing that continues on non-fatal issues. Warnings include duplicate ID detection (surfaced as `id.duplicate` rule violations during validation).
-
-6. **Dynamic Version Detection**: Uses `importlib.metadata` to read version from installed package metadata, with fallback to "0.0.0+unknown" if not installed.
-
-7. **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files, files changed vs main branch, and moved requirements (by comparing current location to committed state).
-
-8. **Conflict Entry Handling**: When duplicate requirement IDs are found (e.g., same ID in spec/ and spec/roadmap/), both are kept: the original with its ID, and the duplicate with a `__conflict` suffix. Conflict entries have `is_conflict=True`, `conflict_with` set to original ID, and `implements=[]` (orphaned).
-
-9. **Sponsor Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude sponsor repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
-
-10. **Optional Dependencies**: Advanced features are available via pip extras:
-    - `elspais[trace-view]`: HTML generation with Jinja2
-    - `elspais[trace-review]`: Flask-based review server
-    - `elspais[all]`: All optional features
-    Missing dependencies produce clear installation instructions.
-
-11. **TraceViewRequirement Adapter**: `TraceViewRequirement.from_core()` wraps `core.models.Requirement` with trace-view specific fields (git state, test info, implementation files). Dependency injection rather than global state.
-
-12. **AI-Assisted Reformatting**: The `reformat` module uses Claude CLI (`claude -p --output-format json`) to transform legacy "Acceptance Criteria" format to assertion-based format. Includes format detection, validation, and line break normalization.
-
-### Requirement Format (Updated)
-
-Requirements use Markdown with assertions as the unit of verification:
-
-```markdown
-# REQ-d00001: Requirement Title
-
-**Level**: Dev | **Status**: Active | **Implements**: REQ-p00001
-
-## Assertions
-
-A. The system SHALL do something specific.
-B. The system SHALL do another thing.
-
-## Rationale
-
-<optional non-normative explanation>
-
-*End* *Requirement Title* | **Hash**: a1b2c3d4
-```
-
-Key format rules:
-- **Assertions replace Acceptance Criteria** - labeled A-Z, each uses SHALL
-- **Assertion IDs** - tests can reference `REQ-d00001` or `REQ-d00001-A`
-- **One-way traceability** - children reference parents via `Implements:`, never reverse
-- **Associated-scoped IDs** - format `TTN-REQ-p00001` for associated repositories
-- **Hash scope** - calculated from lines between header and footer
-- **Placeholder assertions** - removed assertions can use placeholder text ("Removed", "obsolete", etc.) to maintain sequential labels
-
-### Assertion Configuration
-
-Assertions are configured via `[patterns.assertions]` and `[rules.format]`:
-
-```toml
-[patterns.assertions]
-label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
-max_count = 26             # Maximum assertions per requirement
-zero_pad = false           # For numeric styles: true = "01", false = "1"
-
-[rules.format]
-require_assertions = true       # Require ## Assertions section
-acceptance_criteria = "warn"    # "allow" | "warn" | "error" for old Acceptance Criteria format
-require_shall = true            # Require SHALL in assertion text
-labels_sequential = true        # Labels must be sequential (A, B, C... not A, C, D)
-labels_unique = true            # No duplicate labels
-placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved", "Removed"]
-```
-
-See `docs/configuration.md` for full configuration options.
-
-### Configuration
-
-Uses `.elspais.toml` with sections: `[project]`, `[directories]`, `[patterns]`, `[rules]`. See `docs/configuration.md` for full reference.
-
-### Test Fixtures
-
-`tests/fixtures/` contains example repository structures:
-- `hht-like/`: HHT-style requirements (`REQ-p00001`)
-- `fda-style/`: Strict hierarchy requirements
-- `jira-style/`: Jira-like IDs (`PROJ-123`)
-- `named-reqs/`: Named requirements (`REQ-UserAuth`)
-- `associated-repo/`: Multi-repo with associated prefixes
-- `assertions/`: Assertion-based requirements with `## Assertions` section
-- `invalid/`: Invalid cases (circular deps, broken links, missing hashes)
-
-`tests/test_trace_view/` contains trace_view integration tests:
-- Tests use `pytest.importorskip()` for optional dependencies (jinja2, flask)
-- `test_integration.py`: Import tests, model tests, format detection tests
+| Language | Comment Style | Marker Example |
+|----------|--------------|----------------|
+| Python, Shell, Ruby, YAML | `#` | `# elspais: expected-broken-links 3` |
+| JavaScript, TypeScript, Java, C, Go, Rust | `//` | `// elspais: expected-broken-links 3` |
+| SQL, Lua, Ada | `--` | `-- elspais: expected-broken-links 3` |
+| HTML, XML | `<!-- -->` | `<!-- elspais: expected-broken-links 3 -->` |
+| CSS, C-style block | `/* */` | `/* elspais: expected-broken-links 3 */` |
 
 ## Workflow
 
-- **ALWAYS** update the version in `pyproject.toml` before pushing to remote
-- **ALWAYS** update `CHANGELOG.md` with new features
-- **ALWAYS** use a sub-agent to update the `docs/` files
-- **ALWAYS** ensure that `CLAUDE.md` is updated with changes for each commit
-- **ALWAYS** run `pytest tests/test_doc_sync.py` before committing doc changes to verify documentation matches implementation
+**See `WORKFLOW_STATE.md`** for the complete workflow checklist including documentation steps.
+
+- **ALWAYS** use a sub-agent to write tests
+- **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
+
+## Master Plan Workflow
+
+**IMPORTANT**: After `/clear` or at the start of a new session, check `WORKFLOW_STATE.md` for queued issues.
+
+**Commit Discipline**: Each phase should result in exactly one commit. This ensures:
+
+- Atomic, reviewable changes
+- Easy rollback if issues arise
+- Clear progress tracking in git history
+
+This enables iterative implementation of multiple phases across context boundaries.

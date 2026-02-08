@@ -1,3 +1,4 @@
+# Implements: REQ-p00001-C, REQ-p00004-A, REQ-p00004-B
 """
 elspais.commands.changed - Git-based change detection for requirements.
 
@@ -9,37 +10,26 @@ Detects changes to requirement files using git:
 
 import argparse
 import json
-import sys
-from pathlib import Path
 from typing import Dict, Optional
 
-from elspais.config.defaults import DEFAULT_CONFIG
-from elspais.config.loader import find_config_file, load_config
-from elspais.core.git import (
+from elspais.utilities.git import (
     detect_moved_requirements,
     filter_spec_files,
-    get_current_req_locations,
     get_git_changes,
     get_repo_root,
+    get_req_locations_from_graph,
 )
 
 
 def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
-    """Load configuration from file or use defaults."""
-    config_path = getattr(args, "config", None)
-    if config_path:
-        pass  # Use provided path
-    else:
-        config_path = find_config_file(Path.cwd())
+    """Load configuration from file or use defaults.
 
-    if config_path and config_path.exists():
-        try:
-            return load_config(config_path)
-        except Exception as e:
-            print(f"Error loading config: {e}", file=sys.stderr)
-            return None
-    else:
-        return DEFAULT_CONFIG
+    Note: This is a wrapper for get_config() that returns Optional[Dict]
+    for backward compatibility. New code should use get_config() directly.
+    """
+    from elspais.config import get_config
+
+    return get_config(config_path=getattr(args, "config", None))
 
 
 def run(args: argparse.Namespace) -> int:
@@ -72,8 +62,8 @@ def run(args: argparse.Namespace) -> int:
     spec_untracked = filter_spec_files(changes.untracked_files, spec_dir)
     spec_branch = filter_spec_files(changes.branch_changed_files, spec_dir)
 
-    # Detect moved requirements
-    current_locations = get_current_req_locations(repo_root, spec_dir)
+    # Detect moved requirements using graph-based approach
+    current_locations = get_req_locations_from_graph(repo_root)
     moved = detect_moved_requirements(changes.committed_req_locations, current_locations)
 
     # Build result

@@ -1,44 +1,60 @@
-"""
-elspais.mcp - MCP (Model Context Protocol) server for elspais.
+"""elspais.mcp - Model Context Protocol server for elspais.
 
 This module provides an MCP server that exposes elspais functionality
-to AI agents and LLMs. Requires the optional 'mcp' dependency:
-
-    pip install elspais[mcp]
+to AI agents. The server is a pure interface layer that consumes
+TraceGraph directly (REQ-p00060-B).
 
 Usage:
-    elspais mcp serve                    # Start with stdio transport
-    python -m elspais.mcp                # Alternative entry point
+    # Check if MCP is available
+    from elspais.mcp import MCP_AVAILABLE
+
+    if MCP_AVAILABLE:
+        from elspais.mcp import create_server, run_server
+
+        # Create server
+        server = create_server()
+
+        # Or run directly
+        run_server()
 """
 
-from elspais.mcp.context import WorkspaceContext
-from elspais.mcp.serializers import (
-    serialize_assertion,
-    serialize_content_rule,
-    serialize_requirement,
-    serialize_requirement_summary,
-    serialize_violation,
-)
+try:
+    from mcp.server.fastmcp import FastMCP
 
-__all__ = [
-    "WorkspaceContext",
-    "serialize_assertion",
-    "serialize_content_rule",
-    "serialize_requirement",
-    "serialize_requirement_summary",
-    "serialize_violation",
-]
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    FastMCP = None
 
 
-def create_server(working_dir=None):
-    """Create MCP server instance."""
+def create_server(*args, **kwargs):
+    """Create the MCP server.
+
+    Raises:
+        ImportError: If MCP dependencies are not installed.
+    """
+    if not MCP_AVAILABLE:
+        raise ImportError("MCP dependencies not installed. Install with: pip install elspais[mcp]")
     from elspais.mcp.server import create_server as _create
 
-    return _create(working_dir)
+    return _create(*args, **kwargs)
 
 
-def run_server(working_dir=None, transport="stdio"):
-    """Run MCP server."""
+def run_server(*args, **kwargs):
+    """Run the MCP server.
+
+    Raises:
+        ImportError: If MCP dependencies are not installed.
+    """
+    if not MCP_AVAILABLE:
+        raise ImportError("MCP dependencies not installed. Install with: pip install elspais[mcp]")
     from elspais.mcp.server import run_server as _run
 
-    return _run(working_dir, transport)
+    return _run(*args, **kwargs)
+
+
+__all__ = [
+    "MCP_AVAILABLE",
+    "create_server",
+    "run_server",
+]

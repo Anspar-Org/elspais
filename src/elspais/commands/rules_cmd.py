@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from elspais.config.loader import find_config_file, load_config
-from elspais.core.content_rules import load_content_rule, load_content_rules
+from elspais.config import find_config_file, load_config
+from elspais.content_rules import load_content_rule, load_content_rules
 
 
 def run(args: argparse.Namespace) -> int:

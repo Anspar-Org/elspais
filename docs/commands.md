@@ -7,7 +7,6 @@ This document provides comprehensive documentation for all elspais CLI commands.
 - [validate](#validate)
 - [trace](#trace)
 - [hash](#hash)
-- [reformat-with-claude](#reformat-with-claude)
 - [changed](#changed)
 - [analyze](#analyze)
 - [edit](#edit)
@@ -148,167 +147,6 @@ elspais hash update REQ-d00027
 - `0`: All hashes valid (verify) or successfully updated (update)
 - `1`: Hash mismatches found (verify) or update failures (update)
 
-## reformat-with-claude
-
-Transform requirements from legacy "Acceptance Criteria" format to the modern "Assertions" format using Claude AI. This command uses the Claude CLI to intelligently reformat requirements while preserving semantic meaning.
-
-### Usage
-
-```bash
-elspais reformat-with-claude [OPTIONS]
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--start-req ID` | Starting requirement ID (default: all PRD requirements) |
-| `--depth N` | Maximum traversal depth (default: unlimited) |
-| `--dry-run` | Preview changes without modifying files |
-| `--backup` | Create `.bak` files before editing |
-| `--force` | Reformat even if already in new format |
-| `--fix-line-breaks` | Normalize line breaks (remove extra blank lines) |
-| `--line-breaks-only` | Only fix line breaks, skip AI-based reformatting |
-| `--mode {combined,core-only,local-only}` | Which repos to include in hierarchy (default: `combined`) |
-| `--verbose` | Show detailed progress and Claude API interactions |
-
-### Mode Options
-
-The `--mode` flag controls which repositories are included when building the requirement hierarchy for traversal:
-
-- **`combined`** (default): Load both local and core/associated repository requirements. Use this when working in an associated repository that implements requirements from a core repository. This ensures proper hierarchy traversal where DEV requirements that implement core PRDs are included as children during traversal.
-
-- **`core-only`**: Load only core/associated repository requirements. Useful when you want to analyze or reformat requirements from the core repository perspective only.
-
-- **`local-only`**: Load only local requirements. Use this when working on a standalone repository or when you want to ignore cross-repository dependencies.
-
-### How It Works
-
-1. **Format Detection**: The command uses validation rules to identify requirements with `format.acceptance_criteria` violations (old format)
-
-2. **Hierarchy Building**: Builds a complete dependency graph including cross-repository relationships (when mode is `combined`)
-
-3. **Traversal**: Starting from specified requirement (or all PRD requirements), traverses the hierarchy depth-first
-
-4. **AI Transformation**: For each requirement needing reformatting:
-   - Extracts existing content using format detection
-   - Sends to Claude CLI with structured prompt and JSON schema
-   - Validates transformed output
-   - Assembles new format with proper structure
-
-5. **File Modification**: Updates requirement files in-place, preserving other requirements in the same file
-
-### Format Transformation
-
-Converts from legacy format:
-
-```markdown
-**Acceptance Criteria**:
-- The system does X
-- The system provides Y
-- Must support Z
-```
-
-To modern format:
-
-```markdown
-## Assertions
-
-A. The system SHALL do X.
-B. The system SHALL provide Y.
-C. The system SHALL support Z.
-```
-
-### Examples
-
-```bash
-# Preview changes (dry run)
-elspais reformat-with-claude --dry-run
-
-# Reformat with backups
-elspais reformat-with-claude --backup
-
-# Start from specific requirement
-elspais reformat-with-claude --start-req REQ-p00010
-
-# Reformat with cross-repo hierarchy (associated repo implementing core requirements)
-elspais reformat-with-claude --mode combined
-
-# Reformat only local requirements (ignore core dependencies)
-elspais reformat-with-claude --mode local-only
-
-# Limit traversal depth
-elspais reformat-with-claude --start-req REQ-p00001 --depth 2
-
-# Force reformat even if already in new format
-elspais reformat-with-claude --force
-
-# Only fix line breaks (no AI transformation)
-elspais reformat-with-claude --line-breaks-only
-
-# Verbose output to see Claude interactions
-elspais reformat-with-claude --verbose
-```
-
-### Cross-Repository Hierarchy Support
-
-When working in an associated repository that implements requirements from a core repository:
-
-**Scenario**: You have:
-- Core repo with `REQ-p00001` (PRD requirement)
-- Associated repo with `REQ-d00027` that implements `REQ-p00001`
-
-**Setup**: In your associated repo's `.elspais.toml`:
-
-```toml
-[project]
-type = "associated"
-
-[associated]
-prefix = "CAL"
-
-[core]
-path = "../core-repo"
-```
-
-**Usage**:
-
-```bash
-# Reformat starting from core PRD, including associated DEV requirements
-elspais reformat-with-claude --start-req REQ-p00001 --mode combined
-```
-
-This will:
-1. Load requirements from both repositories
-2. Build complete hierarchy graph with cross-repo links
-3. Traverse from `REQ-p00001` → `REQ-d00027` and any other children
-4. Only modify files in the local (associated) repository
-
-### Performance Optimization
-
-The command uses validation to pre-filter requirements before processing:
-
-1. Runs `RuleEngine` validation to identify requirements with `format.acceptance_criteria` violations
-2. Only processes requirements that actually use old format
-3. Significantly reduces processing time (example: 322 → 9 requirements in test repo)
-
-### Requirements
-
-- **Claude CLI**: Must have `claude` command available in PATH
-- **Configuration**: Claude CLI must be configured with API key
-- **Format**: Requirements must be parseable by elspais parser
-
-### Exit Codes
-
-- `0`: All requirements successfully reformatted (or dry run completed)
-- `1`: Errors occurred during reformatting
-
-### Related Documentation
-
-- [AI-Assisted Reformatting](trace-view.md#requirement-reformatting)
-- [Configuration](configuration.md)
-- [Multi-Repository Support](multi-repo.md)
-
 ## changed
 
 Detect git changes to spec files and track requirement modifications.
@@ -346,6 +184,7 @@ elspais changed --base-branch develop
 ### Output
 
 The command reports:
+
 - Modified spec files (uncommitted changes)
 - Files changed vs base branch
 - Requirements moved between files
@@ -601,6 +440,13 @@ MCP (Model Context Protocol) server commands.
 elspais mcp serve [OPTIONS]
 ```
 
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--transport {stdio,sse}` | Transport type (default: stdio) |
+| `--cwd PATH` | Working directory for finding .elspais.toml |
+
 ### Requirements
 
 ```bash
@@ -623,7 +469,35 @@ Add to Claude Desktop config (`~/.config/Claude/claude_desktop_config.json`):
 }
 ```
 
-See main README for MCP resources and tools.
+For Claude Code, add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "elspais": {
+      "command": "elspais",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Tool Categories
+
+The MCP server exposes ~40 tools organized into categories:
+
+- **Read-Only**: `validate()`, `search()`, `get_requirement()`, `analyze()`
+- **Graph**: `get_graph_status()`, `get_hierarchy()`, `get_traceability_path()`, `get_coverage_breakdown()`
+- **Mutation**: `change_reference_type()`, `specialize_reference()`, `move_requirement()`
+- **File Ops**: `prepare_file_deletion()`, `delete_spec_file()`
+- **AI Tools**: `get_node_as_json()`, `transform_with_ai()`
+- **Annotations**: `add_annotation()`, `add_tag()`, `list_tagged()`
+
+See [MCP Server Guide](mcp.md) for comprehensive documentation including:
+- Complete tool reference
+- Resource URI patterns
+- Common workflows
+- Safety patterns
 
 ## version
 
@@ -638,6 +512,7 @@ elspais version
 ### Output
 
 Displays:
+
 - Current installed version
 - Python version
 - Platform information
@@ -670,3 +545,4 @@ All commands follow these conventions:
 - [Multi-Repository Support](multi-repo.md)
 - [Trace-View Features](trace-view.md)
 - [Pattern Configuration](patterns.md)
+- [MCP Server Guide](mcp.md)
