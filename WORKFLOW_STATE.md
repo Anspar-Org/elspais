@@ -12,9 +12,7 @@ Read `AGENT_DESIGN_PRINCIPLES.md` for architectural directives
 Do each of these steps for every Phase in the MASTER_PLAN.md
 Check off each step (change [ ] to [x]) after it is complete.
 
-## Current Task: MCP Round-Trip Fidelity (Complete)
-
-All phases (6-10) are complete. Plan ready for archival.
+## Current Task: Consolidate Spec File I/O (MASTER PLAN 9)
 
 ### 0. Identify Assertions
 
@@ -26,7 +24,7 @@ All phases (6-10) are complete. Plan ready for archival.
 ### 1. Understand Current State
 
 - [x] **EXPLORE**: Read MASTER_PLAN.md for task details
-- [x] **BASELINE**: Ensure tests pass before changes
+- [x] **BASELINE**: Ensure tests pass before changes (1277 passed)
 
 ### 2. Incremental Implementation
 
@@ -36,7 +34,7 @@ All phases (6-10) are complete. Plan ready for archival.
 
 ### 3. Write Tests
 
-- [x] **TEST**: All tests still pass
+- [x] **TEST**: All tests still pass (1306 passed)
 - [x] **ASSERTION NAMES**: Test functions MUST include assertion IDs from `CURRENT_ASSERTIONS` in their names (e.g., `test_REQ_p00004_A_validates_hash`)
 - [x] **CLASS DOCSTRINGS**: Test classes MUST include `Validates REQ-xxx-Y:` in their docstring
 
@@ -46,11 +44,11 @@ All phases (6-10) are complete. Plan ready for archival.
 
 ### 5. Commit
 
-- [x] **COMMIT**: Use ticket prefix in subject
+- [ ] **COMMIT**: Use ticket prefix in subject
 
 ### 6. Phase Complete
 
-- [x] Mark phase complete in MASTER_PLAN.md
+- [ ] Mark phase complete in MASTER_PLAN.md
 - [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLANx.md`
 - [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase

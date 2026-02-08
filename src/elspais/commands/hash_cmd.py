@@ -131,7 +131,7 @@ def _update_hashes(graph, args) -> int:
     """
     from pathlib import Path
 
-    from elspais.mcp.file_mutations import update_hash_in_file
+    from elspais.utilities.spec_writer import update_hash_in_file
 
     dry_run = getattr(args, "dry_run", False)
     target_req_id = getattr(args, "req_id", None)

@@ -1257,6 +1257,7 @@ def _change_reference_type(
     """Change a reference type in a spec file (Implements -> Refines or vice versa).
 
     REQ-o00063-A: Modify Implements/Refines relationships in spec files.
+    Delegates core file I/O to ``utilities.spec_writer.change_reference_type``.
 
     Args:
         repo_root: Repository root path.
@@ -1269,18 +1270,13 @@ def _change_reference_type(
         Success status and optional safety_branch name.
     """
     from elspais.utilities.git import create_safety_branch
-
-    # Normalize type
-    new_type_lower = new_type.lower()
-    if new_type_lower not in ("implements", "refines"):
-        return {"success": False, "error": f"Invalid reference type: {new_type}"}
+    from elspais.utilities.spec_writer import change_reference_type as _crt
 
     # Find the spec file containing req_id
     spec_dir = repo_root / "spec"
     if not spec_dir.exists():
         return {"success": False, "error": "spec/ directory not found"}
 
-    # Search for the requirement in spec files
     target_file = None
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8")
@@ -1291,9 +1287,7 @@ def _change_reference_type(
     if target_file is None:
         return {"success": False, "error": f"Requirement {req_id} not found in spec files"}
 
-    content = target_file.read_text(encoding="utf-8")
-
-    # Create safety branch if requested
+    # Create safety branch if requested (REQ-o00063-D)
     safety_branch = None
     if save_branch:
         branch_result = create_safety_branch(repo_root, req_id)
@@ -1302,34 +1296,10 @@ def _change_reference_type(
             return {"success": False, "error": error_msg}
         safety_branch = branch_result["branch_name"]
 
-    # Find and replace the reference pattern
-    # Match patterns like: **Implements**: REQ-p00001 or **Refines**: REQ-p00001
-    old_patterns = [
-        f"**Implements**: {target_id}",
-        f"**Refines**: {target_id}",
-        f"Implements: {target_id}",
-        f"Refines: {target_id}",
-    ]
+    # Delegate to spec_writer for the actual file modification
+    result = _crt(target_file, req_id, target_id, new_type)
 
-    # Capitalize for display
-    new_type_display = new_type_lower.capitalize()
-    new_text = f"**{new_type_display}**: {target_id}"
-
-    modified = False
-    for pattern in old_patterns:
-        if pattern in content:
-            content = content.replace(pattern, new_text)
-            modified = True
-            break
-
-    if not modified:
-        return {"success": False, "error": f"Reference to {target_id} not found in {req_id}"}
-
-    # Write the modified content
-    target_file.write_text(content, encoding="utf-8")
-
-    result: dict[str, Any] = {"success": True}
-    if safety_branch:
+    if result.get("success") and safety_branch:
         result["safety_branch"] = safety_branch
 
     return result
@@ -1344,6 +1314,7 @@ def _move_requirement(
     """Move a requirement from one spec file to another.
 
     REQ-o00063-B: Relocate a requirement between spec files.
+    Delegates core file I/O to ``utilities.spec_writer.move_requirement``.
 
     Args:
         repo_root: Repository root path.
@@ -1355,6 +1326,7 @@ def _move_requirement(
         Success status and optional safety_branch name.
     """
     from elspais.utilities.git import create_safety_branch
+    from elspais.utilities.spec_writer import move_requirement as _move_req
 
     spec_dir = repo_root / "spec"
     if not spec_dir.exists():
@@ -1378,7 +1350,7 @@ def _move_requirement(
     if source_file == target_path:
         return {"success": False, "error": "Source and target files are the same"}
 
-    # Create safety branch if requested
+    # Create safety branch if requested (REQ-o00063-D)
     safety_branch = None
     if save_branch:
         branch_result = create_safety_branch(repo_root, req_id)
@@ -1387,43 +1359,10 @@ def _move_requirement(
             return {"success": False, "error": error_msg}
         safety_branch = branch_result["branch_name"]
 
-    # Extract the requirement block from source
-    source_content = source_file.read_text(encoding="utf-8")
+    # Delegate to spec_writer for the actual file modification
+    result = _move_req(source_file, target_path, req_id)
 
-    # Find the requirement block (from header to *End* marker or next ## header)
-    # Pattern: ## REQ-xxx: Title ... *End* *Title* | **Hash**: xxx
-    header_pattern = re.compile(
-        rf"(^##+ {re.escape(req_id)}:.*?(?:\*End\*.*?(?:\*\*Hash\*\*:.*?\n|$)|(?=^##+ REQ-)))",
-        re.MULTILINE | re.DOTALL,
-    )
-
-    match = header_pattern.search(source_content)
-    if not match:
-        return {"success": False, "error": f"Could not parse requirement block for {req_id}"}
-
-    req_block = match.group(1)
-
-    # Remove from source
-    new_source_content = source_content[: match.start()] + source_content[match.end() :]
-    # Clean up multiple consecutive blank lines
-    from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
-
-    new_source_content = BLANK_LINE_CLEANUP_RE.sub("\n\n", new_source_content)
-
-    # Append to target
-    target_content = target_path.read_text(encoding="utf-8")
-    if not target_content.endswith("\n\n"):
-        if not target_content.endswith("\n"):
-            target_content += "\n"
-        target_content += "\n"
-    target_content += "---\n\n" + req_block
-
-    # Write both files
-    source_file.write_text(new_source_content, encoding="utf-8")
-    target_path.write_text(target_content, encoding="utf-8")
-
-    result: dict[str, Any] = {"success": True}
-    if safety_branch:
+    if result.get("success") and safety_branch:
         result["safety_branch"] = safety_branch
 
     return result

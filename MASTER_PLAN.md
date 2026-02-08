@@ -1,84 +1,87 @@
-# MASTER PLAN 8 — Agent-Assisted Linking Engine
+# MASTER PLAN 9 — Consolidate Spec File I/O
 
 **Branch**: feature/CUR-514-viewtrace-port
 **Ticket**: CUR-240
-**CURRENT_ASSERTIONS**: REQ-o00065 (A-F), REQ-d00072 (A-F), REQ-d00073 (A-E), REQ-d00074 (A-D)
+**CURRENT_ASSERTIONS**: REQ-o00063 (A-B, D)
 
-## Goal
+## Context
 
-Build a suggestion engine that analyzes unlinked tests and code files, then proposes requirement associations using heuristics (import analysis, function name matching, file path proximity, keyword overlap). Expose this through both a CLI command and MCP tools for AI agent consumption.
+An architecture review found `move_requirement()` duplicated across `edit.py` (CLI) and `server.py` (MCP) with divergent behavior, 4 spec-file writes in `edit.py` missing `encoding="utf-8"`, and the shared utility `mcp/file_mutations.py` mislocated under `mcp/` despite being CLI-consumed. Fixes to one move/status path don't propagate to the other.
 
-## Principle: Discovery + Action
+## Problem Summary
 
-Teams need to not just *see* what's unlinked (existing tools already do this via `get_orphaned_nodes()`, `get_uncovered_assertions()`), but *act on it* efficiently with intelligent suggestions.
-
-## Prerequisites
-
-- MASTER_PLAN (linking convention documentation) should be completed first so conventions are documented before the tool enforces them.
+| Issue | Severity | Files |
+|-------|----------|-------|
+| Missing `encoding="utf-8"` on spec writes | **Bug** | `edit.py` (4 writes) |
+| Duplicate `move_requirement()` (~90 lines each) | Maintenance | `edit.py`, `server.py` |
+| `file_mutations.py` under `mcp/` but used by CLI | Misplacement | `mcp/file_mutations.py` |
+| `add_status_to_file()` never called; `edit.py` reimplements | Dead code | `mcp/file_mutations.py` |
 
 ## Implementation Steps
 
-### Step 1: Agent-assisted linking command
+### Step 1: Relocate and extend `spec_writer.py`
 
-**Files**: `src/elspais/commands/link_suggest.py` (new), `src/elspais/cli.py`
+**Move**: `src/elspais/mcp/file_mutations.py` -> `src/elspais/utilities/spec_writer.py`
 
-Add an `elspais link suggest` command that analyzes unlinked tests and suggests requirement associations:
+Keep existing functions:
+- `update_hash_in_file(file_path, req_id, new_hash)` — unchanged
+- `add_status_to_file(file_path, req_id, status)` — unchanged
 
-- [ ] `elspais link suggest` — scan all unlinked test files and print suggested links with confidence scores
-- [ ] `elspais link suggest --file <path>` — analyze a single file
-- [ ] `elspais link suggest --apply` — interactively apply suggestions (add `# Implements:` comments to files)
-- [ ] Suggestion heuristics:
-  - Import analysis: test imports module -> module has `# Implements: REQ-xxx` -> suggest REQ-xxx
-  - Function name matching: `test_build_graph` -> `build_graph()` implements REQ-xxx -> suggest REQ-xxx
-  - File path proximity: `tests/test_validator.py` -> `src/elspais/validation/` has requirement refs -> suggest those
-  - Keyword overlap: requirement title words appearing in test docstrings or function names
-- [ ] Output format: `SUGGEST: tests/test_foo.py::test_bar -> REQ-p00001-A (confidence: high, reason: imports foo which implements REQ-p00001-A)`
-- [ ] JSON output mode for programmatic consumption: `--format json`
+Add consolidated functions from `edit.py` and `server.py`:
+- [x] `move_requirement(source_file, dest_file, req_id, dry_run=False)` — merge two implementations
+- [x] `modify_implements(file_path, req_id, new_implements, dry_run=False)` — from `edit.py`
+- [x] `modify_status(file_path, req_id, new_status, dry_run=False)` — from `edit.py`
+- [x] `change_reference_type(file_path, target_id, new_type)` — from `server.py`
 
-### Step 2: MCP integration for link suggestions
+All functions use `encoding="utf-8"` consistently.
 
-**Files**: `src/elspais/mcp/tools/` (extend existing)
+### Step 2: Update callers
 
-Wire the link suggestion engine into MCP so AI agents can request and apply suggestions during coding sessions:
+- [x] **`edit.py`**: Remove inline `modify_implements()`, `modify_status()`, `move_requirement()`; import from `utilities.spec_writer`
+- [x] **`server.py`**: Delegate `_move_requirement()` and `_change_reference_type()` to `spec_writer` (keep safety-branch wrappers)
+- [x] **`hash_cmd.py`**: Update import from `elspais.mcp.file_mutations` to `elspais.utilities.spec_writer`
+- [x] **`mcp/file_mutations.py`**: Replace with re-export shim or delete
 
-- [ ] `suggest_links_for_file(file_path)` — return structured suggestions for a specific file
-- [ ] `apply_link(file_path, line, requirement_id)` — insert a `# Implements: REQ-xxx` comment at the specified location
-- [ ] `get_linking_convention()` — return the convention documentation as structured text for agent prompt injection
-- [ ] Integrate with existing `get_uncovered_assertions()` MCP tool to provide a complete workflow: discover gaps -> get suggestions -> apply links
+### Step 3: Update `# Implements:` headers
+
+- [x] Update `REQ-o00063-*` references on affected files
+
+### Step 4: Tests
+
+- [x] Existing tests for `edit.py`, `hash_cmd.py`, MCP pass
+- [x] Add focused test for `utilities/spec_writer.py` covering consolidated `move_requirement()`
+- [x] Full test suite passes (1306 passed)
 
 ## Files to Modify
 
-| File | Change |
+| File | Action |
 |------|--------|
-| **NEW** `src/elspais/commands/link_suggest.py` | Suggestion engine + CLI command |
-| `src/elspais/cli.py` | Register `link suggest` subcommand |
-| `src/elspais/mcp/server.py` | New MCP tools wrapping suggestion engine |
+| `src/elspais/utilities/spec_writer.py` | **Create** (from `mcp/file_mutations.py` + extracted functions) |
+| `src/elspais/mcp/file_mutations.py` | Replace with re-export shim or delete |
+| `src/elspais/commands/edit.py` | Remove 3 functions, import from `spec_writer` |
+| `src/elspais/mcp/server.py` | Delegate `_move_requirement` + `_change_reference_type` |
+| `src/elspais/commands/hash_cmd.py` | Update import path |
+| `tests/core/test_spec_writer.py` | **Create** (consolidation tests) |
 
-## What Stays the Same
+## Design Decisions
 
-- TraceGraph, GraphNode, GraphBuilder structure
-- NodeKind, EdgeKind enums
-- Existing parsers (CodeParser, TestParser)
-- RollupMetrics, CoverageContribution
-- All existing MCP tools
-
-## Commit Strategy
-
-2 commits:
-1. **Linking suggestion engine + CLI command** (Step 1 + tests)
-2. **MCP integration** (Step 2 + end-to-end tests)
+1. **`utilities/` not `mcp/`**: Module serves both CLI and MCP — belongs in shared utilities
+2. **Keep functions stateless**: Each takes `file_path`, operates independently — no class needed
+3. **Preserve return-value contracts**: `edit.py` returns `Dict[str, Any]`; `file_mutations.py` returns `str | None` — consolidated module preserves both
+4. **Safety branches stay in MCP layer**: MCP-specific orchestration, not file I/O
 
 ## Verification
 
-1. `python -m pytest tests/ -x -q` — all pass
-2. `elspais link suggest` produces reasonable suggestions for fixture test files
-3. `elspais link suggest --apply` on a test file, rebuild graph, verify new coverage appears
-4. MCP `suggest_links_for_file()` returns structured suggestions
-5. End-to-end: MCP discover gaps -> get suggestions -> apply links workflow
+1. `pytest tests/commands/test_edit.py` — edit command tests pass
+2. `pytest tests/mcp/` — MCP tests pass
+3. `pytest tests/` — full suite passes (1277+)
+4. `elspais edit --req-id REQ-p00001 --status Draft --dry-run` — still works
+5. `elspais hash update --dry-run` — still works
+6. Grep for `encoding=` in all `spec_writer.py` writes — all explicit UTF-8
 
 ## Archive
 
-- [ ] Mark phase complete in MASTER_PLAN8.md
-- [ ] Archive completed plan: `mv MASTER_PLAN8.md ~/archive/YYYY-MM-DD/MASTER_PLAN8x.md`
+- [ ] Mark phase complete in MASTER_PLAN.md
+- [ ] Archive completed plan: `mv MASTER_PLAN.md ~/archive/YYYY-MM-DD/MASTER_PLAN_spec_writer.md`
 - [ ] Promote next plan: `mv MASTER_PLAN[lowest].md MASTER_PLAN.md`
 - **CLEAR**: Reset checkboxes for next phase
