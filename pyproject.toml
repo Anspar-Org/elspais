@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.51.0"
+version = "0.52.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 authors = [{ name = "Anspar", email = "dev@anspar.io" }]
 keywords = ["requirements", "traceability", "validation", "documentation", "specifications"]
 classifiers = [
@@ -17,10 +17,8 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Documentation",
     "Typing :: Typed",
@@ -98,11 +96,11 @@ addopts = "-v --tb=short --ignore=tests/_obsolete"
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ["py312", "py313"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py38"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [
@@ -116,7 +114,7 @@ select = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = true

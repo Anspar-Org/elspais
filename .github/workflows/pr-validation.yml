@@ -1,3 +1,4 @@
+# Implements: REQ-o00066-F-G
 name: PR Validation
 
 on:
@@ -94,23 +95,29 @@ jobs:
             fi
           done <<< "$COMMITS"
 
+          TOTAL=$((VALID + ${#INVALID[@]}))
+
           if [ ${#INVALID[@]} -gt 0 ]; then
             echo ""
-            echo "COMMIT MESSAGE VALIDATION FAILED"
+            echo "COMMIT MESSAGE VALIDATION: ${#INVALID[@]}/$TOTAL commit(s) missing references"
             echo ""
-            echo "${#INVALID[@]} commit(s) missing required references:"
+            # Show first 10 invalid commits (avoid flooding on large PRs)
+            SHOWN=0
             for commit in "${INVALID[@]}"; do
               IFS='|' read -r sha subject errors <<< "$commit"
               echo "  ${sha:0:7}: $subject"
               echo "    -> $errors"
+              SHOWN=$((SHOWN + 1))
+              [ $SHOWN -ge 10 ] && echo "  ... and $((${#INVALID[@]} - 10)) more" && break
             done
             echo ""
             echo "Required format:"
             echo "  [CUR-XXX] Subject line"
             echo "  Body must reference REQ-{p|o|d}NNNNN"
             echo ""
-            echo "To fix: Use 'git rebase -i' to edit commit messages"
-            exit 1
+            echo "Note: This PR will be squash-merged. Ensure the PR title has [CUR-XXX]."
+            # Non-blocking: squash merge uses PR title, not individual commits
+            exit 0
           else
             echo "All $VALID commit(s) have valid CUR-XXX and REQ-XXX references"
           fi
