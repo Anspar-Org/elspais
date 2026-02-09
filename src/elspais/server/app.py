@@ -1,0 +1,401 @@
+# Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
+"""elspais.server.app - Flask app factory and REST API routes.
+
+This is a THIN REST wrapper — all logic delegates to pure functions
+in ``elspais.mcp.server``. No graph logic is duplicated here.
+
+State pattern matches the MCP server:
+    _state = {"graph": graph, "working_dir": repo_root,
+              "config": config, "build_time": time.time()}
+"""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
+
+from elspais.graph import NodeKind
+from elspais.graph.builder import TraceGraph
+from elspais.mcp.server import (
+    _get_graph_status,
+    _get_hierarchy,
+    _get_mutation_log,
+    _get_requirement,
+    _mutate_add_assertion,
+    _mutate_add_edge,
+    _mutate_change_edge_kind,
+    _mutate_change_status,
+    _mutate_delete_edge,
+    _mutate_update_assertion,
+    _mutate_update_title,
+    _search,
+    _undo_last_mutation,
+)
+
+
+def create_app(
+    repo_root: Path,
+    graph: TraceGraph,
+    config: dict[str, Any],
+) -> Flask:
+    """Create the Flask application with REST API routes.
+
+    REQ-d00010-A: Flask application with factory function.
+    REQ-d00010-F: CORS enabled for cross-origin requests.
+    REQ-d00010-G: Static file serving from templates/static/.
+
+    Args:
+        repo_root: Repository root path.
+        graph: Pre-built TraceGraph instance.
+        config: elspais configuration dict.
+
+    Returns:
+        Configured Flask application.
+    """
+    # Resolve template and static directories
+    templates_dir = Path(__file__).parent.parent / "html" / "templates"
+    static_dir = templates_dir / "static"
+
+    app = Flask(
+        __name__,
+        template_folder=str(templates_dir),
+        static_folder=str(static_dir) if static_dir.exists() else None,
+    )
+
+    # REQ-d00010-F: CORS support
+    CORS(app)
+
+    # State pattern matching MCP server
+    _state: dict[str, Any] = {
+        "graph": graph,
+        "working_dir": repo_root,
+        "config": config,
+        "build_time": time.time(),
+    }
+
+    # ─────────────────────────────────────────────────────────────────
+    # Template route
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/")
+    def index():
+        """Serve the trace-edit UI template."""
+        try:
+            return render_template("trace_edit.html.j2")
+        except Exception:
+            # Template may not exist yet (Phase 3)
+            return jsonify({"message": "trace_edit.html.j2 template not yet available"}), 200
+
+    # ─────────────────────────────────────────────────────────────────
+    # Read-only GET endpoints
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/api/status")
+    def api_status():
+        """GET /api/status - Graph status via _get_graph_status()."""
+        return jsonify(_get_graph_status(_state["graph"]))
+
+    @app.route("/api/requirement/<req_id>")
+    def api_requirement(req_id: str):
+        """GET /api/requirement/<req_id> - Full requirement details."""
+        result = _get_requirement(_state["graph"], req_id)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result)
+
+    @app.route("/api/hierarchy/<req_id>")
+    def api_hierarchy(req_id: str):
+        """GET /api/hierarchy/<req_id> - Ancestors and children."""
+        result = _get_hierarchy(_state["graph"], req_id)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result)
+
+    @app.route("/api/search")
+    def api_search():
+        """GET /api/search?q=<query>&field=<field> - Search requirements."""
+        query = request.args.get("q", "")
+        field = request.args.get("field", "all")
+        if not query:
+            return jsonify([])
+        return jsonify(_search(_state["graph"], query, field))
+
+    @app.route("/api/tree-data")
+    def api_tree_data():
+        """GET /api/tree-data - Build tree data for nav panel.
+
+        Adapts the HTMLGenerator._build_tree_rows pattern to produce
+        a flat list of tree nodes suitable for the nav panel.
+        """
+        g = _state["graph"]
+        rows = []
+
+        def _walk(node, depth: int, parent_id: str | None) -> None:
+            """DFS traversal producing flat row list."""
+            if node.kind != NodeKind.REQUIREMENT:
+                return
+
+            # Collect assertion letters
+            assertions = []
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    label = child.get_field("label", "")
+                    if label:
+                        assertions.append(label)
+
+            # Determine if node has requirement children
+            has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
+
+            rows.append(
+                {
+                    "id": node.id,
+                    "title": node.get_label() or "",
+                    "level": (node.get_field("level") or "").upper(),
+                    "status": (node.get_field("status") or "").upper(),
+                    "depth": depth,
+                    "parent_id": parent_id,
+                    "assertions": sorted(assertions),
+                    "has_children": has_children,
+                    "is_leaf": not has_children,
+                }
+            )
+
+            # Recurse into requirement children
+            for child in node.iter_children():
+                if child.kind == NodeKind.REQUIREMENT:
+                    _walk(child, depth + 1, node.id)
+
+        # Start from roots
+        for root in g.iter_roots():
+            if root.kind == NodeKind.REQUIREMENT:
+                _walk(root, 0, None)
+
+        return jsonify(rows)
+
+    @app.route("/api/file-content")
+    def api_file_content():
+        """GET /api/file-content?path=<relative_path> - Read a file from disk.
+
+        Returns the file content as an array of lines with metadata about
+        whether the file has pending in-memory mutations that would change
+        it on save.
+        """
+        import os
+
+        from elspais.graph.mutations import MutationLog
+
+        rel_path = request.args.get("path", "")
+        if not rel_path:
+            return jsonify({"error": "path parameter required"}), 400
+
+        # Resolve to absolute path, constrained to repo root
+        abs_path = (_state["working_dir"] / rel_path).resolve()
+        repo_resolved = _state["working_dir"].resolve()
+        if not str(abs_path).startswith(str(repo_resolved)):
+            return jsonify({"error": "path outside repository"}), 403
+
+        if not abs_path.exists():
+            return jsonify({"error": f"file not found: {rel_path}"}), 404
+
+        try:
+            content = abs_path.read_text(encoding="utf-8")
+        except Exception as e:
+            return jsonify({"error": f"cannot read file: {e}"}), 500
+
+        lines = content.splitlines()
+
+        # Check which nodes in the mutation log are sourced from this file
+        g = _state["graph"]
+        mutation_log: MutationLog = g._mutation_log
+        affected_node_ids: set[str] = set()
+        for entry in mutation_log.iter_entries():
+            # Each entry has node_id in before_state or after_state
+            node_id = entry.after_state.get("node_id", "") if entry.after_state else ""
+            if not node_id:
+                node_id = entry.before_state.get("node_id", "") if entry.before_state else ""
+            if not node_id:
+                continue
+            node = g.find_by_id(node_id)
+            if node and node.source and node.source.path:
+                node_path = str((_state["working_dir"] / node.source.path).resolve())
+                if node_path == str(abs_path):
+                    affected_node_ids.add(node_id)
+
+        return jsonify(
+            {
+                "lines": lines,
+                "line_count": len(lines),
+                "has_pending_mutations": len(affected_node_ids) > 0,
+                "pending_mutation_count": len(affected_node_ids),
+                "affected_nodes": sorted(affected_node_ids),
+                "mtime": os.path.getmtime(abs_path),
+            }
+        )
+
+    @app.route("/api/dirty")
+    def api_dirty():
+        """GET /api/dirty - Check if graph has unsaved mutations."""
+        log = _get_mutation_log(_state["graph"], limit=1)
+        count = log.get("count", 0)
+        return jsonify({"dirty": count > 0, "mutation_count": count})
+
+    # ─────────────────────────────────────────────────────────────────
+    # Mutation POST endpoints
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/api/mutate/status", methods=["POST"])
+    def api_mutate_status():
+        """POST /api/mutate/status - Change requirement status."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        new_status = data.get("new_status", "")
+        if not node_id or not new_status:
+            return jsonify({"success": False, "error": "node_id and new_status required"}), 400
+        result = _mutate_change_status(_state["graph"], node_id, new_status)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/title", methods=["POST"])
+    def api_mutate_title():
+        """POST /api/mutate/title - Update requirement title."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        new_title = data.get("new_title", "")
+        if not node_id or not new_title:
+            return jsonify({"success": False, "error": "node_id and new_title required"}), 400
+        result = _mutate_update_title(_state["graph"], node_id, new_title)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/assertion", methods=["POST"])
+    def api_mutate_assertion():
+        """POST /api/mutate/assertion - Update assertion text."""
+        data = request.get_json(force=True)
+        assertion_id = data.get("assertion_id", "")
+        new_text = data.get("new_text", "")
+        if not assertion_id or not new_text:
+            return jsonify({"success": False, "error": "assertion_id and new_text required"}), 400
+        result = _mutate_update_assertion(_state["graph"], assertion_id, new_text)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/assertion/add", methods=["POST"])
+    def api_mutate_assertion_add():
+        """POST /api/mutate/assertion/add - Add assertion to requirement."""
+        data = request.get_json(force=True)
+        req_id = data.get("req_id", "")
+        label = data.get("label", "")
+        text = data.get("text", "")
+        if not req_id or not label or not text:
+            return jsonify({"success": False, "error": "req_id, label, and text required"}), 400
+        result = _mutate_add_assertion(_state["graph"], req_id, label, text)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/edge", methods=["POST"])
+    def api_mutate_edge():
+        """POST /api/mutate/edge - Edge mutations (add/change_kind/delete).
+
+        The ``action`` field in the JSON body determines the operation:
+        - "add": requires source_id, target_id, edge_kind
+        - "change_kind": requires source_id, target_id, new_kind
+        - "delete": requires source_id, target_id
+        """
+        data = request.get_json(force=True)
+        action = data.get("action", "")
+        source_id = data.get("source_id", "")
+        target_id = data.get("target_id", "")
+
+        if not action:
+            return jsonify({"success": False, "error": "action required"}), 400
+        if not source_id or not target_id:
+            return jsonify({"success": False, "error": "source_id and target_id required"}), 400
+
+        if action == "add":
+            edge_kind = data.get("edge_kind", "")
+            if not edge_kind:
+                return jsonify({"success": False, "error": "edge_kind required for add"}), 400
+            assertion_targets = data.get("assertion_targets")
+            result = _mutate_add_edge(
+                _state["graph"], source_id, target_id, edge_kind, assertion_targets
+            )
+        elif action == "change_kind":
+            new_kind = data.get("new_kind", "")
+            if not new_kind:
+                return (
+                    jsonify({"success": False, "error": "new_kind required for change_kind"}),
+                    400,
+                )
+            result = _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
+        elif action == "delete":
+            result = _mutate_delete_edge(_state["graph"], source_id, target_id, confirm=True)
+        else:
+            return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
+
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/undo", methods=["POST"])
+    def api_mutate_undo():
+        """POST /api/mutate/undo - Undo the most recent mutation."""
+        result = _undo_last_mutation(_state["graph"])
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    # ─────────────────────────────────────────────────────────────────
+    # Persistence endpoints (REQ-o00063-F)
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/api/save", methods=["POST"])
+    def api_save():
+        """POST /api/save - Persist mutations to spec files on disk."""
+        from elspais.server.persistence import replay_mutations_to_disk
+
+        result = replay_mutations_to_disk(
+            _state["graph"],
+            _state["working_dir"],
+            build_time=_state.get("build_time"),
+        )
+        status_code = 200 if result.get("success") else 409
+        # Update build_time after successful save
+        if result.get("success"):
+            _state["build_time"] = time.time()
+        return jsonify(result), status_code
+
+    @app.route("/api/revert", methods=["POST"])
+    def api_revert():
+        """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
+        from elspais.graph.factory import build_graph
+
+        try:
+            new_graph = build_graph(
+                config=_state["config"],
+                repo_root=_state["working_dir"],
+            )
+            _state["graph"] = new_graph
+            _state["build_time"] = time.time()
+            return jsonify({"success": True, "message": "Graph reverted from disk"})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/reload", methods=["POST"])
+    def api_reload():
+        """POST /api/reload - Reload graph from disk (same as revert)."""
+        from elspais.graph.factory import build_graph
+
+        try:
+            new_graph = build_graph(
+                config=_state["config"],
+                repo_root=_state["working_dir"],
+            )
+            _state["graph"] = new_graph
+            _state["build_time"] = time.time()
+            return jsonify({"success": True, "message": "Graph reloaded from disk"})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    return app

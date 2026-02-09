@@ -1,4 +1,4 @@
-# Implements: REQ-o00063-A, REQ-o00063-B, REQ-o00063-D
+# Implements: REQ-o00063-A, REQ-o00063-B, REQ-o00063-D, REQ-o00063-G, REQ-o00063-H, REQ-o00063-I
 """Spec file I/O — unified module for reading/writing spec files.
 
 Consolidates all spec-file mutation helpers used by both the CLI
@@ -9,12 +9,15 @@ Every file write uses ``encoding="utf-8"`` explicitly.
 
 Public API
 ----------
-- ``update_hash_in_file``  — update hash in a requirement's End marker
-- ``add_status_to_file``   — add a missing Status field to metadata
-- ``modify_implements``    — change the Implements field of a requirement
-- ``modify_status``        — change the Status field of a requirement
-- ``move_requirement``     — move a requirement between spec files
-- ``change_reference_type``— change Implements/Refines in a spec file
+- ``update_hash_in_file``      — update hash in a requirement's End marker
+- ``add_status_to_file``       — add a missing Status field to metadata
+- ``modify_implements``        — change the Implements field of a requirement
+- ``modify_status``            — change the Status field of a requirement
+- ``modify_title``             — change the title of a requirement
+- ``modify_assertion_text``    — change an assertion's text in a requirement
+- ``add_assertion_to_file``    — add a new assertion to a requirement
+- ``move_requirement``         — move a requirement between spec files
+- ``change_reference_type``    — change Implements/Refines in a spec file
 """
 
 from __future__ import annotations
@@ -294,6 +297,275 @@ def modify_status(
         "success": True,
         "old_status": old_status,
         "new_status": new_status,
+        "dry_run": dry_run,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Title / assertion mutations (Phase 1: trace-edit)
+# ---------------------------------------------------------------------------
+
+
+def modify_title(
+    file_path: Path,
+    req_id: str,
+    new_title: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Modify the title of a requirement.
+
+    Finds the header line ``## REQ-xxx: Old Title`` and replaces the title
+    portion while preserving the heading level and ID.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID to modify.
+        new_title: New title text.
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, old_title, new_title, dry_run, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    # Find the requirement header (any markdown header level)
+    req_match = _find_req_header(content, req_id)
+
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    # Group 2 of _find_req_header is the title text
+    old_title = req_match.group(2)
+
+    if old_title == new_title:
+        return {
+            "success": True,
+            "old_title": old_title,
+            "new_title": new_title,
+            "no_change": True,
+            "dry_run": dry_run,
+        }
+
+    # Calculate absolute positions for group 2 (the title)
+    abs_start = req_match.start(2)
+    abs_end = req_match.end(2)
+
+    # Apply change — replace just the title text
+    new_content = content[:abs_start] + new_title + content[abs_end:]
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "old_title": old_title,
+        "new_title": new_title,
+        "dry_run": dry_run,
+    }
+
+
+def modify_assertion_text(
+    file_path: Path,
+    req_id: str,
+    label: str,
+    new_text: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Modify an assertion's text within a requirement block.
+
+    Finds the assertion line ``{label}. old text`` within the requirement
+    and replaces the text portion.  Handles multi-line assertions where
+    continuation lines are indented.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID containing the assertion.
+        label: Assertion label (e.g., 'A', 'B').
+        new_text: New assertion text.
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, old_text, new_text, dry_run, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    # Find the requirement header
+    req_match = _find_req_header(content, req_id)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    start_pos = req_match.end()
+
+    # Find the end of this requirement block
+    next_header = _find_next_req_header(content, start_pos)
+    end_pos = next_header.start() if next_header else len(content)
+
+    block = content[start_pos:end_pos]
+
+    # Find the assertion line within this block.
+    # Pattern: start-of-line, optional whitespace, label, dot, space(s), text
+    assertion_pattern = re.compile(
+        rf"^(\s*{re.escape(label)}\.\s+)(.+)$",
+        re.MULTILINE,
+    )
+    assertion_match = assertion_pattern.search(block)
+
+    if not assertion_match:
+        return {
+            "success": False,
+            "error": f"Assertion {label} not found in {req_id}",
+        }
+
+    # The text starts at group(2). We need to capture multi-line continuation
+    # lines (indented lines that follow the assertion line).
+    text_start = assertion_match.start(2)
+    text_end = assertion_match.end(2)
+
+    # Check for continuation lines: lines that start with whitespace and are
+    # NOT a new assertion label or section boundary.
+    # remaining starts with "\n..." because the regex match ends at end-of-line
+    # before the newline character.  We split on "\n" and skip the first
+    # empty element (the content before the first newline).
+    remaining = block[assertion_match.end() :]
+    continuation_pattern = re.compile(
+        r"^(?P<cont>\s+\S.*)$",
+        re.MULTILINE,
+    )
+    # A new assertion, section header, End marker, or blank line ends continuation
+    boundary_pattern = re.compile(
+        r"^(\s*[A-Z0-9]+\.\s|##\s|\*End\*|\s*$)",
+        re.MULTILINE,
+    )
+
+    lines_after = remaining.split("\n")
+    # Skip the first element — it is always empty (text before first \n)
+    for line in lines_after[1:]:
+        if not line:
+            # Blank line ends continuation
+            break
+        if boundary_pattern.match(line) and not continuation_pattern.match(line):
+            break
+        cont_match = continuation_pattern.match(line)
+        if cont_match:
+            # +1 for the newline character between lines
+            text_end += 1 + len(line)
+        else:
+            break
+
+    old_text = block[text_start:text_end]
+
+    if old_text == new_text:
+        return {
+            "success": True,
+            "old_text": old_text,
+            "new_text": new_text,
+            "no_change": True,
+            "dry_run": dry_run,
+        }
+
+    # Calculate absolute positions in the full content
+    abs_text_start = start_pos + text_start
+    abs_text_end = start_pos + text_end
+
+    new_content = content[:abs_text_start] + new_text + content[abs_text_end:]
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "old_text": old_text,
+        "new_text": new_text,
+        "dry_run": dry_run,
+    }
+
+
+def add_assertion_to_file(
+    file_path: Path,
+    req_id: str,
+    label: str,
+    text: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Add a new assertion to a requirement's Assertions section.
+
+    Finds the ``## Assertions`` section within the requirement and inserts
+    the new assertion after the last existing assertion line, maintaining
+    consistent formatting.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID to add the assertion to.
+        label: Assertion label (e.g., 'G', 'H').
+        text: Assertion text (the SHALL statement).
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, label, dry_run, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    # Find the requirement header
+    req_match = _find_req_header(content, req_id)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    start_pos = req_match.end()
+
+    # Find the end of this requirement block
+    next_header = _find_next_req_header(content, start_pos)
+    end_pos = next_header.start() if next_header else len(content)
+
+    block = content[start_pos:end_pos]
+
+    # Find the ## Assertions section header
+    assertions_header = re.compile(r"^##\s+Assertions\s*$", re.MULTILINE)
+    header_match = assertions_header.search(block)
+    if not header_match:
+        return {
+            "success": False,
+            "error": f"No ## Assertions section found in {req_id}",
+        }
+
+    # Find existing assertion lines within this block (after the Assertions header)
+    assertions_start = header_match.end()
+    assertion_line_pattern = re.compile(r"^\s*[A-Z0-9]+\.\s+.+$", re.MULTILINE)
+
+    # Find the last assertion line within this block
+    last_assertion_end = None
+    for m in assertion_line_pattern.finditer(block, assertions_start):
+        # Check for multi-line continuations after this assertion
+        candidate_end = m.end()
+        remaining_after = block[candidate_end:]
+        lines_after = remaining_after.split("\n")
+        # Skip first element — empty string before the first \n
+        for line in lines_after[1:]:
+            if not line:
+                break
+            # Continuation lines: start with whitespace, contain non-space content
+            if re.match(r"^\s+\S", line):
+                candidate_end += 1 + len(line)
+            else:
+                break
+        last_assertion_end = candidate_end
+
+    if last_assertion_end is None:
+        # No existing assertions — insert right after the Assertions header
+        # with a blank line in between
+        insert_pos = start_pos + assertions_start
+        new_line = f"\n{label}. {text}"
+    else:
+        insert_pos = start_pos + last_assertion_end
+        new_line = f"\n{label}. {text}"
+
+    new_content = content[:insert_pos] + new_line + content[insert_pos:]
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "label": label,
         "dry_run": dry_run,
     }
 

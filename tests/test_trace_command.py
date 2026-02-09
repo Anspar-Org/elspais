@@ -568,8 +568,10 @@ class TestTraceAdvancedFeaturesNotImplemented:
         )
         return spec_dir
 
-    def test_edit_mode_not_implemented(self, temp_spec_dir: Path, capsys):
-        """Test --edit-mode shows not implemented error."""
+    def test_edit_mode_delegates_to_server(self, temp_spec_dir: Path):
+        """Test --edit-mode delegates to _run_server with open_browser=True."""
+        from unittest.mock import patch
+
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -586,11 +588,10 @@ class TestTraceAdvancedFeaturesNotImplemented:
             graph_json=False,
         )
 
-        result = trace.run(args)
-        assert result == 1
-
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.err
+        with patch.object(trace, "_run_server", return_value=0) as mock:
+            result = trace.run(args)
+            assert result == 0
+            mock.assert_called_once_with(args, open_browser=True)
 
     def test_review_mode_not_implemented(self, temp_spec_dir: Path, capsys):
         """Test --review-mode shows not implemented error."""
@@ -616,8 +617,10 @@ class TestTraceAdvancedFeaturesNotImplemented:
         captured = capsys.readouterr()
         assert "not yet implemented" in captured.err
 
-    def test_server_not_implemented(self, temp_spec_dir: Path, capsys):
-        """Test --server shows not implemented error."""
+    def test_server_delegates_to_run_server(self, temp_spec_dir: Path):
+        """Test --server delegates to _run_server with open_browser=False."""
+        from unittest.mock import patch
+
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -634,8 +637,7 @@ class TestTraceAdvancedFeaturesNotImplemented:
             graph_json=False,
         )
 
-        result = trace.run(args)
-        assert result == 1
-
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.err
+        with patch.object(trace, "_run_server", return_value=0) as mock:
+            result = trace.run(args)
+            assert result == 0
+            mock.assert_called_once_with(args, open_browser=False)

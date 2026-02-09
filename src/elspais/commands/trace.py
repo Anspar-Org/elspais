@@ -369,16 +369,80 @@ def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str =
     return generator.generate(embed_content=embed_content)
 
 
+# Implements: REQ-d00010-A
+def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
+    """Start the Flask trace-edit server.
+
+    Builds the graph, creates the Flask app, and runs the dev server.
+
+    Args:
+        args: Parsed CLI arguments.
+        open_browser: If True, open the browser automatically (--edit-mode).
+
+    Returns:
+        Exit code (0 = success).
+    """
+    try:
+        from elspais.server import create_app
+    except ImportError:
+        print(
+            "Error: Flask server requires the trace-review extra.\n"
+            "Install with: pip install elspais[trace-review]",
+            file=sys.stderr,
+        )
+        return 1
+
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    repo_root = Path.cwd().resolve()
+
+    config = get_config(start_path=repo_root, quiet=True)
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        repo_root=repo_root,
+    )
+
+    app = create_app(repo_root=repo_root, graph=graph, config=config)
+
+    port = 5000
+    url = f"http://127.0.0.1:{port}"
+
+    if not getattr(args, "quiet", False):
+        print(f"Starting trace-edit server at {url}", file=sys.stderr)
+
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(url)
+
+    try:
+        app.run(host="127.0.0.1", port=port, debug=False)
+    except KeyboardInterrupt:
+        if not getattr(args, "quiet", False):
+            print("\nServer stopped.", file=sys.stderr)
+
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
     Uses graph factory to build TraceGraph, then streams output in requested format.
     """
-    # Handle not-implemented features
-    for flag in ("edit_mode", "review_mode", "server"):
-        if getattr(args, flag, False):
-            print(f"Error: --{flag.replace('_', '-')} not yet implemented", file=sys.stderr)
-            return 1
+    # Handle --review-mode (still not implemented)
+    if getattr(args, "review_mode", False):
+        print("Error: --review-mode not yet implemented", file=sys.stderr)
+        return 1
+
+    # Handle --server and --edit-mode (trace-edit server)
+    want_server = getattr(args, "server", False)
+    want_edit = getattr(args, "edit_mode", False)
+    if want_server or want_edit:
+        return _run_server(args, open_browser=want_edit)
 
     # Parse --report preset
     report_name = getattr(args, "report", None)
