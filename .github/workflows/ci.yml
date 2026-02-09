@@ -1,0 +1,118 @@
+# Implements: REQ-o00066-A-B-C-D-E
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,trace-view,trace-review,mcp]"
+
+      - name: Run tests
+        run: pytest --tb=short -q
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Check with ruff
+        run: ruff check src/ tests/
+
+  self-validate:
+    name: Self-Validate Specs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install elspais
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Validate requirement format and IDs
+        run: elspais validate
+
+      - name: Generate traceability matrix
+        run: |
+          mkdir -p build-reports
+          elspais trace --format both --output build-reports/traceability_matrix
+
+      - name: Upload traceability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traceability-${{ github.sha }}
+          path: build-reports/
+          retention-days: 30
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and audit tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[all]"
+          pip install pip-audit safety
+
+      - name: Audit dependencies for known vulnerabilities
+        run: pip-audit
+
+      - name: Check with safety
+        run: safety check
+        continue-on-error: true
