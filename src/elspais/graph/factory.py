@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from elspais.associates import get_associate_spec_directories
-from elspais.config import get_config, get_ignore_config, get_spec_directories
+from elspais.config import get_code_directories, get_config, get_ignore_config, get_spec_directories
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers import ParserRegistry
@@ -24,6 +24,35 @@ from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import PatternConfig
 from elspais.utilities.reference_config import ReferenceResolver
+
+# Default file patterns for [directories].code scanning.
+# Covers all languages listed in the multi-language comment support table.
+DEFAULT_CODE_PATTERNS = [
+    "*.py",
+    "*.js",
+    "*.ts",
+    "*.jsx",
+    "*.tsx",
+    "*.java",
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.hpp",
+    "*.go",
+    "*.rs",
+    "*.rb",
+    "*.sh",
+    "*.bash",
+    "*.sql",
+    "*.lua",
+    "*.yml",
+    "*.yaml",
+    "*.dart",
+    "*.swift",
+    "*.kt",
+    "*.css",
+    "*.scss",
+]
 
 
 def _find_repo_root(spec_dir: Path) -> Path | None:
@@ -195,8 +224,11 @@ def build_graph(
                 continue
             builder.add_parsed_content(parsed_content)
 
-    # 5. Scan code directories from traceability.scan_patterns
+    # 5. Scan code files from [traceability].scan_patterns AND [directories].code
     if scan_code:
+        scanned_code_files: set[str] = set()
+
+        # 5a. Explicit scan_patterns (existing behavior)
         traceability_config = config.get("traceability", {})
         scan_patterns = traceability_config.get("scan_patterns", [])
 
@@ -206,9 +238,33 @@ def build_graph(
             for file_path in matched_files:
                 path = Path(file_path)
                 if path.is_file():
+                    resolved = str(path.resolve())
+                    scanned_code_files.add(resolved)
                     domain_file = DomainFile(path)
                     for parsed_content in domain_file.deserialize(code_registry):
                         builder.add_parsed_content(parsed_content)
+
+        # 5b. [directories].code with default file patterns
+        code_dirs = get_code_directories(config, repo_root)
+        ignore_dirs = config.get("directories", {}).get("ignore", [])
+
+        for code_dir in code_dirs:
+            domain_file = DomainFile(
+                code_dir,
+                patterns=DEFAULT_CODE_PATTERNS,
+                recursive=True,
+                skip_dirs=ignore_dirs,
+            )
+            for parsed_content in domain_file.deserialize(code_registry):
+                source_path = parsed_content.source_context.metadata.get("path")
+                if source_path:
+                    resolved = str(Path(source_path).resolve())
+                    if resolved in scanned_code_files:
+                        continue
+                    scanned_code_files.add(resolved)
+                    if ignore_config.should_ignore(source_path, scope="code"):
+                        continue
+                builder.add_parsed_content(parsed_content)
 
     # 6. Scan test directories from testing config
     if scan_tests:

@@ -8,10 +8,12 @@ Supports configurable reference keyword (default: "Validates") and dynamic
 pattern generation from PatternConfig.
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Set
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from elspais.graph import GraphNode
@@ -33,9 +35,9 @@ class TestReference:
     """
 
     requirement_id: str
-    assertion_label: Optional[str]
+    assertion_label: str | None
     test_file: Path
-    test_name: Optional[str] = None
+    test_name: str | None = None
     line_number: int = 0
     expected_broken: bool = False
 
@@ -52,9 +54,9 @@ class TestScanResult:
         suppressed_count: Count of refs marked as expected_broken (for logging)
     """
 
-    references: Dict[str, List[TestReference]] = field(default_factory=dict)
+    references: dict[str, list[TestReference]] = field(default_factory=dict)
     files_scanned: int = 0
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     suppressed_count: int = 0
 
     def add_reference(self, ref: TestReference) -> None:
@@ -67,9 +69,9 @@ class TestScanResult:
 
 
 def build_validates_patterns(
-    pattern_config: "PatternConfig",
+    pattern_config: PatternConfig,
     keyword: str = "Validates",
-) -> List[str]:
+) -> list[str]:
     """
     Build regex patterns for test references using PatternConfig.
 
@@ -157,7 +159,7 @@ class TestScanner:
 
     def __init__(
         self,
-        reference_patterns: Optional[List[str]] = None,
+        reference_patterns: list[str] | None = None,
         reference_keyword: str = "Validates",
     ) -> None:
         """
@@ -181,7 +183,7 @@ class TestScanner:
 
         self._patterns = [re.compile(p, re.IGNORECASE) for p in patterns]
 
-    def _build_default_patterns(self, keyword: str) -> List[str]:
+    def _build_default_patterns(self, keyword: str) -> list[str]:
         """Build default patterns with the given keyword."""
         keyword_variants = f"(?:{keyword}|{keyword.upper()}|{keyword.lower()})"
 
@@ -199,9 +201,9 @@ class TestScanner:
     def scan_directories(
         self,
         base_path: Path,
-        test_dirs: List[str],
-        file_patterns: List[str],
-        ignore: Optional[List[str]] = None,
+        test_dirs: list[str],
+        file_patterns: list[str],
+        ignore: list[str] | None = None,
     ) -> TestScanResult:
         """
         Scan test directories for requirement references.
@@ -221,7 +223,7 @@ class TestScanner:
         """
         result = TestScanResult()
         ignore_set = set(ignore or [])
-        seen_files: Set[Path] = set()
+        seen_files: set[Path] = set()
 
         for dir_pattern in test_dirs:
             # Handle special cases for directory patterns
@@ -277,7 +279,7 @@ class TestScanner:
     # Number of header lines to scan for marker
     _MARKER_HEADER_LINES = 20
 
-    def _scan_file(self, file_path: Path) -> List[TestReference]:
+    def _scan_file(self, file_path: Path) -> list[TestReference]:
         """
         Scan a single test file for requirement references.
 
@@ -290,7 +292,7 @@ class TestScanner:
         refs, _ = self._scan_file_with_marker(file_path)
         return refs
 
-    def _scan_file_with_marker(self, file_path: Path) -> tuple[List[TestReference], int]:
+    def _scan_file_with_marker(self, file_path: Path) -> tuple[list[TestReference], int]:
         """
         Scan a single test file for requirement references with marker support.
 
@@ -303,7 +305,7 @@ class TestScanner:
         Returns:
             Tuple of (list of TestReference objects, count of suppressed refs)
         """
-        references: List[TestReference] = []
+        references: list[TestReference] = []
 
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -311,7 +313,7 @@ class TestScanner:
             return references, 0
 
         lines = content.split("\n")
-        current_test_name: Optional[str] = None
+        current_test_name: str | None = None
 
         # Detect marker in header and get initial suppress count
         suppress_remaining = self._detect_expected_broken_links_marker(file_path) or 0
@@ -359,7 +361,7 @@ class TestScanner:
 
         return references, suppressed_count
 
-    def _detect_expected_broken_links_marker(self, file_path: Path) -> Optional[int]:
+    def _detect_expected_broken_links_marker(self, file_path: Path) -> int | None:
         """
         Detect expected-broken-links marker in file header.
 
@@ -386,7 +388,7 @@ class TestScanner:
 
         return None
 
-    def scan_file(self, file_path: Path) -> List[TestReference]:
+    def scan_file(self, file_path: Path) -> list[TestReference]:
         """
         Public method to scan a single file.
 
@@ -402,7 +404,7 @@ class TestScanner:
 def create_test_nodes(
     scan_result: TestScanResult,
     repo_root: Path,
-) -> List["GraphNode"]:
+) -> list[GraphNode]:
     """
     Convert TestScanResult to GraphNode objects for graph building.
 
@@ -422,7 +424,7 @@ def create_test_nodes(
     from elspais.graph import GraphNode, NodeKind, SourceLocation
 
     # Group references by (file, test_name) to create one node per test
-    tests_by_key: Dict[tuple, List[TestReference]] = {}
+    tests_by_key: dict[tuple, list[TestReference]] = {}
 
     for _req_id, refs in scan_result.references.items():
         for ref in refs:
@@ -431,7 +433,7 @@ def create_test_nodes(
                 tests_by_key[key] = []
             tests_by_key[key].append(ref)
 
-    nodes: List[GraphNode] = []
+    nodes: list[GraphNode] = []
 
     for (file_path_str, test_name), refs in tests_by_key.items():
         file_path = Path(file_path_str)
@@ -443,8 +445,8 @@ def create_test_nodes(
             rel_path = str(file_path)
 
         # Collect all targets this test validates and expected broken targets
-        validates_targets: List[str] = []
-        expected_broken_targets: List[str] = []
+        validates_targets: list[str] = []
+        expected_broken_targets: list[str] = []
         for ref in refs:
             # Build target ID
             if ref.assertion_label:

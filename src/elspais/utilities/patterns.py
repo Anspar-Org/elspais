@@ -9,9 +9,11 @@ Supports multiple ID formats:
 Ported from core/patterns.py.
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # --- Shared regex patterns ---
 
@@ -45,10 +47,10 @@ class ParsedRequirement:
 
     full_id: str
     prefix: str
-    associated: Optional[str]
+    associated: str | None
     type_code: str
     number: str
-    assertion: Optional[str] = None
+    assertion: str | None = None
 
 
 @dataclass
@@ -66,13 +68,13 @@ class PatternConfig:
 
     id_template: str
     prefix: str
-    types: Dict[str, Dict[str, Any]]
-    id_format: Dict[str, Any]
-    associated: Optional[Dict[str, Any]] = None
-    assertions: Optional[Dict[str, Any]] = None
+    types: dict[str, dict[str, Any]]
+    id_format: dict[str, Any]
+    associated: dict[str, Any] | None = None
+    assertions: dict[str, Any] | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PatternConfig":
+    def from_dict(cls, data: dict[str, Any]) -> PatternConfig:
         """Create PatternConfig from configuration dictionary."""
         return cls(
             id_template=data.get("id_template", "{prefix}-{type}{id}"),
@@ -83,14 +85,14 @@ class PatternConfig:
             assertions=data.get("assertions"),
         )
 
-    def get_type_by_id(self, type_id: str) -> Optional[Dict[str, Any]]:
+    def get_type_by_id(self, type_id: str) -> dict[str, Any] | None:
         """Get type configuration by type ID."""
         for config in self.types.values():
             if config.get("id") == type_id:
                 return config
         return None
 
-    def resolve_level(self, raw_level: str) -> Optional[str]:
+    def resolve_level(self, raw_level: str) -> str | None:
         """Resolve raw level text to canonical type key.
 
         Case-insensitive match against config type keys.
@@ -107,7 +109,7 @@ class PatternConfig:
                 return key
         return None
 
-    def get_all_type_ids(self) -> List[str]:
+    def get_all_type_ids(self) -> list[str]:
         """Get list of all type IDs."""
         return [config.get("id", "") for config in self.types.values()]
 
@@ -230,7 +232,7 @@ class PatternValidator:
 
         return re.compile(f"^{pattern}$")
 
-    def parse(self, id_string: str, allow_assertion: bool = False) -> Optional[ParsedRequirement]:
+    def parse(self, id_string: str, allow_assertion: bool = False) -> ParsedRequirement | None:
         """Parse a requirement ID string into components.
 
         Args:
@@ -340,7 +342,7 @@ class PatternValidator:
 
         raise ValueError(f"Cannot parse assertion label: {label}")
 
-    def format(self, type_code: str, number: int, associated: Optional[str] = None) -> str:
+    def format(self, type_code: str, number: int, associated: str | None = None) -> str:
         """Format a requirement ID from components.
 
         Args:
@@ -380,7 +382,7 @@ class PatternValidator:
 
         return result
 
-    def extract_implements_ids(self, implements_str: str) -> List[str]:
+    def extract_implements_ids(self, implements_str: str) -> list[str]:
         """Extract requirement IDs from an Implements field value.
 
         Args:

@@ -5,10 +5,11 @@ elspais.associates - Associate repository configuration loading.
 Provides functions for loading associate configurations from YAML files
 and resolving associate spec directories.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -30,7 +31,7 @@ class Associate:
     enabled: bool = True
     path: str = ""
     spec_path: str = "spec"
-    local_path: Optional[str] = None
+    local_path: str | None = None
 
 
 # Alias for backwards compatibility
@@ -48,13 +49,13 @@ class AssociatesConfig:
         local_dir: Default base directory for associate repos
     """
 
-    associates: List[Associate] = field(default_factory=list)
+    associates: list[Associate] = field(default_factory=list)
     config_file: str = ""
     local_dir: str = "sponsor"
 
     # Alias property for backwards compatibility
     @property
-    def sponsors(self) -> List[Associate]:
+    def sponsors(self) -> list[Associate]:
         return self.associates
 
 
@@ -62,7 +63,7 @@ class AssociatesConfig:
 SponsorsConfig = AssociatesConfig
 
 
-def parse_yaml(content: str) -> Dict[str, Any]:
+def parse_yaml(content: str) -> dict[str, Any]:
     """
     Parse simple YAML content into a dictionary.
 
@@ -78,10 +79,10 @@ def parse_yaml(content: str) -> Dict[str, Any]:
     Returns:
         Parsed dictionary
     """
-    result: Dict[str, Any] = {}
-    current_key: Optional[str] = None
-    current_list: Optional[List[Dict]] = None
-    current_dict: Optional[Dict[str, Any]] = None
+    result: dict[str, Any] = {}
+    current_key: str | None = None
+    current_list: list[dict] | None = None
+    current_dict: dict[str, Any] | None = None
 
     lines = content.split("\n")
 
@@ -168,7 +169,7 @@ def _parse_yaml_value(value: str) -> Any:
     return value
 
 
-def load_associates_yaml(yaml_path: Path) -> Dict[str, Any]:
+def load_associates_yaml(yaml_path: Path) -> dict[str, Any]:
     """
     Load associates configuration from a YAML file.
 
@@ -200,7 +201,7 @@ def load_associates_yaml(yaml_path: Path) -> Dict[str, Any]:
 load_sponsors_yaml = load_associates_yaml
 
 
-def _parse_associates_yaml(content: str) -> Dict[str, Any]:
+def _parse_associates_yaml(content: str) -> dict[str, Any]:
     """
     Parse associates YAML content with proper handling of nested lists.
 
@@ -210,11 +211,11 @@ def _parse_associates_yaml(content: str) -> Dict[str, Any]:
     Returns:
         Parsed dictionary with associates configuration
     """
-    result: Dict[str, Any] = {"sponsors": {}}
+    result: dict[str, Any] = {"sponsors": {}}
     current_section = None
     current_list_key = None
-    current_list: List[Dict] = []
-    current_item: Optional[Dict] = None
+    current_list: list[dict] = []
+    current_item: dict | None = None
     current_dict_key = None  # For override files: sponsors: callisto: ...
 
     lines = content.split("\n")
@@ -297,8 +298,8 @@ def _parse_associates_yaml(content: str) -> Dict[str, Any]:
 
 
 def load_associates_config(
-    config: Dict[str, Any],
-    base_path: Optional[Path] = None,
+    config: dict[str, Any],
+    base_path: Path | None = None,
 ) -> AssociatesConfig:
     """
     Load associate configurations from config files.
@@ -379,8 +380,8 @@ load_sponsors_config = load_associates_config
 def resolve_associate_spec_dir(
     associate: Associate,
     config: AssociatesConfig,
-    base_path: Optional[Path] = None,
-) -> Optional[Path]:
+    base_path: Path | None = None,
+) -> Path | None:
     """
     Resolve the spec directory path for an associate.
 
@@ -427,9 +428,9 @@ resolve_sponsor_spec_dir = resolve_associate_spec_dir
 
 
 def get_associate_spec_directories(
-    config: Dict[str, Any],
-    base_path: Optional[Path] = None,
-) -> List[Path]:
+    config: dict[str, Any],
+    base_path: Path | None = None,
+) -> list[Path]:
     """
     Get all associate spec directories from configuration.
 

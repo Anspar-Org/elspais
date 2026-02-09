@@ -7,7 +7,7 @@ for requirements authoring. They can include YAML frontmatter for metadata.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 
 @dataclass
@@ -18,10 +18,10 @@ class ContentRule:
     title: str
     content: str
     type: str = "guidance"
-    applies_to: List[str] = field(default_factory=list)
+    applies_to: list[str] = field(default_factory=list)
 
 
-def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
+def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """
     Parse YAML frontmatter from markdown text.
 
@@ -59,7 +59,7 @@ def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
     return metadata, content
 
 
-def _parse_simple_yaml(lines: List[str]) -> Dict[str, Any]:
+def _parse_simple_yaml(lines: list[str]) -> dict[str, Any]:
     """
     Parse simple YAML format (zero-dependency).
 
@@ -70,9 +70,9 @@ def _parse_simple_yaml(lines: List[str]) -> Dict[str, Any]:
         - item1
         - item2
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     current_key = None
-    current_list: List[str] = []
+    current_list: list[str] = []
 
     for line in lines:
         stripped = line.strip()
@@ -149,9 +149,9 @@ def load_content_rule(file_path: Path) -> ContentRule:
 
 
 def load_content_rules(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     base_path: Path,
-) -> List[ContentRule]:
+) -> list[ContentRule]:
     """
     Load all content rules from configuration.
 

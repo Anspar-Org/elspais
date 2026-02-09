@@ -1,5 +1,7 @@
 """Tests for mutation infrastructure (MutationEntry, MutationLog, undo)."""
 
+from __future__ import annotations
+
 import pytest
 
 from elspais.graph import MutationEntry, MutationLog

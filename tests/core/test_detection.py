@@ -1,5 +1,6 @@
 # Validates REQ-p00002-B
 """Tests for TraceGraph detection capabilities (orphans, broken references)."""
+from __future__ import annotations
 
 from elspais.graph import BrokenReference
 from elspais.graph.builder import GraphBuilder

@@ -4,13 +4,14 @@ elspais.testing.result_parser - Test result file parser.
 Parses JUnit XML and pytest JSON result files to extract test outcomes.
 """
 
+from __future__ import annotations
+
 import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set
 
 
 class TestStatus(Enum):
@@ -41,10 +42,10 @@ class TestResult:
     test_name: str
     classname: str
     status: TestStatus
-    requirement_ids: List[str] = field(default_factory=list)
-    result_file: Optional[Path] = None
-    duration: Optional[float] = None
-    message: Optional[str] = None
+    requirement_ids: list[str] = field(default_factory=list)
+    result_file: Path | None = None
+    duration: float | None = None
+    message: str | None = None
 
 
 @dataclass
@@ -58,9 +59,9 @@ class ResultParseResult:
         errors: List of parse errors
     """
 
-    results: List[TestResult] = field(default_factory=list)
-    files_parsed: List[Path] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    results: list[TestResult] = field(default_factory=list)
+    files_parsed: list[Path] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 class ResultParser:
@@ -76,7 +77,7 @@ class ResultParser:
         r"(?:REQ[-_])?([pod]\d{5})(?:[-_]([A-Z]))?",
     ]
 
-    def __init__(self, reference_patterns: Optional[List[str]] = None) -> None:
+    def __init__(self, reference_patterns: list[str] | None = None) -> None:
         """
         Initialize the parser.
 
@@ -89,7 +90,7 @@ class ResultParser:
     def parse_result_files(
         self,
         base_path: Path,
-        result_file_patterns: List[str],
+        result_file_patterns: list[str],
     ) -> ResultParseResult:
         """
         Parse all matching result files.
@@ -102,7 +103,7 @@ class ResultParser:
             ResultParseResult with all parsed test results
         """
         result = ResultParseResult()
-        seen_files: Set[Path] = set()
+        seen_files: set[Path] = set()
 
         for pattern in result_file_patterns:
             for result_file in base_path.glob(pattern):
@@ -127,7 +128,7 @@ class ResultParser:
 
         return result
 
-    def _parse_junit_xml(self, file_path: Path) -> List[TestResult]:
+    def _parse_junit_xml(self, file_path: Path) -> list[TestResult]:
         """
         Parse a JUnit XML result file.
 
@@ -137,7 +138,7 @@ class ResultParser:
         Returns:
             List of TestResult objects
         """
-        results: List[TestResult] = []
+        results: list[TestResult] = []
 
         try:
             tree = ET.parse(file_path)
@@ -195,7 +196,7 @@ class ResultParser:
 
         return results
 
-    def _parse_pytest_json(self, file_path: Path) -> List[TestResult]:
+    def _parse_pytest_json(self, file_path: Path) -> list[TestResult]:
         """
         Parse a pytest JSON result file.
 
@@ -205,7 +206,7 @@ class ResultParser:
         Returns:
             List of TestResult objects
         """
-        results: List[TestResult] = []
+        results: list[TestResult] = []
 
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -257,7 +258,7 @@ class ResultParser:
 
         return results
 
-    def _extract_requirement_ids(self, test_name: str, classname: str) -> List[str]:
+    def _extract_requirement_ids(self, test_name: str, classname: str) -> list[str]:
         """
         Extract requirement IDs from test name and classname.
 
@@ -268,7 +269,7 @@ class ResultParser:
         Returns:
             List of normalized requirement IDs (e.g., ["REQ-p00001"])
         """
-        req_ids: List[str] = []
+        req_ids: list[str] = []
         search_text = f"{classname}::{test_name}"
 
         for pattern in self._patterns:
@@ -284,10 +285,10 @@ class ResultParser:
 
         return req_ids
 
-    def parse_junit_xml(self, file_path: Path) -> List[TestResult]:
+    def parse_junit_xml(self, file_path: Path) -> list[TestResult]:
         """Public method to parse a JUnit XML file."""
         return self._parse_junit_xml(file_path)
 
-    def parse_pytest_json(self, file_path: Path) -> List[TestResult]:
+    def parse_pytest_json(self, file_path: Path) -> list[TestResult]:
         """Public method to parse a pytest JSON file."""
         return self._parse_pytest_json(file_path)

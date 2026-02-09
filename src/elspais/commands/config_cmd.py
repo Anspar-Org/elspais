@@ -4,12 +4,14 @@ elspais.commands.config_cmd - Configuration management command.
 View and modify .elspais.toml configuration.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
 from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import tomlkit
 
@@ -255,7 +257,7 @@ def cmd_path(args: argparse.Namespace) -> int:
 # Helper functions
 
 
-def _get_config_path(args: argparse.Namespace) -> Optional[Path]:
+def _get_config_path(args: argparse.Namespace) -> Path | None:
     """Get configuration file path from args or by discovery."""
     if hasattr(args, "config") and args.config:
         return args.config
@@ -296,7 +298,7 @@ def _set_by_path(config: Any, path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
-def _unset_by_path(config: Dict[str, Any], path: str) -> bool:
+def _unset_by_path(config: dict[str, Any], path: str) -> bool:
     """Remove a key from config. Returns True if found and removed."""
     parts = path.split(".")
     current = config
@@ -381,7 +383,7 @@ def _print_value(value: Any, prefix: str = "") -> None:
             print(value)
 
 
-def _print_config(config: Dict[str, Any], indent: int = 0) -> None:
+def _print_config(config: dict[str, Any], indent: int = 0) -> None:
     """Pretty print configuration in TOML-like format."""
     for key, value in config.items():
         if isinstance(value, dict):
@@ -391,7 +393,7 @@ def _print_config(config: Dict[str, Any], indent: int = 0) -> None:
             print(f"{key} = {_format_value(value)}")
 
 
-def _print_section(section: Dict[str, Any], path: str, indent: int = 0) -> None:
+def _print_section(section: dict[str, Any], path: str, indent: int = 0) -> None:
     """Print a configuration section."""
     simple_items = []
     nested_items = []

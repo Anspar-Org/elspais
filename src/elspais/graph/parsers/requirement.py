@@ -7,7 +7,8 @@ header through end marker.
 from __future__ import annotations
 
 import re
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.hasher import HASH_VALUE_PATTERN

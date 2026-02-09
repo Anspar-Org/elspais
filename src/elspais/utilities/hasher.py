@@ -4,10 +4,10 @@
 Provides functions for calculating and verifying SHA-256 based content hashes.
 Ported from core/hasher.py.
 """
+from __future__ import annotations
 
 import hashlib
 import re
-from typing import Optional
 
 # Canonical pattern for matching any hash value in a footer.
 # Matches hex hashes (a1b2c3d4), placeholders (XXXXXXXX, TODO, ________), etc.
@@ -178,7 +178,7 @@ def compute_normalized_hash(
     return hash_obj.hexdigest()[:length]
 
 
-def extract_hash_from_footer(footer_text: str) -> Optional[str]:
+def extract_hash_from_footer(footer_text: str) -> str | None:
     """Extract hash value from requirement footer line.
 
     Looks for pattern: **Hash**: XXXXXXXX

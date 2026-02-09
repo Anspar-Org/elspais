@@ -8,8 +8,9 @@ Includes function/class context tracking for TEST→CODE linking.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.graph.parsers.config_helpers import is_empty_comment

@@ -5,9 +5,11 @@ Coordinates test file scanning and result parsing to produce
 per-requirement test coverage data.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from elspais.testing.config import TestingConfig
 from elspais.testing.result_parser import ResultParser, TestResult, TestStatus
@@ -31,7 +33,7 @@ class RequirementTestData:
     test_passed: int = 0
     test_failed: int = 0
     test_skipped: int = 0
-    test_result_files: List[str] = field(default_factory=list)
+    test_result_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -45,9 +47,9 @@ class TestMappingResult:
         errors: List of errors encountered
     """
 
-    requirement_data: Dict[str, RequirementTestData] = field(default_factory=dict)
-    scan_summary: Dict[str, Any] = field(default_factory=dict)
-    errors: List[str] = field(default_factory=list)
+    requirement_data: dict[str, RequirementTestData] = field(default_factory=dict)
+    scan_summary: dict[str, Any] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
 
 
 class TestCoverageMapper:
@@ -71,9 +73,9 @@ class TestCoverageMapper:
 
     def map_tests(
         self,
-        requirement_ids: Set[str],
+        requirement_ids: set[str],
         base_path: Path,
-        ignore: Optional[List[str]] = None,
+        ignore: list[str] | None = None,
     ) -> TestMappingResult:
         """
         Map tests to requirements and gather coverage data.
@@ -112,7 +114,7 @@ class TestCoverageMapper:
         result.errors.extend(parse_result.errors)
 
         # Step 3: Build requirement ID to test results mapping
-        req_to_results: Dict[str, List[TestResult]] = {}
+        req_to_results: dict[str, list[TestResult]] = {}
         for test_result in parse_result.results:
             for req_id in test_result.requirement_ids:
                 if req_id not in req_to_results:
@@ -137,7 +139,7 @@ class TestCoverageMapper:
                 if not scan_result.references.get(req_id):
                     test_data.test_count = len(results)
 
-                result_files: Set[str] = set()
+                result_files: set[str] = set()
                 for tr in results:
                     if tr.status == TestStatus.PASSED:
                         test_data.test_passed += 1

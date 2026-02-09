@@ -13,10 +13,11 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 
 def _clean_git_env() -> dict[str, str]:

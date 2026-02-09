@@ -8,8 +8,9 @@ Uses the shared reference_config infrastructure for configurable patterns.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.reference_config import (
