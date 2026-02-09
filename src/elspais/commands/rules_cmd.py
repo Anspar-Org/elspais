@@ -4,10 +4,11 @@ elspais.commands.rules_cmd - Content rules management command.
 View and manage content rule files.
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from elspais.config import find_config_file, load_config
 from elspais.content_rules import load_content_rule, load_content_rules
@@ -117,7 +118,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
-def _get_config_path(args: argparse.Namespace) -> Optional[Path]:
+def _get_config_path(args: argparse.Namespace) -> Path | None:
     """Get configuration file path from args or by discovery."""
     if hasattr(args, "config") and args.config:
         return args.config

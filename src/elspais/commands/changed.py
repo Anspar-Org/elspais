@@ -7,10 +7,10 @@ Detects changes to requirement files using git:
 - Changes vs main/master branch
 - Moved requirements (comparing current location to committed state)
 """
+from __future__ import annotations
 
 import argparse
 import json
-from typing import Dict, Optional
 
 from elspais.utilities.git import (
     detect_moved_requirements,
@@ -21,7 +21,7 @@ from elspais.utilities.git import (
 )
 
 
-def load_configuration(args: argparse.Namespace) -> Optional[Dict]:
+def load_configuration(args: argparse.Namespace) -> dict | None:
     """Load configuration from file or use defaults.
 
     Note: This is a wrapper for get_config() that returns Optional[Dict]

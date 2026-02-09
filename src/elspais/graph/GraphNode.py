@@ -10,10 +10,11 @@ This module provides the core data structures for Architecture 3.0:
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable, Iterator
 from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:

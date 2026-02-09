@@ -6,6 +6,8 @@ between full-text mode (hashes body_text) and normalized-text mode
 (hashes normalized assertion text only).
 """
 
+from __future__ import annotations
+
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.utilities.hasher import calculate_hash, compute_normalized_hash

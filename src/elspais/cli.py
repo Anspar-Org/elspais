@@ -4,11 +4,11 @@ elspais.cli - Command-line interface.
 
 Main entry point for the elspais CLI tool.
 """
+from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from elspais import __version__
 from elspais.commands import (
@@ -817,7 +817,7 @@ Examples:
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
 

@@ -4,10 +4,10 @@ elspais.commands.init - Initialize configuration command.
 
 Creates .elspais.toml configuration file.
 """
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Optional
 
 # Example requirement template for --template flag
 EXAMPLE_REQUIREMENT = """# REQ-d00001: Example Requirement Title
@@ -117,7 +117,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     return 0
 
 
-def generate_config(project_type: str, associated_prefix: Optional[str] = None) -> str:
+def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
     """Generate configuration file content."""
 
     if project_type == "associated":

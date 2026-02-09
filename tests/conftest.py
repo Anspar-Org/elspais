@@ -3,8 +3,8 @@ pytest configuration and shared fixtures for elspais tests.
 """
 
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

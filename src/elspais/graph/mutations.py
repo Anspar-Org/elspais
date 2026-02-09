@@ -7,9 +7,10 @@ broken references, and other graph state changes.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Iterator
+from typing import Any
 from uuid import uuid4
 
 

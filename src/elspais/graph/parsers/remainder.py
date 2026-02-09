@@ -6,7 +6,7 @@ Groups contiguous lines into remainder blocks.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 

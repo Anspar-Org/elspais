@@ -12,8 +12,9 @@ as that can process arbitrary blocks of text.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 from elspais.graph.parsers import ParsedContent
 

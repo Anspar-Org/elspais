@@ -10,12 +10,13 @@ Provides functionality to modify requirements in-place:
 
 File I/O is delegated to ``utilities.spec_writer``.
 """
+from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from elspais.utilities.spec_writer import modify_implements, modify_status, move_requirement
 
@@ -114,7 +115,7 @@ def run_single_edit(
     results = []
 
     # Collect valid refs if validation is enabled
-    valid_refs: Optional[set] = None
+    valid_refs: set | None = None
     if validate_refs:
         valid_refs = collect_all_req_ids(spec_dir)
 
@@ -169,7 +170,7 @@ def run_single_edit(
 def find_requirement_in_files(
     spec_dir: Path,
     req_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Find a requirement in spec files.
 
@@ -227,10 +228,10 @@ def collect_all_req_ids(spec_dir: Path) -> set:
 
 def batch_edit(
     spec_dir: Path,
-    changes: List[Dict[str, Any]],
+    changes: list[dict[str, Any]],
     dry_run: bool = False,
     validate_refs: bool = False,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Apply batch edits from a list of change specifications.
 
@@ -249,7 +250,7 @@ def batch_edit(
     results = []
 
     # Collect all req IDs if validation is enabled
-    valid_refs: Optional[set] = None
+    valid_refs: set | None = None
     if validate_refs:
         valid_refs = collect_all_req_ids(spec_dir)
 
@@ -272,7 +273,7 @@ def batch_edit(
             continue
 
         file_path = location["file_path"]
-        result: Dict[str, Any] = {"req_id": req_id, "success": True}
+        result: dict[str, Any] = {"req_id": req_id, "success": True}
 
         # Validate implements references if enabled
         if validate_refs and valid_refs and "implements" in change:

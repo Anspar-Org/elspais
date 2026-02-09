@@ -6,7 +6,7 @@ and result file parsing.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -24,14 +24,14 @@ class TestingConfig:
     """
 
     enabled: bool = False
-    test_dirs: List[str] = field(default_factory=list)
-    patterns: List[str] = field(default_factory=list)
-    result_files: List[str] = field(default_factory=list)
-    reference_patterns: List[str] = field(default_factory=list)
+    test_dirs: list[str] = field(default_factory=list)
+    patterns: list[str] = field(default_factory=list)
+    result_files: list[str] = field(default_factory=list)
+    reference_patterns: list[str] = field(default_factory=list)
     reference_keyword: str = "Validates"
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TestingConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "TestingConfig":
         """
         Create TestingConfig from configuration dictionary.
 

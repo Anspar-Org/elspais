@@ -6,9 +6,10 @@ various sources (files, stdin, CLI args) into parsed content.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from elspais.graph.parsers import ParseContext, ParsedContent, ParserRegistry
 

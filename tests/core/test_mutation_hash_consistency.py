@@ -8,6 +8,8 @@ Uses explicit hash_mode="full-text" since these tests verify the invariant that
 hash == calculate_hash(body_text), which only holds in full-text mode.
 """
 
+from __future__ import annotations
+
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.utilities.hasher import calculate_hash

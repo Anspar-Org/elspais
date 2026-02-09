@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
