@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [directories]
 spec = ["spec"]
-code = ["src"]
+code = ["src", ".github/workflows"]
 
 [spec]
 skip_dirs = ["roadmap"]

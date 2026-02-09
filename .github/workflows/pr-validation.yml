@@ -1,0 +1,123 @@
+# Implements: REQ-o00066-F-G
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate-pr-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Check PR title for ticket reference
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "PR Title: $PR_TITLE"
+
+          if echo "$PR_TITLE" | grep -qE '\[CUR-[0-9]+\]'; then
+            echo "PR title contains Linear ticket reference"
+          else
+            echo ""
+            echo "PR TITLE VALIDATION FAILED"
+            echo ""
+            echo "PR title must include a Linear ticket reference."
+            echo "Squash merges use the PR title as the commit message,"
+            echo "so the ticket reference is required for traceability."
+            echo ""
+            echo "Required format:"
+            echo "  [CUR-XXX] Description of changes"
+            echo ""
+            echo "To fix: Edit the PR title at:"
+            echo "  $PR_URL"
+            exit 1
+          fi
+
+  validate-commit-messages:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commits for ticket and requirement references
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          COMMITS=$(git log --no-merges --format='%H|%s' "$BASE_SHA".."$HEAD_SHA")
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found in PR"
+            exit 0
+          fi
+
+          INVALID=()
+          VALID=0
+
+          while IFS='|' read -r sha subject; do
+            FULL_MSG=$(git log -1 --format='%B' "$sha")
+
+            HAS_CUR=false
+            if echo "$FULL_MSG" | grep -qE '\[?CUR-[0-9]+\]?'; then
+              HAS_CUR=true
+            fi
+
+            HAS_REQ=false
+            if echo "$FULL_MSG" | grep -qE 'REQ-[pdo][0-9]{5}'; then
+              HAS_REQ=true
+            fi
+
+            if [ "$HAS_CUR" = "true" ] && [ "$HAS_REQ" = "true" ]; then
+              echo "OK ${sha:0:7}: $subject"
+              VALID=$((VALID + 1))
+            else
+              ERRORS=""
+              [ "$HAS_CUR" = "false" ] && ERRORS="missing CUR-XXX"
+              if [ "$HAS_REQ" = "false" ]; then
+                [ -n "$ERRORS" ] && ERRORS="$ERRORS, "
+                ERRORS="${ERRORS}missing REQ-XXX"
+              fi
+              echo "FAIL ${sha:0:7}: $subject ($ERRORS)"
+              INVALID+=("$sha|$subject|$ERRORS")
+            fi
+          done <<< "$COMMITS"
+
+          TOTAL=$((VALID + ${#INVALID[@]}))
+
+          if [ ${#INVALID[@]} -gt 0 ]; then
+            echo ""
+            echo "COMMIT MESSAGE VALIDATION: ${#INVALID[@]}/$TOTAL commit(s) missing references"
+            echo ""
+            # Show first 10 invalid commits (avoid flooding on large PRs)
+            SHOWN=0
+            for commit in "${INVALID[@]}"; do
+              IFS='|' read -r sha subject errors <<< "$commit"
+              echo "  ${sha:0:7}: $subject"
+              echo "    -> $errors"
+              SHOWN=$((SHOWN + 1))
+              [ $SHOWN -ge 10 ] && echo "  ... and $((${#INVALID[@]} - 10)) more" && break
+            done
+            echo ""
+            echo "Required format:"
+            echo "  [CUR-XXX] Subject line"
+            echo "  Body must reference REQ-{p|o|d}NNNNN"
+            echo ""
+            echo "Note: This PR will be squash-merged. Ensure the PR title has [CUR-XXX]."
+            # Non-blocking: squash merge uses PR title, not individual commits
+            exit 0
+          else
+            echo "All $VALID commit(s) have valid CUR-XXX and REQ-XXX references"
+          fi
