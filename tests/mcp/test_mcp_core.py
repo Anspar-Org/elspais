@@ -270,7 +270,7 @@ class TestGetRequirement:
         assert "REQ-p00001" in find_calls
 
     def test_REQ_d00062_B_returns_node_fields(self, sample_graph):
-        """REQ-d00062-B: Returns id, title, level, status, hash."""
+        """REQ-d00062-B: Returns id, title, kind, plus properties with level, status, hash."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
@@ -278,9 +278,10 @@ class TestGetRequirement:
 
         assert result["id"] == "REQ-p00001"
         assert result["title"] == "Platform Security"
-        assert result["level"] == "PRD"
-        assert result["status"] == "Active"
-        assert result["hash"] == "abc12345"
+        assert result["kind"] == "requirement"
+        assert result["properties"]["level"] == "PRD"
+        assert result["properties"]["status"] == "Active"
+        assert result["properties"]["hash"] == "abc12345"
 
     def test_REQ_d00062_C_returns_assertions(self, sample_graph):
         """REQ-d00062-C: Returns assertions from iter_children()."""

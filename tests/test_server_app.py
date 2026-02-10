@@ -165,8 +165,9 @@ class TestGetRequirement:
         data = resp.get_json()
         assert data["id"] == "REQ-p00001"
         assert data["title"] == "Platform Security"
-        assert data["level"] == "PRD"
-        assert data["status"] == "Active"
+        assert data["kind"] == "requirement"
+        assert data["properties"]["level"] == "PRD"
+        assert data["properties"]["status"] == "Active"
         assert "children" in data
 
     def test_REQ_d00010_A_requirement_not_found(self, client):
@@ -593,6 +594,155 @@ class TestCors:
         )
         assert resp.status_code == 200
         assert "Access-Control-Allow-Origin" in resp.headers
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generic Node API Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetNode:
+    """Validates REQ-d00010-A: GET /api/node/<node_id> generic endpoint."""
+
+    def test_REQ_d00010_A_node_requirement(self, client):
+        """Fetch a requirement node, verify kind and properties."""
+        resp = client.get("/api/node/REQ-p00001")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] == "REQ-p00001"
+        assert data["kind"] == "requirement"
+        assert data["properties"]["level"] == "PRD"
+        assert data["properties"]["status"] == "Active"
+
+    def test_REQ_d00010_A_node_not_found(self, client):
+        """Verify 404 for a non-existent node ID."""
+        resp = client.get("/api/node/NONEXISTENT-ID")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_REQ_d00010_A_node_assertion(self, client):
+        """Fetch an assertion node, verify kind and label property."""
+        resp = client.get("/api/node/REQ-p00001-A")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] == "REQ-p00001-A"
+        assert data["kind"] == "assertion"
+        assert data["properties"]["label"] == "A"
+
+    def test_REQ_d00010_A_node_common_envelope(self, client):
+        """Verify all common envelope fields are present in node response."""
+        resp = client.get("/api/node/REQ-p00001")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        expected_keys = {
+            "id",
+            "kind",
+            "title",
+            "source",
+            "keywords",
+            "parents",
+            "children",
+            "links",
+            "properties",
+        }
+        assert expected_keys.issubset(set(data.keys()))
+
+    def test_REQ_d00010_A_node_journey(self, client, sample_graph):
+        """Fetch a USER_JOURNEY node, verify kind and actor property."""
+        journey = GraphNode(
+            id="JNY-Login-01", kind=NodeKind.USER_JOURNEY, label="User Login Journey"
+        )
+        journey._content = {"actor": "End User", "goal": "Log into the system"}
+        sample_graph._index["JNY-Login-01"] = journey
+
+        resp = client.get("/api/node/JNY-Login-01")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] == "JNY-Login-01"
+        assert data["kind"] == "journey"
+        assert data["properties"]["actor"] == "End User"
+        assert data["properties"]["goal"] == "Log into the system"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Query Endpoint Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestApiQuery:
+    """Validates REQ-d00010-A: GET /api/query combined filter endpoint."""
+
+    def test_REQ_d00010_A_query_by_kind(self, client):
+        """Filter by kind=requirement returns only requirement nodes."""
+        resp = client.get("/api/query?kind=requirement")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["count"] >= 1
+        for result in data["results"]:
+            assert result["kind"] == "requirement"
+
+    def test_REQ_d00010_A_query_by_level(self, client):
+        """Filter by kind=requirement&level=PRD returns only PRD requirements."""
+        resp = client.get("/api/query?kind=requirement&level=PRD")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["count"] >= 1
+        for result in data["results"]:
+            assert result["kind"] == "requirement"
+            assert result["level"] == "PRD"
+
+    def test_REQ_d00010_A_query_empty(self, client):
+        """Non-existent level filter returns empty results."""
+        resp = client.get("/api/query?kind=requirement&level=NONEXISTENT")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["count"] == 0
+        assert data["results"] == []
+
+    def test_REQ_d00010_A_query_limit(self, client):
+        """Limit parameter restricts result count."""
+        resp = client.get("/api/query?kind=requirement&limit=1")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["results"]) <= 1
+
+    def test_REQ_d00010_A_query_no_params(self, client):
+        """No query params returns all nodes in the graph."""
+        resp = client.get("/api/query")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Graph has at least 4 nodes: 2 requirements + 2 assertions
+        assert data["count"] >= 4
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tree Data Journey Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestTreeDataJourneys:
+    """Validates REQ-d00010-A: Journey nodes in tree-data endpoint."""
+
+    def test_REQ_d00010_A_tree_data_includes_journeys(self, client, sample_graph):
+        """Journey nodes appear in tree-data with kind=journey and is_journey=True."""
+        journey = GraphNode(id="JNY-Browse-01", kind=NodeKind.USER_JOURNEY, label="Browse Catalog")
+        journey._content = {"actor": "Shopper", "goal": "Find products"}
+        sample_graph._index["JNY-Browse-01"] = journey
+
+        resp = client.get("/api/tree-data")
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        journey_rows = [r for r in data if r.get("id") == "JNY-Browse-01"]
+        assert len(journey_rows) == 1
+
+        row = journey_rows[0]
+        assert row["kind"] == "journey"
+        assert row["is_journey"] is True
+        assert row["title"] == "Browse Catalog"
+        assert row["actor"] == "Shopper"
+        assert row["goal"] == "Find products"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

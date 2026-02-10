@@ -24,6 +24,7 @@ from elspais.mcp.server import (
     _get_graph_status,
     _get_hierarchy,
     _get_mutation_log,
+    _get_node,
     _get_requirement,
     _mutate_add_assertion,
     _mutate_add_edge,
@@ -32,6 +33,7 @@ from elspais.mcp.server import (
     _mutate_delete_edge,
     _mutate_update_assertion,
     _mutate_update_title,
+    _query_nodes,
     _search,
     _undo_last_mutation,
 )
@@ -119,16 +121,68 @@ def create_app(
 
     @app.route("/api/status")
     def api_status():
-        """GET /api/status - Graph status via _get_graph_status()."""
-        return jsonify(_get_graph_status(_state["graph"]))
+        """GET /api/status - Graph status with associated repos info."""
+        result = _get_graph_status(_state["graph"])
+        # Include associated repos metadata for badge display
+        try:
+            from elspais.associates import load_associates_config
+
+            assoc_config = load_associates_config(_state["config"], _state["working_dir"])
+            result["associated_repos"] = [
+                {"code": a.code, "name": a.name} for a in assoc_config.associates if a.enabled
+            ]
+        except Exception:
+            result["associated_repos"] = []
+        return jsonify(result)
 
     @app.route("/api/requirement/<req_id>")
     def api_requirement(req_id: str):
-        """GET /api/requirement/<req_id> - Full requirement details."""
+        """GET /api/requirement/<req_id> - Full requirement details.
+
+        Thin wrapper: calls _get_node() internally but guards kind==requirement.
+        """
         result = _get_requirement(_state["graph"], req_id)
         if "error" in result:
             return jsonify(result), 404
         return jsonify(result)
+
+    @app.route("/api/node/<node_id>")
+    def api_node(node_id: str):
+        """GET /api/node/<node_id> - Full details for any node kind."""
+        result = _get_node(_state["graph"], node_id)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result)
+
+    @app.route("/api/query")
+    def api_query():
+        """GET /api/query - Combined property + keyword filter endpoint.
+
+        Query parameters:
+            kind: Filter by NodeKind value (requirement, journey, test, etc.)
+            keywords: Comma-separated keywords
+            match_all: true (default) = AND, false = OR
+            level: Property filter (PRD, OPS, DEV)
+            status: Property filter (active, draft, passed, failed, etc.)
+            actor: Property filter (journey actor)
+            limit: Max results (default 50)
+        """
+        kind = request.args.get("kind")
+        keywords_str = request.args.get("keywords", "")
+        keywords = (
+            [k.strip() for k in keywords_str.split(",") if k.strip()] if keywords_str else None
+        )
+        match_all = request.args.get("match_all", "true").lower() != "false"
+        limit = int(request.args.get("limit", "50"))
+        # Collect property filters from known param names
+        filters: dict[str, str] = {}
+        for prop in ("level", "status", "actor"):
+            val = request.args.get(prop)
+            if val:
+                filters[prop] = val
+        return jsonify(
+            _query_nodes(_state["graph"], kind, keywords, match_all, filters or None, limit)
+        )
 
     @app.route("/api/hierarchy/<req_id>")
     def api_hierarchy(req_id: str):
@@ -153,69 +207,222 @@ def create_app(
 
         Produces a flat list of tree nodes with coverage, git state,
         and associated flags to enable filtering in edit mode.
+        Includes TEST and TEST_RESULT nodes as children of requirements.
         """
+        import re
+
         g = _state["graph"]
-        rows = []
+        rows: list[dict[str, Any]] = []
+        visited: set[tuple[str, str]] = set()  # (node_id, parent_id) dedup
+
+        def _is_associated(node) -> bool:
+            """Check if a requirement is from an associated/sponsor repo."""
+            # Definitive: ID pattern (e.g., REQ-CAL-p00001)
+            if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
+                return True
+            # Definitive: repo_prefix metric set by annotator
+            rp = node.get_metric("repo_prefix", "")
+            if rp and rp != "CORE":
+                return True
+            # Definitive: source location from a different repo
+            if node.source and node.source.repo:
+                return True
+            # Explicit field marker
+            return bool(node.get_field("associated", False))
+
+        def _get_repo_prefix(node) -> str:
+            """Get repo prefix for a node."""
+            # Check annotated metric (non-CORE values are definitive)
+            rp = node.get_metric("repo_prefix", "")
+            if rp and rp != "CORE":
+                return rp
+            # Check source location repo marker
+            if node.source and node.source.repo:
+                return node.source.repo
+            # Extract from ID pattern (e.g., REQ-CAL-d00001 → CAL)
+            m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
+            if m:
+                return m.group(1)
+            return rp or "CORE"
 
         def _walk(node, depth: int, parent_id: str | None) -> None:
             """DFS traversal producing flat row list."""
-            if node.kind != NodeKind.REQUIREMENT:
+            if node.kind not in (
+                NodeKind.REQUIREMENT,
+                NodeKind.TEST,
+                NodeKind.TEST_RESULT,
+            ):
                 return
 
-            # Collect assertion letters
-            assertions = []
-            for child in node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    if label:
-                        assertions.append(label)
+            visit_key = (node.id, parent_id or "__root__")
+            if visit_key in visited:
+                return
+            visited.add(visit_key)
 
-            # Determine if node has requirement children
-            has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
+            if node.kind == NodeKind.REQUIREMENT:
+                # Collect assertion letters
+                assertions = []
+                for child in node.iter_children():
+                    if child.kind == NodeKind.ASSERTION:
+                        label = child.get_field("label", "")
+                        if label:
+                            assertions.append(label)
 
-            # Coverage (set by _annotate_coverage via index route)
-            coverage = node.get_field("coverage", "none")
+                # Check for requirement or test children
+                has_children = any(
+                    c.kind in (NodeKind.REQUIREMENT, NodeKind.TEST) for c in node.iter_children()
+                )
 
-            # Git state (set by _annotate_git_state via index route)
-            is_changed = bool(node.get_field("is_changed", False))
-            is_uncommitted = bool(node.get_field("is_uncommitted", False))
+                coverage = node.get_field("coverage", "none")
+                is_changed = bool(node.get_field("is_changed", False))
+                is_uncommitted = bool(node.get_field("is_uncommitted", False))
 
-            # Associated repo flag
-            is_associated = bool(node.get_field("is_associated", False))
+                rows.append(
+                    {
+                        "id": node.id,
+                        "kind": "requirement",
+                        "title": node.get_label() or "",
+                        "level": (node.get_field("level") or "").upper(),
+                        "status": (node.get_field("status") or "").upper(),
+                        "depth": depth,
+                        "parent_id": parent_id,
+                        "assertions": sorted(assertions),
+                        "has_children": has_children,
+                        "is_leaf": not has_children,
+                        "coverage": coverage,
+                        "is_changed": is_changed,
+                        "is_uncommitted": is_uncommitted,
+                        "is_associated": _is_associated(node),
+                        "is_test": False,
+                        "is_test_result": False,
+                        "result_status": "",
+                        "repo_prefix": _get_repo_prefix(node),
+                        "source_file": node.get_field("source_file", ""),
+                        "source_line": node.get_field("source_line", 0),
+                    }
+                )
 
-            # Source file info
-            source_file = node.get_field("source_file", "")
-            source_line = node.get_field("source_line", 0)
+                # Recurse: requirement children first, then tests
+                for child in node.iter_children():
+                    if child.kind == NodeKind.REQUIREMENT:
+                        _walk(child, depth + 1, node.id)
+                for child in node.iter_children():
+                    if child.kind == NodeKind.TEST:
+                        _walk(child, depth + 1, node.id)
 
-            rows.append(
-                {
-                    "id": node.id,
-                    "title": node.get_label() or "",
-                    "level": (node.get_field("level") or "").upper(),
-                    "status": (node.get_field("status") or "").upper(),
-                    "depth": depth,
-                    "parent_id": parent_id,
-                    "assertions": sorted(assertions),
-                    "has_children": has_children,
-                    "is_leaf": not has_children,
-                    "coverage": coverage,
-                    "is_changed": is_changed,
-                    "is_uncommitted": is_uncommitted,
-                    "is_associated": is_associated,
-                    "source_file": source_file,
-                    "source_line": source_line,
-                }
-            )
+            elif node.kind == NodeKind.TEST:
+                source_file = node.source.path if node.source else ""
+                source_line = node.source.line if node.source else 0
+                has_children = any(c.kind == NodeKind.TEST_RESULT for c in node.iter_children())
 
-            # Recurse into requirement children
-            for child in node.iter_children():
-                if child.kind == NodeKind.REQUIREMENT:
-                    _walk(child, depth + 1, node.id)
+                rows.append(
+                    {
+                        "id": node.id,
+                        "kind": "test",
+                        "title": node.get_label() or "",
+                        "level": "",
+                        "status": "",
+                        "depth": depth,
+                        "parent_id": parent_id,
+                        "assertions": [],
+                        "has_children": has_children,
+                        "is_leaf": not has_children,
+                        "coverage": "none",
+                        "is_changed": False,
+                        "is_uncommitted": False,
+                        "is_associated": False,
+                        "is_test": True,
+                        "is_test_result": False,
+                        "result_status": "",
+                        "repo_prefix": "CORE",
+                        "source_file": source_file,
+                        "source_line": source_line,
+                    }
+                )
+
+                # Recurse into test_result children
+                for child in node.iter_children():
+                    if child.kind == NodeKind.TEST_RESULT:
+                        _walk(child, depth + 1, node.id)
+
+            elif node.kind == NodeKind.TEST_RESULT:
+                source_file = node.source.path if node.source else ""
+                source_line = node.source.line if node.source else 0
+                result_status = (node.get_field("status", "") or "").lower()
+
+                rows.append(
+                    {
+                        "id": node.id,
+                        "kind": "test_result",
+                        "title": node.get_label() or "",
+                        "level": "",
+                        "status": "",
+                        "depth": depth,
+                        "parent_id": parent_id,
+                        "assertions": [],
+                        "has_children": False,
+                        "is_leaf": True,
+                        "coverage": "none",
+                        "is_changed": False,
+                        "is_uncommitted": False,
+                        "is_associated": False,
+                        "is_test": False,
+                        "is_test_result": True,
+                        "result_status": result_status,
+                        "repo_prefix": "CORE",
+                        "source_file": source_file,
+                        "source_line": source_line,
+                    }
+                )
 
         # Start from roots
         for root in g.iter_roots():
             if root.kind == NodeKind.REQUIREMENT:
                 _walk(root, 0, None)
+
+        # Add orphan TEST nodes not reached from root traversal
+        visited_ids = {vk[0] for vk in visited}
+        for node in g.nodes_by_kind(NodeKind.TEST):
+            if node.id not in visited_ids:
+                _walk(node, 0, None)
+
+        # Add orphan TEST_RESULT nodes
+        visited_ids = {vk[0] for vk in visited}
+        for node in g.nodes_by_kind(NodeKind.TEST_RESULT):
+            if node.id not in visited_ids:
+                _walk(node, 0, None)
+
+        # Add USER_JOURNEY nodes as root-level rows
+        for node in g.nodes_by_kind(NodeKind.USER_JOURNEY):
+            source_file = node.source.path if node.source else ""
+            source_line = node.source.line if node.source else 0
+            rows.append(
+                {
+                    "id": node.id,
+                    "kind": "journey",
+                    "title": node.get_label() or "",
+                    "level": "",
+                    "status": "",
+                    "depth": 0,
+                    "parent_id": None,
+                    "assertions": [],
+                    "has_children": False,
+                    "is_leaf": True,
+                    "coverage": "none",
+                    "is_changed": False,
+                    "is_uncommitted": False,
+                    "is_associated": False,
+                    "is_test": False,
+                    "is_test_result": False,
+                    "is_journey": True,
+                    "result_status": "",
+                    "repo_prefix": "CORE",
+                    "source_file": source_file,
+                    "source_line": source_line,
+                    "actor": node.get_field("actor", ""),
+                    "goal": node.get_field("goal", ""),
+                }
+            )
 
         return jsonify(rows)
 

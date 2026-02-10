@@ -23,6 +23,7 @@ body {
     flex-direction: column;
 }
 {% include "partials/css/_header-edit.css.j2" %}
+{% include "partials/css/_toolbar.css.j2" %}
 {% include "partials/css/_buttons.css.j2" %}
 {% include "partials/css/_toast.css.j2" %}
 {% include "partials/css/_nav-panel.css.j2" %}
@@ -85,9 +86,10 @@ body {
     <nav class="nav-panel" id="nav-panel">
         <div class="nav-tabs">
             <button class="nav-tab active" data-kind="req" onclick="switchNavTab('req')">Req</button>
-            <button class="nav-tab" data-kind="code" onclick="switchNavTab('code')">Code</button>
-            <button class="nav-tab" data-kind="test" onclick="switchNavTab('test')">Tests</button>
             <button class="nav-tab" data-kind="journey" onclick="switchNavTab('journey')">Journeys</button>
+            <span class="nav-tab-spacer"></span>
+            <button class="nav-tree-action" onclick="expandAllTreeNodes()" title="Expand all">&#9660;</button>
+            <button class="nav-tree-action" onclick="collapseAllTreeNodes()" title="Collapse all">&#9654;</button>
         </div>
         <div class="nav-tree-container" id="nav-tree-container">
             <div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">Loading tree...</div>
@@ -335,8 +337,50 @@ const editState = {
     activeNavTab: 'req',
     treeData: [],
     collapsedTreeNodes: new Set(),
-    searchDebounce: null
+    searchDebounce: null,
+    activeFilters: {
+        levelPrd: false,
+        levelOps: false,
+        levelDev: false,
+        uncommitted: false,
+        changed: false,
+        main: false,
+        leaf: false,
+        hideTests: false,
+        hideResults: false,
+        hiddenRepos: []
+    },
+    knownRepos: [],
+    filterStatus: '',
+    filterCoverage: '',
+    fontSize: 14,
+    theme: 'system',
+    toolbarHidden: false
 };
+// Apply theme early to prevent flash of wrong theme
+(function() {
+    try {
+        var m = document.cookie.match(/(^| )elspais_trace_edit_state=([^;]+)/);
+        if (m) {
+            var s = JSON.parse(decodeURIComponent(m[2]));
+            if (s.theme) editState.theme = s.theme;
+            if (s.fontSize) {
+                editState.fontSize = s.fontSize;
+                document.documentElement.style.fontSize = s.fontSize + 'px';
+            }
+        }
+    } catch(e) {}
+    // Apply theme immediately
+    var html = document.documentElement;
+    html.classList.remove('dark-theme', 'light-theme');
+    if (editState.theme === 'dark') {
+        html.classList.add('dark-theme');
+    } else if (editState.theme === 'light') {
+        html.classList.add('light-theme');
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        html.classList.add('dark-theme');
+    }
+})();
 {% else %}
 // State
 const state = {
@@ -389,6 +433,75 @@ function switchToReqTab(reqId) {
     openCard(reqId);
 }
 
+// Hamburger menu
+function toggleHamburgerMenu() {
+    document.getElementById('hamburger-dropdown').classList.toggle('visible');
+}
+function closeHamburgerMenu() {
+    document.getElementById('hamburger-dropdown').classList.remove('visible');
+}
+document.addEventListener('click', function(e) {
+    var menu = document.getElementById('hamburger-menu');
+    if (menu && !menu.contains(e.target)) {
+        closeHamburgerMenu();
+    }
+});
+
+// Font size
+function adjustFontSize(delta) {
+    var current = editState.fontSize || 14;
+    var newSize = Math.max(10, Math.min(20, current + delta));
+    editState.fontSize = newSize;
+    document.documentElement.style.fontSize = newSize + 'px';
+    var display = document.getElementById('font-size-display');
+    if (display) display.textContent = newSize + 'px';
+    saveState();
+}
+
+// Theme
+function setTheme(theme) {
+    editState.theme = theme;
+    applyTheme();
+    document.querySelectorAll('.theme-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.theme === theme);
+    });
+    saveState();
+}
+
+function applyTheme() {
+    var theme = editState.theme || 'system';
+    var html = document.documentElement;
+    html.classList.remove('dark-theme', 'light-theme');
+    if (theme === 'dark') {
+        html.classList.add('dark-theme');
+    } else if (theme === 'light') {
+        // light = no dark-theme class, even if system prefers dark
+        html.classList.add('light-theme');
+    } else {
+        // system: check OS preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            html.classList.add('dark-theme');
+        }
+    }
+}
+
+// Listen for OS theme changes (for system mode)
+if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+        if (editState.theme === 'system') applyTheme();
+    });
+}
+
+// Toolbar toggle
+function toggleToolbar() {
+    editState.toolbarHidden = !editState.toolbarHidden;
+    var toolbar = document.getElementById('edit-toolbar');
+    var btn = document.getElementById('filter-toggle-btn');
+    if (toolbar) toolbar.classList.toggle('toolbar-hidden', editState.toolbarHidden);
+    if (btn) btn.classList.toggle('dimmed', editState.toolbarHidden);
+    saveState();
+}
+
 {% else %}
 {% include "partials/js/_filter-engine.js.j2" %}
 {% include "partials/js/_journey-engine.js.j2" %}
@@ -424,8 +537,7 @@ document.addEventListener('keydown', function(e) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadStats();
-    loadTreeData();
+    loadTreeData();  // also updates header stats
     initSearch();
     initDividers();
     refreshDirtyCount();
@@ -433,9 +545,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const saved = loadState();
     if (saved) {
         if (saved.activeNavTab) {
-            editState.activeNavTab = saved.activeNavTab;
+            // Migrate removed tabs to 'req'
+            var navTab = (saved.activeNavTab === 'code' || saved.activeNavTab === 'test') ? 'req' : saved.activeNavTab;
+            editState.activeNavTab = navTab;
             document.querySelectorAll('.nav-tab').forEach(function(tab) {
-                tab.classList.toggle('active', tab.dataset.kind === saved.activeNavTab);
+                tab.classList.toggle('active', tab.dataset.kind === navTab);
             });
         }
         if (saved.editEnabled) {
@@ -444,16 +558,71 @@ document.addEventListener('DOMContentLoaded', function() {
         if (saved.collapsedTreeNodes && Array.isArray(saved.collapsedTreeNodes)) {
             editState.collapsedTreeNodes = new Set(saved.collapsedTreeNodes);
         }
+        // Restore nav tree filters
+        if (saved.activeFilters) {
+            Object.assign(editState.activeFilters, saved.activeFilters);
+            // Update header stat badge dimmed state for level filters
+            document.getElementById('stat-prd').classList.toggle('dimmed', !!editState.activeFilters.levelPrd);
+            document.getElementById('stat-ops').classList.toggle('dimmed', !!editState.activeFilters.levelOps);
+            document.getElementById('stat-dev').classList.toggle('dimmed', !!editState.activeFilters.levelDev);
+            // Update core badge dimmed state (dimmed = hiding associated)
+            document.getElementById('stat-main').classList.toggle('dimmed', !!editState.activeFilters.main);
+            // Update tests/results badge dimmed state
+            document.getElementById('stat-tests').classList.toggle('dimmed', !!editState.activeFilters.hideTests);
+            document.getElementById('stat-results').classList.toggle('dimmed', !!editState.activeFilters.hideResults);
+            // Ensure hiddenRepos is an array
+            if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
+                editState.activeFilters.hiddenRepos = [];
+            }
+            // Update toolbar git filter buttons
+            document.getElementById('edit-btn-uncommitted').classList.toggle('active', !!editState.activeFilters.uncommitted);
+            document.getElementById('edit-btn-changed').classList.toggle('active', !!editState.activeFilters.changed);
+            // Update checkboxes
+            document.getElementById('edit-toggle-leaf').checked = !!editState.activeFilters.leaf;
+        }
+        if (saved.filterStatus) {
+            editState.filterStatus = saved.filterStatus;
+            document.getElementById('edit-filter-status').value = saved.filterStatus;
+        }
+        if (saved.filterCoverage) {
+            editState.filterCoverage = saved.filterCoverage;
+            document.getElementById('edit-filter-coverage').value = saved.filterCoverage;
+        }
+        // Restore font size
+        if (saved.fontSize) {
+            editState.fontSize = saved.fontSize;
+            document.documentElement.style.fontSize = saved.fontSize + 'px';
+            var fsDisplay = document.getElementById('font-size-display');
+            if (fsDisplay) fsDisplay.textContent = saved.fontSize + 'px';
+        }
+        // Restore theme
+        if (saved.theme) {
+            editState.theme = saved.theme;
+            applyTheme();
+            document.querySelectorAll('.theme-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.theme === saved.theme);
+            });
+        }
+        // Restore toolbar visibility
+        if (saved.toolbarHidden) {
+            editState.toolbarHidden = true;
+            var tb = document.getElementById('edit-toolbar');
+            var ftb = document.getElementById('filter-toggle-btn');
+            if (tb) tb.classList.add('toolbar-hidden');
+            if (ftb) ftb.classList.add('dimmed');
+        }
         if (saved.openCardIds && saved.openCardIds.length > 0) {
             const collapsedSet = new Set(saved.collapsedCards || []);
             const ids = saved.openCardIds.slice().reverse();
             (async function restoreCards() {
                 for (const id of ids) {
-                    const data = await apiFetch('/api/requirement/' + encodeURIComponent(id));
+                    // All cards: fetch via generic /api/node/ endpoint
+                    const data = await apiFetch('/api/node/' + encodeURIComponent(id));
                     if (data && !data.error) {
                         editState.openCards.set(id, {
                             data: data,
-                            collapsed: collapsedSet.has(id)
+                            collapsed: collapsedSet.has(id),
+                            kind: data.kind
                         });
                         editState.openCardOrder.push(id);
                     }

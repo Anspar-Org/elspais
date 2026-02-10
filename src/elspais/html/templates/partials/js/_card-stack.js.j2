@@ -1,7 +1,7 @@
 // Partial: _card-stack.js.j2 — Card rendering, open/close
 
 // =====================================================================
-// Card Stack
+// Card Stack — Unified for all node kinds
 // =====================================================================
 
 async function openCard(nodeId) {
@@ -11,12 +11,12 @@ async function openCard(nodeId) {
         return;
     }
 
-    // Fetch requirement data
-    const data = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
+    // Fetch node data via generic endpoint
+    const data = await apiFetch('/api/node/' + encodeURIComponent(nodeId));
     if (!data) return;
 
-    // Store in state
-    editState.openCards.set(nodeId, { data: data, collapsed: false });
+    // Store in state with kind from response
+    editState.openCards.set(nodeId, { data: data, collapsed: false, kind: data.kind });
 
     // Add to front of order
     editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== nodeId; });
@@ -93,7 +93,14 @@ function renderCardStack() {
     editState.openCardOrder.forEach(function(nodeId) {
         const info = editState.openCards.get(nodeId);
         if (!info) return;
-        html += buildCardHtml(nodeId, info.data, info.collapsed);
+        var kind = info.kind || 'requirement';
+        if (kind === 'journey') {
+            html += buildJourneyCardHtml(nodeId, info.data, info.collapsed);
+        } else if (kind === 'requirement') {
+            html += buildCardHtml(nodeId, info.data, info.collapsed);
+        } else {
+            html += buildGenericCardHtml(nodeId, info.data, info.collapsed);
+        }
     });
 
     body.innerHTML = html;
@@ -107,10 +114,11 @@ function buildCardHtml(nodeId, data, collapsed) {
     const focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
     const shortId = nodeId.replace('REQ-', '');
     const title = escapeHtml(data.title || '');
-    const level = (data.level || '').toUpperCase();
-    const status = (data.status || '').toLowerCase();
+    var props = data.properties || {};
+    const level = (props.level || '').toUpperCase();
+    const status = (props.status || '').toLowerCase();
     const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
-    const hash = data.hash || '';
+    const hash = props.hash || '';
     const sourcePath = (data.source && data.source.path) || '';
     const sourceLine = (data.source && data.source.line) || 0;
 
@@ -247,4 +255,169 @@ function updateNavSelection() {
     document.querySelectorAll('.nav-tree-row').forEach(function(row) {
         row.classList.toggle('selected', editState.openCards.has(row.dataset.id));
     });
+}
+
+// =====================================================================
+// Journey Cards — reads from generic /api/node/ response
+// =====================================================================
+
+function buildJourneyCardHtml(nodeId, data, collapsed) {
+    var collapsedClass = collapsed ? ' collapsed' : '';
+    var focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
+    var title = escapeHtml(data.title || '');
+    var shortId = escapeHtml(data.id || nodeId);
+    var props = data.properties || {};
+    var sourcePath = (data.source && data.source.path) || '';
+    var sourceLine = (data.source && data.source.line) || 1;
+
+    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+
+    // Header
+    html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
+    html += '<span class="req-card-expand">&#9660;</span>';
+    html += '<span class="journey-card-kind">JNY</span>';
+    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="req-card-body">';
+
+    // Metadata section
+    html += '<div class="card-section"><div class="card-section-label">Journey Metadata</div>';
+    html += '<div class="card-meta">';
+
+    if (props.actor) {
+        html += '<div class="card-meta-item">';
+        html += '<span class="card-meta-key">Actor:</span>';
+        html += '<span class="card-meta-value">' + escapeHtml(props.actor) + '</span>';
+        html += '</div>';
+    }
+
+    if (props.goal) {
+        html += '<div class="card-meta-item">';
+        html += '<span class="card-meta-key">Goal:</span>';
+        html += '<span class="card-meta-value">' + escapeHtml(props.goal) + '</span>';
+        html += '</div>';
+    }
+
+    if (props.descriptor) {
+        html += '<div class="card-meta-item">';
+        html += '<span class="card-meta-key">Topic:</span>';
+        html += '<span class="card-meta-value">' + escapeHtml(props.descriptor) + '</span>';
+        html += '</div>';
+    }
+
+    if (sourcePath) {
+        html += '<div class="card-meta-item">';
+        html += '<span class="card-meta-key">Source:</span>';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
+            escapeHtml(sourcePath.split('/').pop()) + '</a>';
+        html += '</div>';
+    }
+
+    html += '</div></div>';
+
+    // Referenced Requirements (from links array — ADDRESSES edges)
+    var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'addresses'; });
+    if (refs.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Addresses (' + refs.length + ')</div>';
+        html += '<div class="card-parents">';
+        refs.forEach(function(link) {
+            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
+            html += link.id.replace('REQ-', '');
+            if (link.title) html += ' - ' + escapeHtml(link.title);
+            html += '</a>';
+        });
+        html += '</div></div>';
+    }
+
+    // Description
+    if (props.description) {
+        html += '<div class="card-section"><div class="card-section-label">Description</div>';
+        html += '<div class="journey-card-description">' + escapeHtml(props.description) + '</div>';
+        html += '</div>';
+    }
+
+    html += '</div>'; // end req-card-body
+    html += '</div>'; // end req-card
+
+    return html;
+}
+
+// =====================================================================
+// Generic Card — fallback for TEST, CODE, TEST_RESULT, etc.
+// =====================================================================
+
+function buildGenericCardHtml(nodeId, data, collapsed) {
+    var collapsedClass = collapsed ? ' collapsed' : '';
+    var focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
+    var title = escapeHtml(data.title || nodeId);
+    var kind = data.kind || 'unknown';
+    var kindLabel = kind.charAt(0).toUpperCase() + kind.slice(1);
+    var props = data.properties || {};
+    var sourcePath = (data.source && data.source.path) || '';
+    var sourceLine = (data.source && data.source.line) || 0;
+
+    var html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+
+    // Header
+    html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
+    html += '<span class="req-card-expand">&#9660;</span>';
+    html += '<span class="journey-card-kind">' + escapeHtml(kindLabel) + '</span>';
+    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="req-card-body">';
+
+    // Source
+    if (sourcePath) {
+        html += '<div class="card-section"><div class="card-section-label">Source</div>';
+        html += '<div class="card-meta"><div class="card-meta-item">';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
+        html += '</div></div></div>';
+    }
+
+    // Properties as key-value pairs
+    var propKeys = Object.keys(props);
+    if (propKeys.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Properties</div>';
+        html += '<div class="card-meta">';
+        propKeys.forEach(function(key) {
+            var val = props[key];
+            if (val === null || val === undefined || val === '') return;
+            html += '<div class="card-meta-item">';
+            html += '<span class="card-meta-key">' + escapeHtml(key) + ':</span>';
+            html += '<span class="card-meta-value">' + escapeHtml(String(val)) + '</span>';
+            html += '</div>';
+        });
+        html += '</div></div>';
+    }
+
+    // Links
+    var links = data.links || [];
+    if (links.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Links (' + links.length + ')</div>';
+        html += '<div class="card-parents">';
+        links.forEach(function(link) {
+            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
+            html += '<span class="card-parent-kind">' + escapeHtml(link.edge_kind || '') + '</span> ';
+            html += escapeHtml(link.id);
+            if (link.title) html += ' - ' + escapeHtml(link.title);
+            html += '</a>';
+        });
+        html += '</div></div>';
+    }
+
+    html += '</div>'; // end req-card-body
+    html += '</div>'; // end req-card
+
+    return html;
 }
