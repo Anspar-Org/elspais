@@ -158,6 +158,7 @@ class HTMLGenerator:
 
         # Render template
         html_content = template.render(
+            mode="view",
             stats=stats,
             rows=rows,
             journeys=journeys,

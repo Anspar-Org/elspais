@@ -85,7 +85,7 @@ def create_app(
     def index():
         """Serve the trace-edit UI template."""
         try:
-            return render_template("trace_edit.html.j2")
+            return render_template("trace_edit.html.j2", mode="edit")
         except Exception:
             # Template may not exist yet (Phase 3)
             return jsonify({"message": "trace_edit.html.j2 template not yet available"}), 200

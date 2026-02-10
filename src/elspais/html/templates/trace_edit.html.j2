@@ -40,49 +40,13 @@ body {
      HEADER
      ===================================================================== -->
 
-<header class="header">
-    <div class="header-left">
-        <h1 class="header-title">Trace Edit</h1>
-        <div class="header-stats" id="header-stats">
-            <span class="stat-badge prd" id="stat-prd">PRD: --</span>
-            <span class="stat-badge ops" id="stat-ops">OPS: --</span>
-            <span class="stat-badge dev" id="stat-dev">DEV: --</span>
-        </div>
-    </div>
-
-    <div class="header-center">
-        <div class="search-box" id="search-box">
-            <input type="text" id="search-input" placeholder="Search requirements..." autocomplete="off">
-            <div class="search-results" id="search-results"></div>
-        </div>
-    </div>
-
-    <div class="header-right">
-        <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
-            <span class="edit-toggle-indicator"></span>
-            <span>Edit Mode</span>
-        </button>
-
-        <button class="btn" id="btn-undo" onclick="doUndo()" disabled title="Undo last change">
-            Undo
-        </button>
-
-        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save mutations to disk">
-            Save
-            <span class="unsaved-badge hidden" id="unsaved-badge">0</span>
-        </button>
-
-        <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes">
-            Revert
-        </button>
-    </div>
-</header>
+{% include "partials/_header.html.j2" %}
 
 <!-- =====================================================================
      TOAST CONTAINER
      ===================================================================== -->
 
-<div class="toast-container" id="toast-container"></div>
+{% include "partials/_toast_container.html.j2" %}
 
 <!-- =====================================================================
      3-PANEL LAYOUT
@@ -125,16 +89,7 @@ body {
     <div class="divider" id="divider-right" style="display:none;"></div>
 
     <!-- File Viewer Panel (Right) -->
-    <aside class="file-viewer-panel" id="file-viewer-panel">
-        <div class="file-viewer-header">
-            <span class="file-viewer-path" id="fv-path">No file selected</span>
-            <span class="fv-status" id="fv-status"></span>
-            <button class="file-viewer-close-btn" onclick="closeFileViewer()" title="Close">&times;</button>
-        </div>
-        <div class="file-viewer-body" id="fv-body">
-            <div class="file-viewer-placeholder">Select a source file to view</div>
-        </div>
-    </aside>
+    {% include "partials/_file_viewer.html.j2" %}
 
 </div>
 

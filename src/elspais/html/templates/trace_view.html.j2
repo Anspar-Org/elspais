@@ -32,100 +32,19 @@
      HEADER
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<header class="header">
-    <h1 class="header-title">Requirements Traceability</h1>
-
-    <div class="header-stats">
-        <span class="stat-badge prd" id="badge-prd" onclick="toggleLevelFilter('PRD')" title="Click to filter PRD only">PRD: {{ stats.prd_count }}</span>
-        <span class="stat-badge ops" id="badge-ops" onclick="toggleLevelFilter('OPS')" title="Click to filter OPS only">OPS: {{ stats.ops_count }}</span>
-        <span class="stat-badge dev" id="badge-dev" onclick="toggleLevelFilter('DEV')" title="Click to filter DEV only">DEV: {{ stats.dev_count }}</span>
-        <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
-        <span style="color: #adb5bd;">|</span>
-        <span class="stat-badge code" id="badge-code" onclick="toggleFilter('code')" title="Click to hide code nodes">Code: {{ stats.code_count }}</span>
-        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">Tests: {{ stats.test_count }}</span>
-        {% if stats.test_result_count > 0 %}
-        <span class="stat-badge results" id="badge-results" onclick="toggleFilter('results')" title="Click to show test results">Results: {{ stats.test_passed_count }}✓ {{ stats.test_failed_count }}✗</span>
-        {% endif %}
-        <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
-    </div>
-
-    <div class="assertion-summary">
-        Assertions: <strong>{{ stats.assertion_count }}</strong> unique |
-        Implemented: <strong>{{ stats.assertions_implemented }}</strong> |
-        Tested: <strong>{{ stats.assertions_tested }}</strong> |
-        Validated: <strong>{{ stats.assertions_validated }}</strong>
-    </div>
-
-    <div class="header-meta">
-        <span class="version-badge">v{{ version }}</span>
-        <button class="legend-btn" onclick="toggleLegend()">
-            <span>ℹ</span> Legend
-        </button>
-        <button class="legend-btn" onclick="clearAllCookies()" title="Clear saved preferences">
-            <span>🍪</span> Reset
-        </button>
-    </div>
-</header>
+{% include "partials/_header.html.j2" %}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      TOOLBAR
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<div class="toolbar">
-    <!-- View Mode -->
-    <div class="btn-group" role="group">
-        <button class="btn" data-view="flat" onclick="setViewMode('flat')">Flat View</button>
-        <button class="btn active" data-view="hierarchical" onclick="setViewMode('hierarchical')">Hierarchical View</button>
-    </div>
-
-    <!-- Git Filters -->
-    <div class="btn-group" role="group">
-        <button class="btn" id="btn-uncommitted" onclick="toggleFilter('uncommitted')">Uncommitted</button>
-        <button class="btn" id="btn-changed" onclick="toggleFilter('changed')">Changed vs Main</button>
-    </div>
-
-    <!-- Content Toggles -->
-    <div class="toggle-group">
-        <label class="toggle-item">
-            <input type="checkbox" id="toggle-leaf" onchange="applyFilters()">
-            <span>🌿 Leaf Only</span>
-        </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="toggle-deprecated" onchange="applyFilters()">
-            <span>Include deprecated</span>
-        </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="toggle-roadmap" onchange="applyFilters()">
-            <span>Include roadmap</span>
-        </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="toggle-code" onchange="applyFilters()">
-            <span>Show code refs</span>
-        </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="toggle-indirect" onchange="toggleIndirectCoverage()">
-            <span>Indirect coverage</span>
-        </label>
-    </div>
-
-    <!-- Actions -->
-    <div class="toolbar-actions">
-        <button class="btn btn-icon" onclick="expandAll()" title="Expand All">▼ Expand All</button>
-        <button class="btn btn-icon" onclick="collapseAll()" title="Collapse All">▶ Collapse All</button>
-        <button class="btn" onclick="clearFilters()">Clear</button>
-        <span class="counter" id="counter">Showing {{ stats.total_count }} of {{ stats.total_count }} requirements</span>
-    </div>
-</div>
+{% include "partials/_toolbar.html.j2" %}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      TABS
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<div class="tabs">
-    <button class="tab active" data-tab="requirements" onclick="switchTab('requirements')">Requirements</button>
-    <button class="tab" data-tab="journeys" onclick="switchTab('journeys')">User Journeys</button>
-</div>
+{% include "partials/_tabs.html.j2" %}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      SPLIT LAYOUT: MAIN CONTENT + FILE VIEWER
@@ -287,99 +206,7 @@
     </div>
 
     <!-- User Journeys Tab Content -->
-    <div class="tab-content" id="content-journeys">
-        <h2 class="section-title">User Journeys</h2>
-        {% if journeys %}
-        <div class="journey-toolbar">
-            <div class="journey-search">
-                <input type="text" id="journey-search" placeholder="Search journeys by ID, title, actor, or goal..." oninput="filterJourneys()">
-            </div>
-            <div class="journey-group-controls">
-                <label for="journey-group-by">Group by:</label>
-                <select id="journey-group-by" onchange="regroupJourneys()">
-                    <option value="none">None</option>
-                    <option value="descriptor">Descriptor</option>
-                    <option value="actor">Actor</option>
-                    <option value="file">File</option>
-                </select>
-            </div>
-            <div class="journey-count">
-                <span id="journey-visible-count">{{ journeys|length }}</span> of {{ journeys|length }} journeys
-            </div>
-        </div>
-        <div class="journey-list" id="journey-list">
-            {% for journey in journeys %}
-            <div class="journey-card"
-                 data-id="{{ journey.id|lower }}"
-                 data-title="{{ journey.title|lower }}"
-                 data-actor="{{ (journey.actor or '')|lower }}"
-                 data-goal="{{ (journey.goal or '')|lower }}"
-                 data-descriptor="{{ journey.descriptor|lower }}"
-                 data-file="{{ journey.file|lower }}"
-                 data-refs="{{ journey.referenced_reqs|join(',')|lower }}">
-                <div class="journey-card-header">
-                    <span class="journey-id">{{ journey.id }}</span>
-                    <h3>{{ journey.title }}</h3>
-                </div>
-                {% if journey.actor or journey.goal or journey.descriptor or journey.file %}
-                <div class="journey-meta">
-                    {% if journey.descriptor %}
-                    <div class="journey-meta-item">
-                        <span class="journey-meta-label">Topic</span>
-                        <span class="journey-meta-value">{{ journey.descriptor }}</span>
-                    </div>
-                    {% endif %}
-                    {% if journey.actor %}
-                    <div class="journey-meta-item">
-                        <span class="journey-meta-label">Actor</span>
-                        <span class="journey-meta-value">{{ journey.actor }}</span>
-                    </div>
-                    {% endif %}
-                    {% if journey.goal %}
-                    <div class="journey-meta-item">
-                        <span class="journey-meta-label">Goal</span>
-                        <span class="journey-meta-value">{{ journey.goal }}</span>
-                    </div>
-                    {% endif %}
-                    {% if journey.file %}
-                    <div class="journey-meta-item">
-                        <span class="journey-meta-label">Source</span>
-                        <span class="journey-meta-value">{{ journey.file }}</span>
-                    </div>
-                    {% endif %}
-                </div>
-                {% endif %}
-                {% if journey.referenced_reqs %}
-                <div class="journey-refs">
-                    <span class="journey-refs-label">Addresses:</span>
-                    {% for req_id in journey.referenced_reqs %}
-                    <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}</span>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                {% if journey.description %}
-                <div class="journey-description">{{ journey.description }}</div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="no-journeys">
-            <p>No user journeys found in specification files.</p>
-            <p style="font-size: 0.875rem; margin-top: 8px;">User journeys are defined with <code>## JNY-xxx: Title</code> headers in spec files.</p>
-            <p style="font-size: 0.8rem; margin-top: 12px; color: #868e96;">
-                Example format:<br>
-                <code style="display: block; margin-top: 8px; padding: 12px; background: #f1f3f5; border-radius: 4px; text-align: left;">
-## JNY-LOGIN-01: User Login<br>
-**Actor**: End User<br>
-**Goal**: Access the system securely<br><br>
-Steps...<br><br>
-*End* *JNY-LOGIN-01*
-                </code>
-            </p>
-        </div>
-        {% endif %}
-    </div>
+    {% include "partials/_journey_tab.html.j2" %}
 </main>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -388,21 +215,7 @@ Steps...<br><br>
 
 <div class="split-divider" id="split-divider"></div>
 
-<aside class="file-viewer-panel" id="file-viewer-panel">
-    <div class="file-viewer-header">
-        <span class="file-viewer-path" id="file-viewer-path">No file selected</span>
-        <span class="file-viewer-lang" id="file-viewer-lang"></span>
-        <div class="file-viewer-mode-toggle" id="file-viewer-mode-toggle" style="display:none;">
-            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
-            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
-        </div>
-        <a class="file-viewer-btn" id="file-viewer-vscode" href="#" title="Open in VS Code">VS Code</a>
-        <button class="file-viewer-btn file-viewer-close" onclick="closeFileViewer()" title="Close panel">&times;</button>
-    </div>
-    <div class="file-viewer-body" id="file-viewer-body">
-        <!-- File content rendered here by JavaScript -->
-    </div>
-</aside>
+{% include "partials/_file_viewer.html.j2" %}
 
 </div><!-- end split-layout -->
 
@@ -410,82 +223,7 @@ Steps...<br><br>
      LEGEND MODAL
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-<div class="modal-overlay" id="legend-modal" onclick="closeLegendOnOverlay(event)">
-    <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <h3 class="modal-title">Legend</h3>
-            <button class="modal-close" onclick="toggleLegend()">&times;</button>
-        </div>
-
-        <div class="legend-section">
-            <h4>Coverage Status</h4>
-            <div class="legend-item">
-                <span class="legend-icon">○</span>
-                <span>No implementations - no code references this requirement</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-icon">◐</span>
-                <span>Partial - some assertions have code implementations</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-icon">●</span>
-                <span>Full - all assertions have code implementations</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-icon" style="color: #ffc107;">⚡</span>
-                <span>Test failures or warnings detected</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Change Indicators</h4>
-            <div class="legend-item">
-                <span class="legend-icon" style="color: #fd7e14;">◆</span>
-                <span>Changed vs remote main branch</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Assertion Badges</h4>
-            <div class="legend-item">
-                <span class="legend-icon"><span class="assertion-badge">A</span></span>
-                <span>Implements specific assertion(s) from parent requirement</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Status Badges</h4>
-            <div class="legend-item">
-                <span class="status-badge draft">DRAFT</span>
-                <span>Work in progress</span>
-            </div>
-            <div class="legend-item">
-                <span class="status-badge active">ACTIVE</span>
-                <span>Approved and active</span>
-            </div>
-            <div class="legend-item">
-                <span class="status-badge deprecated">DEPRECATED</span>
-                <span>No longer applicable</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Levels</h4>
-            <div class="legend-item">
-                <span class="stat-badge prd" style="font-size: 0.75rem;">PRD</span>
-                <span>Product Requirements - business-level needs</span>
-            </div>
-            <div class="legend-item">
-                <span class="stat-badge ops" style="font-size: 0.75rem;">OPS</span>
-                <span>Operations Requirements - operational constraints</span>
-            </div>
-            <div class="legend-item">
-                <span class="stat-badge dev" style="font-size: 0.75rem;">DEV</span>
-                <span>Development Requirements - technical specifications</span>
-            </div>
-        </div>
-    </div>
-</div>
+{% include "partials/_legend_modal.html.j2" %}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      EMBEDDED DATA

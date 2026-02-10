@@ -1,0 +1,8 @@
+{# Partial: _tabs.html.j2 — Tab bar (view mode) #}
+
+{% if mode == 'view' %}
+<div class="tabs">
+    <button class="tab active" data-tab="requirements" onclick="switchTab('requirements')">Requirements</button>
+    <button class="tab" data-tab="journeys" onclick="switchTab('journeys')">User Journeys</button>
+</div>
+{% endif %}
