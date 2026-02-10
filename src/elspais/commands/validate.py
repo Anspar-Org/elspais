@@ -66,14 +66,18 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     fix_mode = getattr(args, "fix", False)
     dry_run = getattr(args, "dry_run", False)
+    mode = getattr(args, "mode", "combined")
 
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
+
+    scan_sponsors = mode != "core"
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
+        scan_sponsors=scan_sponsors,
     )
 
     # Collect validation issues

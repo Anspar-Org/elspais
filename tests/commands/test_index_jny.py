@@ -65,8 +65,17 @@ class TestIndexRegenerateJNY:
         _regenerate_index(graph, [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
-        # Table header includes Addresses column
-        assert "| ID | Title | Actor | File | Addresses |" in index_content
+        # Table header includes Addresses column (padded with alignment)
+        header_lines = [
+            line
+            for line in index_content.split("\n")
+            if line.startswith("|") and "Addresses" in line
+        ]
+        assert len(header_lines) >= 1
+        header = header_lines[0]
+        # All expected column headers present
+        for col in ("ID", "Title", "Actor", "File", "Addresses"):
+            assert col in header
         # JNY row includes the addressed REQ
         assert "JNY-Dev-01" in index_content
         assert "REQ-p00012" in index_content

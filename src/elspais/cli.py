@@ -136,7 +136,12 @@ Common rules to skip:
         action="store_true",
         help="Output requirements as JSON (hht_diary compatible format)",
     )
-    # NOTE: --tests, --no-tests, --mode removed (dead code - never implemented)
+    validate_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: only local specs, combined: include associated repos (default)",
+    )
 
     # health command
     health_parser = subparsers.add_parser(
@@ -279,6 +284,12 @@ Checks performed:
     index_parser = subparsers.add_parser(
         "index",
         help="Manage INDEX.md file (validate, regenerate)",
+    )
+    index_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: only local specs, combined: include associated repos (default)",
     )
     index_subparsers = index_parser.add_subparsers(dest="index_action")
 
