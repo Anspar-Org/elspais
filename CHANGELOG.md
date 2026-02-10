@@ -2,6 +2,14 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.54.1] - 2026-02-10
+
+### Changed
+
+- **Python 3.10+ support**: Lowered minimum Python version from 3.12 to 3.10, added 3.10/3.11 to CI test matrix
+- **Auto version bump**: PRs automatically get a version bump based on changed files — patch for docs/tests/specs, minor for source changes
+- **Auto release**: Merging to main with a version change automatically creates a GitHub release, triggering PyPI publish and Homebrew tap update
+
 ## [0.54.0] - 2026-02-10
 
 ### Added
