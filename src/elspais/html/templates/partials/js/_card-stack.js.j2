@@ -1,0 +1,250 @@
+// Partial: _card-stack.js.j2 — Card rendering, open/close
+
+// =====================================================================
+// Card Stack
+// =====================================================================
+
+async function openCard(nodeId) {
+    // If already open, just focus it
+    if (editState.openCards.has(nodeId)) {
+        focusCard(nodeId);
+        return;
+    }
+
+    // Fetch requirement data
+    const data = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
+    if (!data) return;
+
+    // Store in state
+    editState.openCards.set(nodeId, { data: data, collapsed: false });
+
+    // Add to front of order
+    editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== nodeId; });
+    editState.openCardOrder.unshift(nodeId);
+
+    renderCardStack();
+    focusCard(nodeId);
+    updateNavSelection();
+    saveState();
+}
+
+function closeCard(nodeId) {
+    editState.openCards.delete(nodeId);
+    editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== nodeId; });
+    renderCardStack();
+    updateNavSelection();
+    saveState();
+}
+
+function focusCard(nodeId) {
+    // Move to front of order
+    editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== nodeId; });
+    editState.openCardOrder.unshift(nodeId);
+
+    // Remove focused class from all, add to target
+    document.querySelectorAll('.req-card').forEach(function(c) { c.classList.remove('focused'); });
+    const card = document.getElementById('card-' + nodeId);
+    if (card) {
+        card.classList.add('focused');
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    renderCardStack();
+    saveState();
+}
+
+function toggleCardCollapse(nodeId) {
+    const info = editState.openCards.get(nodeId);
+    if (!info) return;
+    info.collapsed = !info.collapsed;
+    const card = document.getElementById('card-' + nodeId);
+    if (card) {
+        card.classList.toggle('collapsed', info.collapsed);
+    }
+    saveState();
+}
+
+function closeAllCards() {
+    editState.openCards.clear();
+    editState.openCardOrder = [];
+    renderCardStack();
+    updateNavSelection();
+    saveState();
+}
+
+function renderCardStack() {
+    const body = document.getElementById('card-stack-body');
+    const empty = document.getElementById('card-stack-empty');
+    const countEl = document.getElementById('card-stack-count');
+
+    if (editState.openCardOrder.length === 0) {
+        body.innerHTML = '';
+        body.appendChild(empty);
+        empty.style.display = 'flex';
+        countEl.textContent = 'No cards open';
+        return;
+    }
+
+    empty.style.display = 'none';
+    countEl.textContent = editState.openCardOrder.length + ' card' +
+        (editState.openCardOrder.length !== 1 ? 's' : '') + ' open';
+
+    let html = '';
+    editState.openCardOrder.forEach(function(nodeId) {
+        const info = editState.openCards.get(nodeId);
+        if (!info) return;
+        html += buildCardHtml(nodeId, info.data, info.collapsed);
+    });
+
+    body.innerHTML = html;
+
+    // Re-add empty element (hidden) for later
+    body.appendChild(empty);
+}
+
+function buildCardHtml(nodeId, data, collapsed) {
+    const collapsedClass = collapsed ? ' collapsed' : '';
+    const focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
+    const shortId = nodeId.replace('REQ-', '');
+    const title = escapeHtml(data.title || '');
+    const level = (data.level || '').toUpperCase();
+    const status = (data.status || '').toLowerCase();
+    const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
+    const hash = data.hash || '';
+    const sourcePath = (data.source && data.source.path) || '';
+    const sourceLine = (data.source && data.source.line) || 0;
+
+    let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+
+    // Header
+    html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
+    html += '<span class="req-card-expand">&#9660;</span>';
+    html += '<span class="req-card-id">' + shortId + '</span>';
+    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="req-card-body">';
+
+    // Metadata section
+    html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
+    html += '<div class="card-meta">';
+
+    // Level
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Level:</span>';
+    html += '<span class="card-meta-value">' + level + '</span>';
+    html += '</div>';
+
+    // Status (badge or select)
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Status:</span>';
+    html += '<span class="status-badge-wrapper"><span class="status-badge ' + status + '">' + statusDisplay + '</span></span>';
+    html += '<span class="status-select-wrapper edit-only">';
+    html += '<select class="status-select" data-node-id="' + nodeId + '" data-original="' + status + '" onchange="onStatusChange(this)">';
+    ['Active', 'Draft', 'Deprecated', 'Proposed'].forEach(function(s) {
+        const sel = s.toLowerCase() === status ? ' selected' : '';
+        html += '<option value="' + s + '"' + sel + '>' + s + '</option>';
+    });
+    html += '</select></span>';
+    html += '</div>';
+
+    // Hash
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Hash:</span>';
+    html += '<span class="card-meta-value" style="font-family:monospace;font-size:0.75rem;">' + hash + '</span>';
+    html += '</div>';
+
+    // Source
+    if (sourcePath) {
+        html += '<div class="card-meta-item">';
+        html += '<span class="card-meta-key">Source:</span>';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
+        html += '</div>';
+    }
+
+    html += '</div></div>';
+
+    // Editable Title (edit mode only, replaces header title on blur)
+    html += '<div class="card-section edit-only" style="display:none;"><div class="card-section-label">Title</div>';
+    html += '<div class="editable-field" contenteditable="true" data-node-id="' + nodeId + '" ' +
+        'data-field="title" data-original="' + escapeAttr(data.title || '') + '" ' +
+        'onblur="onTitleBlur(this)" onkeydown="onEditableKeydown(event)">' +
+        escapeHtml(data.title || '') + '</div>';
+    html += '</div>';
+
+    // Parents section
+    if (data.parents && data.parents.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
+        html += '<div class="card-parents">';
+        data.parents.forEach(function(p) {
+            const edgeKind = (p.edge_kind || 'implements').toUpperCase();
+            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
+            html += '<span class="card-parent-kind">' + edgeKind + '</span> ';
+            html += p.id.replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
+            html += '</a>';
+        });
+        html += '</div></div>';
+    }
+
+    // Assertions section
+    const assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });
+    if (assertions.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Assertions (' + assertions.length + ')</div>';
+        html += '<div class="card-assertions">';
+        assertions.forEach(function(a) {
+            const assertionId = a.id || '';
+            const label = a.label || '';
+            const text = a.text || '';
+            html += '<div class="card-assertion" data-assertion-id="' + assertionId + '">';
+            html += '<span class="card-assertion-label">' + label + '</span>';
+            html += '<span class="card-assertion-text editable-field" ' +
+                'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
+                'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
+                'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
+                escapeHtml(text) + '</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+
+        // Add assertion button (edit mode only)
+        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')" style="display:none;">+ Add Assertion</button>';
+        html += '</div>';
+    } else {
+        html += '<div class="card-section"><div class="card-section-label">Assertions</div>';
+        html += '<div style="font-size:0.8rem;color:#adb5bd;">No assertions defined</div>';
+        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')" style="display:none;">+ Add Assertion</button>';
+        html += '</div>';
+    }
+
+    // Children (requirements only)
+    const childReqs = (data.children || []).filter(function(c) {
+        return c.kind === 'requirement';
+    });
+    if (childReqs.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Children (' + childReqs.length + ')</div>';
+        html += '<div class="card-children">';
+        childReqs.forEach(function(c) {
+            html += '<a class="card-child-link" href="#" onclick="event.preventDefault(); openCard(\'' + c.id + '\')">';
+            html += c.id.replace('REQ-', '');
+            if (c.title) html += ' - ' + escapeHtml(c.title);
+            html += '</a>';
+        });
+        html += '</div></div>';
+    }
+
+    html += '</div>'; // end req-card-body
+    html += '</div>'; // end req-card
+
+    return html;
+}
+
+function updateNavSelection() {
+    document.querySelectorAll('.nav-tree-row').forEach(function(row) {
+        row.classList.toggle('selected', editState.openCards.has(row.dataset.id));
+    });
+}

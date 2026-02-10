@@ -1,0 +1,149 @@
+// Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats
+
+// =====================================================================
+// Header Stats
+// =====================================================================
+
+async function loadStats() {
+    const data = await apiFetch('/api/status');
+    if (!data) return;
+    const counts = data.counts || {};
+    document.getElementById('stat-prd').textContent = 'PRD: ' + (counts.prd || 0);
+    document.getElementById('stat-ops').textContent = 'OPS: ' + (counts.ops || 0);
+    document.getElementById('stat-dev').textContent = 'DEV: ' + (counts.dev || 0);
+}
+
+async function refreshDirtyCount() {
+    const data = await apiFetch('/api/dirty');
+    if (!data) return;
+    editState.mutationCount = data.mutation_count || 0;
+    const badge = document.getElementById('unsaved-badge');
+    const btnSave = document.getElementById('btn-save');
+    const btnRevert = document.getElementById('btn-revert');
+    const btnUndo = document.getElementById('btn-undo');
+    if (editState.mutationCount > 0) {
+        badge.textContent = editState.mutationCount;
+        badge.classList.remove('hidden');
+        btnSave.disabled = false;
+        btnRevert.disabled = false;
+        btnUndo.disabled = false;
+    } else {
+        badge.classList.add('hidden');
+        btnSave.disabled = true;
+        btnRevert.disabled = true;
+        btnUndo.disabled = true;
+    }
+}
+
+// =====================================================================
+// Nav Tree
+// =====================================================================
+
+async function loadTreeData() {
+    const data = await apiFetch('/api/tree-data');
+    if (!data) return;
+    editState.treeData = data;
+    renderNavTree();
+}
+
+function renderNavTree() {
+    const container = document.getElementById('nav-tree-container');
+    const activeTab = editState.activeNavTab;
+    const rows = editState.treeData;
+
+    if (!rows || rows.length === 0) {
+        container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No items found</div>';
+        return;
+    }
+
+    // Filter by tab
+    let filteredRows;
+    if (activeTab === 'req') {
+        filteredRows = rows.filter(function(r) { return r.level && r.level !== ''; });
+    } else {
+        // For code/test/journey — we only have requirement rows from tree-data
+        // Show all rows but these tabs will display a "coming soon" message
+        filteredRows = rows;
+    }
+
+    if (activeTab !== 'req') {
+        container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">' +
+            activeTab.charAt(0).toUpperCase() + activeTab.slice(1) +
+            ' nodes are visible in the requirement tree hierarchy.</div>';
+        return;
+    }
+
+    let html = '';
+    filteredRows.forEach(function(row) {
+        // Determine if collapsed
+        const isCollapsed = editState.collapsedTreeNodes.has(row.id);
+        // Check if parent is collapsed (skip rendering)
+        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows)) {
+            return; // don't render
+        }
+
+        const indents = [];
+        for (let i = 0; i < row.depth; i++) {
+            indents.push('<span class="nav-tree-indent"></span>');
+        }
+
+        const toggleClass = row.has_children
+            ? (isCollapsed ? 'nav-tree-toggle' : 'nav-tree-toggle')
+            : 'nav-tree-toggle leaf';
+        const toggleIcon = row.has_children
+            ? (isCollapsed ? '&#9654;' : '&#9660;')
+            : '';
+
+        const selectedClass = editState.openCards.has(row.id) ? ' selected' : '';
+        const levelClass = row.level ? row.level.toLowerCase() : '';
+        const shortId = row.id.replace('REQ-', '');
+
+        html += '<div class="nav-tree-row' + selectedClass + '" ' +
+            'data-id="' + row.id + '" ' +
+            'data-parent="' + (row.parent_id || '') + '" ' +
+            'data-depth="' + row.depth + '" ' +
+            'onclick="openCard(\'' + row.id + '\')">' +
+            indents.join('') +
+            '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
+            toggleIcon + '</button>' +
+            (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
+            '<span class="nav-tree-id">' + shortId + '</span>' +
+            '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
+            '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+function isAncestorCollapsed(row, allRows) {
+    if (!row.parent_id) return false;
+    // Walk up the parent chain
+    let parentId = row.parent_id;
+    while (parentId) {
+        if (editState.collapsedTreeNodes.has(parentId)) return true;
+        // Find parent row
+        const parentRow = allRows.find(function(r) { return r.id === parentId; });
+        if (!parentRow) break;
+        parentId = parentRow.parent_id;
+    }
+    return false;
+}
+
+function toggleTreeNode(nodeId) {
+    if (editState.collapsedTreeNodes.has(nodeId)) {
+        editState.collapsedTreeNodes.delete(nodeId);
+    } else {
+        editState.collapsedTreeNodes.add(nodeId);
+    }
+    renderNavTree();
+    saveState();
+}
+
+function switchNavTab(kind) {
+    editState.activeNavTab = kind;
+    document.querySelectorAll('.nav-tab').forEach(function(tab) {
+        tab.classList.toggle('active', tab.dataset.kind === kind);
+    });
+    renderNavTree();
+    saveState();
+}
