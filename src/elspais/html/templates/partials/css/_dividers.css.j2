@@ -1,0 +1,29 @@
+/* Partial: _dividers.css.j2 — Vertical dividers for resizable panels */
+
+/* --- Vertical Dividers --- */
+
+.divider {
+    width: 4px;
+    background: #e9ecef;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    position: relative;
+}
+
+.divider:hover,
+.divider.dragging {
+    background: #0d6efd;
+}
+
+.divider::after {
+    content: '\00B7\00B7\00B7';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    color: #adb5bd;
+    font-size: 8px;
+    letter-spacing: 2px;
+    pointer-events: none;
+}

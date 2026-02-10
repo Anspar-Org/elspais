@@ -1,0 +1,82 @@
+/* Partial: _tree-structure.css.j2 — Tree indent/toggle, req-id, file-link, assertion-badges */
+
+.tree-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tree-indent {
+    display: inline-block;
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.tree-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #6c757d;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    font-size: 10px;
+}
+
+.tree-toggle:hover {
+    color: #495057;
+}
+
+.tree-toggle.collapsed::before {
+    content: "▶";
+}
+
+.tree-toggle.expanded::before {
+    content: "▼";
+}
+
+.tree-toggle.leaf {
+    visibility: hidden;
+}
+
+.req-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.875rem;
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.req-id:hover {
+    text-decoration: underline;
+}
+
+.file-link {
+    color: #198754;
+    text-decoration: none;
+}
+
+.file-link:hover {
+    text-decoration: underline;
+}
+
+.assertion-badges {
+    display: flex;
+    gap: 2px;
+    margin-left: 4px;
+}
+
+.assertion-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: #e7f1ff;
+    color: #0d6efd;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
