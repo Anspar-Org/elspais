@@ -69,8 +69,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      # TODO: Change --mode to combined when sponsor repos are integrated into the build
       - name: Validate requirement format and IDs
-        run: elspais validate
+        run: elspais validate --mode core
+
+      - name: Validate INDEX.md accuracy
+        run: elspais index --mode core validate
 
       - name: Generate traceability matrix
         run: |

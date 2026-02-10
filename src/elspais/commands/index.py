@@ -30,14 +30,18 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    mode = getattr(args, "mode", "combined")
 
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
+
+    scan_sponsors = mode != "core"
 
     graph = build_graph(
         config=config,
         spec_dirs=spec_dirs if spec_dir else None,
         config_path=config_path,
+        scan_sponsors=scan_sponsors,
     )
 
     action = getattr(args, "index_action", None)
@@ -118,10 +122,43 @@ def _validate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Nam
     return 1
 
 
+def _format_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+    """Format a markdown table with properly padded columns.
+
+    Computes max width for each column and pads all cells to align pipes.
+    """
+    col_widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            col_widths[i] = max(col_widths[i], len(cell))
+
+    def _pad_row(cells: list[str]) -> str:
+        padded = " | ".join(cell.ljust(col_widths[i]) for i, cell in enumerate(cells))
+        return f"| {padded} |"
+
+    lines = [_pad_row(headers)]
+    lines.append("| " + " | ".join("-" * w for w in col_widths) + " |")
+    for row in rows:
+        lines.append(_pad_row(row))
+    return lines
+
+
+def _make_relative(file_path: str, spec_dirs: list[Path]) -> str:
+    """Make a file path relative to the first matching spec directory."""
+    if not file_path:
+        return ""
+    for spec_dir in spec_dirs:
+        try:
+            return str(Path(file_path).relative_to(spec_dir))
+        except ValueError:
+            pass
+    return str(file_path)
+
+
 def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
     """Regenerate INDEX.md from graph requirements."""
     # Group by level
-    by_level = {"PRD": [], "OPS": [], "DEV": [], "other": []}
+    by_level: dict[str, list] = {"PRD": [], "OPS": [], "DEV": [], "other": []}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         level = (node.level or "").upper()
@@ -147,22 +184,15 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
 
         lines.append(f"## {title}")
         lines.append("")
-        lines.append("| ID | Title | File | Hash |")
-        lines.append("|---|---|---|---|")
 
+        headers = ["ID", "Title", "File", "Hash"]
+        rows = []
         for node in sorted(nodes, key=lambda n: n.id):
-            file_path = node.source.path if node.source else ""
-            # Make path relative
-            if file_path:
-                for spec_dir in spec_dirs:
-                    try:
-                        file_path = Path(file_path).relative_to(spec_dir)
-                        break
-                    except ValueError:
-                        pass
+            file_path = _make_relative(node.source.path if node.source else "", spec_dirs)
             hash_val = node.hash or ""
-            lines.append(f"| {node.id} | {node.get_label()} | {file_path} | {hash_val} |")
+            rows.append([node.id, node.get_label(), str(file_path), hash_val])
 
+        lines.extend(_format_table(headers, rows))
         lines.append("")
 
     # User Journeys section
@@ -170,26 +200,19 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
     if journey_nodes:
         lines.append("## User Journeys (JNY)")
         lines.append("")
-        lines.append("| ID | Title | Actor | File | Addresses |")
-        lines.append("|---|---|---|---|---|")
 
+        headers = ["ID", "Title", "Actor", "File", "Addresses"]
+        rows = []
         for node in sorted(journey_nodes, key=lambda n: n.id):
             actor = node.get_field("actor") or ""
-            file_path = node.source.path if node.source else ""
-            if file_path:
-                for spec_dir in spec_dirs:
-                    try:
-                        file_path = Path(file_path).relative_to(spec_dir)
-                        break
-                    except ValueError:
-                        pass
-            # Extract addresses from incoming ADDRESSES edges
+            file_path = _make_relative(node.source.path if node.source else "", spec_dirs)
             addresses = sorted(
                 e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
             )
             addr_str = ", ".join(addresses)
-            lines.append(f"| {node.id} | {node.get_label()} | {actor} | {file_path} | {addr_str} |")
+            rows.append([node.id, node.get_label(), actor, str(file_path), addr_str])
 
+        lines.extend(_format_table(headers, rows))
         lines.append("")
 
     # Write to first spec dir
