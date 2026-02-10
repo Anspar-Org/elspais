@@ -66,6 +66,17 @@ function renderNavTree() {
         filteredRows = rows;
     }
 
+    if (activeTab === 'journey') {
+        // Show server-rendered journey content in nav panel
+        var journeyContainer = document.getElementById('journey-data-container');
+        if (journeyContainer) {
+            container.innerHTML = journeyContainer.innerHTML;
+        } else {
+            container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No journey data available.</div>';
+        }
+        return;
+    }
+
     if (activeTab !== 'req') {
         container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">' +
             activeTab.charAt(0).toUpperCase() + activeTab.slice(1) +
@@ -98,6 +109,25 @@ function renderNavTree() {
         const levelClass = row.level ? row.level.toLowerCase() : '';
         const shortId = row.id.replace('REQ-', '');
 
+        // Coverage icon
+        var covIcon = '';
+        if (row.coverage === 'full') {
+            covIcon = '<span class="coverage-icon full" title="Full coverage">●</span>';
+        } else if (row.coverage === 'partial') {
+            covIcon = '<span class="coverage-icon partial" title="Partial coverage">◐</span>';
+        } else {
+            covIcon = '<span class="coverage-icon none" title="No coverage">○</span>';
+        }
+
+        // Status badge
+        var statusBadge = '';
+        if (row.status) {
+            var statusLower = row.status.toLowerCase();
+            statusBadge = '<span class="status-badge ' + statusLower + '" style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
+            if (row.is_changed) statusBadge += '<span class="change-indicator">◆</span>';
+            statusBadge += '</span>';
+        }
+
         html += '<div class="nav-tree-row' + selectedClass + '" ' +
             'data-id="' + row.id + '" ' +
             'data-parent="' + (row.parent_id || '') + '" ' +
@@ -106,9 +136,11 @@ function renderNavTree() {
             indents.join('') +
             '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
             toggleIcon + '</button>' +
+            covIcon +
             (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
             '<span class="nav-tree-id">' + shortId + '</span>' +
             '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
+            statusBadge +
             '</div>';
     });
 

@@ -83,12 +83,35 @@ def create_app(
 
     @app.route("/")
     def index():
-        """Serve the trace-edit UI template."""
+        """Serve the trace-edit UI template with enriched context.
+
+        Reuses HTMLGenerator methods to compute stats, journeys,
+        and other view context for the unified template.
+        """
         try:
-            return render_template("trace_unified.html.j2", mode="edit")
+            from elspais.html.generator import HTMLGenerator
+
+            gen = HTMLGenerator(_state["graph"], base_path=str(_state["working_dir"]))
+            gen._annotate_git_state()
+            gen._annotate_coverage()
+            stats = gen._compute_stats()
+            journeys = gen._collect_journeys()
+            stats.journey_count = len(journeys)
+            statuses = sorted(gen._collect_unique_values("status"))
+            topics = sorted(gen._collect_unique_values("topic"))
+
+            return render_template(
+                "trace_unified.html.j2",
+                mode="edit",
+                stats=stats,
+                journeys=journeys,
+                statuses=statuses,
+                topics=topics,
+                version=gen.version,
+                base_path=str(_state["working_dir"]),
+            )
         except Exception:
-            # Template may not exist yet (Phase 3)
-            return jsonify({"message": "trace_edit.html.j2 template not yet available"}), 200
+            return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
 
     # ─────────────────────────────────────────────────────────────────
     # Read-only GET endpoints
@@ -128,8 +151,8 @@ def create_app(
     def api_tree_data():
         """GET /api/tree-data - Build tree data for nav panel.
 
-        Adapts the HTMLGenerator._build_tree_rows pattern to produce
-        a flat list of tree nodes suitable for the nav panel.
+        Produces a flat list of tree nodes with coverage, git state,
+        and associated flags to enable filtering in edit mode.
         """
         g = _state["graph"]
         rows = []
@@ -150,6 +173,20 @@ def create_app(
             # Determine if node has requirement children
             has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
 
+            # Coverage (set by _annotate_coverage via index route)
+            coverage = node.get_field("coverage", "none")
+
+            # Git state (set by _annotate_git_state via index route)
+            is_changed = bool(node.get_field("is_changed", False))
+            is_uncommitted = bool(node.get_field("is_uncommitted", False))
+
+            # Associated repo flag
+            is_associated = bool(node.get_field("is_associated", False))
+
+            # Source file info
+            source_file = node.get_field("source_file", "")
+            source_line = node.get_field("source_line", 0)
+
             rows.append(
                 {
                     "id": node.id,
@@ -161,6 +198,12 @@ def create_app(
                     "assertions": sorted(assertions),
                     "has_children": has_children,
                     "is_leaf": not has_children,
+                    "coverage": coverage,
+                    "is_changed": is_changed,
+                    "is_uncommitted": is_uncommitted,
+                    "is_associated": is_associated,
+                    "source_file": source_file,
+                    "source_line": source_line,
                 }
             )
 

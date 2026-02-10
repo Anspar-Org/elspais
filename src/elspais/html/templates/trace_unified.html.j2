@@ -30,6 +30,10 @@ body {
 {% include "partials/css/_card-stack.css.j2" %}
 {% include "partials/css/_edit-mode.css.j2" %}
 {% include "partials/css/_file-viewer-edit.css.j2" %}
+{% include "partials/css/_status-badges.css.j2" %}
+{% include "partials/css/_coverage.css.j2" %}
+{% include "partials/css/_legend.css.j2" %}
+{% include "partials/css/_journey.css.j2" %}
 {% include "partials/css/_dark-theme.css.j2" %}
 /* Edit responsive */
 @media (max-width: 768px) {
@@ -288,6 +292,13 @@ body {
 
 {% endif %}
 
+{% if mode == 'edit' %}
+<!-- Journey content rendered in nav panel via switchNavTab('journey') -->
+<div id="journey-data-container" style="display:none;">
+    {% include "partials/_journey_tab.html.j2" %}
+</div>
+{% endif %}
+
 {% include "partials/_legend_modal.html.j2" %}
 
 {% if mode == 'view' %}
@@ -361,6 +372,23 @@ const state = {
 {% include "partials/js/_edit-engine.js.j2" %}
 {% include "partials/js/_nav-tree.js.j2" %}
 {% include "partials/js/_card-stack.js.j2" %}
+
+// Legend toggle (shared with view mode)
+function toggleLegend() {
+    var modal = document.getElementById('legend-modal');
+    modal.classList.toggle('visible');
+}
+function closeLegendOnOverlay(event) {
+    if (event.target === event.currentTarget) {
+        toggleLegend();
+    }
+}
+
+// Journey ref click: open card in edit mode (replaces switchToReqTab)
+function switchToReqTab(reqId) {
+    openCard(reqId);
+}
+
 {% else %}
 {% include "partials/js/_filter-engine.js.j2" %}
 {% include "partials/js/_journey-engine.js.j2" %}
@@ -373,7 +401,10 @@ const state = {
 // Keyboard Shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        if (document.getElementById('file-viewer-panel').classList.contains('open')) {
+        var legendModal = document.getElementById('legend-modal');
+        if (legendModal && legendModal.classList.contains('visible')) {
+            toggleLegend();
+        } else if (document.getElementById('file-viewer-panel').classList.contains('open')) {
             closeFileViewer();
         }
     }
