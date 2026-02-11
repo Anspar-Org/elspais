@@ -43,7 +43,12 @@ except ImportError:
 
 from elspais.config import find_config_file, get_config
 from elspais.graph import NodeKind
-from elspais.graph.annotators import count_by_coverage, count_by_git_status, count_by_level
+from elspais.graph.annotators import (
+    annotate_graph_git_state,
+    count_by_coverage,
+    count_by_git_status,
+    count_by_level,
+)
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.mutations import MutationEntry
@@ -432,6 +437,8 @@ def _get_project_summary(
     # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph, config=config)
     coverage_stats = count_by_coverage(graph)
+    # Annotate git state before counting (idempotent, safe to call multiple times)
+    annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
 
     return {
@@ -441,6 +448,48 @@ def _get_project_summary(
         "total_nodes": graph.node_count(),
         "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(graph.broken_references()),
+    }
+
+
+def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
+    """Get requirements with git changes.
+
+    Annotates the graph with git state, then filters for requirement nodes
+    where any git flag is True.
+
+    Args:
+        graph: The TraceGraph to analyze.
+
+    Returns:
+        Dict with 'requirements' list and 'summary' counts.
+    """
+    annotate_graph_git_state(graph)
+
+    changed: list[dict[str, Any]] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        is_uncommitted = node.get_metric("is_uncommitted", False)
+        is_branch_changed = node.get_metric("is_branch_changed", False)
+        is_moved = node.get_metric("is_moved", False)
+
+        if is_uncommitted or is_branch_changed or is_moved:
+            entry = _serialize_requirement_summary(node)
+            entry["git_state"] = {
+                "is_uncommitted": is_uncommitted,
+                "is_untracked": node.get_metric("is_untracked", False),
+                "is_modified": node.get_metric("is_modified", False),
+                "is_branch_changed": is_branch_changed,
+                "is_moved": is_moved,
+                "is_new": node.get_metric("is_new", False),
+            }
+            entry["source"] = node.source.path if node.source else None
+            changed.append(entry)
+
+    summary = count_by_git_status(graph)
+
+    return {
+        "requirements": changed,
+        "count": len(changed),
+        "summary": summary,
     }
 
 
@@ -1513,6 +1562,7 @@ The graph is the single source of truth - all tools read directly from it.
 ### Workspace Context
 - `get_workspace_info()` - Repo path, project name, configuration
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
+- `get_changed_requirements()` - Requirements with uncommitted or branch changes
 
 ### Node Mutations (in-memory)
 - `mutate_rename_node(old_id, new_id)` - Rename requirement
@@ -1752,6 +1802,19 @@ def create_server(
             Project summary with counts, coverage, and change metrics.
         """
         return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
+
+    @mcp.tool()
+    def get_changed_requirements() -> dict[str, Any]:
+        """Get requirements with git changes.
+
+        Returns requirements that have uncommitted changes, differ from the main
+        branch, or have been moved between files. Each result includes the
+        requirement summary, git state flags, and source file path.
+
+        Returns:
+            Changed requirements with git state and summary counts.
+        """
+        return _get_changed_requirements(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)

@@ -801,3 +801,109 @@ class TestRoundTripFidelity:
         parent = result["parents"][0]
         assert parent["id"] == "REQ-o00001"
         assert parent["edge_kind"] == "refines"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_project_summary() change metrics - CUR-879
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetProjectSummaryChanges:
+    """Tests for get_project_summary() change metrics (CUR-879)."""
+
+    def test_REQ_CUR879_D_project_summary_includes_change_metrics(self, sample_graph):
+        """REQ-CUR879-D: get_project_summary returns non-zero change metrics."""
+        pytest.importorskip("mcp")
+        from unittest.mock import patch
+
+        from elspais.graph.GraphNode import SourceLocation
+        from elspais.mcp.server import _get_project_summary
+        from elspais.utilities.git import GitChangeInfo
+
+        for node_id, path in [
+            ("REQ-p00001", "spec/prd.md"),
+            ("REQ-o00001", "spec/ops.md"),
+            ("REQ-d00001", "spec/dev.md"),
+        ]:
+            node = sample_graph.find_by_id(node_id)
+            if node:
+                node.source = SourceLocation(path=path, line=1)
+
+        git_info = GitChangeInfo(
+            modified_files={"spec/prd.md"},
+            branch_changed_files={"spec/prd.md", "spec/ops.md"},
+        )
+
+        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
+            result = _get_project_summary(sample_graph, sample_graph.repo_root)
+
+        assert result["changes"]["uncommitted"] >= 1
+        assert result["changes"]["branch_changed"] >= 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_changed_requirements() - CUR-879
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetChangedRequirements:
+    """Tests for get_changed_requirements() tool (CUR-879)."""
+
+    def test_REQ_CUR879_E_get_changed_requirements_returns_changed(self, sample_graph):
+        """REQ-CUR879-E: get_changed_requirements returns changed requirements."""
+        pytest.importorskip("mcp")
+        from unittest.mock import patch
+
+        from elspais.graph.GraphNode import SourceLocation
+        from elspais.mcp.server import _get_changed_requirements
+        from elspais.utilities.git import GitChangeInfo
+
+        for node_id, path in [
+            ("REQ-p00001", "spec/prd.md"),
+            ("REQ-o00001", "spec/ops.md"),
+            ("REQ-d00001", "spec/dev.md"),
+        ]:
+            node = sample_graph.find_by_id(node_id)
+            if node:
+                node.source = SourceLocation(path=path, line=1)
+
+        git_info = GitChangeInfo(
+            modified_files={"spec/prd.md"},
+            branch_changed_files={"spec/prd.md", "spec/ops.md"},
+        )
+
+        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
+            result = _get_changed_requirements(sample_graph)
+
+        assert result["count"] >= 2
+        ids = {r["id"] for r in result["requirements"]}
+        assert "REQ-p00001" in ids  # modified
+        assert "REQ-o00001" in ids  # branch changed
+
+        # Check git_state dict is present
+        prd_entry = next(r for r in result["requirements"] if r["id"] == "REQ-p00001")
+        assert prd_entry["git_state"]["is_modified"] is True
+        assert prd_entry["git_state"]["is_uncommitted"] is True
+        assert prd_entry["source"] == "spec/prd.md"
+
+        # Check summary is present
+        assert "summary" in result
+        assert result["summary"]["uncommitted"] >= 1
+
+    def test_REQ_CUR879_F_get_changed_requirements_empty_when_clean(self, sample_graph):
+        """REQ-CUR879-F: get_changed_requirements returns empty when no changes."""
+        pytest.importorskip("mcp")
+        from unittest.mock import patch
+
+        from elspais.mcp.server import _get_changed_requirements
+        from elspais.utilities.git import GitChangeInfo
+
+        git_info = GitChangeInfo()  # No changes
+
+        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
+            result = _get_changed_requirements(sample_graph)
+
+        assert result["count"] == 0
+        assert result["requirements"] == []
+        assert result["summary"]["uncommitted"] == 0
+        assert result["summary"]["branch_changed"] == 0

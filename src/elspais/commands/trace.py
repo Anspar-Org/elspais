@@ -487,8 +487,10 @@ def run(args: argparse.Namespace) -> int:
 
     # Handle --graph-json mode
     if getattr(args, "graph_json", False):
+        from elspais.graph.annotators import annotate_graph_git_state
         from elspais.graph.serialize import serialize_graph
 
+        annotate_graph_git_state(graph)
         output = json.dumps(serialize_graph(graph), indent=2)
         if args.output:
             Path(args.output).write_text(output, encoding="utf-8")
