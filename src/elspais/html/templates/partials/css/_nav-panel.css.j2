@@ -143,3 +143,60 @@
 .nav-tree-level.prd { background: #212529; color: white; }
 .nav-tree-level.ops { background: #fd7e14; color: white; }
 .nav-tree-level.dev { background: #20c997; color: white; }
+
+/* Test and result rows in nav tree */
+.nav-tree-test {
+    background: rgba(13, 202, 240, 0.06);
+}
+.nav-tree-test:hover {
+    background: rgba(13, 202, 240, 0.12);
+}
+.nav-tree-result {
+    background: rgba(108, 117, 125, 0.04);
+    font-size: 0.75rem;
+}
+.nav-tree-result:hover {
+    background: rgba(108, 117, 125, 0.10);
+}
+.nav-tree-result.result-passed { border-left-color: #198754; }
+.nav-tree-result.result-failed { border-left-color: #dc3545; }
+.nav-tree-result.result-error { border-left-color: #ffc107; }
+.nav-tree-result.result-skipped { border-left-color: #6c757d; }
+
+.nav-tree-kind-icon {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    width: 16px;
+    text-align: center;
+}
+.nav-tree-kind-icon.test-icon {
+    font-size: 0.8rem;
+}
+
+.nav-tree-result-badge {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+.nav-tree-result-badge.passed { background: #d1e7dd; color: #0f5132; }
+.nav-tree-result-badge.failed, .nav-tree-result-badge.fail, .nav-tree-result-badge.failure { background: #f8d7da; color: #842029; }
+.nav-tree-result-badge.error { background: #fff3cd; color: #664d03; }
+.nav-tree-result-badge.skipped, .nav-tree-result-badge.skip { background: #e2e3e5; color: #41464b; }
+
+/* Tab spacer and tree action buttons */
+.nav-tab-spacer { flex: 1; }
+
+.nav-tree-action {
+    padding: 6px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.7rem;
+    color: #adb5bd;
+    transition: color 0.15s;
+}
+.nav-tree-action:hover { color: #495057; }

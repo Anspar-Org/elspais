@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.52.0"
+version = "0.54.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 authors = [{ name = "Anspar", email = "dev@anspar.io" }]
 keywords = ["requirements", "traceability", "validation", "documentation", "specifications"]
 classifiers = [

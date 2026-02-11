@@ -46,4 +46,40 @@
         <span class="counter" id="counter">Showing {{ stats.total_count }} of {{ stats.total_count }} requirements</span>
     </div>
 </div>
+{% elif mode == 'edit' %}
+<div class="toolbar" id="edit-toolbar">
+    <!-- Git Filters -->
+    <div class="btn-group" role="group">
+        <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')">Uncommitted</button>
+        <button class="btn" id="edit-btn-changed" onclick="toggleEditFilter('changed')">Changed</button>
+    </div>
+
+    <!-- Dropdowns -->
+    <select class="filter-select" id="edit-filter-status" onchange="applyEditFilters()" title="Filter by status">
+        <option value="">Status: All</option>
+        {% for status in statuses %}
+        <option value="{{ status }}">{{ status }}</option>
+        {% endfor %}
+    </select>
+    <select class="filter-select" id="edit-filter-coverage" onchange="applyEditFilters()" title="Filter by coverage">
+        <option value="">Cov: All</option>
+        <option value="none">None</option>
+        <option value="partial">Partial</option>
+        <option value="full">Full</option>
+    </select>
+
+    <!-- Toggles -->
+    <div class="toggle-group">
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
+            <span>Leaf Only</span>
+        </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="toolbar-actions">
+        <button class="btn" onclick="clearEditFilters()" title="Clear all filters">Clear</button>
+        <span class="counter" id="edit-counter"></span>
+    </div>
+</div>
 {% endif %}

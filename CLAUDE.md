@@ -15,7 +15,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
 
-**Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.9+ stdlib for everything else.
+**Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.10+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
 **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
 **Configuration System** (`config/__init__.py`) almost all parsible content is configurable.

@@ -4,14 +4,22 @@
 
 const COOKIE_NAME = 'elspais_trace_edit_state';
 const COOKIE_DAYS = 30;
+const COOKIE_VERSION = 5;  // v5: added fontSize, theme, toolbarHidden
 
 function saveState() {
     const stateToSave = {
+        _v: COOKIE_VERSION,
         editEnabled: editState.enabled,
         openCardIds: editState.openCardOrder,
         activeNavTab: editState.activeNavTab,
         collapsedTreeNodes: Array.from(editState.collapsedTreeNodes),
-        collapsedCards: []
+        collapsedCards: [],
+        activeFilters: editState.activeFilters,
+        filterStatus: editState.filterStatus,
+        filterCoverage: editState.filterCoverage,
+        fontSize: editState.fontSize,
+        theme: editState.theme,
+        toolbarHidden: editState.toolbarHidden
     };
     // Track which cards are collapsed
     editState.openCards.forEach((info, id) => {
@@ -26,7 +34,9 @@ function loadState() {
     const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
     if (!match) return null;
     try {
-        return JSON.parse(decodeURIComponent(match[2]));
+        var saved = JSON.parse(decodeURIComponent(match[2]));
+        if (!saved._v || saved._v < COOKIE_VERSION) return null;  // discard stale cookie
+        return saved;
     } catch (e) {
         return null;
     }

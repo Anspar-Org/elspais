@@ -6,11 +6,20 @@
 
 <header class="header">
     <div class="header-left">
-        <h1 class="header-title">Trace Edit</h1>
+        <h1 class="header-title">Trace Edit <span class="version-badge">v{{ version }}</span></h1>
         <div class="header-stats" id="header-stats">
-            <span class="stat-badge prd" id="stat-prd">PRD: --</span>
-            <span class="stat-badge ops" id="stat-ops">OPS: --</span>
-            <span class="stat-badge dev" id="stat-dev">DEV: --</span>
+            <span class="stat-badge prd" id="stat-prd" onclick="toggleEditLevelFilter('levelPrd')" title="Click to hide PRD requirements">PRD: --</span>
+            <span class="stat-badge ops" id="stat-ops" onclick="toggleEditLevelFilter('levelOps')" title="Click to hide OPS requirements">OPS: --</span>
+            <span class="stat-badge dev" id="stat-dev" onclick="toggleEditLevelFilter('levelDev')" title="Click to hide DEV requirements">DEV: --</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-badge main" id="stat-main" onclick="toggleEditFilter('main')" title="Click to hide associated requirements (show core only)">Core: --</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-badge tests" id="stat-tests" onclick="toggleEditFilter('hideTests')" title="Click to hide test nodes">Tests: --</span>
+            <span class="stat-badge results" id="stat-results" onclick="toggleEditFilter('hideResults')" title="Click to hide test result nodes">Results: --</span>
+            <span class="stat-sep repo-sep" id="repo-sep" style="display:none;">|</span>
+            <span id="repo-badges-container"></span>
+            <span class="stat-sep">|</span>
+            <button class="btn filter-toggle-btn" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar">&#9881;</button>
         </div>
     </div>
 
@@ -40,9 +49,28 @@
             Revert
         </button>
 
-        <button class="btn" onclick="toggleLegend()" title="Show legend">
-            &#8505; Legend
-        </button>
+        <div class="hamburger-menu" id="hamburger-menu">
+            <button class="btn hamburger-btn" onclick="toggleHamburgerMenu()" title="Options">&#9776;</button>
+            <div class="hamburger-dropdown" id="hamburger-dropdown">
+                <button class="hamburger-item" onclick="toggleLegend(); closeHamburgerMenu()">
+                    &#8505; Legend
+                </button>
+                <div class="hamburger-divider"></div>
+                <div class="hamburger-label">Font Size</div>
+                <div class="hamburger-item font-size-controls">
+                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(-1)" title="Decrease font size">A&#x2212;</button>
+                    <span id="font-size-display">14px</span>
+                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(1)" title="Increase font size">A+</button>
+                </div>
+                <div class="hamburger-divider"></div>
+                <div class="hamburger-label">Theme</div>
+                <div class="hamburger-item theme-controls">
+                    <button class="btn theme-btn" data-theme="light" onclick="event.stopPropagation(); setTheme('light')" title="Light theme">&#9728;</button>
+                    <button class="btn theme-btn" data-theme="dark" onclick="event.stopPropagation(); setTheme('dark')" title="Dark theme">&#9790;</button>
+                    <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
+                </div>
+            </div>
+        </div>
     </div>
 </header>
 

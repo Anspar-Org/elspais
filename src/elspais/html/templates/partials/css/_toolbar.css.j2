@@ -92,3 +92,37 @@
     font-size: 0.875rem;
     color: #6c757d;
 }
+
+/* Filter dropdown (shared by toolbar) */
+.filter-select {
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #495057;
+    background: white;
+    cursor: pointer;
+}
+
+/* Dim context-only rows (ancestors shown for tree structure but not matching the filter) */
+.nav-tree-row.filter-dim {
+    opacity: 0.35;
+}
+
+.nav-tree-row.filter-dim:hover {
+    opacity: 0.7;
+}
+
+/* Hideable toolbar */
+.toolbar {
+    transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
+    max-height: 100px;
+    overflow: hidden;
+}
+.toolbar.toolbar-hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    border-bottom: none;
+}
