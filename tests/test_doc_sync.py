@@ -6,8 +6,10 @@ markdown renderer handles all expected patterns correctly.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +21,17 @@ from elspais.utilities.docs_loader import (
     load_topic,
 )
 from elspais.utilities.md_renderer import MarkdownRenderer, render_markdown
+
+# Ensure subprocess can find the source tree (editable installs may point elsewhere)
+_SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
+
+
+def _make_env() -> dict[str, str]:
+    """Return env dict with PYTHONPATH pointing to this repo's src/."""
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{_SRC_DIR}{os.pathsep}{existing}" if existing else _SRC_DIR
+    return env
 
 
 class TestDocsExistence:
@@ -195,6 +208,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
             timeout=10,
+            env=_make_env(),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "ELSPAIS" in result.stdout
@@ -206,6 +220,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
             timeout=10,
+            env=_make_env(),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         # Should contain headings from multiple topics
@@ -220,6 +235,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
             timeout=10,
+            env=_make_env(),
         )
         assert result.returncode == 0
         assert "\033[" not in result.stdout, "Plain output should have no ANSI codes"
@@ -232,6 +248,7 @@ class TestCLIIntegration:
             capture_output=True,
             text=True,
             timeout=10,
+            env=_make_env(),
         )
         assert result.returncode == 0, f"Failed for {topic}: {result.stderr}"
         assert len(result.stdout) > 100, f"{topic} output too short"
