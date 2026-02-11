@@ -3,5 +3,18 @@
     "requirement-traceability@anspar-cc-plugins": false,
     "simple-requirements@anspar-cc-plugins": false,
     "traceability-matrix@anspar-cc-plugins": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/validate-pr-title.sh"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -9,6 +9,16 @@ on:
         description: 'Skip PyPI upload (just update Homebrew)'
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish (without v prefix)'
+        type: string
+        required: true
+      skip_pypi:
+        description: 'Skip PyPI upload (just update Homebrew)'
+        type: boolean
+        default: false
 
 jobs:
   publish:
@@ -46,15 +56,20 @@ jobs:
     if: always() && (needs.publish.result == 'success' || inputs.skip_pypi)
 
     steps:
-      - name: Extract version from tag
+      - uses: actions/checkout@v4
+
+      - name: Extract version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            # Strip 'v' prefix from tag if present
+          if [ -n "${{ inputs.version }}" ]; then
+            # workflow_call: version passed explicitly
+            VERSION="${{ inputs.version }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            # release: strip 'v' prefix from tag
             VERSION="${{ github.event.release.tag_name }}"
             VERSION="${VERSION#v}"
           else
-            # Read from pyproject.toml
+            # workflow_dispatch: read from pyproject.toml
             VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
