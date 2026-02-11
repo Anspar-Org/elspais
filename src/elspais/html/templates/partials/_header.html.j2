@@ -1,0 +1,115 @@
+{# Partial: _header.html.j2 — Mode-conditional header #}
+{# Edit: 3-column layout with search + edit controls #}
+{# View: flat layout with stat badges, assertion summary, legend/reset #}
+
+{% if mode == 'edit' %}
+
+<header class="header">
+    <div class="header-left">
+        <h1 class="header-title">Trace Edit <span class="version-badge">v{{ version }}</span></h1>
+        <div class="header-stats" id="header-stats">
+            <span class="stat-badge prd" id="stat-prd" onclick="toggleEditLevelFilter('levelPrd')" title="Click to hide PRD requirements">PRD: --</span>
+            <span class="stat-badge ops" id="stat-ops" onclick="toggleEditLevelFilter('levelOps')" title="Click to hide OPS requirements">OPS: --</span>
+            <span class="stat-badge dev" id="stat-dev" onclick="toggleEditLevelFilter('levelDev')" title="Click to hide DEV requirements">DEV: --</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-badge main" id="stat-main" onclick="toggleEditFilter('main')" title="Click to hide associated requirements (show core only)">Core: --</span>
+            <span class="stat-sep">|</span>
+            <span class="stat-badge tests" id="stat-tests" onclick="toggleEditFilter('hideTests')" title="Click to hide test nodes">Tests: --</span>
+            <span class="stat-badge results" id="stat-results" onclick="toggleEditFilter('hideResults')" title="Click to hide test result nodes">Results: --</span>
+            <span class="stat-sep repo-sep" id="repo-sep" style="display:none;">|</span>
+            <span id="repo-badges-container"></span>
+            <span class="stat-sep">|</span>
+            <button class="btn filter-toggle-btn" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar">&#9881;</button>
+        </div>
+    </div>
+
+    <div class="header-center">
+        <div class="search-box" id="search-box">
+            <input type="text" id="search-input" placeholder="Search requirements..." autocomplete="off">
+            <div class="search-results" id="search-results"></div>
+        </div>
+    </div>
+
+    <div class="header-right">
+        <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
+            <span class="edit-toggle-indicator"></span>
+            <span>Edit Mode</span>
+        </button>
+
+        <button class="btn" id="btn-undo" onclick="doUndo()" disabled title="Undo last change">
+            Undo
+        </button>
+
+        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save mutations to disk">
+            Save
+            <span class="unsaved-badge hidden" id="unsaved-badge">0</span>
+        </button>
+
+        <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes">
+            Revert
+        </button>
+
+        <div class="hamburger-menu" id="hamburger-menu">
+            <button class="btn hamburger-btn" onclick="toggleHamburgerMenu()" title="Options">&#9776;</button>
+            <div class="hamburger-dropdown" id="hamburger-dropdown">
+                <button class="hamburger-item" onclick="toggleLegend(); closeHamburgerMenu()">
+                    &#8505; Legend
+                </button>
+                <div class="hamburger-divider"></div>
+                <div class="hamburger-label">Font Size</div>
+                <div class="hamburger-item font-size-controls">
+                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(-1)" title="Decrease font size">A&#x2212;</button>
+                    <span id="font-size-display">14px</span>
+                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(1)" title="Increase font size">A+</button>
+                </div>
+                <div class="hamburger-divider"></div>
+                <div class="hamburger-label">Theme</div>
+                <div class="hamburger-item theme-controls">
+                    <button class="btn theme-btn" data-theme="light" onclick="event.stopPropagation(); setTheme('light')" title="Light theme">&#9728;</button>
+                    <button class="btn theme-btn" data-theme="dark" onclick="event.stopPropagation(); setTheme('dark')" title="Dark theme">&#9790;</button>
+                    <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+{% else %}
+
+<header class="header">
+    <h1 class="header-title">Requirements Traceability</h1>
+
+    <div class="header-stats">
+        <span class="stat-badge prd" id="badge-prd" onclick="toggleLevelFilter('PRD')" title="Click to filter PRD only">PRD: {{ stats.prd_count }}</span>
+        <span class="stat-badge ops" id="badge-ops" onclick="toggleLevelFilter('OPS')" title="Click to filter OPS only">OPS: {{ stats.ops_count }}</span>
+        <span class="stat-badge dev" id="badge-dev" onclick="toggleLevelFilter('DEV')" title="Click to filter DEV only">DEV: {{ stats.dev_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge core" id="badge-core" onclick="toggleFilter('core')" title="Click to hide core (non-associated) requirements">Core: {{ stats.total_count - stats.associated_count }}</span>
+        <span style="color: #adb5bd;">|</span>
+        <span class="stat-badge code" id="badge-code" onclick="toggleFilter('code')" title="Click to hide code nodes">Code: {{ stats.code_count }}</span>
+        <span class="stat-badge tests" id="badge-tests" onclick="toggleFilter('tests')" title="Click to hide test nodes">Tests: {{ stats.test_count }}</span>
+        {% if stats.test_result_count > 0 %}
+        <span class="stat-badge results" id="badge-results" onclick="toggleFilter('results')" title="Click to show test results">Results: {{ stats.test_passed_count }}✓ {{ stats.test_failed_count }}✗</span>
+        {% endif %}
+        <span class="stat-badge associated" id="badge-associated" onclick="toggleFilter('associated')" title="Click to filter associated repos">Assoc: {{ stats.associated_count|default(0) }}</span>
+    </div>
+
+    <div class="assertion-summary">
+        Assertions: <strong>{{ stats.assertion_count }}</strong> unique |
+        Implemented: <strong>{{ stats.assertions_implemented }}</strong> |
+        Tested: <strong>{{ stats.assertions_tested }}</strong> |
+        Validated: <strong>{{ stats.assertions_validated }}</strong>
+    </div>
+
+    <div class="header-meta">
+        <span class="version-badge">v{{ version }}</span>
+        <button class="legend-btn" onclick="toggleLegend()">
+            <span>ℹ</span> Legend
+        </button>
+        <button class="legend-btn" onclick="clearAllCookies()" title="Clear saved preferences">
+            <span>🍪</span> Reset
+        </button>
+    </div>
+</header>
+
+{% endif %}

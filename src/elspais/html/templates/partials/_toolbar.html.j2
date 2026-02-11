@@ -1,0 +1,85 @@
+{# Partial: _toolbar.html.j2 — Filters/toggles toolbar (view mode) #}
+
+{% if mode == 'view' %}
+<div class="toolbar">
+    <!-- View Mode -->
+    <div class="btn-group" role="group">
+        <button class="btn" data-view="flat" onclick="setViewMode('flat')">Flat View</button>
+        <button class="btn active" data-view="hierarchical" onclick="setViewMode('hierarchical')">Hierarchical View</button>
+    </div>
+
+    <!-- Git Filters -->
+    <div class="btn-group" role="group">
+        <button class="btn" id="btn-uncommitted" onclick="toggleFilter('uncommitted')">Uncommitted</button>
+        <button class="btn" id="btn-changed" onclick="toggleFilter('changed')">Changed vs Main</button>
+    </div>
+
+    <!-- Content Toggles -->
+    <div class="toggle-group">
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-leaf" onchange="applyFilters()">
+            <span>🌿 Leaf Only</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-deprecated" onchange="applyFilters()">
+            <span>Include deprecated</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-roadmap" onchange="applyFilters()">
+            <span>Include roadmap</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-code" onchange="applyFilters()">
+            <span>Show code refs</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="toggle-indirect" onchange="toggleIndirectCoverage()">
+            <span>Indirect coverage</span>
+        </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="toolbar-actions">
+        <button class="btn btn-icon" onclick="expandAll()" title="Expand All">&#9660; Expand All</button>
+        <button class="btn btn-icon" onclick="collapseAll()" title="Collapse All">&#9654; Collapse All</button>
+        <button class="btn" onclick="clearFilters()">Clear</button>
+        <span class="counter" id="counter">Showing {{ stats.total_count }} of {{ stats.total_count }} requirements</span>
+    </div>
+</div>
+{% elif mode == 'edit' %}
+<div class="toolbar" id="edit-toolbar">
+    <!-- Git Filters -->
+    <div class="btn-group" role="group">
+        <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')">Uncommitted</button>
+        <button class="btn" id="edit-btn-changed" onclick="toggleEditFilter('changed')">Changed</button>
+    </div>
+
+    <!-- Dropdowns -->
+    <select class="filter-select" id="edit-filter-status" onchange="applyEditFilters()" title="Filter by status">
+        <option value="">Status: All</option>
+        {% for status in statuses %}
+        <option value="{{ status }}">{{ status }}</option>
+        {% endfor %}
+    </select>
+    <select class="filter-select" id="edit-filter-coverage" onchange="applyEditFilters()" title="Filter by coverage">
+        <option value="">Cov: All</option>
+        <option value="none">None</option>
+        <option value="partial">Partial</option>
+        <option value="full">Full</option>
+    </select>
+
+    <!-- Toggles -->
+    <div class="toggle-group">
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
+            <span>Leaf Only</span>
+        </label>
+    </div>
+
+    <!-- Actions -->
+    <div class="toolbar-actions">
+        <button class="btn" onclick="clearEditFilters()" title="Clear all filters">Clear</button>
+        <span class="counter" id="edit-counter"></span>
+    </div>
+</div>
+{% endif %}

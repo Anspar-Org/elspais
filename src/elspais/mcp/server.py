@@ -82,20 +82,20 @@ def _serialize_assertion(node: Any) -> dict[str, Any]:
     }
 
 
-def _serialize_requirement_full(node: Any) -> dict[str, Any]:
-    """Serialize a requirement node to full format.
+def _serialize_node_generic(node: Any) -> dict[str, Any]:
+    """Serialize any graph node to full format with kind-specific properties.
+
+    Returns a common envelope (id, kind, title, source, parents, children,
+    links, keywords) plus a ``properties`` dict with kind-specific fields.
 
     REQ-d00064-B: Returns all fields including assertions and edges.
     REQ-d00064-C: Reads from node.get_field() and node.get_label().
-
-    Children are returned as a single flat list in document order,
-    each tagged with "kind" so the receiver can distinguish assertion
-    vs remainder vs other children without needing to re-sort.
-
-    Parents include "edge_kind" (IMPLEMENTS/REFINES) so the metadata
-    line can be reconstructed.
     """
-    # Build flat children list in document order (iter_children preserves insertion order)
+    from elspais.graph.relations import EdgeKind as EK
+
+    kind = node.kind
+
+    # ── Common: children ──
     children = []
     for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
@@ -128,35 +128,135 @@ def _serialize_requirement_full(node: Any) -> dict[str, Any]:
                 }
             )
 
-    # Build edge_kind map from incoming edges (parent -> this node direction)
-    # incoming edges have source=parent, target=this node
+    # ── Common: parents with edge_kind ──
     edge_map = {e.source.id: e.kind.value for e in node.iter_incoming_edges()}
-
-    # Get parents with edge_kind annotation
     parents = []
     for parent in node.iter_parents():
-        if parent.kind == NodeKind.REQUIREMENT:
-            parents.append(
+        parents.append(
+            {
+                "id": parent.id,
+                "kind": parent.kind.value,
+                "title": parent.get_label(),
+                "edge_kind": edge_map.get(parent.id, "unknown"),
+            }
+        )
+
+    # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
+    links = []
+    for edge in node.iter_incoming_edges():
+        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+            links.append(
                 {
-                    **_serialize_requirement_summary(parent),
-                    "edge_kind": edge_map.get(parent.id, "unknown"),
+                    "id": edge.source.id,
+                    "kind": edge.source.kind.value,
+                    "title": edge.source.get_label(),
+                    "edge_kind": edge.kind.value,
+                }
+            )
+    for edge in node.iter_outgoing_edges():
+        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+            links.append(
+                {
+                    "id": edge.target.id,
+                    "kind": edge.target.kind.value,
+                    "title": edge.target.get_label(),
+                    "edge_kind": edge.kind.value,
                 }
             )
 
+    # ── Common: keywords ──
+    keywords = node.get_field("keywords", []) or []
+
+    # ── Kind-specific properties ──
+    properties: dict[str, Any] = {}
+    if kind == NodeKind.REQUIREMENT:
+        properties = {
+            "level": node.get_field("level"),
+            "status": node.get_field("status"),
+            "hash": node.get_field("hash"),
+            "body_text": node.get_field("body_text"),
+        }
+    elif kind == NodeKind.USER_JOURNEY:
+        descriptor = None
+        m = re.match(r"JNY-(.+)-\d+$", node.id)
+        if m:
+            descriptor = m.group(1)
+        properties = {
+            "actor": node.get_field("actor", ""),
+            "goal": node.get_field("goal", ""),
+            "description": node.get_field("body", "") or node.get_field("description", ""),
+            "descriptor": descriptor,
+        }
+    elif kind == NodeKind.TEST:
+        properties = {
+            "function_name": node.get_field("function_name", ""),
+            "class_name": node.get_field("class_name", ""),
+        }
+    elif kind == NodeKind.TEST_RESULT:
+        properties = {
+            "status": node.get_field("status", ""),
+            "duration": node.get_field("duration", 0.0),
+            "message": node.get_field("message", ""),
+            "classname": node.get_field("classname", ""),
+        }
+    elif kind == NodeKind.CODE:
+        properties = {
+            "function_name": node.get_field("function_name", ""),
+            "class_name": node.get_field("class_name", ""),
+            "function_line": node.get_field("function_line", 0),
+        }
+    elif kind == NodeKind.ASSERTION:
+        properties = {
+            "label": node.get_field("label"),
+            "text": node.get_label(),
+        }
+    elif kind == NodeKind.REMAINDER:
+        properties = {
+            "heading": node.get_field("heading"),
+            "text": node.get_field("text"),
+        }
+
     return {
         "id": node.id,
+        "kind": kind.value,
         "title": node.get_label(),
-        "level": node.get_field("level"),
-        "status": node.get_field("status"),
-        "hash": node.get_field("hash"),
-        "body_text": node.get_field("body_text"),
-        "children": children,
-        "parents": parents,
         "source": {
             "path": node.source.path if node.source else None,
             "line": node.source.line if node.source else None,
         },
+        "keywords": keywords,
+        "parents": parents,
+        "children": children,
+        "links": links,
+        "properties": properties,
     }
+
+
+def _serialize_node_summary(node: Any) -> dict[str, Any]:
+    """Serialize any graph node to lightweight summary format.
+
+    Returns id, kind, title, plus kind-specific filterable properties.
+    """
+    kind = node.kind
+    summary: dict[str, Any] = {
+        "id": node.id,
+        "kind": kind.value,
+        "title": node.get_label(),
+    }
+
+    # Add filterable properties per kind
+    if kind == NodeKind.REQUIREMENT:
+        summary["level"] = node.get_field("level")
+        summary["status"] = node.get_field("status")
+    elif kind == NodeKind.USER_JOURNEY:
+        summary["actor"] = node.get_field("actor", "")
+        summary["goal"] = node.get_field("goal", "")
+    elif kind == NodeKind.TEST_RESULT:
+        summary["status"] = node.get_field("status", "")
+    elif kind == NodeKind.TEST:
+        summary["function_name"] = node.get_field("function_name", "")
+
+    return summary
 
 
 def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
@@ -316,8 +416,30 @@ def _search(
     return results
 
 
+def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
+    """Get any graph node by ID.
+
+    Returns the generic node envelope with kind-specific properties.
+    No kind restriction — any node kind is valid.
+
+    Args:
+        graph: The TraceGraph to query.
+        node_id: The node ID to look up.
+
+    Returns:
+        Serialized node dict, or dict with 'error' key if not found.
+    """
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return {"error": f"Node '{node_id}' not found"}
+    return _serialize_node_generic(node)
+
+
 def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     """Get single requirement details.
+
+    Thin wrapper around _get_node() with a kind == REQUIREMENT guard.
+    Preserves the function signature used by ~15 tests and the MCP tool.
 
     REQ-d00062-A: Uses graph.find_by_id() for O(1) lookup.
     REQ-d00062-B: Returns node fields.
@@ -333,7 +455,7 @@ def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     if node.kind != NodeKind.REQUIREMENT:
         return {"error": f"Node '{req_id}' is not a requirement"}
 
-    return _serialize_requirement_full(node)
+    return _serialize_node_generic(node)
 
 
 def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
@@ -920,22 +1042,31 @@ def _find_by_keywords(
     graph: TraceGraph,
     keywords: list[str],
     match_all: bool = True,
+    kind: str | None = None,
 ) -> dict[str, Any]:
-    """Find requirements containing specified keywords.
+    """Find nodes containing specified keywords.
 
     Args:
         graph: The TraceGraph to search.
         keywords: List of keywords to search for.
         match_all: If True, node must contain ALL keywords (AND).
                    If False, node must contain ANY keyword (OR).
+        kind: Optional NodeKind value string to filter by (e.g. "requirement").
 
     Returns:
         Dict with 'success', 'results', and 'count'.
     """
     from elspais.graph.annotators import find_by_keywords
 
-    nodes = find_by_keywords(graph, keywords, match_all)
-    results = [_serialize_requirement_summary(node) for node in nodes]
+    kind_enum = None
+    if kind:
+        try:
+            kind_enum = NodeKind(kind)
+        except ValueError:
+            return {"success": False, "error": f"Unknown kind: {kind}", "results": [], "count": 0}
+
+    nodes = find_by_keywords(graph, keywords, match_all, kind=kind_enum)
+    results = [_serialize_node_summary(node) for node in nodes]
 
     return {
         "success": True,
@@ -961,6 +1092,70 @@ def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
         "success": True,
         "keywords": keywords,
         "count": len(keywords),
+    }
+
+
+def _query_nodes(
+    graph: TraceGraph,
+    kind: str | None = None,
+    keywords: list[str] | None = None,
+    match_all: bool = True,
+    filters: dict[str, str] | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Combined property + keyword filter query for any node kind.
+
+    Starts with nodes filtered by kind (or all nodes), narrows by keywords
+    using existing annotator infrastructure, then post-filters by property
+    values.
+
+    Args:
+        graph: The TraceGraph to query.
+        kind: Optional NodeKind value string (e.g. "requirement", "journey").
+        keywords: Optional list of keywords to filter by.
+        match_all: If True, node must contain ALL keywords.
+        filters: Optional dict of property name → value for post-filtering.
+        limit: Maximum results to return.
+
+    Returns:
+        Dict with 'results', 'count', and 'truncated' flag.
+    """
+    # 1. Start with nodes by kind (or all)
+    kind_enum = None
+    if kind:
+        try:
+            kind_enum = NodeKind(kind)
+        except ValueError:
+            return {"results": [], "count": 0, "truncated": False}
+        candidates = list(graph.nodes_by_kind(kind_enum))
+    else:
+        candidates = list(graph.all_nodes())
+
+    # 2. Keyword filter (if provided)
+    if keywords:
+        from elspais.graph.annotators import find_by_keywords
+
+        keyword_ids = {n.id for n in find_by_keywords(graph, keywords, match_all, kind=kind_enum)}
+        candidates = [n for n in candidates if n.id in keyword_ids]
+
+    # 3. Property post-filters (known safe keys only)
+    allowed_filter_keys = {"level", "status", "actor"}
+    if filters:
+        for key, value in filters.items():
+            if key not in allowed_filter_keys:
+                continue
+            candidates = [
+                n for n in candidates if (n.get_field(key, "") or "").upper() == value.upper()
+            ]
+
+    # 4. Serialize and limit
+    total = len(candidates)
+    results = [_serialize_node_summary(n) for n in candidates[:limit]]
+
+    return {
+        "results": results,
+        "count": total,
+        "truncated": total > limit,
     }
 
 
@@ -1762,6 +1957,58 @@ def create_server(
             Requirement details including assertions and relationships.
         """
         return _get_requirement(_state["graph"], req_id)
+
+    @mcp.tool()
+    def get_node(node_id: str) -> dict[str, Any]:
+        """Get full details for any graph node by ID.
+
+        Works for any node kind: requirement, journey, test, result, code,
+        assertion, remainder. Returns a common envelope plus kind-specific
+        properties.
+
+        Args:
+            node_id: The node ID (e.g., 'REQ-p00001', 'JNY-Login-01').
+
+        Returns:
+            Node details with kind-specific properties.
+        """
+        return _get_node(_state["graph"], node_id)
+
+    @mcp.tool()
+    def query_nodes(
+        kind: str | None = None,
+        keywords: str | None = None,
+        match_all: bool = True,
+        level: str | None = None,
+        status: str | None = None,
+        actor: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Combined property + keyword filter query for any node kind.
+
+        Args:
+            kind: Filter by NodeKind value: requirement, journey, test, result, code.
+            keywords: Comma-separated keywords to search for.
+            match_all: True (default) = AND, False = OR for keywords.
+            level: Property filter: PRD, OPS, DEV (requirements only).
+            status: Property filter for requirement or test result status.
+            actor: Property filter: journey actor.
+            limit: Max results (default 50).
+
+        Returns:
+            Results list with count and truncated flag.
+        """
+        kw_list = None
+        if keywords:
+            kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+        filters = {}
+        if level:
+            filters["level"] = level
+        if status:
+            filters["status"] = status
+        if actor:
+            filters["actor"] = actor
+        return _query_nodes(_state["graph"], kind, kw_list, match_all, filters or None, limit)
 
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:

@@ -128,7 +128,7 @@ class HTMLGenerator:
                 loader=PackageLoader("elspais.html", "templates"),
                 autoescape=select_autoescape(["html", "xml"]),
             )
-            template = env.get_template("trace_view.html.j2")
+            template = env.get_template("trace_unified.html.j2")
         except ImportError as err:
             raise ImportError(
                 "HTMLGenerator requires the trace-view extra. "
@@ -158,6 +158,7 @@ class HTMLGenerator:
 
         # Render template
         html_content = template.render(
+            mode="view",
             stats=stats,
             rows=rows,
             journeys=journeys,

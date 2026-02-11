@@ -1,0 +1,128 @@
+/* Partial: _toolbar.css.j2 — Toolbar controls */
+
+.toolbar {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-group {
+    display: flex;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.btn-group .btn {
+    border: none;
+    border-right: 1px solid #dee2e6;
+    background: white;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn-group .btn:last-child {
+    border-right: none;
+}
+
+.btn-group .btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-group .btn.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: #495057;
+    cursor: pointer;
+}
+
+.toggle-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    align-items: center;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    transition: background 0.15s;
+}
+
+.btn:hover {
+    background: #f8f9fa;
+}
+
+.btn-icon {
+    padding: 8px 12px;
+}
+
+.counter {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* Filter dropdown (shared by toolbar) */
+.filter-select {
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #495057;
+    background: white;
+    cursor: pointer;
+}
+
+/* Dim context-only rows (ancestors shown for tree structure but not matching the filter) */
+.nav-tree-row.filter-dim {
+    opacity: 0.35;
+}
+
+.nav-tree-row.filter-dim:hover {
+    opacity: 0.7;
+}
+
+/* Hideable toolbar */
+.toolbar {
+    transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
+    max-height: 100px;
+    overflow: hidden;
+}
+.toolbar.toolbar-hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    border-bottom: none;
+}

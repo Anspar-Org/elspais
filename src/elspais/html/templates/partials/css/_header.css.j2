@@ -1,0 +1,127 @@
+/* Partial: _header.css.j2 — Header + stat badges */
+
+.header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.header-stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    user-select: none;
+}
+
+.stat-badge:hover {
+    opacity: 0.85;
+    transform: scale(1.02);
+}
+
+.stat-badge.active {
+    /* When filter is active (hiding that level), show hollow/outline appearance */
+    box-shadow: inset 0 0 0 2px currentColor;
+    background: transparent !important;
+}
+
+/* Level badges need dark text when active (background becomes transparent) */
+.stat-badge.prd.active { color: #212529; }
+.stat-badge.ops.active { color: #fd7e14; }
+.stat-badge.dev.active { color: #20c997; }
+.stat-badge.core.active { color: #0d6efd; }
+
+.stat-badge.prd { background: #212529; color: white; }
+.stat-badge.ops { background: #fd7e14; color: white; }
+.stat-badge.dev { background: #20c997; color: white; }
+.stat-badge.core { background: #0d6efd; color: white; }
+.stat-badge.code {
+    background: #6c757d;
+    color: white;
+}
+.stat-badge.code.active {
+    color: #6c757d;
+}
+.stat-badge.tests {
+    background: #198754;
+    color: white;
+}
+.stat-badge.tests.active {
+    color: #198754;
+}
+.stat-badge.results {
+    background: #6610f2;
+    color: white;
+}
+.stat-badge.results.active {
+    color: #6610f2;
+}
+.stat-badge.associated {
+    background: #6f42c1;
+    color: white;
+}
+.stat-badge.associated.active {
+    color: #6f42c1;
+}
+
+.assertion-summary {
+    font-size: 0.85em;
+    color: #6c757d;
+    padding: 4px 0;
+    border-top: 1px solid #dee2e6;
+    margin-top: 8px;
+}
+.assertion-summary strong {
+    color: #212529;
+}
+
+.header-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.version-badge {
+    padding: 4px 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.legend-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.legend-btn:hover {
+    background: #5a6268;
+}

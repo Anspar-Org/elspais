@@ -207,7 +207,7 @@ echo ""
 
 echo -e "${BLUE}Verifying CLI help...${NC}"
 
-if ! python3 -m elspais --help > /dev/null 2>&1; then
+if ! elspais --help > /dev/null 2>&1; then
     echo -e "${RED}CLI help verification failed!${NC}"
     VALIDATION_FAILED=true
 else
@@ -347,7 +347,7 @@ FIXTURE_DIRS=(
 for fixture_dir in "${FIXTURE_DIRS[@]}"; do
     if [ -d "$REPO_ROOT/$fixture_dir" ]; then
         echo "  Validating $fixture_dir..."
-        if ! (cd "$REPO_ROOT/$fixture_dir" && python3 -m elspais validate 2>&1); then
+        if ! (cd "$REPO_ROOT/$fixture_dir" && elspais validate 2>&1); then
             # Some fixtures have intentional errors, so just warn
             echo -e "${YELLOW}  Warning: validation issues in $fixture_dir${NC}"
         else

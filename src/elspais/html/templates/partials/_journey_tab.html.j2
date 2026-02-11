@@ -1,0 +1,96 @@
+{# Partial: _journey_tab.html.j2 — Journey cards with search/grouping #}
+
+<!-- User Journeys Tab Content -->
+<div class="tab-content" id="content-journeys">
+    <h2 class="section-title">User Journeys</h2>
+    {% if journeys %}
+    <div class="journey-toolbar">
+        <div class="journey-search">
+            <input type="text" id="journey-search" placeholder="Search journeys by ID, title, actor, or goal..." oninput="filterJourneys()">
+        </div>
+        <div class="journey-group-controls">
+            <label for="journey-group-by">Group by:</label>
+            <select id="journey-group-by" onchange="regroupJourneys()">
+                <option value="none">None</option>
+                <option value="descriptor">Descriptor</option>
+                <option value="actor">Actor</option>
+                <option value="file">File</option>
+            </select>
+        </div>
+        <div class="journey-count">
+            <span id="journey-visible-count">{{ journeys|length }}</span> of {{ journeys|length }} journeys
+        </div>
+    </div>
+    <div class="journey-list" id="journey-list">
+        {% for journey in journeys %}
+        <div class="journey-card"
+             data-id="{{ journey.id|lower }}"
+             data-title="{{ journey.title|lower }}"
+             data-actor="{{ (journey.actor or '')|lower }}"
+             data-goal="{{ (journey.goal or '')|lower }}"
+             data-descriptor="{{ journey.descriptor|lower }}"
+             data-file="{{ journey.file|lower }}"
+             data-refs="{{ journey.referenced_reqs|join(',')|lower }}">
+            <div class="journey-card-header">
+                <span class="journey-id">{{ journey.id }}</span>
+                <h3>{{ journey.title }}</h3>
+            </div>
+            {% if journey.actor or journey.goal or journey.descriptor or journey.file %}
+            <div class="journey-meta">
+                {% if journey.descriptor %}
+                <div class="journey-meta-item">
+                    <span class="journey-meta-label">Topic</span>
+                    <span class="journey-meta-value">{{ journey.descriptor }}</span>
+                </div>
+                {% endif %}
+                {% if journey.actor %}
+                <div class="journey-meta-item">
+                    <span class="journey-meta-label">Actor</span>
+                    <span class="journey-meta-value">{{ journey.actor }}</span>
+                </div>
+                {% endif %}
+                {% if journey.goal %}
+                <div class="journey-meta-item">
+                    <span class="journey-meta-label">Goal</span>
+                    <span class="journey-meta-value">{{ journey.goal }}</span>
+                </div>
+                {% endif %}
+                {% if journey.file %}
+                <div class="journey-meta-item">
+                    <span class="journey-meta-label">Source</span>
+                    <span class="journey-meta-value">{{ journey.file }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if journey.referenced_reqs %}
+            <div class="journey-refs">
+                <span class="journey-refs-label">Addresses:</span>
+                {% for req_id in journey.referenced_reqs %}
+                <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if journey.description %}
+            <div class="journey-description">{{ journey.description }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-journeys">
+        <p>No user journeys found in specification files.</p>
+        <p style="font-size: 0.875rem; margin-top: 8px;">User journeys are defined with <code>## JNY-xxx: Title</code> headers in spec files.</p>
+        <p style="font-size: 0.8rem; margin-top: 12px; color: #868e96;">
+            Example format:<br>
+            <code style="display: block; margin-top: 8px; padding: 12px; background: #f1f3f5; border-radius: 4px; text-align: left;">
+## JNY-LOGIN-01: User Login<br>
+**Actor**: End User<br>
+**Goal**: Access the system securely<br><br>
+Steps...<br><br>
+*End* *JNY-LOGIN-01*
+            </code>
+        </p>
+    </div>
+    {% endif %}
+</div>

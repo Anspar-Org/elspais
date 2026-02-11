@@ -1,0 +1,38 @@
+/* Partial: _tabs.css.j2 — Tab navigation */
+
+.tabs {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+}
+
+.tab {
+    padding: 12px 24px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #6c757d;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.tab:hover {
+    color: #495057;
+}
+
+.tab.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}

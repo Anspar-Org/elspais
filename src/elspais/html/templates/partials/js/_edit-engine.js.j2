@@ -1,0 +1,326 @@
+// Partial: _edit-engine.js.j2 — API helpers, toast, edit toggle, mutations, undo/save/revert, search
+
+// =====================================================================
+// API Helpers
+// =====================================================================
+
+async function apiFetch(url, options) {
+    try {
+        const resp = await fetch(url, options);
+        const data = await resp.json();
+        if (!resp.ok && data.error) {
+            showToast(data.error, 'error');
+            return null;
+        }
+        return data;
+    } catch (err) {
+        showToast('Network error: ' + err.message, 'error');
+        return null;
+    }
+}
+
+async function mutate(endpoint, payload) {
+    const data = await apiFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (data && data.success) {
+        showToast('Change applied', 'success');
+        await refreshDirtyCount();
+    } else if (data) {
+        showToast(data.error || 'Mutation failed', 'error');
+    }
+    return data;
+}
+
+// =====================================================================
+// Toast Notifications
+// =====================================================================
+
+function showToast(message, type) {
+    type = type || 'info';
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, 3000);
+}
+
+// =====================================================================
+// Edit Mode
+// =====================================================================
+
+function toggleEditMode() {
+    editState.enabled = !editState.enabled;
+    document.body.classList.toggle('edit-mode', editState.enabled);
+    document.getElementById('edit-toggle').classList.toggle('active', editState.enabled);
+
+    // Toggle contenteditable on assertion text fields
+    document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+        el.contentEditable = editState.enabled ? 'true' : 'false';
+    });
+
+    // Show/hide edit-only elements
+    document.querySelectorAll('.edit-only').forEach(function(el) {
+        el.style.display = editState.enabled ? '' : 'none';
+    });
+
+    saveState();
+}
+
+// =====================================================================
+// Edit Handlers
+// =====================================================================
+
+function onStatusChange(selectEl) {
+    const nodeId = selectEl.dataset.nodeId;
+    const newStatus = selectEl.value;
+    const original = selectEl.dataset.original;
+
+    if (newStatus.toLowerCase() === original) {
+        selectEl.classList.remove('dirty');
+        return;
+    }
+
+    selectEl.classList.add('dirty');
+    mutate('/api/mutate/status', { node_id: nodeId, new_status: newStatus }).then(function(result) {
+        if (result && result.success) {
+            selectEl.dataset.original = newStatus.toLowerCase();
+            selectEl.classList.remove('dirty');
+            // Refresh the card data
+            refreshCard(nodeId);
+        }
+    });
+}
+
+function onTitleBlur(el) {
+    if (!editState.enabled) return;
+    const nodeId = el.dataset.nodeId;
+    const newTitle = el.textContent.trim();
+    const original = el.dataset.original;
+
+    if (newTitle === original) {
+        el.classList.remove('dirty');
+        return;
+    }
+
+    if (!newTitle) {
+        el.textContent = original;
+        el.classList.remove('dirty');
+        showToast('Title cannot be empty', 'error');
+        return;
+    }
+
+    el.classList.add('dirty');
+    mutate('/api/mutate/title', { node_id: nodeId, new_title: newTitle }).then(function(result) {
+        if (result && result.success) {
+            el.dataset.original = newTitle;
+            el.classList.remove('dirty');
+            refreshCard(nodeId);
+        } else {
+            el.textContent = original;
+            el.classList.remove('dirty');
+        }
+    });
+}
+
+function onAssertionBlur(el) {
+    if (!editState.enabled) return;
+    const assertionId = el.dataset.assertionId;
+    const newText = el.textContent.trim();
+    const original = el.dataset.original;
+
+    if (newText === original) {
+        el.classList.remove('dirty');
+        return;
+    }
+
+    if (!newText) {
+        el.textContent = original;
+        el.classList.remove('dirty');
+        showToast('Assertion text cannot be empty', 'error');
+        return;
+    }
+
+    el.classList.add('dirty');
+    mutate('/api/mutate/assertion', { assertion_id: assertionId, new_text: newText }).then(function(result) {
+        if (result && result.success) {
+            el.dataset.original = newText;
+            el.classList.remove('dirty');
+        } else {
+            el.textContent = original;
+            el.classList.remove('dirty');
+        }
+    });
+}
+
+function onAddAssertion(nodeId) {
+    const label = prompt('Assertion label (e.g., A, B, C):');
+    if (!label) return;
+    const text = prompt('Assertion text (SHALL statement):');
+    if (!text) return;
+
+    mutate('/api/mutate/assertion/add', {
+        req_id: nodeId,
+        label: label.trim().toUpperCase(),
+        text: text.trim()
+    }).then(function(result) {
+        if (result && result.success) {
+            refreshCard(nodeId);
+        }
+    });
+}
+
+function onEditableKeydown(event) {
+    // Enter key = blur (save)
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        event.target.blur();
+    }
+    // Escape = revert
+    if (event.key === 'Escape') {
+        event.target.textContent = event.target.dataset.original;
+        event.target.classList.remove('dirty');
+        event.target.blur();
+    }
+}
+
+async function refreshCard(nodeId) {
+    const data = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
+    if (!data) return;
+    const info = editState.openCards.get(nodeId);
+    if (!info) return;
+    info.data = data;
+    renderCardStack();
+    // Restore edit mode state after re-render
+    if (editState.enabled) {
+        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+            el.contentEditable = 'true';
+        });
+        document.querySelectorAll('.edit-only').forEach(function(el) {
+            el.style.display = '';
+        });
+    }
+}
+
+// =====================================================================
+// Save / Revert / Undo
+// =====================================================================
+
+async function doSave() {
+    const result = await mutate('/api/save', {});
+    if (result && result.success) {
+        showToast('Saved to disk', 'success');
+    }
+    // Even if it returns 501 (not yet implemented), display message
+    if (result && result.message) {
+        showToast(result.message, 'info');
+    }
+}
+
+async function doRevert() {
+    if (!confirm('Revert all unsaved changes? This cannot be undone.')) return;
+    const result = await mutate('/api/revert', {});
+    if (result && result.success) {
+        showToast('All changes reverted', 'success');
+        // Reload all open cards
+        editState.openCardOrder.forEach(function(id) {
+            refreshCard(id);
+        });
+    }
+    if (result && result.message) {
+        showToast(result.message, 'info');
+    }
+}
+
+async function doUndo() {
+    const result = await mutate('/api/mutate/undo', {});
+    if (result && result.success) {
+        // Reload all open cards to reflect undo
+        editState.openCardOrder.forEach(function(id) {
+            refreshCard(id);
+        });
+    }
+}
+
+// =====================================================================
+// Search
+// =====================================================================
+
+function initSearch() {
+    const input = document.getElementById('search-input');
+    const results = document.getElementById('search-results');
+
+    input.addEventListener('input', function() {
+        clearTimeout(editState.searchDebounce);
+        const query = input.value.trim();
+        if (query.length < 2) {
+            results.classList.remove('visible');
+            return;
+        }
+        editState.searchDebounce = setTimeout(function() {
+            performSearch(query);
+        }, 250);
+    });
+
+    input.addEventListener('focus', function() {
+        if (results.children.length > 0 && input.value.trim().length >= 2) {
+            results.classList.add('visible');
+        }
+    });
+
+    // Close search results on click outside
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('search-box').contains(e.target)) {
+            results.classList.remove('visible');
+        }
+    });
+
+    // Keyboard navigation
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            results.classList.remove('visible');
+            input.blur();
+        }
+        if (e.key === 'Enter') {
+            const first = results.querySelector('.search-result-item');
+            if (first) {
+                first.click();
+                results.classList.remove('visible');
+            }
+        }
+    });
+}
+
+async function performSearch(query) {
+    const data = await apiFetch('/api/search?q=' + encodeURIComponent(query));
+    const results = document.getElementById('search-results');
+    if (!data || data.length === 0) {
+        results.innerHTML = '<div style="padding:12px;color:#adb5bd;text-align:center;font-size:0.8rem;">No results</div>';
+        results.classList.add('visible');
+        return;
+    }
+
+    let html = '';
+    data.slice(0, 20).forEach(function(item) {
+        const level = (item.level || '').toUpperCase();
+        const levelColor = level === 'PRD' ? '#212529'
+            : level === 'OPS' ? '#fd7e14'
+            : level === 'DEV' ? '#20c997' : '#6c757d';
+        html += '<div class="search-result-item" onclick="openCard(\'' + item.id + '\'); ' +
+            'document.getElementById(\'search-results\').classList.remove(\'visible\');">';
+        html += '<span class="search-result-level" style="background:' + levelColor + ';color:white;">' + level + '</span>';
+        html += '<span class="search-result-id">' + item.id.replace('REQ-', '') + '</span>';
+        html += '<span class="search-result-title">' + escapeHtml(item.title || '') + '</span>';
+        html += '</div>';
+    });
+
+    results.innerHTML = html;
+    results.classList.add('visible');
+}

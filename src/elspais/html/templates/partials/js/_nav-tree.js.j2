@@ -1,0 +1,525 @@
+// Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats
+
+// =====================================================================
+// Header Stats
+// =====================================================================
+
+function updateHeaderStats() {
+    // Compute level + main + test/result counts from tree data (unique IDs)
+    var rows = editState.treeData;
+    if (!rows || rows.length === 0) return;
+    var seen = {};
+    var counts = {prd: 0, ops: 0, dev: 0, main: 0, tests: 0, results: 0};
+    var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
+    for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (seen[r.id]) continue;
+        seen[r.id] = true;
+        if (r.is_test) { counts.tests++; continue; }
+        if (r.is_test_result) { counts.results++; continue; }
+        if (r.level) {
+            var lev = r.level.toLowerCase();
+            if (counts[lev] !== undefined) counts[lev]++;
+            if (!r.is_associated) counts.main++;
+            // Track associated repo prefixes
+            if (r.is_associated && r.repo_prefix && r.repo_prefix !== 'CORE') {
+                repoCounts[r.repo_prefix] = (repoCounts[r.repo_prefix] || 0) + 1;
+            }
+        }
+    }
+    document.getElementById('stat-prd').textContent = 'PRD: ' + counts.prd;
+    document.getElementById('stat-ops').textContent = 'OPS: ' + counts.ops;
+    document.getElementById('stat-dev').textContent = 'DEV: ' + counts.dev;
+    document.getElementById('stat-main').textContent = 'Core: ' + counts.main;
+    document.getElementById('stat-tests').textContent = 'Tests: ' + counts.tests;
+    document.getElementById('stat-results').textContent = 'Results: ' + counts.results;
+
+    // Build associated repo badges dynamically
+    apiFetch('/api/status').then(function(data) {
+        if (!data) return;
+        var assocRepos = data.associated_repos || [];
+        // Build name lookup from API: { "CAL": "callisto", ... }
+        var nameMap = {};
+        for (var j = 0; j < assocRepos.length; j++) {
+            nameMap[assocRepos[j].code] = assocRepos[j].name;
+        }
+        var container = document.getElementById('repo-badges-container');
+        var sep = document.getElementById('repo-sep');
+        if (!container) return;
+        container.innerHTML = '';
+        var repoPrefixes = Object.keys(repoCounts).sort();
+        editState.knownRepos = repoPrefixes;
+        if (repoPrefixes.length === 0) {
+            if (sep) sep.style.display = 'none';
+            return;
+        }
+        if (sep) sep.style.display = '';
+        for (var k = 0; k < repoPrefixes.length; k++) {
+            var code = repoPrefixes[k];
+            var fullName = nameMap[code];
+            var displayName = fullName ? fullName.charAt(0).toUpperCase() + fullName.slice(1) : code;
+            var count = repoCounts[code];
+            var badge = document.createElement('span');
+            badge.className = 'stat-badge repo';
+            badge.id = 'stat-repo-' + code;
+            badge.title = 'Click to hide ' + displayName + ' requirements';
+            badge.textContent = displayName + ': ' + count;
+            badge.setAttribute('data-repo', code);
+            badge.onclick = (function(repoCode) {
+                return function() { toggleRepoFilter(repoCode); };
+            })(code);
+            // Restore dimmed state if filter is active
+            if (editState.activeFilters.hiddenRepos &&
+                editState.activeFilters.hiddenRepos.indexOf(code) >= 0) {
+                badge.classList.add('dimmed');
+            }
+            container.appendChild(badge);
+        }
+    });
+}
+
+async function refreshDirtyCount() {
+    const data = await apiFetch('/api/dirty');
+    if (!data) return;
+    editState.mutationCount = data.mutation_count || 0;
+    const badge = document.getElementById('unsaved-badge');
+    const btnSave = document.getElementById('btn-save');
+    const btnRevert = document.getElementById('btn-revert');
+    const btnUndo = document.getElementById('btn-undo');
+    if (editState.mutationCount > 0) {
+        badge.textContent = editState.mutationCount;
+        badge.classList.remove('hidden');
+        btnSave.disabled = false;
+        btnRevert.disabled = false;
+        btnUndo.disabled = false;
+    } else {
+        badge.classList.add('hidden');
+        btnSave.disabled = true;
+        btnRevert.disabled = true;
+        btnUndo.disabled = true;
+    }
+}
+
+// =====================================================================
+// Nav Tree
+// =====================================================================
+
+async function loadTreeData() {
+    const data = await apiFetch('/api/tree-data');
+    if (!data) return;
+    editState.treeData = data;
+    updateHeaderStats();
+    renderNavTree();
+}
+
+function renderNavTree() {
+    const container = document.getElementById('nav-tree-container');
+    const activeTab = editState.activeNavTab;
+    const rows = editState.treeData;
+
+    if (!rows || rows.length === 0) {
+        container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No items found</div>';
+        return;
+    }
+
+    // Filter by tab — req tab shows requirements + their test/result children
+    let filteredRows;
+    if (activeTab === 'req') {
+        filteredRows = rows.filter(function(r) {
+            return (r.level && r.level !== '') || r.is_test || r.is_test_result;
+        });
+    } else {
+        filteredRows = rows;
+    }
+
+    if (activeTab === 'journey') {
+        var journeys = rows.filter(function(r) { return r.kind === 'journey'; });
+        if (journeys.length === 0) {
+            container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No journey data available.</div>';
+            return;
+        }
+        var jhtml = '';
+        for (var ji = 0; ji < journeys.length; ji++) {
+            var j = journeys[ji];
+            var jSelected = editState.openCards.has(j.id) ? ' selected' : '';
+            jhtml += '<div class="nav-tree-row nav-tree-journey' + jSelected + '" ' +
+                'data-id="' + j.id + '" data-kind="journey" ' +
+                'onclick="openCard(\'' + j.id + '\')">' +
+                '<span class="nav-tree-kind-icon">&#x1F9ED;</span>' +
+                '<span class="nav-tree-id" style="color:#6c757d;">' + escapeHtml(j.id) + '</span>' +
+                '<span class="nav-tree-title">' + escapeHtml(j.title) + '</span>' +
+                '</div>';
+        }
+        container.innerHTML = jhtml;
+        return;
+    }
+
+    if (activeTab !== 'req' && activeTab !== 'journey') {
+        container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">Select a tab to view content.</div>';
+        return;
+    }
+
+    // Apply edit-mode filters
+    const totalBeforeFilter = filteredRows.length;
+    const af = editState.activeFilters;
+    var hiddenRepos = af.hiddenRepos || [];
+    const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
+        af.uncommitted || af.changed || af.main || af.leaf ||
+        af.hideTests || af.hideResults || hiddenRepos.length > 0 ||
+        editState.filterStatus !== '' || editState.filterCoverage !== '';
+
+    // Track which rows are direct filter matches (vs ancestor context)
+    var matchSet = null;
+    var directMatchCount = 0;
+
+    if (hasActiveFilter) {
+        // Build parent-index map: for each row index, find its parent row index
+        // (nearest preceding row whose id matches this row's parent_id).
+        // This handles DAG flattening where the same ID appears multiple times.
+        var parentIdx = new Array(filteredRows.length);
+        for (var i = 0; i < filteredRows.length; i++) {
+            parentIdx[i] = -1;
+            if (filteredRows[i].parent_id) {
+                for (var j = i - 1; j >= 0; j--) {
+                    if (filteredRows[j].id === filteredRows[i].parent_id) {
+                        parentIdx[i] = j;
+                        break;
+                    }
+                }
+            }
+        }
+        // First pass: mark row indices that directly match the filter
+        var matchIndices = new Set();
+        for (var i = 0; i < filteredRows.length; i++) {
+            var r = filteredRows[i];
+            // Level filters (when active, HIDE that level)
+            if (af.levelPrd && r.level === 'PRD') continue;
+            if (af.levelOps && r.level === 'OPS') continue;
+            if (af.levelDev && r.level === 'DEV') continue;
+            // Test/Result visibility filters (when active, HIDE those rows)
+            if (af.hideTests && r.is_test) continue;
+            if (af.hideResults && r.is_test_result) continue;
+            // Associated repo filters (hide specific repos)
+            if (hiddenRepos.length > 0 && r.is_associated &&
+                r.repo_prefix && hiddenRepos.indexOf(r.repo_prefix) >= 0) continue;
+            // Git filters (when active, SHOW only matching)
+            if (af.uncommitted && !r.is_uncommitted && !r.is_test && !r.is_test_result) continue;
+            if (af.changed && !r.is_changed && !r.is_test && !r.is_test_result) continue;
+            // Main filter (show only main/non-associated)
+            if (af.main && r.is_associated) continue;
+            // Leaf only (skip for test/result rows)
+            if (af.leaf && !r.is_leaf && !r.is_test && !r.is_test_result) continue;
+            // Status dropdown (skip for test/result rows)
+            if (editState.filterStatus && r.status !== editState.filterStatus && !r.is_test && !r.is_test_result) continue;
+            // Coverage dropdown (skip for test/result rows)
+            if (editState.filterCoverage && r.coverage !== editState.filterCoverage && !r.is_test && !r.is_test_result) continue;
+            matchIndices.add(i);
+        }
+        directMatchCount = matchIndices.size;
+        // Second pass: include ancestors of matching rows to preserve tree structure
+        var allVisible = new Set(matchIndices);
+        for (var i = 0; i < filteredRows.length; i++) {
+            if (matchIndices.has(i)) {
+                var pi = parentIdx[i];
+                while (pi >= 0) {
+                    if (allVisible.has(pi)) break;  // already included
+                    allVisible.add(pi);
+                    pi = parentIdx[pi];
+                }
+            }
+        }
+        // Build a set of original indices for matched rows (for dimming context-only rows)
+        matchSet = new Set();
+        var finalIdx = 0;
+        for (var i = 0; i < filteredRows.length; i++) {
+            if (allVisible.has(i)) {
+                if (matchIndices.has(i)) matchSet.add(finalIdx);
+                finalIdx++;
+            }
+        }
+        filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
+    }
+
+    // Update counter
+    var counterEl = document.getElementById('edit-counter');
+    if (counterEl) {
+        if (hasActiveFilter) {
+            counterEl.textContent = directMatchCount + ' / ' + totalBeforeFilter;
+        } else {
+            counterEl.textContent = '';
+        }
+    }
+
+    if (hasActiveFilter && directMatchCount === 0) {
+        container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No matching requirements</div>';
+        return;
+    }
+
+    let html = '';
+    filteredRows.forEach(function(row, arrIdx) {
+        // Determine if collapsed
+        const isCollapsed = editState.collapsedTreeNodes.has(row.id);
+        // Check if parent is collapsed (skip rendering)
+        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows)) {
+            return; // don't render
+        }
+
+        const indents = [];
+        for (let i = 0; i < row.depth; i++) {
+            indents.push('<span class="nav-tree-indent"></span>');
+        }
+
+        const toggleClass = row.has_children
+            ? (isCollapsed ? 'nav-tree-toggle' : 'nav-tree-toggle')
+            : 'nav-tree-toggle leaf';
+        const toggleIcon = row.has_children
+            ? (isCollapsed ? '&#9654;' : '&#9660;')
+            : '';
+
+        const selectedClass = editState.openCards.has(row.id) ? ' selected' : '';
+        // Dim context-only rows when filters are active
+        const dimClass = (matchSet && !matchSet.has(arrIdx)) ? ' filter-dim' : '';
+
+        // ── TEST row rendering ──
+        if (row.is_test) {
+            var testTitle = row.title || row.id;
+            // Shorten long test paths
+            if (testTitle.length > 60) {
+                testTitle = '...' + testTitle.slice(-57);
+            }
+            html += '<div class="nav-tree-row nav-tree-test' + dimClass + '" ' +
+                'data-id="' + row.id + '" ' +
+                'data-parent="' + (row.parent_id || '') + '" ' +
+                'data-depth="' + row.depth + '" ' +
+                'data-kind="test">' +
+                indents.join('') +
+                '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
+                toggleIcon + '</button>' +
+                '<span class="nav-tree-kind-icon test-icon" title="Test">&#x1F9EA;</span>' +
+                '<span class="nav-tree-title">' + escapeHtml(testTitle) + '</span>' +
+                '</div>';
+            return;
+        }
+
+        // ── TEST_RESULT row rendering ──
+        if (row.is_test_result) {
+            var resultTitle = row.title || row.id;
+            if (resultTitle.length > 55) {
+                resultTitle = '...' + resultTitle.slice(-52);
+            }
+            var statusIcon = '';
+            var resultClass = '';
+            var rs = row.result_status || '';
+            if (rs === 'passed' || rs === 'pass') { statusIcon = '&#x2705;'; resultClass = ' result-passed'; }
+            else if (rs === 'failed' || rs === 'fail' || rs === 'failure') { statusIcon = '&#x274C;'; resultClass = ' result-failed'; }
+            else if (rs === 'error') { statusIcon = '&#x26A0;&#xFE0F;'; resultClass = ' result-error'; }
+            else if (rs === 'skipped' || rs === 'skip') { statusIcon = '&#x23ED;&#xFE0F;'; resultClass = ' result-skipped'; }
+            else { statusIcon = '&#x2753;'; resultClass = ''; }
+
+            html += '<div class="nav-tree-row nav-tree-result' + resultClass + dimClass + '" ' +
+                'data-id="' + row.id + '" ' +
+                'data-parent="' + (row.parent_id || '') + '" ' +
+                'data-depth="' + row.depth + '" ' +
+                'data-kind="test_result">' +
+                indents.join('') +
+                '<span class="nav-tree-indent"></span>' +  /* Extra indent since no toggle */
+                '<span class="nav-tree-kind-icon">' + statusIcon + '</span>' +
+                '<span class="nav-tree-title">' + escapeHtml(resultTitle) + '</span>' +
+                (rs ? '<span class="nav-tree-result-badge ' + rs + '">' + rs + '</span>' : '') +
+                '</div>';
+            return;
+        }
+
+        // ── REQUIREMENT row rendering ──
+        const levelClass = row.level ? row.level.toLowerCase() : '';
+        const shortId = row.id.replace('REQ-', '');
+
+        // Coverage icon
+        var covIcon = '';
+        if (row.coverage === 'full') {
+            covIcon = '<span class="coverage-icon full" title="Full coverage">&#x25CF;</span>';
+        } else if (row.coverage === 'partial') {
+            covIcon = '<span class="coverage-icon partial" title="Partial coverage">&#x25D0;</span>';
+        } else {
+            covIcon = '<span class="coverage-icon none" title="No coverage">&#x25CB;</span>';
+        }
+
+        // Status badge
+        var statusBadge = '';
+        if (row.status) {
+            var statusLower = row.status.toLowerCase();
+            statusBadge = '<span class="status-badge ' + statusLower + '" style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
+            if (row.is_changed) statusBadge += '<span class="change-indicator">&#x25C6;</span>';
+            statusBadge += '</span>';
+        }
+
+        html += '<div class="nav-tree-row' + selectedClass + dimClass + '" ' +
+            'data-id="' + row.id + '" ' +
+            'data-parent="' + (row.parent_id || '') + '" ' +
+            'data-depth="' + row.depth + '" ' +
+            'data-kind="requirement" ' +
+            'onclick="openCard(\'' + row.id + '\')">' +
+            indents.join('') +
+            '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
+            toggleIcon + '</button>' +
+            covIcon +
+            (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
+            '<span class="nav-tree-id">' + shortId + '</span>' +
+            '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
+            statusBadge +
+            '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+function isAncestorCollapsed(row, allRows) {
+    if (!row.parent_id) return false;
+    // Walk up the parent chain
+    let parentId = row.parent_id;
+    while (parentId) {
+        if (editState.collapsedTreeNodes.has(parentId)) return true;
+        // Find parent row
+        const parentRow = allRows.find(function(r) { return r.id === parentId; });
+        if (!parentRow) break;
+        parentId = parentRow.parent_id;
+    }
+    return false;
+}
+
+function toggleTreeNode(nodeId) {
+    if (editState.collapsedTreeNodes.has(nodeId)) {
+        editState.collapsedTreeNodes.delete(nodeId);
+    } else {
+        editState.collapsedTreeNodes.add(nodeId);
+    }
+    renderNavTree();
+    saveState();
+}
+
+function switchNavTab(kind) {
+    editState.activeNavTab = kind;
+    document.querySelectorAll('.nav-tab').forEach(function(tab) {
+        tab.classList.toggle('active', tab.dataset.kind === kind);
+    });
+    renderNavTree();
+    saveState();
+}
+
+// =====================================================================
+// Edit-Mode Filters
+// =====================================================================
+
+function toggleEditLevelFilter(key) {
+    editState.activeFilters[key] = !editState.activeFilters[key];
+    // Toggle dimmed state on header stat badge
+    var badgeMap = { levelPrd: 'stat-prd', levelOps: 'stat-ops', levelDev: 'stat-dev' };
+    var badge = document.getElementById(badgeMap[key]);
+    if (badge) badge.classList.toggle('dimmed', editState.activeFilters[key]);
+    applyEditFilters();
+}
+
+function toggleEditFilter(key) {
+    editState.activeFilters[key] = !editState.activeFilters[key];
+    // Update button state for git filters
+    var btnMap = { uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
+    if (btnMap[key]) {
+        var btn = document.getElementById(btnMap[key]);
+        if (btn) btn.classList.toggle('active', editState.activeFilters[key]);
+    }
+    // Update stat badge state for core filter (dimmed = hiding associated)
+    if (key === 'main') {
+        var mainBadge = document.getElementById('stat-main');
+        if (mainBadge) mainBadge.classList.toggle('dimmed', editState.activeFilters.main);
+    }
+    // Update stat badge state for tests/results (dimmed = hidden)
+    if (key === 'hideTests') {
+        var testBadge = document.getElementById('stat-tests');
+        if (testBadge) testBadge.classList.toggle('dimmed', editState.activeFilters.hideTests);
+    }
+    if (key === 'hideResults') {
+        var resultBadge = document.getElementById('stat-results');
+        if (resultBadge) resultBadge.classList.toggle('dimmed', editState.activeFilters.hideResults);
+    }
+    // Update checkbox state for toggles
+    var checkMap = { leaf: 'edit-toggle-leaf' };
+    if (checkMap[key]) {
+        var cb = document.getElementById(checkMap[key]);
+        if (cb) cb.checked = editState.activeFilters[key];
+    }
+    applyEditFilters();
+}
+
+function toggleRepoFilter(repoCode) {
+    if (!editState.activeFilters.hiddenRepos) {
+        editState.activeFilters.hiddenRepos = [];
+    }
+    var idx = editState.activeFilters.hiddenRepos.indexOf(repoCode);
+    if (idx >= 0) {
+        editState.activeFilters.hiddenRepos.splice(idx, 1);
+    } else {
+        editState.activeFilters.hiddenRepos.push(repoCode);
+    }
+    // Update badge dimmed state
+    var badge = document.getElementById('stat-repo-' + repoCode);
+    if (badge) badge.classList.toggle('dimmed', idx < 0);
+    applyEditFilters();
+}
+
+function applyEditFilters() {
+    // Sync dropdown values to state
+    var statusSel = document.getElementById('edit-filter-status');
+    var covSel = document.getElementById('edit-filter-coverage');
+    if (statusSel) editState.filterStatus = statusSel.value;
+    if (covSel) editState.filterCoverage = covSel.value;
+    renderNavTree();
+    saveState();
+}
+
+function clearEditFilters() {
+    // Reset all filter state
+    editState.activeFilters = {
+        levelPrd: false, levelOps: false, levelDev: false,
+        uncommitted: false, changed: false, main: false, leaf: false,
+        hideTests: false, hideResults: false, hiddenRepos: []
+    };
+    editState.filterStatus = '';
+    editState.filterCoverage = '';
+    // Reset header stat badge states
+    document.querySelectorAll('.stat-badge').forEach(function(b) {
+        b.classList.remove('dimmed');
+        b.classList.remove('active');
+    });
+    // Reset toolbar buttons
+    document.querySelectorAll('#edit-toolbar .btn-group .btn').forEach(function(b) { b.classList.remove('active'); });
+    var statusSel = document.getElementById('edit-filter-status');
+    var covSel = document.getElementById('edit-filter-coverage');
+    if (statusSel) statusSel.value = '';
+    if (covSel) covSel.value = '';
+    var leafCb = document.getElementById('edit-toggle-leaf');
+    if (leafCb) leafCb.checked = false;
+    renderNavTree();
+    saveState();
+}
+
+// =====================================================================
+// Collapse / Expand All
+// =====================================================================
+
+function collapseAllTreeNodes() {
+    var rows = editState.treeData;
+    if (!rows) return;
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].has_children) {
+            editState.collapsedTreeNodes.add(rows[i].id);
+        }
+    }
+    renderNavTree();
+    saveState();
+}
+
+function expandAllTreeNodes() {
+    editState.collapsedTreeNodes.clear();
+    renderNavTree();
+    saveState();
+}

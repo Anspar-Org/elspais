@@ -1,0 +1,338 @@
+/* Partial: _card-stack.css.j2 — Card stack panel and requirement cards */
+
+/* --- Card Stack (Center) --- */
+
+.card-stack-panel {
+    flex: 1;
+    min-width: 350px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #f8f9fa;
+}
+
+.card-stack-header {
+    padding: 8px 16px;
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.card-stack-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.card-stack-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #adb5bd;
+    gap: 8px;
+    padding: 40px;
+    text-align: center;
+}
+
+.card-stack-empty-icon {
+    font-size: 2.5rem;
+    opacity: 0.5;
+}
+
+/* --- Requirement Card --- */
+
+.req-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.req-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.req-card.focused {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13,110,253,0.15);
+}
+
+.req-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    user-select: none;
+}
+
+.req-card-header:hover {
+    background: #e9ecef;
+}
+
+.req-card-expand {
+    font-size: 8px;
+    color: #adb5bd;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+}
+
+.req-card.collapsed .req-card-expand {
+    transform: rotate(-90deg);
+}
+
+.req-card-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #0d6efd;
+    flex-shrink: 0;
+}
+
+.req-card-title-display {
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #212529;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.req-card-close {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: #adb5bd;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.req-card-close:hover {
+    color: #dc3545;
+}
+
+.req-card-body {
+    padding: 14px;
+}
+
+.req-card.collapsed .req-card-body {
+    display: none;
+}
+
+/* Card Sections */
+.card-section {
+    margin-bottom: 12px;
+}
+
+.card-section:last-child {
+    margin-bottom: 0;
+}
+
+.card-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 4px;
+}
+
+.card-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.card-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+}
+
+.card-meta-key {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.card-meta-value {
+    color: #212529;
+}
+
+/* Status Badge (in cards) */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.draft { background: #cfe2ff; color: #084298; }
+.status-badge.active { background: #d1e7dd; color: #0f5132; }
+.status-badge.deprecated { background: #f8d7da; color: #842029; }
+.status-badge.proposed { background: #fff3cd; color: #664d03; }
+
+/* Parent Links */
+.card-parents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.card-parent-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #f0f4ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #0d6efd;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none;
+}
+
+.card-parent-link:hover {
+    background: #d0e2ff;
+}
+
+.card-parent-kind {
+    font-size: 0.65rem;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Assertion List */
+.card-assertions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.card-assertion {
+    display: flex;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: #f8f9fa;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.card-assertion-label {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #0d6efd;
+    background: #e7f1ff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    height: fit-content;
+}
+
+.card-assertion-text {
+    font-size: 0.8rem;
+    color: #495057;
+    line-height: 1.5;
+}
+
+/* Children List */
+.card-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.card-child-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    color: #495057;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none;
+}
+
+.card-child-link:hover {
+    background: #e9ecef;
+    color: #0d6efd;
+}
+
+.card-child-edge-kind {
+    font-size: 0.6rem;
+    color: #adb5bd;
+    font-weight: 600;
+}
+
+/* Add Assertion Button */
+.card-add-assertion-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px dashed #dee2e6;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #6c757d;
+    transition: all 0.15s;
+    margin-top: 4px;
+}
+
+.card-add-assertion-btn:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+    background: #f0f4ff;
+}
+
+/* --- Journey Card --- */
+
+.journey-card-kind {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    background: #6c757d;
+    color: white;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.journey-card-description {
+    font-size: 0.8rem;
+    color: #495057;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}

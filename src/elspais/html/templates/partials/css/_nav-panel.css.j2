@@ -1,0 +1,202 @@
+/* Partial: _nav-panel.css.j2 — 3-panel layout + nav panel (tree sidebar) */
+
+/* ---------------------------------------------------------------------
+   3-Panel Layout
+   --------------------------------------------------------------------- */
+
+.layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* --- Nav Panel (Left) --- */
+
+.nav-panel {
+    width: 280px;
+    min-width: 200px;
+    max-width: 400px;
+    background: white;
+    border-right: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.nav-tabs {
+    display: flex;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.nav-tab {
+    flex: 1;
+    padding: 10px 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.nav-tab:hover {
+    color: #495057;
+    background: #f8f9fa;
+}
+
+.nav-tab.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+}
+
+.nav-tree-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+}
+
+.nav-tree-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #495057;
+    border-left: 3px solid transparent;
+    transition: background 0.1s, border-color 0.1s;
+    user-select: none;
+    gap: 4px;
+}
+
+.nav-tree-row:hover {
+    background: #f0f4ff;
+}
+
+.nav-tree-row.selected {
+    background: #e7f1ff;
+    border-left-color: #0d6efd;
+}
+
+.nav-tree-row.hidden {
+    display: none;
+}
+
+.nav-tree-indent {
+    display: inline-block;
+    width: 16px;
+    flex-shrink: 0;
+}
+
+.nav-tree-toggle {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 8px;
+    color: #adb5bd;
+    cursor: pointer;
+    border: none;
+    background: none;
+}
+
+.nav-tree-toggle:hover {
+    color: #495057;
+}
+
+.nav-tree-toggle.leaf {
+    visibility: hidden;
+}
+
+.nav-tree-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    color: #0d6efd;
+    flex-shrink: 0;
+}
+
+.nav-tree-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #6c757d;
+    font-size: 0.75rem;
+}
+
+.nav-tree-level {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.nav-tree-level.prd { background: #212529; color: white; }
+.nav-tree-level.ops { background: #fd7e14; color: white; }
+.nav-tree-level.dev { background: #20c997; color: white; }
+
+/* Test and result rows in nav tree */
+.nav-tree-test {
+    background: rgba(13, 202, 240, 0.06);
+}
+.nav-tree-test:hover {
+    background: rgba(13, 202, 240, 0.12);
+}
+.nav-tree-result {
+    background: rgba(108, 117, 125, 0.04);
+    font-size: 0.75rem;
+}
+.nav-tree-result:hover {
+    background: rgba(108, 117, 125, 0.10);
+}
+.nav-tree-result.result-passed { border-left-color: #198754; }
+.nav-tree-result.result-failed { border-left-color: #dc3545; }
+.nav-tree-result.result-error { border-left-color: #ffc107; }
+.nav-tree-result.result-skipped { border-left-color: #6c757d; }
+
+.nav-tree-kind-icon {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    width: 16px;
+    text-align: center;
+}
+.nav-tree-kind-icon.test-icon {
+    font-size: 0.8rem;
+}
+
+.nav-tree-result-badge {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+.nav-tree-result-badge.passed { background: #d1e7dd; color: #0f5132; }
+.nav-tree-result-badge.failed, .nav-tree-result-badge.fail, .nav-tree-result-badge.failure { background: #f8d7da; color: #842029; }
+.nav-tree-result-badge.error { background: #fff3cd; color: #664d03; }
+.nav-tree-result-badge.skipped, .nav-tree-result-badge.skip { background: #e2e3e5; color: #41464b; }
+
+/* Tab spacer and tree action buttons */
+.nav-tab-spacer { flex: 1; }
+
+.nav-tree-action {
+    padding: 6px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.7rem;
+    color: #adb5bd;
+    transition: color 0.15s;
+}
+.nav-tree-action:hover { color: #495057; }
