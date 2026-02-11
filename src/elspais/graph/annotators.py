@@ -162,6 +162,36 @@ def annotate_display_info(node: GraphNode) -> None:
         node.set_metric("external_spec_path", str(external_spec_path))
 
 
+def annotate_graph_git_state(graph: TraceGraph) -> None:
+    """Annotate all requirement nodes in the graph with git state information.
+
+    This is the single entry point for applying git annotations to a graph.
+    It calls get_git_changes() to gather git info, then applies
+    annotate_git_state() to each REQUIREMENT node.
+
+    Idempotent: safe to call multiple times on the same graph.
+    Fails silently when git is unavailable.
+
+    Args:
+        graph: The TraceGraph to annotate.
+    """
+    from elspais.graph import NodeKind
+
+    repo_root = graph.repo_root
+    if not repo_root:
+        return
+
+    try:
+        from elspais.utilities.git import get_git_changes
+
+        git_info = get_git_changes(repo_root)
+    except Exception:
+        return
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        annotate_git_state(node, git_info)
+
+
 def annotate_implementation_files(
     node: GraphNode,
     implementation_files: list[tuple[str, int]],
@@ -989,6 +1019,7 @@ def collect_all_keywords(
 
 __all__ = [
     "annotate_git_state",
+    "annotate_graph_git_state",
     "annotate_display_info",
     "annotate_implementation_files",
     "count_by_level",

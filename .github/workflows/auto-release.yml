@@ -1,0 +1,98 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+
+permissions:
+  contents: write
+  id-token: write    # required by publish-pypi.yml's publish job
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.new_version }}
+      released: ${{ steps.create_release.outputs.released }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: version
+        run: |
+          # Current version
+          NEW_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+          # Previous version (from parent commit)
+          OLD_VERSION=$(git show HEAD~1:pyproject.toml 2>/dev/null | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/' || echo "")
+
+          echo "old_version=${OLD_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [ "$NEW_VERSION" != "$OLD_VERSION" ] && [ -n "$OLD_VERSION" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version changed: ${OLD_VERSION} -> ${NEW_VERSION}"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged (${NEW_VERSION}), skipping release"
+          fi
+
+      - name: Check if tag already exists
+        if: steps.version.outputs.changed == 'true'
+        id: tag
+        run: |
+          TAG="v${{ steps.version.outputs.new_version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${TAG} already exists, skipping"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${TAG} does not exist, will create release"
+          fi
+
+      - name: Extract changelog entry
+        if: steps.version.outputs.changed == 'true' && steps.tag.outputs.exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          # Extract the changelog section for this version
+          # Matches from ## [VERSION] to the next ## [ or end of file
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
+
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v${VERSION}"
+          fi
+
+          # Write to file to preserve formatting
+          echo "$NOTES" > /tmp/release-notes.md
+          echo "Release notes:"
+          cat /tmp/release-notes.md
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.changed == 'true' && steps.tag.outputs.exists == 'false'
+        id: create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file /tmp/release-notes.md \
+            --target main
+          echo "Created release v${VERSION}"
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish
+    needs: [release]
+    if: needs.release.outputs.released == 'true'
+    uses: ./.github/workflows/publish-pypi.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit

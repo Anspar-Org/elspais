@@ -10,6 +10,7 @@ from elspais.graph import NodeKind
 from elspais.graph.annotators import (
     annotate_display_info,
     annotate_git_state,
+    annotate_graph_git_state,
     annotate_implementation_files,
     collect_topics,
     count_by_level,
@@ -485,3 +486,72 @@ class TestAggregateIterationBehavior:
         assert topics1 == topics2
         # Should have exactly 2 unique topics
         assert len(topics1) == 2
+
+
+class TestAnnotateGraphGitState:
+    """Tests for annotate_graph_git_state function."""
+
+    def test_REQ_CUR879_A_annotate_graph_git_state_annotates_all_nodes(self):
+        """REQ-CUR879-A: annotate_graph_git_state annotates all requirement nodes."""
+        from pathlib import Path
+        from unittest.mock import patch
+
+        graph = build_graph(
+            make_requirement("REQ-p00001", source_path="spec/prd.md"),
+            make_requirement("REQ-o00001", source_path="spec/ops.md"),
+            repo_root=Path("/test/repo"),
+        )
+
+        git_info = GitChangeInfo(
+            modified_files={"spec/prd.md"},
+            branch_changed_files={"spec/ops.md"},
+        )
+
+        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
+            annotate_graph_git_state(graph)
+
+        node_p = graph.find_by_id("REQ-p00001")
+        node_o = graph.find_by_id("REQ-o00001")
+
+        # REQ-p00001 is in modified_files
+        assert node_p.get_metric("is_modified") is True
+        assert node_p.get_metric("is_uncommitted") is True
+
+        # REQ-o00001 is in branch_changed_files
+        assert node_o.get_metric("is_branch_changed") is True
+
+    def test_REQ_CUR879_B_annotate_graph_git_state_fails_silently(self):
+        """REQ-CUR879-B: annotate_graph_git_state fails silently when git unavailable."""
+        from pathlib import Path
+        from unittest.mock import patch
+
+        graph = build_graph(
+            make_requirement("REQ-p00001", source_path="spec/prd.md"),
+            repo_root=Path("/test/repo"),
+        )
+
+        with patch("elspais.utilities.git.get_git_changes", side_effect=Exception("git not found")):
+            # Should not raise
+            annotate_graph_git_state(graph)
+
+        # Metrics should not have been set
+        node = graph.find_by_id("REQ-p00001")
+        assert node.get_metric("is_uncommitted") is None
+
+    def test_annotate_graph_git_state_skips_when_no_repo_root(self):
+        """Returns silently when graph has no repo_root."""
+        from unittest.mock import patch
+
+        graph = build_graph(
+            make_requirement("REQ-p00001"),
+        )
+        # Force repo_root to None (build_graph defaults to cwd)
+        graph.repo_root = None
+
+        with patch("elspais.utilities.git.get_git_changes") as mock_git:
+            annotate_graph_git_state(graph)
+            # get_git_changes should never be called
+            mock_git.assert_not_called()
+
+        node = graph.find_by_id("REQ-p00001")
+        assert node.get_metric("is_uncommitted") is None

@@ -174,63 +174,20 @@ class HTMLGenerator:
         return html_content
 
     def _annotate_git_state(self) -> None:
-        """Apply git state annotations to all requirement nodes.
+        """Apply git state and display annotations to all requirement nodes.
 
-        Detects uncommitted changes and changes vs main branch for filtering.
+        Uses the shared annotate_graph_git_state() for git detection,
+        then applies display info annotations separately.
         """
         from elspais.graph import NodeKind
-        from elspais.graph.annotators import annotate_display_info, annotate_git_state
+        from elspais.graph.annotators import annotate_display_info, annotate_graph_git_state
 
-        # Try to get git info
-        git_info = None
-        try:
-            from elspais.utilities.git import (
-                GitChangeInfo,
-                _extract_req_locations_from_graph,
-                get_changed_vs_branch,
-                get_modified_files,
-                temporary_worktree,
-            )
+        # Apply git state annotations (shared with MCP and graph-json)
+        annotate_graph_git_state(self.graph)
 
-            repo_root = self.graph.repo_root
-            if repo_root:
-                modified, untracked = get_modified_files(repo_root)
-                branch_changed = get_changed_vs_branch(repo_root)
-
-                # Get committed locations using graph-based approach via git worktree
-                committed_locs: dict[str, str] = {}
-                try:
-                    with temporary_worktree(repo_root, "HEAD") as worktree_path:
-                        from elspais.graph.factory import build_graph
-
-                        committed_graph = build_graph(
-                            repo_root=worktree_path,
-                            scan_code=False,
-                            scan_tests=False,
-                            scan_sponsors=False,
-                        )
-                        committed_locs = _extract_req_locations_from_graph(
-                            committed_graph, worktree_path
-                        )
-                except Exception:
-                    # Worktree creation failed, continue with empty committed_locs
-                    pass
-
-                git_info = GitChangeInfo(
-                    modified_files=set(modified),
-                    untracked_files=set(untracked),
-                    branch_changed_files=set(branch_changed),
-                    committed_req_locations=committed_locs,
-                )
-        except Exception:
-            # Git not available or error - continue without git info
-            pass
-
-        # Annotate all requirement nodes
-        for node in self.graph.all_nodes():
-            if node.kind == NodeKind.REQUIREMENT:
-                annotate_git_state(node, git_info)
-                annotate_display_info(node)
+        # Apply display info annotations (HTML-specific concern)
+        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            annotate_display_info(node)
 
     def _annotate_coverage(self) -> None:
         """Compute coverage metrics for all requirement nodes.

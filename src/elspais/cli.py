@@ -134,9 +134,19 @@ Common rules to skip:
         "-j",
         "--json",
         action="store_true",
-        help="Output requirements as JSON (hht_diary compatible format)",
+        help="Output validation results as JSON",
     )
-    # NOTE: --tests, --no-tests, --mode removed (dead code - never implemented)
+    validate_parser.add_argument(
+        "--export",
+        action="store_true",
+        help="Export requirements as JSON dict keyed by ID",
+    )
+    validate_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: only local specs, combined: include associated repos (default)",
+    )
 
     # health command
     health_parser = subparsers.add_parser(
@@ -279,6 +289,12 @@ Checks performed:
     index_parser = subparsers.add_parser(
         "index",
         help="Manage INDEX.md file (validate, regenerate)",
+    )
+    index_parser.add_argument(
+        "--mode",
+        choices=["core", "combined"],
+        default="combined",
+        help="core: only local specs, combined: include associated repos (default)",
     )
     index_subparsers = index_parser.add_subparsers(dest="index_action")
 

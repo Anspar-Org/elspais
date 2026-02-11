@@ -43,6 +43,78 @@ if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
 fi
 
 # =====================================================
+# 0. Version Bump and Branch Freshness Check
+# =====================================================
+# Runs before expensive validations. Ensures the branch
+# is up-to-date with origin/main and has a version bump.
+
+# Step A: Fetch and check freshness against origin/main
+git fetch origin main --quiet 2>/dev/null || true
+
+if git rev-parse origin/main >/dev/null 2>&1; then
+    BEHIND_COUNT=$(git rev-list --count HEAD..origin/main)
+    if [ "$BEHIND_COUNT" -gt 0 ]; then
+        echo ""
+        echo -e "${RED}======================================${NC}"
+        echo -e "${RED}  Branch is $BEHIND_COUNT commit(s) behind origin/main${NC}"
+        echo -e "${RED}======================================${NC}"
+        echo ""
+        echo "Please rebase before pushing:"
+        echo "  git pull --rebase origin main"
+        echo ""
+        exit 1
+    fi
+
+    # Step B: Auto-bump version if needed
+    MAIN_VERSION=$(git show origin/main:pyproject.toml | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/')
+    BRANCH_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+    if [ "$MAIN_VERSION" = "$BRANCH_VERSION" ]; then
+        # Determine bump type from changed files
+        CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+
+        PATCH_ONLY=true
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+                docs/*|tests/*|spec/*|*.md|.gitignore|.github/workflows/*)
+                    ;; # patch-level change
+                *)
+                    PATCH_ONLY=false
+                    break
+                    ;;
+            esac
+        done <<< "$CHANGED_FILES"
+
+        # Parse major.minor.patch
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$MAIN_VERSION"
+
+        if [ "$PATCH_ONLY" = "true" ]; then
+            PATCH=$((PATCH + 1))
+        else
+            MINOR=$((MINOR + 1))
+            PATCH=0
+        fi
+
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+        # Update pyproject.toml and commit
+        sed -i "s/^version = \"${MAIN_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+        git add pyproject.toml
+        git commit --no-verify -m "chore: auto-bump version to ${NEW_VERSION}"
+
+        echo ""
+        echo -e "${GREEN}Auto-bumped version to ${NEW_VERSION}.${NC}"
+        echo -e "${YELLOW}Push again to include the bump.${NC}"
+        echo ""
+        # Exit 1: git resolved refs to SHAs before calling this hook,
+        # so the new commit won't be included in the current push.
+        # Rejecting and re-pushing is the clean approach.
+        exit 1
+    fi
+fi
+
+# =====================================================
 # 1. Detect PR Status and PR-Intended Branches
 # =====================================================
 

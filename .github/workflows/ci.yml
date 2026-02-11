@@ -2,8 +2,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -14,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -69,8 +67,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      # TODO: Change --mode to combined when sponsor repos are integrated into the build
       - name: Validate requirement format and IDs
-        run: elspais validate
+        run: elspais validate --mode core
+
+      - name: Validate INDEX.md accuracy
+        run: elspais index --mode core validate
 
       - name: Generate traceability matrix
         run: |

@@ -66,15 +66,44 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     fix_mode = getattr(args, "fix", False)
     dry_run = getattr(args, "dry_run", False)
+    mode = getattr(args, "mode", "combined")
 
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
+
+    scan_sponsors = mode != "core"
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
+        scan_sponsors=scan_sponsors,
     )
+
+    # Handle --export mode (early return, not validation)
+    if getattr(args, "export", False):
+        export_dict: dict[str, dict] = {}
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            assertions = []
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    assertions.append(
+                        {
+                            "label": child.get_field("label", ""),
+                            "text": child.get_label() or "",
+                        }
+                    )
+            export_dict[node.id] = {
+                "title": node.get_label() or "",
+                "level": node.get_field("level", ""),
+                "status": node.get_field("status", ""),
+                "hash": node.get_field("hash", ""),
+                "file": node.source.path if node.source else "",
+                "line": node.source.line if node.source else 0,
+                "assertions": assertions,
+            }
+        print(json.dumps(export_dict, indent=2))
+        return 0
 
     # Collect validation issues
     errors = []
