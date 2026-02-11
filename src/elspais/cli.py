@@ -134,7 +134,12 @@ Common rules to skip:
         "-j",
         "--json",
         action="store_true",
-        help="Output requirements as JSON (hht_diary compatible format)",
+        help="Output validation results as JSON",
+    )
+    validate_parser.add_argument(
+        "--export",
+        action="store_true",
+        help="Export requirements as JSON dict keyed by ID",
     )
     validate_parser.add_argument(
         "--mode",
