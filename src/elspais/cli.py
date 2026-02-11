@@ -1035,13 +1035,12 @@ After adding the line, restart your shell or source the config file.
 
 def version_command(args: argparse.Namespace) -> int:
     """Handle version command."""
-    print(f"elspais {__version__}")
-
     if args.check:
-        print("Checking for updates...")
-        # TODO: Implement update check
-        print("Update check not yet implemented.")
+        from elspais.utilities.version_check import check_for_updates
 
+        return check_for_updates(__version__)
+
+    print(f"elspais {__version__}")
     return 0
 
 
