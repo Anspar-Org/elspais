@@ -180,7 +180,7 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 # REQ-p00007: Collaborative Review System
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00001
 
 ## Rationale
 
