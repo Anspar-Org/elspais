@@ -311,11 +311,13 @@ function renderNavTree() {
             covIcon = '<span class="coverage-icon none" title="No coverage">&#x25CB;</span>';
         }
 
-        // Status badge
+        // Status badge (with optional validation color + tooltip for Active status)
         var statusBadge = '';
         if (row.status) {
             var statusLower = row.status.toLowerCase();
-            statusBadge = '<span class="status-badge ' + statusLower + '" style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
+            var valClass = row.validation_color ? ' val-' + row.validation_color : '';
+            var tipAttr = row.validation_tip ? ' data-tip="' + escapeHtml(row.validation_tip) + '"' : '';
+            statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + ' style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
             if (row.is_changed) statusBadge += '<span class="change-indicator">&#x25C6;</span>';
             statusBadge += '</span>';
         }

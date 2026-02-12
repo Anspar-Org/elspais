@@ -249,6 +249,8 @@ def create_app(
         """
         import re
 
+        from elspais.html.generator import compute_validation_color
+
         g = _state["graph"]
         rows: list[dict[str, Any]] = []
         visited: set[tuple[str, str]] = set()  # (node_id, parent_id) dedup
@@ -307,6 +309,7 @@ def create_app(
             coverage = node.get_field("coverage", "none")
             is_changed = bool(node.get_field("is_changed", False))
             is_uncommitted = bool(node.get_field("is_uncommitted", False))
+            val_color, val_tip = compute_validation_color(node)
 
             rows.append(
                 {
@@ -330,6 +333,8 @@ def create_app(
                     "repo_prefix": _get_repo_prefix(node),
                     "source_file": node.get_field("source_file", ""),
                     "source_line": node.get_field("source_line", 0),
+                    "validation_color": val_color,
+                    "validation_tip": val_tip,
                 }
             )
 

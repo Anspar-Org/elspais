@@ -46,6 +46,8 @@ class TreeRow:
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
     coverage_indirect: str = "none"  # "none", "partial", "full" (including indirect)
+    validation_color: str = ""  # val-green/val-yellow-green/val-yellow/val-red/val-orange or ""
+    validation_tip: str = ""  # Hover tooltip explaining the validation color
     source_file: str = ""  # Relative path to source file
     source_line: int = 0  # Line number in source file
     result_status: str = ""  # For TEST_RESULT: passed/failed/error/skipped
@@ -85,6 +87,75 @@ class ViewStats:
     assertions_implemented: int = 0  # Assertions with CODE coverage
     assertions_tested: int = 0  # Assertions with TEST coverage
     assertions_validated: int = 0  # Assertions with passing TEST_RESULTs
+
+
+def compute_validation_color(node: GraphNode) -> tuple[str, str]:
+    """Compute a validation quality color for a requirement's Active status badge.
+
+    Inspects the node's pre-computed RollupMetrics to classify its
+    coverage/validation quality into a color tier:
+    - green: Full direct coverage, all assertions validated, no failures
+    - yellow-green: Full coverage including indirect, all validated, no failures
+    - yellow: Some coverage, no failures
+    - red: Has test failures
+    - orange: Anomalous (tests but no results, tests but no code, or no coverage)
+    - ("", ""): Non-Active status, or no assertions
+
+    Args:
+        node: A GraphNode with pre-computed rollup_metrics.
+
+    Returns:
+        Tuple of (css_class_suffix, reason_text). Both empty if no color applies.
+    """
+    from elspais.graph.metrics import RollupMetrics
+
+    status = (node.status or "").upper()
+    if status != "ACTIVE":
+        return ("", "")
+
+    rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return ("", "")
+
+    n = rollup.total_assertions
+
+    # Red: any test failures take priority
+    if rollup.has_failures:
+        return ("red", "Test failures detected")
+
+    # Green: full direct coverage AND all assertions validated
+    if rollup.coverage_pct == 100 and rollup.validated >= n:
+        return ("green", f"All {n} assertions covered and validated")
+
+    # Yellow-green: full coverage with indirect AND all validated with indirect
+    if rollup.indirect_coverage_pct == 100 and rollup.validated_with_indirect >= n:
+        return (
+            "yellow-green",
+            f"All {n} assertions validated (including indirect)",
+        )
+
+    # Orange: anomalous test/code gaps
+    if rollup.direct_tested > 0:
+        from elspais.graph import NodeKind
+
+        has_code = any(c.kind == NodeKind.CODE for c in node.iter_children())
+        # Tests exist but zero results (tests never run)
+        if rollup.validated == 0 and rollup.validated_with_indirect == 0:
+            return ("orange", f"Tests exist but no results ({rollup.direct_tested}/{n} tested)")
+        # Tests exist but no code implementation
+        if not has_code:
+            return (
+                "orange",
+                f"Tests exist but no code implementation ({rollup.direct_tested}/{n} tested)",
+            )
+
+    # Yellow: some coverage exists, no failures
+    if rollup.coverage_pct > 0 or rollup.indirect_coverage_pct > 0:
+        v = rollup.validated or rollup.validated_with_indirect
+        return ("yellow", f"Partial: {v}/{n} validated, {rollup.coverage_pct:.0f}% covered")
+
+    # Orange: assertions exist but zero coverage (anomalous)
+    return ("orange", f"No coverage ({n} assertions)")
 
 
 class HTMLGenerator:
@@ -446,6 +517,7 @@ class HTMLGenerator:
             coverage, coverage_indirect, has_failures = (
                 ("none", "none", False) if is_impl_node else compute_coverage(node)
             )
+            val_color, val_tip = ("", "") if is_impl_node else compute_validation_color(node)
             assertion_letters = (
                 get_assertion_letters(node, parent_id)
                 if parent_assertions is None
@@ -483,6 +555,8 @@ class HTMLGenerator:
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
                 coverage_indirect=coverage_indirect,
+                validation_color=val_color,
+                validation_tip=val_tip,
                 topic=get_topic(node) if not is_impl_node else "",
                 depth=depth,
                 parent_id=(
@@ -733,6 +807,7 @@ class HTMLGenerator:
 
         data: dict[str, Any] = {}
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            vc, vt = compute_validation_color(node)
             data[node.id] = {
                 "id": node.id,
                 "label": node.get_label(),
@@ -740,6 +815,8 @@ class HTMLGenerator:
                 "level": (node.level or "").upper(),
                 "status": node.status,
                 "hash": node.hash,
+                "validation_color": vc,
+                "validation_tip": vt,
                 "source": {
                     "path": node.source.path if node.source else None,
                     "line": node.source.line if node.source else None,
@@ -903,4 +980,4 @@ class HTMLGenerator:
         return journeys
 
 
-__all__ = ["HTMLGenerator"]
+__all__ = ["HTMLGenerator", "compute_validation_color"]

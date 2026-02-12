@@ -31,6 +31,61 @@
     color: #664d03;
 }
 
+/* Validation-quality color overrides for Active status badges */
+.status-badge.active.val-green {
+    background: #198754;
+    color: #fff;
+}
+
+.status-badge.active.val-yellow-green {
+    background: #7bb661;
+    color: #1a3a0a;
+}
+
+.status-badge.active.val-yellow {
+    background: #ffc107;
+    color: #664d03;
+}
+
+.status-badge.active.val-red {
+    background: #dc3545;
+    color: #fff;
+}
+
+.status-badge.active.val-orange {
+    background: #fd7e14;
+    color: #fff;
+}
+
+/* Delayed hover tooltip for validation-colored badges */
+.status-badge[data-tip] {
+    position: relative;
+}
+
+.status-badge[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    white-space: nowrap;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 400;
+    text-transform: none;
+    background: #212529;
+    color: #f8f9fa;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1000;
+    transition: opacity 0.15s ease 1s;
+}
+
+.status-badge[data-tip]:hover::after {
+    opacity: 1;
+}
+
 .change-indicator {
     color: #fd7e14;
     font-size: 0.75rem;
