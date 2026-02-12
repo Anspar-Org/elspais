@@ -5,18 +5,17 @@
 // =====================================================================
 
 function updateHeaderStats() {
-    // Compute level + main + test/result counts from tree data (unique IDs)
+    // Compute level + main counts from tree data (unique IDs)
+    // Test/result counts come from /api/status (not in tree data)
     var rows = editState.treeData;
     if (!rows || rows.length === 0) return;
     var seen = {};
-    var counts = {prd: 0, ops: 0, dev: 0, main: 0, tests: 0, results: 0};
+    var counts = {prd: 0, ops: 0, dev: 0, main: 0};
     var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
     for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         if (seen[r.id]) continue;
         seen[r.id] = true;
-        if (r.is_test) { counts.tests++; continue; }
-        if (r.is_test_result) { counts.results++; continue; }
         if (r.level) {
             var lev = r.level.toLowerCase();
             if (counts[lev] !== undefined) counts[lev]++;
@@ -31,12 +30,14 @@ function updateHeaderStats() {
     document.getElementById('stat-ops').textContent = 'OPS: ' + counts.ops;
     document.getElementById('stat-dev').textContent = 'DEV: ' + counts.dev;
     document.getElementById('stat-main').textContent = 'Core: ' + counts.main;
-    document.getElementById('stat-tests').textContent = 'Tests: ' + counts.tests;
-    document.getElementById('stat-results').textContent = 'Results: ' + counts.results;
 
-    // Build associated repo badges dynamically
+    // Fetch test/result counts from /api/status (informational badges)
     apiFetch('/api/status').then(function(data) {
         if (!data) return;
+        var nc = data.node_counts || {};
+        document.getElementById('stat-tests').textContent = 'Tests: ' + (nc.test || 0);
+        document.getElementById('stat-results').textContent = 'Results: ' + (nc.test_result || 0);
+
         var assocRepos = data.associated_repos || [];
         // Build name lookup from API: { "CAL": "callisto", ... }
         var nameMap = {};
@@ -122,11 +123,11 @@ function renderNavTree() {
         return;
     }
 
-    // Filter by tab — req tab shows requirements + their test/result children
+    // Filter by tab — req tab shows requirements only
     let filteredRows;
     if (activeTab === 'req') {
         filteredRows = rows.filter(function(r) {
-            return (r.level && r.level !== '') || r.is_test || r.is_test_result;
+            return r.level && r.level !== '';
         });
     } else {
         filteredRows = rows;
@@ -165,7 +166,7 @@ function renderNavTree() {
     var hiddenRepos = af.hiddenRepos || [];
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
         af.uncommitted || af.changed || af.main || af.leaf ||
-        af.hideTests || af.hideResults || hiddenRepos.length > 0 ||
+        hiddenRepos.length > 0 ||
         editState.filterStatus !== '' || editState.filterCoverage !== '';
 
     // Track which rows are direct filter matches (vs ancestor context)
@@ -196,23 +197,20 @@ function renderNavTree() {
             if (af.levelPrd && r.level === 'PRD') continue;
             if (af.levelOps && r.level === 'OPS') continue;
             if (af.levelDev && r.level === 'DEV') continue;
-            // Test/Result visibility filters (when active, HIDE those rows)
-            if (af.hideTests && r.is_test) continue;
-            if (af.hideResults && r.is_test_result) continue;
             // Associated repo filters (hide specific repos)
             if (hiddenRepos.length > 0 && r.is_associated &&
                 r.repo_prefix && hiddenRepos.indexOf(r.repo_prefix) >= 0) continue;
             // Git filters (when active, SHOW only matching)
-            if (af.uncommitted && !r.is_uncommitted && !r.is_test && !r.is_test_result) continue;
-            if (af.changed && !r.is_changed && !r.is_test && !r.is_test_result) continue;
+            if (af.uncommitted && !r.is_uncommitted) continue;
+            if (af.changed && !r.is_changed) continue;
             // Main filter (show only main/non-associated)
             if (af.main && r.is_associated) continue;
-            // Leaf only (skip for test/result rows)
-            if (af.leaf && !r.is_leaf && !r.is_test && !r.is_test_result) continue;
-            // Status dropdown (skip for test/result rows)
-            if (editState.filterStatus && r.status !== editState.filterStatus && !r.is_test && !r.is_test_result) continue;
-            // Coverage dropdown (skip for test/result rows)
-            if (editState.filterCoverage && r.coverage !== editState.filterCoverage && !r.is_test && !r.is_test_result) continue;
+            // Leaf only
+            if (af.leaf && !r.is_leaf) continue;
+            // Status dropdown
+            if (editState.filterStatus && r.status !== editState.filterStatus) continue;
+            // Coverage dropdown
+            if (editState.filterCoverage && r.coverage !== editState.filterCoverage) continue;
             matchIndices.add(i);
         }
         directMatchCount = matchIndices.size;
@@ -279,56 +277,6 @@ function renderNavTree() {
         const selectedClass = editState.openCards.has(row.id) ? ' selected' : '';
         // Dim context-only rows when filters are active
         const dimClass = (matchSet && !matchSet.has(arrIdx)) ? ' filter-dim' : '';
-
-        // ── TEST row rendering ──
-        if (row.is_test) {
-            var testTitle = row.title || row.id;
-            // Shorten long test paths
-            if (testTitle.length > 60) {
-                testTitle = '...' + testTitle.slice(-57);
-            }
-            html += '<div class="nav-tree-row nav-tree-test' + dimClass + '" ' +
-                'data-id="' + row.id + '" ' +
-                'data-parent="' + (row.parent_id || '') + '" ' +
-                'data-depth="' + row.depth + '" ' +
-                'data-kind="test">' +
-                indents.join('') +
-                '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
-                toggleIcon + '</button>' +
-                '<span class="nav-tree-kind-icon test-icon" title="Test">&#x1F9EA;</span>' +
-                '<span class="nav-tree-title">' + escapeHtml(testTitle) + '</span>' +
-                '</div>';
-            return;
-        }
-
-        // ── TEST_RESULT row rendering ──
-        if (row.is_test_result) {
-            var resultTitle = row.title || row.id;
-            if (resultTitle.length > 55) {
-                resultTitle = '...' + resultTitle.slice(-52);
-            }
-            var statusIcon = '';
-            var resultClass = '';
-            var rs = row.result_status || '';
-            if (rs === 'passed' || rs === 'pass') { statusIcon = '&#x2705;'; resultClass = ' result-passed'; }
-            else if (rs === 'failed' || rs === 'fail' || rs === 'failure') { statusIcon = '&#x274C;'; resultClass = ' result-failed'; }
-            else if (rs === 'error') { statusIcon = '&#x26A0;&#xFE0F;'; resultClass = ' result-error'; }
-            else if (rs === 'skipped' || rs === 'skip') { statusIcon = '&#x23ED;&#xFE0F;'; resultClass = ' result-skipped'; }
-            else { statusIcon = '&#x2753;'; resultClass = ''; }
-
-            html += '<div class="nav-tree-row nav-tree-result' + resultClass + dimClass + '" ' +
-                'data-id="' + row.id + '" ' +
-                'data-parent="' + (row.parent_id || '') + '" ' +
-                'data-depth="' + row.depth + '" ' +
-                'data-kind="test_result">' +
-                indents.join('') +
-                '<span class="nav-tree-indent"></span>' +  /* Extra indent since no toggle */
-                '<span class="nav-tree-kind-icon">' + statusIcon + '</span>' +
-                '<span class="nav-tree-title">' + escapeHtml(resultTitle) + '</span>' +
-                (rs ? '<span class="nav-tree-result-badge ' + rs + '">' + rs + '</span>' : '') +
-                '</div>';
-            return;
-        }
 
         // ── REQUIREMENT row rendering ──
         const levelClass = row.level ? row.level.toLowerCase() : '';
@@ -432,15 +380,6 @@ function toggleEditFilter(key) {
         var mainBadge = document.getElementById('stat-main');
         if (mainBadge) mainBadge.classList.toggle('dimmed', editState.activeFilters.main);
     }
-    // Update stat badge state for tests/results (dimmed = hidden)
-    if (key === 'hideTests') {
-        var testBadge = document.getElementById('stat-tests');
-        if (testBadge) testBadge.classList.toggle('dimmed', editState.activeFilters.hideTests);
-    }
-    if (key === 'hideResults') {
-        var resultBadge = document.getElementById('stat-results');
-        if (resultBadge) resultBadge.classList.toggle('dimmed', editState.activeFilters.hideResults);
-    }
     // Update checkbox state for toggles
     var checkMap = { leaf: 'edit-toggle-leaf' };
     if (checkMap[key]) {
@@ -481,7 +420,7 @@ function clearEditFilters() {
     editState.activeFilters = {
         levelPrd: false, levelOps: false, levelDev: false,
         uncommitted: false, changed: false, main: false, leaf: false,
-        hideTests: false, hideResults: false, hiddenRepos: []
+        hiddenRepos: []
     };
     editState.filterStatus = '';
     editState.filterCoverage = '';

@@ -1,3 +1,4 @@
+/* Implements: REQ-p00006-B */
 /* Partial: _card-stack.css.j2 — Card stack panel and requirement cards */
 
 /* --- Card Stack (Center) --- */
@@ -335,4 +336,213 @@
     color: #495057;
     line-height: 1.6;
     white-space: pre-wrap;
+}
+
+/* --- Assertion Validation Buttons --- */
+
+.card-assertion-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-assertion {
+    align-items: flex-start;
+}
+
+.assertion-implemented-btn,
+.assertion-validation-btn {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    background: transparent;
+    color: #6c757d;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.assertion-implemented-btn { margin-left: auto; }
+
+.assertion-implemented-btn:hover,
+.assertion-validation-btn:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+}
+
+/* Implemented button states */
+.assertion-implemented-btn.implemented-yes {
+    border-color: #0d6efd;
+    color: #0d6efd;
+}
+
+.assertion-implemented-btn.implemented-yes:hover {
+    background: #e7f1ff;
+}
+
+.assertion-implemented-btn.implemented-yes.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.assertion-implemented-btn.implemented-no {
+    border-color: #adb5bd;
+    color: #adb5bd;
+}
+
+.assertion-implemented-btn.implemented-no:hover {
+    background: #f8f9fa;
+}
+
+.assertion-implemented-btn.active {
+    font-weight: 700;
+}
+
+.assertion-validation-btn.validation-pass {
+    border-color: #198754;
+    color: #198754;
+}
+
+.assertion-validation-btn.validation-pass:hover {
+    background: #d1e7dd;
+}
+
+.assertion-validation-btn.validation-pass.active {
+    background: #198754;
+    color: white;
+}
+
+.assertion-validation-btn.validation-partial {
+    border-color: #ffc107;
+    color: #92400e;
+}
+
+.assertion-validation-btn.validation-partial:hover {
+    background: #fff3cd;
+}
+
+.assertion-validation-btn.validation-partial.active {
+    background: #ffc107;
+    color: #1a1d21;
+}
+
+.assertion-validation-btn.validation-fail {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.assertion-validation-btn.validation-fail:hover {
+    background: #f8d7da;
+}
+
+.assertion-validation-btn.validation-fail.active {
+    background: #dc3545;
+    color: white;
+}
+
+.assertion-validation-btn.validation-unknown {
+    border-color: #6c757d;
+    color: #6c757d;
+}
+
+.assertion-validation-btn.validation-unknown:hover {
+    background: #e9ecef;
+}
+
+.assertion-validation-btn.validation-unknown.active {
+    background: #6c757d;
+    color: white;
+}
+
+.assertion-validation-btn.active {
+    font-weight: 700;
+}
+
+/* --- Assertion Code Panel --- */
+
+.assertion-code-panel {
+    margin: 4px 0 2px 28px;
+    padding: 8px 10px;
+    background: #f0f4ff;
+    border-radius: 4px;
+    border-left: 3px solid #0d6efd;
+    font-size: 0.78rem;
+}
+
+/* --- Assertion Test Panel --- */
+
+.assertion-tests-panel {
+    margin: 4px 0 2px 28px;
+    padding: 8px 10px;
+    background: #f0f4f8;
+    border-radius: 4px;
+    border-left: 3px solid #dee2e6;
+    font-size: 0.78rem;
+}
+
+.assertion-tests-loading,
+.assertion-tests-empty {
+    color: #6c757d;
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.assertion-test-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+
+.assertion-test-item:last-child {
+    border-bottom: none;
+}
+
+.assertion-test-item.test-passed { color: #198754; }
+.assertion-test-item.test-failed { color: #dc3545; }
+.assertion-test-item.test-no-result { color: #6c757d; }
+
+.assertion-test-icon {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    width: 1.2em;
+    text-align: center;
+}
+
+.assertion-test-link {
+    color: #0d6efd;
+    text-decoration: none;
+    cursor: pointer;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+    text-align: left;
+}
+
+a.assertion-test-link:hover {
+    text-decoration: underline;
+    color: #0b5ed7;
+}
+
+.assertion-result-file-link {
+    font-size: 0.65rem;
+    color: #6c757d;
+    text-decoration: none;
+    cursor: pointer;
+    margin-left: 4px;
+}
+
+.assertion-result-file-link:hover {
+    color: #0d6efd;
+    text-decoration: underline;
 }

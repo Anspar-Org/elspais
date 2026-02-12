@@ -197,6 +197,9 @@ async function refreshCard(nodeId) {
     const info = editState.openCards.get(nodeId);
     if (!info) return;
     info.data = data;
+    // Invalidate assertion caches for this requirement
+    delete assertionTestsCache[nodeId];
+    delete assertionCodeCache[nodeId];
     renderCardStack();
     // Restore edit mode state after re-render
     if (editState.enabled) {

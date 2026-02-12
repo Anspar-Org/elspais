@@ -175,6 +175,16 @@
 .dark-theme .line-content { color: #e9ecef; }
 .dark-theme .source-line:hover { background: #2b3035; }
 .dark-theme .source-line.highlighted { background: #3d3019; }
+.dark-theme .source-line.highlighted:hover { background: #4a3a1f; }
+.dark-theme .file-viewer-lang { background: #343a40; color: #adb5bd; }
+.dark-theme .file-viewer-btn { color: #adb5bd; }
+.dark-theme .file-viewer-btn:hover { background: #343a40; }
+.dark-theme .file-viewer-mode-toggle { background: #343a40; }
+.dark-theme .file-viewer-mode-btn { color: #adb5bd; }
+.dark-theme .file-viewer-mode-btn.active { background: #495057; color: #e9ecef; box-shadow: none; }
+.dark-theme .file-viewer-close-btn { color: #adb5bd; }
+.dark-theme .file-viewer-close-btn:hover { color: #e77681; background: #3d1f24; }
+.dark-theme .line-content.rendered-line code { background: #343a40; }
 
 .dark-theme .toast.success { background: #1a3328; color: #5cb85c; border-color: #2d5a3e; }
 .dark-theme .toast.error { background: #3d1f24; color: #e77681; border-color: #5a2d33; }
@@ -207,3 +217,64 @@
 /* Journey cards */
 .dark-theme .journey-card-kind { background: #495057; color: #e9ecef; }
 .dark-theme .journey-card-description { color: #adb5bd; }
+
+/* Assertion implemented + validation buttons */
+.dark-theme .assertion-implemented-btn,
+.dark-theme .assertion-validation-btn {
+    border-color: #495057;
+    color: #868e96;
+}
+.dark-theme .assertion-implemented-btn:hover,
+.dark-theme .assertion-validation-btn:hover {
+    background: #343a40;
+    border-color: #6c757d;
+}
+
+.dark-theme .assertion-implemented-btn.implemented-yes { border-color: #2b5f96; color: #6ea8fe; }
+.dark-theme .assertion-implemented-btn.implemented-yes:hover { background: #1a2d42; }
+.dark-theme .assertion-implemented-btn.implemented-yes.active { background: #2b5f96; color: #e7f1ff; }
+
+.dark-theme .assertion-implemented-btn.implemented-no { border-color: #495057; color: #6c757d; }
+.dark-theme .assertion-implemented-btn.implemented-no:hover { background: #343a40; }
+
+.dark-theme .assertion-validation-btn.validation-pass { border-color: #2d6a4f; color: #5cb85c; }
+.dark-theme .assertion-validation-btn.validation-pass:hover { background: #1a3328; }
+.dark-theme .assertion-validation-btn.validation-pass.active { background: #2d6a4f; color: #d1e7dd; }
+
+.dark-theme .assertion-validation-btn.validation-partial { border-color: #7c6a1e; color: #f0c75e; }
+.dark-theme .assertion-validation-btn.validation-partial:hover { background: #3d3019; }
+.dark-theme .assertion-validation-btn.validation-partial.active { background: #7c6a1e; color: #fef3c7; }
+
+.dark-theme .assertion-validation-btn.validation-fail { border-color: #842029; color: #e77681; }
+.dark-theme .assertion-validation-btn.validation-fail:hover { background: #3d1f24; }
+.dark-theme .assertion-validation-btn.validation-fail.active { background: #842029; color: #f8d7da; }
+
+.dark-theme .assertion-validation-btn.validation-unknown { border-color: #495057; color: #868e96; }
+.dark-theme .assertion-validation-btn.validation-unknown:hover { background: #343a40; }
+.dark-theme .assertion-validation-btn.validation-unknown.active { background: #495057; color: #e9ecef; }
+
+/* Assertion code panels */
+.dark-theme .assertion-code-panel {
+    background: #1a2232;
+    border-left-color: #2b5f96;
+}
+
+/* Assertion test panels */
+.dark-theme .assertion-tests-panel {
+    background: #1a1d21;
+    border-left-color: #495057;
+}
+
+.dark-theme .assertion-tests-loading,
+.dark-theme .assertion-tests-empty { color: #868e96; }
+
+.dark-theme .assertion-test-item { border-bottom-color: rgba(255,255,255,0.04); }
+.dark-theme .assertion-test-item.test-passed { color: #5cb85c; }
+.dark-theme .assertion-test-item.test-failed { color: #e77681; }
+.dark-theme .assertion-test-item.test-no-result { color: #868e96; }
+
+.dark-theme .assertion-test-link { color: #6ea8fe; }
+.dark-theme a.assertion-test-link:hover { color: #9ec5fe; }
+
+.dark-theme .assertion-result-file-link { color: #868e96; }
+.dark-theme .assertion-result-file-link:hover { color: #6ea8fe; }

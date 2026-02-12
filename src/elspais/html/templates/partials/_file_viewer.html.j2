@@ -1,5 +1,5 @@
 {# Partial: _file_viewer.html.j2 — Merged file viewer panel #}
-{# Edit: status badge (on-disk/has-mutations), simple close #}
+{# Edit: status badge + lang badge, rendered/source toggle, VS Code link #}
 {# View: lang badge, rendered/source mode toggle, VS Code link #}
 
 {% if mode == 'edit' %}
@@ -8,6 +8,12 @@
     <div class="file-viewer-header">
         <span class="file-viewer-path" id="fv-path">No file selected</span>
         <span class="fv-status" id="fv-status"></span>
+        <span class="file-viewer-lang" id="fv-lang"></span>
+        <div class="file-viewer-mode-toggle" id="fv-mode-toggle" style="display:none;">
+            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
+            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
+        </div>
+        <a class="file-viewer-btn" id="fv-vscode" href="#" title="Open in VS Code" style="display:none;">VS Code</a>
         <button class="file-viewer-close-btn" onclick="closeFileViewer()" title="Close">&times;</button>
     </div>
     <div class="file-viewer-body" id="fv-body">

@@ -1753,6 +1753,7 @@ class GraphBuilder:
         node._content = {
             "actor": data.get("actor"),
             "goal": data.get("goal"),
+            "body": content.raw_text,
         }
         self._nodes[journey_id] = node
         # Implements: REQ-d00071-D

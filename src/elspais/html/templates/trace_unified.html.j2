@@ -31,6 +31,13 @@ body {
 {% include "partials/css/_card-stack.css.j2" %}
 {% include "partials/css/_edit-mode.css.j2" %}
 {% include "partials/css/_file-viewer-edit.css.j2" %}
+/* Pygments syntax highlighting theme */
+{% if pygments_css %}
+{{ pygments_css }}
+{% endif %}
+{% if pygments_css_dark %}
+{{ pygments_css_dark }}
+{% endif %}
 {% include "partials/css/_status-badges.css.j2" %}
 {% include "partials/css/_coverage.css.j2" %}
 {% include "partials/css/_legend.css.j2" %}
@@ -65,7 +72,7 @@ body {
 {% endif %}
     </style>
 </head>
-<body>
+<body{% if mode == 'edit' %} data-base-path="{{ base_path }}"{% endif %}>
 
 {% include "partials/_header.html.j2" %}
 
@@ -346,8 +353,6 @@ const editState = {
         changed: false,
         main: false,
         leaf: false,
-        hideTests: false,
-        hideResults: false,
         hiddenRepos: []
     },
     knownRepos: [],
@@ -567,9 +572,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('stat-dev').classList.toggle('dimmed', !!editState.activeFilters.levelDev);
             // Update core badge dimmed state (dimmed = hiding associated)
             document.getElementById('stat-main').classList.toggle('dimmed', !!editState.activeFilters.main);
-            // Update tests/results badge dimmed state
-            document.getElementById('stat-tests').classList.toggle('dimmed', !!editState.activeFilters.hideTests);
-            document.getElementById('stat-results').classList.toggle('dimmed', !!editState.activeFilters.hideResults);
             // Ensure hiddenRepos is an array
             if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
                 editState.activeFilters.hiddenRepos = [];
