@@ -160,6 +160,7 @@ def install_local(
 
     _patch_argcomplete_marker()
     _show_active_version()
+    _print_shell_hint()
     return 0
 
 
@@ -215,6 +216,7 @@ def uninstall_local(
 
     _patch_argcomplete_marker()
     _show_active_version()
+    _print_shell_hint()
     return 0
 
 
@@ -258,6 +260,35 @@ def _show_active_version() -> None:
             print(f"  Active: {result.stdout.strip()}")
     except FileNotFoundError:
         print("  Warning: elspais command not found in PATH", file=sys.stderr)
+
+
+def _print_shell_hint() -> None:
+    """Print shell commands the user should run to refresh their session.
+
+    After pipx/uv reinstalls the binary, the shell's command hash table
+    and completion functions are stale. We print the exact commands to
+    run — but never source rc files automatically.
+    """
+    import os
+
+    shell_path = os.environ.get("SHELL", "")
+    shell = Path(shell_path).name if shell_path else ""
+
+    print("\n  To activate in this shell, run:")
+
+    if shell == "zsh":
+        print("    rehash")
+        print('    eval "$(register-python-argcomplete elspais)"')
+    elif shell == "bash":
+        print("    hash -r")
+        print('    eval "$(register-python-argcomplete elspais)"')
+    elif shell == "fish":
+        print("    register-python-argcomplete --shell fish elspais | source")
+    elif shell == "tcsh":
+        print("    rehash")
+        print("    eval `register-python-argcomplete --shell tcsh elspais`")
+    else:
+        print("    hash -r  # or rehash, depending on your shell")
 
 
 # --- CLI dispatchers ---

@@ -447,3 +447,38 @@ class TestPatchArgcompleteMarker:
         ):
             # Should not raise, just warn
             install_cmd._patch_argcomplete_marker()
+
+
+# ---------------------------------------------------------------------------
+# _print_shell_hint
+# ---------------------------------------------------------------------------
+
+
+class TestPrintShellHint:
+    """Validates REQ-p00001-A: Post-install shell refresh hints."""
+
+    @patch.dict("os.environ", {"SHELL": "/bin/zsh"})
+    def test_REQ_p00001_A_zsh_hint(self, capsys):
+        install_cmd._print_shell_hint()
+        out = capsys.readouterr().out
+        assert "rehash" in out
+        assert "register-python-argcomplete" in out
+
+    @patch.dict("os.environ", {"SHELL": "/bin/bash"})
+    def test_REQ_p00001_A_bash_hint(self, capsys):
+        install_cmd._print_shell_hint()
+        out = capsys.readouterr().out
+        assert "hash -r" in out
+        assert "register-python-argcomplete" in out
+
+    @patch.dict("os.environ", {"SHELL": "/usr/bin/fish"})
+    def test_REQ_p00001_A_fish_hint(self, capsys):
+        install_cmd._print_shell_hint()
+        out = capsys.readouterr().out
+        assert "--shell fish" in out
+
+    @patch.dict("os.environ", {"SHELL": ""})
+    def test_REQ_p00001_A_unknown_shell_hint(self, capsys):
+        install_cmd._print_shell_hint()
+        out = capsys.readouterr().out
+        assert "hash -r" in out
