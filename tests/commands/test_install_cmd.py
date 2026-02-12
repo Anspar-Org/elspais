@@ -243,25 +243,31 @@ class TestInstallLocal:
 
 
 class TestUninstallLocal:
-    """Validates REQ-p00001-A: Reverting to PyPI version."""
+    """Validates REQ-p00001-A: Reverting to PyPI version (two-step)."""
 
     @patch("elspais.commands.install_cmd._show_active_version")
     @patch("subprocess.run")
-    def test_REQ_p00001_A_pipx_command(self, mock_run, mock_version):
+    def test_REQ_p00001_A_pipx_uninstalls_then_installs(self, mock_run, mock_version):
         mock_run.return_value = MagicMock(returncode=0)
         result = install_cmd.uninstall_local("pipx")
         assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert cmd == ["pipx", "install", "elspais", "--force"]
+        assert mock_run.call_count == 2
+        step1 = mock_run.call_args_list[0][0][0]
+        step2 = mock_run.call_args_list[1][0][0]
+        assert step1 == ["pipx", "uninstall", "elspais"]
+        assert step2 == ["pipx", "install", "elspais"]
 
     @patch("elspais.commands.install_cmd._show_active_version")
     @patch("subprocess.run")
-    def test_REQ_p00001_A_uv_command(self, mock_run, mock_version):
+    def test_REQ_p00001_A_uv_uninstalls_then_installs(self, mock_run, mock_version):
         mock_run.return_value = MagicMock(returncode=0)
         result = install_cmd.uninstall_local("uv")
         assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert cmd == ["uv", "tool", "install", "elspais", "--force"]
+        assert mock_run.call_count == 2
+        step1 = mock_run.call_args_list[0][0][0]
+        step2 = mock_run.call_args_list[1][0][0]
+        assert step1 == ["uv", "tool", "uninstall", "elspais"]
+        assert step2 == ["uv", "tool", "install", "elspais"]
 
     @patch("elspais.commands.install_cmd._show_active_version")
     @patch("subprocess.run")
@@ -269,8 +275,8 @@ class TestUninstallLocal:
         mock_run.return_value = MagicMock(returncode=0)
         result = install_cmd.uninstall_local("pipx", version="0.50.0")
         assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert "elspais==0.50.0" in cmd[2]
+        step2 = mock_run.call_args_list[1][0][0]
+        assert "elspais==0.50.0" in step2[2]
 
     @patch("elspais.commands.install_cmd._show_active_version")
     @patch("subprocess.run")
@@ -278,14 +284,27 @@ class TestUninstallLocal:
         mock_run.return_value = MagicMock(returncode=0)
         result = install_cmd.uninstall_local("pipx", extras=["mcp", "trace-view"])
         assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert cmd[2] == "elspais[mcp,trace-view]"
+        step2 = mock_run.call_args_list[1][0][0]
+        assert step2[2] == "elspais[mcp,trace-view]"
 
     @patch("subprocess.run")
-    def test_REQ_p00001_A_failure_returns_1(self, mock_run):
+    def test_REQ_p00001_A_uninstall_failure_returns_1(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stderr="fail")
         result = install_cmd.uninstall_local("pipx")
         assert result == 1
+        # Should fail on step 1 (uninstall), never reaching step 2
+        assert mock_run.call_count == 1
+
+    @patch("subprocess.run")
+    def test_REQ_p00001_A_install_failure_returns_1(self, mock_run):
+        """Uninstall succeeds but fresh install fails."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # uninstall OK
+            MagicMock(returncode=1, stderr="install fail"),  # install fails
+        ]
+        result = install_cmd.uninstall_local("pipx")
+        assert result == 1
+        assert mock_run.call_count == 2
 
     def test_REQ_p00001_A_unsupported_tool_returns_1(self):
         result = install_cmd.uninstall_local("conda")

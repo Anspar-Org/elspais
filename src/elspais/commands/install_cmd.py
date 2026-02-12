@@ -219,6 +219,11 @@ def uninstall_local(
 ) -> int:
     """Revert to PyPI release version.
 
+    Uses a two-step process: uninstall first, then install fresh.
+    This is necessary because ``pipx install --force`` caches the local
+    source path from editable installs and silently reuses it instead
+    of fetching from PyPI.
+
     Args:
         tool: Package tool to use ("pipx" or "uv").
         extras: Extras to install with the PyPI version.
@@ -230,11 +235,14 @@ def uninstall_local(
     """
     base = f"elspais=={version}" if version else "elspais"
     install_spec = _build_install_spec(base, extras)
+    capture = not verbose
 
     if tool == "pipx":
-        cmd = ["pipx", "install", install_spec, "--force"]
+        uninstall_cmd = ["pipx", "uninstall", "elspais"]
+        install_cmd = ["pipx", "install", install_spec]
     elif tool == "uv":
-        cmd = ["uv", "tool", "install", install_spec, "--force"]
+        uninstall_cmd = ["uv", "tool", "uninstall", "elspais"]
+        install_cmd = ["uv", "tool", "install", install_spec]
     else:
         print(f"Error: Unsupported tool '{tool}'", file=sys.stderr)
         return 1
@@ -244,20 +252,25 @@ def uninstall_local(
         print(f"  Extras: {', '.join(extras)}")
     if version:
         print(f"  Version: {version}")
-    print(f"  Using: {' '.join(cmd)}")
 
-    result = subprocess.run(
-        cmd,
-        capture_output=not verbose,
-        text=True,
-    )
+    # Step 1: fully remove the current install (clears cached paths)
+    print(f"  Step 1: {' '.join(uninstall_cmd)}")
+    result = subprocess.run(uninstall_cmd, capture_output=capture, text=True)
+    if result.returncode != 0:
+        print("Error: Uninstall failed", file=sys.stderr)
+        if capture and result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return 1
 
+    # Step 2: fresh install from PyPI
+    print(f"  Step 2: {' '.join(install_cmd)}")
+    result = subprocess.run(install_cmd, capture_output=capture, text=True)
     if result.returncode != 0:
         print(
             f"Error: Installation failed (exit code {result.returncode})",
             file=sys.stderr,
         )
-        if not verbose and result.stderr:
+        if capture and result.stderr:
             print(result.stderr, file=sys.stderr)
         return 1
 
