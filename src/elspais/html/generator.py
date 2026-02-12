@@ -748,24 +748,13 @@ class HTMLGenerator:
             Dict mapping file paths to their content data:
             {path: {lines: [highlighted_html_per_line], language: str, raw: str}}
         """
-        _MAX_FILE_SIZE = 512_000  # 500KB limit
+        from elspais.html.highlighting import MAX_FILE_SIZE, highlight_file_content
 
         # Collect unique source paths from all nodes
         paths: set[str] = set()
         for node in self.graph.all_nodes():
             if node.source and node.source.path:
                 paths.add(node.source.path)
-
-        # Try to import Pygments for syntax highlighting
-        try:
-            from pygments import highlight as pygments_highlight
-            from pygments.formatters import HtmlFormatter
-            from pygments.lexers import TextLexer, get_lexer_for_filename
-
-            has_pygments = True
-            formatter = HtmlFormatter(nowrap=True)
-        except ImportError:
-            has_pygments = False
 
         result: dict[str, Any] = {}
         for path in sorted(paths):
@@ -775,7 +764,7 @@ class HTMLGenerator:
                     continue
 
                 # Skip files that are too large
-                if file_path.stat().st_size > _MAX_FILE_SIZE:
+                if file_path.stat().st_size > MAX_FILE_SIZE:
                     continue
 
                 # Skip binary files (check first 8KB for null bytes)
@@ -785,42 +774,7 @@ class HTMLGenerator:
                         continue
 
                 raw_content = file_path.read_text(encoding="utf-8", errors="replace")
-                raw_lines = raw_content.split("\n")
-
-                # Determine language and apply highlighting
-                language = file_path.suffix.lstrip(".") or "text"
-                highlighted_lines: list[str] = []
-
-                if has_pygments:
-                    try:
-                        lexer = get_lexer_for_filename(path)
-                        language = lexer.name.lower()
-                    except Exception:
-                        lexer = TextLexer()
-                        language = "text"
-
-                    # Highlight the full content, then split by line
-                    # This preserves multi-line token state (e.g., docstrings)
-                    full_highlighted = pygments_highlight(raw_content, lexer, formatter)
-                    highlighted_lines = full_highlighted.split("\n")
-
-                    # Pygments may add a trailing empty string after final \n
-                    if highlighted_lines and highlighted_lines[-1] == "":
-                        highlighted_lines.pop()
-                else:
-                    # No Pygments: use HTML-escaped plain text
-                    import html
-
-                    highlighted_lines = [html.escape(line) for line in raw_lines]
-                    # Remove trailing empty line to match raw_lines
-                    if highlighted_lines and raw_content.endswith("\n"):
-                        highlighted_lines.pop()
-
-                result[path] = {
-                    "lines": highlighted_lines,
-                    "language": language,
-                    "raw": raw_content,
-                }
+                result[path] = highlight_file_content(path, raw_content)
             except (OSError, UnicodeDecodeError):
                 continue
 
@@ -832,13 +786,9 @@ class HTMLGenerator:
         Returns CSS rules scoped under .highlight for the file viewer panel.
         Returns empty string if Pygments is not installed.
         """
-        try:
-            from pygments.formatters import HtmlFormatter
+        from elspais.html.highlighting import get_pygments_css
 
-            formatter = HtmlFormatter(style="default")
-            return formatter.get_style_defs(".highlight")
-        except ImportError:
-            return ""
+        return get_pygments_css()
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""

@@ -68,8 +68,19 @@ def create_app(
         static_folder=str(static_dir) if static_dir.exists() else None,
     )
 
+    # Always reload templates from disk (editable installs change files in-place)
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+
     # REQ-d00010-F: CORS support
     CORS(app)
+
+    # Disable browser caching for dev server (ensures fresh content on reload)
+    @app.after_request
+    def _no_cache(response):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     # State pattern matching MCP server
     _state: dict[str, Any] = {
@@ -92,6 +103,7 @@ def create_app(
         """
         try:
             from elspais.html.generator import HTMLGenerator
+            from elspais.html.highlighting import get_pygments_css
 
             gen = HTMLGenerator(_state["graph"], base_path=str(_state["working_dir"]))
             gen._annotate_git_state()
@@ -111,6 +123,8 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
+                pygments_css=get_pygments_css(),
+                pygments_css_dark=get_pygments_css(style="monokai", scope=".dark-theme .highlight"),
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
@@ -437,6 +451,7 @@ def create_app(
         import os
 
         from elspais.graph.mutations import MutationLog
+        from elspais.html.highlighting import highlight_file_content
 
         rel_path = request.args.get("path", "")
         if not rel_path:
@@ -458,6 +473,9 @@ def create_app(
 
         lines = content.splitlines()
 
+        # Syntax highlighting via shared module
+        highlighted = highlight_file_content(rel_path, content)
+
         # Check which nodes in the mutation log are sourced from this file
         g = _state["graph"]
         mutation_log: MutationLog = g._mutation_log
@@ -478,6 +496,8 @@ def create_app(
         return jsonify(
             {
                 "lines": lines,
+                "highlighted_lines": highlighted["lines"],
+                "language": highlighted["language"],
                 "line_count": len(lines),
                 "has_pending_mutations": len(affected_node_ids) > 0,
                 "pending_mutation_count": len(affected_node_ids),

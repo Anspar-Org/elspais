@@ -569,6 +569,66 @@ class TestPersistenceEndpoints:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# File Content API Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetFileContent:
+    """Validates REQ-p00006-A: /api/file-content with syntax highlighting."""
+
+    def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
+        """API returns highlighted_lines and language for a Python file."""
+        graph = TraceGraph(repo_root=tmp_path)
+        app = create_app(repo_root=tmp_path, graph=graph, config={})
+        app.config["TESTING"] = True
+
+        py_file = tmp_path / "example.py"
+        py_file.write_text("def foo():\n    return 42\n")
+
+        with app.test_client() as c:
+            resp = c.get("/api/file-content?path=example.py")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "highlighted_lines" in data
+            assert "language" in data
+            assert "lines" in data
+            assert data["language"] == "python"
+            # highlighted_lines should contain Pygments spans
+            assert any("<span" in line for line in data["highlighted_lines"])
+            # plain lines should be raw text
+            assert data["lines"][0] == "def foo():"
+
+    def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
+        """API still returns mutation tracking alongside highlighting."""
+        graph = TraceGraph(repo_root=tmp_path)
+        app = create_app(repo_root=tmp_path, graph=graph, config={})
+        app.config["TESTING"] = True
+
+        md_file = tmp_path / "README.md"
+        md_file.write_text("# Hello\n\nWorld\n")
+
+        with app.test_client() as c:
+            resp = c.get("/api/file-content?path=README.md")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "has_pending_mutations" in data
+            assert "pending_mutation_count" in data
+            assert "affected_nodes" in data
+            assert "mtime" in data
+            assert data["has_pending_mutations"] is False
+
+    def test_REQ_p00006_A_file_content_missing_path(self, client):
+        """Missing path parameter returns 400."""
+        resp = client.get("/api/file-content")
+        assert resp.status_code == 400
+
+    def test_REQ_p00006_A_file_content_not_found(self, client):
+        """Non-existent file returns 404."""
+        resp = client.get("/api/file-content?path=nonexistent.py")
+        assert resp.status_code == 404
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CORS Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
