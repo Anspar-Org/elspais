@@ -14,6 +14,7 @@ from elspais import __version__
 from elspais.commands import (
     analyze,
     changed,
+    completion,
     config_cmd,
     edit,
     example_cmd,
@@ -21,6 +22,7 @@ from elspais.commands import (
     health,
     index,
     init,
+    install_cmd,
     link_suggest,
     reformat_cmd,
     rules_cmd,
@@ -693,35 +695,99 @@ Examples:
         help="Generate shell tab-completion scripts",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Shell Completion Setup:
+Quick Setup:
+  elspais completion --install       # Auto-detect shell and install
+  elspais completion --uninstall     # Remove completion from rc file
 
-  First, install the completion extra:
-    pip install elspais[completion]
+Manual Setup:
+  elspais completion                 # Show manual instructions
+  elspais completion --shell bash    # Generate script for specific shell
 
-  Bash (add to ~/.bashrc):
-    eval "$(register-python-argcomplete elspais)"
-
-  Zsh (add to ~/.zshrc):
-    autoload -U bashcompinit
-    bashcompinit
-    eval "$(register-python-argcomplete elspais)"
-
-  Fish (add to ~/.config/fish/config.fish):
-    register-python-argcomplete --shell fish elspais | source
-
-  Tcsh (add to ~/.tcshrc):
-    eval `register-python-argcomplete --shell tcsh elspais`
-
-  Global activation (for all argcomplete-enabled tools):
-    activate-global-python-argcomplete
-
-After adding the appropriate line, restart your shell or source the config file.
+First, install the completion extra:
+  pip install elspais[completion]
 """,
     )
     completion_parser.add_argument(
         "--shell",
         choices=["bash", "zsh", "fish", "tcsh"],
         help="Generate script for specific shell",
+    )
+    completion_parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Auto-install completion in your shell rc file",
+    )
+    completion_parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove completion from your shell rc file",
+    )
+
+    # install command
+    install_parser = subparsers.add_parser(
+        "install",
+        help="Install elspais variants (local dev version)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais install local                       Install from local source
+  elspais install local --extras all          With all extras
+  elspais install local --path /code/elspais  Explicit source path
+  elspais install local --tool uv             Force uv instead of pipx
+""",
+    )
+    install_subparsers = install_parser.add_subparsers(dest="install_action")
+    install_local_parser = install_subparsers.add_parser(
+        "local",
+        help="Install local source as editable (replaces PyPI version)",
+    )
+    install_local_parser.add_argument(
+        "--path",
+        help="Path to elspais source directory (auto-detected if omitted)",
+        metavar="PATH",
+    )
+    install_local_parser.add_argument(
+        "--extras",
+        help="Comma-separated extras to install (e.g., 'all', 'mcp,trace-view')",
+        metavar="EXTRAS",
+    )
+    install_local_parser.add_argument(
+        "--tool",
+        choices=["pipx", "uv"],
+        help="Package tool to use (auto-detected if omitted)",
+    )
+
+    # uninstall command
+    uninstall_parser = subparsers.add_parser(
+        "uninstall",
+        help="Revert elspais installation (back to PyPI)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais uninstall local                     Revert to latest PyPI release
+  elspais uninstall local --extras all        With all extras
+  elspais uninstall local --version 0.59.0    Specific version
+""",
+    )
+    uninstall_subparsers = uninstall_parser.add_subparsers(dest="uninstall_action")
+    uninstall_local_parser = uninstall_subparsers.add_parser(
+        "local",
+        help="Revert to PyPI release version",
+    )
+    uninstall_local_parser.add_argument(
+        "--extras",
+        help="Comma-separated extras to install (e.g., 'all', 'mcp,trace-view')",
+        metavar="EXTRAS",
+    )
+    uninstall_local_parser.add_argument(
+        "--version",
+        help="Specific PyPI version to install (default: latest)",
+        metavar="VERSION",
+    )
+    uninstall_local_parser.add_argument(
+        "--tool",
+        choices=["pipx", "uv"],
+        help="Package tool to use (auto-detected if omitted)",
     )
 
     # mcp command
@@ -860,6 +926,7 @@ def main(argv: list[str] | None = None) -> int:
     # Handle no command
     if not args.command:
         parser.print_help()
+        completion.maybe_show_completion_hint()
         return 0
 
     # Auto-detect git repository root and change to it
@@ -911,7 +978,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "docs":
             return docs_command(args)
         elif args.command == "completion":
-            return completion_command(args)
+            return completion.run(args)
         elif args.command == "mcp":
             return mcp_command(args)
         elif args.command == "link":
@@ -920,6 +987,10 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("Usage: elspais link suggest [options]")
                 return 1
+        elif args.command == "install":
+            return install_cmd.run(args)
+        elif args.command == "uninstall":
+            return install_cmd.run_uninstall(args)
         else:
             parser.print_help()
             return 1
@@ -963,72 +1034,6 @@ def docs_command(args: argparse.Namespace) -> int:
         pydoc.pager(output)
     else:
         print(output)
-
-    return 0
-
-
-def completion_command(args: argparse.Namespace) -> int:
-    """Handle completion command - generate shell completion scripts."""
-    import importlib.util
-
-    if importlib.util.find_spec("argcomplete") is None:
-        print("Error: argcomplete not installed.", file=sys.stderr)
-        print("Install with: pip install elspais[completion]", file=sys.stderr)
-        return 1
-
-    shell = args.shell
-
-    if shell:
-        # Generate script for specific shell
-        import subprocess
-
-        shell_flag = f"--shell={shell}" if shell in ("fish", "tcsh") else ""
-        cmd = ["register-python-argcomplete"]
-        if shell_flag:
-            cmd.append(shell_flag)
-        cmd.append("elspais")
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                print(result.stdout)
-            else:
-                print(f"Error generating completion script: {result.stderr}", file=sys.stderr)
-                return 1
-        except FileNotFoundError:
-            print("Error: register-python-argcomplete not found.", file=sys.stderr)
-            print("Make sure argcomplete is properly installed.", file=sys.stderr)
-            return 1
-    else:
-        # Show setup instructions
-        print(
-            """
-Shell Completion Setup for elspais
-===================================
-
-Bash (add to ~/.bashrc):
-  eval "$(register-python-argcomplete elspais)"
-
-Zsh (add to ~/.zshrc):
-  autoload -U bashcompinit
-  bashcompinit
-  eval "$(register-python-argcomplete elspais)"
-
-Fish (add to ~/.config/fish/config.fish):
-  register-python-argcomplete --shell fish elspais | source
-
-Tcsh (add to ~/.tcshrc):
-  eval `register-python-argcomplete --shell tcsh elspais`
-
-Generate script for a specific shell:
-  elspais completion --shell bash
-  elspais completion --shell zsh
-  elspais completion --shell fish
-  elspais completion --shell tcsh
-
-After adding the line, restart your shell or source the config file.
-"""
-        )
 
     return 0
 

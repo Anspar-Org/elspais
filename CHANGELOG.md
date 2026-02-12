@@ -2,6 +2,14 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.61.0] - 2026-02-11
+
+### Added
+
+- **`elspais install local`**: Install local source as editable pipx/uv install, replacing the global PyPI version for dev testing
+- **`elspais uninstall local`**: Revert to PyPI release version with optional `--version` pinning
+- Auto-detects pipx/uv, source root via `pyproject.toml`, and currently installed extras
+
 ## [0.54.1] - 2026-02-10
 
 ### Changed
