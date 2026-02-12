@@ -322,6 +322,18 @@ body {
 <script type="application/json" id="source-files">
 {{ source_files | tojson }}
 </script>
+
+<script type="application/json" id="node-index">
+{{ node_index | tojson }}
+</script>
+
+<script type="application/json" id="coverage-index">
+{{ coverage_index | tojson }}
+</script>
+
+<script type="application/json" id="status-data">
+{{ status_data | tojson }}
+</script>
 {% endif %}
 
 <!-- =====================================================================
@@ -332,6 +344,8 @@ body {
 const MODE = '{{ mode }}';
 
 {% include "partials/js/_utils.js.j2" %}
+
+{% include "partials/js/_api-adapter.js.j2" %}
 
 {% if mode == 'edit' %}
 // State
@@ -612,6 +626,13 @@ document.addEventListener('DOMContentLoaded', function() {
             var ftb = document.getElementById('filter-toggle-btn');
             if (tb) tb.classList.add('toolbar-hidden');
             if (ftb) ftb.classList.add('dimmed');
+        }
+        // Restore panel widths
+        if (saved.navPanelWidth) {
+            document.getElementById('nav-panel').style.width = saved.navPanelWidth;
+        }
+        if (saved.fileViewerWidth) {
+            document.getElementById('file-viewer-panel').style.width = saved.fileViewerWidth;
         }
         if (saved.openCardIds && saved.openCardIds.length > 0) {
             const collapsedSet = new Set(saved.collapsedCards || []);

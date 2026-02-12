@@ -1,23 +1,9 @@
-// Partial: _edit-engine.js.j2 — API helpers, toast, edit toggle, mutations, undo/save/revert, search
+// Partial: _edit-engine.js.j2 — toast, edit toggle, mutations, undo/save/revert, search
+// Note: apiFetch() is now defined in _api-adapter.js.j2 (shared by both modes)
 
 // =====================================================================
-// API Helpers
+// Mutation Helper
 // =====================================================================
-
-async function apiFetch(url, options) {
-    try {
-        const resp = await fetch(url, options);
-        const data = await resp.json();
-        if (!resp.ok && data.error) {
-            showToast(data.error, 'error');
-            return null;
-        }
-        return data;
-    } catch (err) {
-        showToast('Network error: ' + err.message, 'error');
-        return null;
-    }
-}
 
 async function mutate(endpoint, payload) {
     const data = await apiFetch(endpoint, {

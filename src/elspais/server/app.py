@@ -128,6 +128,10 @@ def create_app(
                 base_path=str(_state["working_dir"]),
                 pygments_css=get_pygments_css(),
                 pygments_css_dark=get_pygments_css(style="monokai", scope=".dark-theme .highlight"),
+                # Empty dicts — edit mode uses live API, not embedded data
+                node_index={},
+                coverage_index={},
+                status_data={},
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200

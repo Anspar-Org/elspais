@@ -1,0 +1,114 @@
+// Partial: _api-adapter.js.j2 — Unified apiFetch() adapter
+// Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
+//
+// Edit mode: delegates to real fetch() for live API calls.
+// View mode: routes URL patterns to embedded JSON data.
+
+{% if mode == 'edit' %}
+// ── Edit mode: real API calls ──
+var _embeddedData = null;
+
+async function apiFetch(url, options) {
+    try {
+        var resp = await fetch(url, options);
+        var data = await resp.json();
+        if (!resp.ok && data.error) {
+            showToast(data.error, 'error');
+            return null;
+        }
+        return data;
+    } catch (err) {
+        showToast('Network error: ' + err.message, 'error');
+        return null;
+    }
+}
+
+{% else %}
+// ── View mode: read from embedded JSON ──
+var _embeddedData = {
+    nodes: JSON.parse(document.getElementById('node-index').textContent),
+    coverage: JSON.parse(document.getElementById('coverage-index').textContent),
+    status: JSON.parse(document.getElementById('status-data').textContent),
+    tree: JSON.parse(document.getElementById('tree-data').textContent),
+    sources: JSON.parse(document.getElementById('source-files').textContent)
+};
+
+function apiFetch(url) {
+    var m;
+    // /api/node/<id>
+    if ((m = url.match(/\/api\/node\/(.+)/))) {
+        var id = decodeURIComponent(m[1]);
+        var node = _embeddedData.nodes[id];
+        return Promise.resolve(node || {error: 'not found'});
+    }
+    // /api/test-coverage/<id>
+    if ((m = url.match(/\/api\/test-coverage\/(.+)/))) {
+        var id = decodeURIComponent(m[1]);
+        var entry = _embeddedData.coverage[id];
+        return Promise.resolve(entry ? entry.test : {success: false});
+    }
+    // /api/code-coverage/<id>
+    if ((m = url.match(/\/api\/code-coverage\/(.+)/))) {
+        var id = decodeURIComponent(m[1]);
+        var entry = _embeddedData.coverage[id];
+        return Promise.resolve(entry ? entry.code : {success: false});
+    }
+    // /api/tree-data
+    if (url === '/api/tree-data') {
+        return Promise.resolve(_embeddedData.tree);
+    }
+    // /api/status
+    if (url === '/api/status') {
+        return Promise.resolve(_embeddedData.status);
+    }
+    // /api/file-content — route to embedded source-files data
+    if (url.indexOf('/api/file-content') === 0) {
+        var params = new URLSearchParams(url.split('?')[1] || '');
+        var path = params.get('path') || '';
+        var fileData = _embeddedData.sources[path];
+        if (fileData) {
+            return Promise.resolve({
+                lines: (fileData.raw || '').split('\n'),
+                highlighted_lines: fileData.lines || [],
+                language: fileData.language || '',
+                line_count: (fileData.lines || []).length,
+                has_pending_mutations: false,
+                pending_mutation_count: 0,
+                affected_nodes: []
+            });
+        }
+        return Promise.resolve({error: 'file not found in embedded data'});
+    }
+    // /api/requirement/<id> — same as /api/node/ for requirements
+    if ((m = url.match(/\/api\/requirement\/(.+)/))) {
+        var id = decodeURIComponent(m[1]);
+        var node = _embeddedData.nodes[id];
+        return Promise.resolve(node || {error: 'not found'});
+    }
+    // /api/dirty — always clean in static mode
+    if (url === '/api/dirty') {
+        return Promise.resolve({dirty: false, mutation_count: 0});
+    }
+    // /api/search — basic client-side search in embedded nodes
+    if (url.indexOf('/api/search') === 0) {
+        var params = new URLSearchParams(url.split('?')[1] || '');
+        var query = (params.get('q') || '').toLowerCase();
+        if (!query) return Promise.resolve([]);
+        var results = [];
+        var nodes = _embeddedData.nodes;
+        for (var key in nodes) {
+            var n = nodes[key];
+            if (n.kind === 'requirement') {
+                var title = (n.title || '').toLowerCase();
+                var id = (n.id || '').toLowerCase();
+                if (title.indexOf(query) !== -1 || id.indexOf(query) !== -1) {
+                    results.push({id: n.id, title: n.title, level: (n.properties || {}).level});
+                }
+            }
+        }
+        return Promise.resolve(results);
+    }
+    // Fallback: not available in static mode
+    return Promise.resolve({error: 'not available in static mode'});
+}
+{% endif %}

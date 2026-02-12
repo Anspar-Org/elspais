@@ -19,7 +19,9 @@ function saveState() {
         filterCoverage: editState.filterCoverage,
         fontSize: editState.fontSize,
         theme: editState.theme,
-        toolbarHidden: editState.toolbarHidden
+        toolbarHidden: editState.toolbarHidden,
+        navPanelWidth: document.getElementById('nav-panel').style.width || null,
+        fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };
     // Track which cards are collapsed
     editState.openCards.forEach((info, id) => {

@@ -153,6 +153,11 @@ class HTMLGenerator:
         source_files = self._collect_source_files() if embed_content else {}
         pygments_css = self._get_pygments_css() if source_files else ""
 
+        # Build embedded data indexes for view-mode apiFetch adapter
+        node_index = self._build_node_index() if embed_content else {}
+        coverage_index = self._build_coverage_index() if embed_content else {}
+        status_data = self._build_status_data() if embed_content else {}
+
         # Update journey count in stats
         stats.journey_count = len(journeys)
 
@@ -167,6 +172,9 @@ class HTMLGenerator:
             tree_data=tree_data,
             source_files=source_files,
             pygments_css=pygments_css,
+            node_index=node_index,
+            coverage_index=coverage_index,
+            status_data=status_data,
             version=self.version,
             base_path=self.base_path,
         )
@@ -736,6 +744,44 @@ class HTMLGenerator:
                 },
             }
         return data
+
+    def _build_node_index(self) -> dict[str, Any]:
+        """Build node index for embedded JSON — matches /api/node/<id> response shape.
+
+        Delegates to the MCP server's _serialize_node_generic() to produce
+        identical JSON as the live API, ensuring view mode and edit mode
+        see the same data structure.
+        """
+        from elspais.mcp.server import _serialize_node_generic
+
+        index: dict[str, Any] = {}
+        for node in self.graph.all_nodes():
+            index[node.id] = _serialize_node_generic(node, self.graph)
+        return index
+
+    def _build_coverage_index(self) -> dict[str, Any]:
+        """Build per-requirement coverage index for embedded JSON.
+
+        Each entry is keyed by requirement ID and contains both test coverage
+        (matching /api/test-coverage/<id>) and code coverage
+        (matching /api/code-coverage/<id>) response shapes.
+        """
+        from elspais.graph import NodeKind
+        from elspais.mcp.server import _get_assertion_code_map, _get_assertion_test_map
+
+        index: dict[str, Any] = {}
+        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            index[node.id] = {
+                "test": _get_assertion_test_map(self.graph, node.id),
+                "code": _get_assertion_code_map(self.graph, node.id),
+            }
+        return index
+
+    def _build_status_data(self) -> dict[str, Any]:
+        """Build graph status data for embedded JSON — matches /api/status response shape."""
+        from elspais.mcp.server import _get_graph_status
+
+        return _get_graph_status(self.graph)
 
     def _collect_source_files(self) -> dict[str, Any]:
         """Collect source file contents with syntax highlighting for inline viewer.

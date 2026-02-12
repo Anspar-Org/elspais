@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.62.0] - 2026-02-12
+
+### Added
+
+- **Embedded data layer for unified trace viewer**: View-mode static HTML now embeds node index, coverage index, and status data as JSON script tags, enabling a unified `apiFetch()` adapter that routes to embedded data in view mode and live API in edit mode (REQ-p00006-A, REQ-p00006-B, REQ-p00006-C)
+
 ## [0.61.0] - 2026-02-11
 
 ### Added
