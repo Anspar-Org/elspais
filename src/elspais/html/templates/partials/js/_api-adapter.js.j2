@@ -39,19 +39,19 @@ function apiFetch(url) {
     if ((m = url.match(/\/api\/node\/(.+)/))) {
         var id = decodeURIComponent(m[1]);
         var node = _embeddedData.nodes[id];
-        return Promise.resolve(node || {error: 'not found'});
+        return Promise.resolve(node || null);
     }
     // /api/test-coverage/<id>
     if ((m = url.match(/\/api\/test-coverage\/(.+)/))) {
         var id = decodeURIComponent(m[1]);
         var entry = _embeddedData.coverage[id];
-        return Promise.resolve(entry ? entry.test : {success: false});
+        return Promise.resolve(entry ? entry.test : null);
     }
     // /api/code-coverage/<id>
     if ((m = url.match(/\/api\/code-coverage\/(.+)/))) {
         var id = decodeURIComponent(m[1]);
         var entry = _embeddedData.coverage[id];
-        return Promise.resolve(entry ? entry.code : {success: false});
+        return Promise.resolve(entry ? entry.code : null);
     }
     // /api/tree-data
     if (url === '/api/tree-data') {
@@ -77,13 +77,13 @@ function apiFetch(url) {
                 affected_nodes: []
             });
         }
-        return Promise.resolve({error: 'file not found in embedded data'});
+        return Promise.resolve(null);
     }
     // /api/requirement/<id> — same as /api/node/ for requirements
     if ((m = url.match(/\/api\/requirement\/(.+)/))) {
         var id = decodeURIComponent(m[1]);
         var node = _embeddedData.nodes[id];
-        return Promise.resolve(node || {error: 'not found'});
+        return Promise.resolve(node || null);
     }
     // /api/dirty — always clean in static mode
     if (url === '/api/dirty') {
@@ -109,6 +109,6 @@ function apiFetch(url) {
         return Promise.resolve(results);
     }
     // Fallback: not available in static mode
-    return Promise.resolve({error: 'not available in static mode'});
+    return Promise.resolve(null);
 }
 {% endif %}

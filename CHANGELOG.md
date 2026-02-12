@@ -2,6 +2,21 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.63.0] - 2026-02-12
+
+### Changed
+
+- **Unified 3-panel layout for both view and edit modes**: Replaced the view-mode table layout with the 3-panel layout (nav tree + card stack + file viewer) already used by edit mode. Both modes now share the same interactive layout, state management (`editState`), and cookie persistence (REQ-p00006-A, REQ-d00010-A)
+- **Unified file viewer**: Single implementation using `apiFetch()` for both modes with vscode:// link interception, markdown rendering toggle, and syntax highlighting
+- **Unified header and toolbar**: Edit-mode header (with dynamic stats via JS) and toolbar (git filters, status/coverage dropdowns) now serve both modes, with edit-specific buttons wrapped in mode conditionals
+- **Dark theme support in view mode**: Added `pygments_css_dark` generation to HTMLGenerator for syntax highlighting in dark theme
+
+### Removed
+
+- View-mode table layout, flat/hierarchical view toggle, table column filters
+- Dead CSS: `_table.css.j2`, `_tree-structure.css.j2`, `_code-test-rows.css.j2`, `_responsive.css.j2`, `_tabs.css.j2`, `_header.css.j2`, `_file-viewer.css.j2`
+- Dead JS: `_filter-engine.js.j2`, `_journey-engine.js.j2`
+
 ## [0.62.0] - 2026-02-12
 
 ### Added

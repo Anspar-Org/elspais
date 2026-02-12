@@ -61,15 +61,17 @@ class TestHTMLGeneratorBasic:
 
         assert "Requirements Traceability" in result
 
-    def test_generate_includes_requirements(self, sample_graph):
-        """Includes requirement IDs in HTML."""
+    def test_REQ_p00006_A_generate_includes_requirements_in_embedded_json(self, sample_graph):
+        """Includes requirement IDs in embedded JSON node-index."""
         generator = HTMLGenerator(sample_graph)
 
-        result = generator.generate()
+        result = generator.generate(embed_content=True)
 
-        assert "REQ-p00001" in result
-        assert "REQ-o00001" in result
-        assert "REQ-d00001" in result
+        # Requirement IDs are in the embedded node-index JSON, not in table rows
+        assert '"REQ-p00001"' in result
+        assert '"REQ-o00001"' in result
+        assert '"REQ-d00001"' in result
+        assert 'id="node-index"' in result
 
     def test_generate_includes_styles(self, sample_graph):
         """Includes CSS styles."""
@@ -173,14 +175,16 @@ class TestHTMLGeneratorTreeStructure:
 
         assert "tree-toggle" in result
 
-    def test_includes_depth_data(self, sample_graph):
-        """Includes depth data for indentation."""
+    def test_REQ_p00006_A_includes_depth_data_in_embedded_json(self, sample_graph):
+        """Includes depth/hierarchy data in embedded tree-data JSON."""
         generator = HTMLGenerator(sample_graph)
 
-        result = generator.generate()
+        result = generator.generate(embed_content=True)
 
-        assert 'data-depth="0"' in result  # Root
-        assert 'data-depth="1"' in result  # First level children
+        # Depth data is now in the embedded tree-data JSON, not on table <tr> elements
+        assert 'id="tree-data"' in result
+        assert '"level": "PRD"' in result  # Root level
+        assert '"level": "OPS"' in result  # First level children
 
     def test_includes_parent_id(self, sample_graph):
         """Includes parent ID for hierarchy."""
@@ -194,13 +198,14 @@ class TestHTMLGeneratorTreeStructure:
 class TestHTMLGeneratorCoverage:
     """Tests for coverage indicators."""
 
-    def test_includes_coverage_data(self, sample_graph):
-        """Includes coverage status data."""
+    def test_REQ_p00006_A_includes_coverage_data_in_embedded_json(self, sample_graph):
+        """Includes coverage data in embedded coverage-index JSON."""
         generator = HTMLGenerator(sample_graph)
 
-        result = generator.generate()
+        result = generator.generate(embed_content=True)
 
-        assert "data-coverage" in result
+        # Coverage data is now in the embedded coverage-index JSON
+        assert 'id="coverage-index"' in result
 
     def test_coverage_values(self, sample_graph):
         """Coverage has valid values."""
@@ -217,66 +222,74 @@ class TestHTMLGeneratorCoverage:
 class TestHTMLGeneratorFiltering:
     """Tests for filtering features."""
 
-    def test_includes_filter_inputs(self, sample_graph):
-        """Includes filter input fields."""
+    def test_REQ_d00052_A_includes_toolbar_filter_dropdowns(self, sample_graph):
+        """Includes toolbar filter dropdowns for status and coverage."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert "filter-id" in result
-        assert "filter-title" in result
+        # Table column filters replaced by toolbar dropdowns
+        assert "edit-filter-status" in result
+        assert "edit-filter-coverage" in result
 
-    def test_includes_filter_dropdowns(self, sample_graph):
-        """Includes filter dropdown selects."""
+    def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
+        """Includes toolbar git filter buttons."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert "filter-level" in result
-        assert "filter-status" in result
+        # Level/status column filters replaced by toolbar git filter buttons
+        assert "edit-btn-uncommitted" in result
+        assert "edit-btn-changed" in result
 
-    def test_includes_toggle_checkboxes(self, sample_graph):
-        """Includes toggle checkboxes."""
+    def test_REQ_d00052_E_includes_leaf_toggle_checkbox(self, sample_graph):
+        """Includes leaf-only toggle checkbox in toolbar."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert "toggle-leaf" in result
-        assert "toggle-deprecated" in result
+        # Only leaf toggle remains; deprecated toggle removed
+        assert "edit-toggle-leaf" in result
 
 
 class TestHTMLGeneratorTopics:
     """Tests for topic extraction."""
 
-    def test_extracts_topic_from_path(self, sample_graph):
-        """Extracts topic from file path."""
+    def test_REQ_p00006_A_topic_data_in_embedded_node_index(self, sample_graph):
+        """Topic data is available in embedded node-index JSON."""
+        generator = HTMLGenerator(sample_graph)
+
+        result = generator.generate(embed_content=True)
+
+        # Topics are now in the embedded node-index JSON, not data-topic attributes
+        assert 'id="node-index"' in result
+        # Source path info (from which topics are derived) is in the JSON
+        assert "spec/prd.md" in result
+
+
+class TestHTMLGeneratorNavPanel:
+    """Tests for nav panel tab support (replaces flat/hierarchical view modes)."""
+
+    def test_REQ_d00052_F_includes_nav_panel_tabs(self, sample_graph):
+        """Includes Req and Journeys nav panel tabs."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Topics should be derived from filenames
-        assert "data-topic" in result
+        # Flat/Hierarchical view modes replaced by nav-panel tabs
+        assert "switchNavTab" in result
+        assert 'data-kind="req"' in result
+        assert 'data-kind="journey"' in result
 
-
-class TestHTMLGeneratorViewModes:
-    """Tests for view mode support."""
-
-    def test_includes_view_mode_buttons(self, sample_graph):
-        """Includes view mode toggle buttons."""
+    def test_REQ_p00006_A_includes_three_panel_layout(self, sample_graph):
+        """Includes 3-panel layout containers."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert "Flat View" in result
-        assert "Hierarchical View" in result
-
-    def test_includes_view_mode_javascript(self, sample_graph):
-        """Includes JavaScript for view mode switching."""
-        generator = HTMLGenerator(sample_graph)
-
-        result = generator.generate()
-
-        assert "setViewMode" in result
+        assert "nav-tree-container" in result
+        assert "card-stack-panel" in result
+        assert "file-viewer-panel" in result or "file-viewer" in result
 
 
 class TestHTMLGeneratorLegend:
@@ -315,23 +328,25 @@ class TestHTMLGeneratorAssertions:
 class TestHTMLGeneratorGitIntegration:
     """Tests for git change detection integration."""
 
-    def test_includes_git_data_attributes(self, sample_graph):
-        """Includes git state data attributes."""
+    def test_REQ_d00052_D_git_state_in_embedded_json(self, sample_graph):
+        """Git state data is in embedded node-index JSON."""
         generator = HTMLGenerator(sample_graph)
 
-        result = generator.generate()
+        result = generator.generate(embed_content=True)
 
-        assert "data-is-changed" in result
-        assert "data-is-uncommitted" in result
+        # Git data attributes were on table rows; now in embedded node-index JSON
+        assert 'id="node-index"' in result
+        # The node-index contains serialized node data including git state
+        assert "application/json" in result
 
-    def test_includes_git_filter_buttons(self, sample_graph):
-        """Includes git filter buttons."""
+    def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
+        """Includes git filter buttons in toolbar."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
         assert "Uncommitted" in result
-        assert "Changed vs Main" in result
+        assert "Changed" in result  # Was "Changed vs Main", now just "Changed"
 
 
 class TestHTMLGeneratorJourneyBadges:

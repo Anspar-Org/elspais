@@ -152,6 +152,7 @@ class HTMLGenerator:
         # Collect source files with syntax highlighting for inline viewer
         source_files = self._collect_source_files() if embed_content else {}
         pygments_css = self._get_pygments_css() if source_files else ""
+        pygments_css_dark = self._get_pygments_css_dark() if source_files else ""
 
         # Build embedded data indexes for view-mode apiFetch adapter
         node_index = self._build_node_index() if embed_content else {}
@@ -172,6 +173,7 @@ class HTMLGenerator:
             tree_data=tree_data,
             source_files=source_files,
             pygments_css=pygments_css,
+            pygments_css_dark=pygments_css_dark,
             node_index=node_index,
             coverage_index=coverage_index,
             status_data=status_data,
@@ -835,6 +837,17 @@ class HTMLGenerator:
         from elspais.html.highlighting import get_pygments_css
 
         return get_pygments_css()
+
+    def _get_pygments_css_dark(self) -> str:
+        """Generate dark-theme Pygments CSS for syntax highlighting.
+
+        Returns CSS rules scoped under .dark-theme .highlight for the
+        file viewer panel when dark theme is active.
+        Returns empty string if Pygments is not installed.
+        """
+        from elspais.html.highlighting import get_pygments_css
+
+        return get_pygments_css(style="monokai", scope=".dark-theme .highlight")
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""

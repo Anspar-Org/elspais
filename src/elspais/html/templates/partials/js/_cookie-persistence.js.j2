@@ -1,10 +1,9 @@
-// Partial: _cookie-persistence.js.j2 — Merged state save/load
+// Partial: _cookie-persistence.js.j2 — Unified state save/load (both modes)
+// Uses mode-specific cookie name but same save/load format
 
-{% if mode == 'edit' %}
-
-const COOKIE_NAME = 'elspais_trace_edit_state';
+const COOKIE_NAME = MODE === 'edit' ? 'elspais_trace_edit_state' : 'elspais_trace_view_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 6;  // v6: removed hideTests/hideResults (tests moved to validation buttons)
+const COOKIE_VERSION = 7;  // v7: unified 3-panel layout for both modes
 
 function saveState() {
     const stateToSave = {
@@ -24,16 +23,16 @@ function saveState() {
         fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };
     // Track which cards are collapsed
-    editState.openCards.forEach((info, id) => {
+    editState.openCards.forEach(function(info, id) {
         if (info.collapsed) stateToSave.collapsedCards.push(id);
     });
-    const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
+    var expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
     document.cookie = COOKIE_NAME + '=' + encodeURIComponent(JSON.stringify(stateToSave)) +
         '; expires=' + expires + '; path=/; SameSite=Lax';
 }
 
 function loadState() {
-    const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
+    var match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
     if (!match) return null;
     try {
         var saved = JSON.parse(decodeURIComponent(match[2]));
@@ -43,178 +42,3 @@ function loadState() {
         return null;
     }
 }
-
-{% else %}
-
-const COOKIE_NAME = 'elspais_trace_view_state';
-const COOKIE_DAYS = 30;
-
-function saveStateToCookie() {
-    const journeyGroupBy = document.getElementById('journey-group-by');
-    const journeySearch = document.getElementById('journey-search');
-
-    const stateToSave = {
-        viewMode: state.viewMode,
-        activeFilters: state.activeFilters,
-        collapsedNodes: Array.from(state.collapsedNodes),  // Convert Set to Array for JSON
-        toggleLeaf: document.getElementById('toggle-leaf').checked,
-        toggleDeprecated: document.getElementById('toggle-deprecated').checked,
-        toggleRoadmap: document.getElementById('toggle-roadmap').checked,
-        toggleCode: document.getElementById('toggle-code').checked,
-        toggleIndirect: state.indirectCoverage,
-        filterLevel: document.getElementById('filter-level').value,
-        filterStatus: document.getElementById('filter-status').value,
-        filterCov: document.getElementById('filter-cov').value,
-        filterTopic: document.getElementById('filter-topic').value,
-        activeTab: state.activeTab,
-        // Journey state
-        journeyGroupBy: journeyGroupBy ? journeyGroupBy.value : 'none',
-        journeySearch: journeySearch ? journeySearch.value : '',
-        collapsedJourneyGroups: Array.from(collapsedJourneyGroups),
-        // File viewer state
-        splitRatio: state.splitRatio
-    };
-    const expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
-    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateToSave))}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-function loadStateFromCookie() {
-    const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
-    if (!match) return null;
-    try {
-        return JSON.parse(decodeURIComponent(match[2]));
-    } catch {
-        return null;
-    }
-}
-
-function restoreState() {
-    const saved = loadStateFromCookie();
-    if (!saved) return;
-
-    // Restore view mode
-    if (saved.viewMode) {
-        state.viewMode = saved.viewMode;
-        document.querySelectorAll('[data-view]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.view === saved.viewMode);
-        });
-        document.getElementById('view-mode-label').textContent =
-            saved.viewMode === 'flat' ? 'Flat View' : 'Hierarchical View';
-    }
-
-    // Restore active filters
-    if (saved.activeFilters) {
-        Object.assign(state.activeFilters, saved.activeFilters);
-        Object.keys(state.activeFilters).forEach(key => {
-            const btn = document.getElementById('btn-' + key);
-            if (btn) btn.classList.toggle('active', state.activeFilters[key]);
-        });
-        // Update level badges
-        document.getElementById('badge-prd')?.classList.toggle('active', state.activeFilters.levelPrd);
-        document.getElementById('badge-ops')?.classList.toggle('active', state.activeFilters.levelOps);
-        document.getElementById('badge-dev')?.classList.toggle('active', state.activeFilters.levelDev);
-        document.getElementById('badge-code')?.classList.toggle('active', state.activeFilters.code);
-        document.getElementById('badge-tests')?.classList.toggle('active', state.activeFilters.tests);
-        document.getElementById('badge-results')?.classList.toggle('active', state.activeFilters.results);
-        document.getElementById('badge-associated')?.classList.toggle('active', state.activeFilters.associated);
-        document.getElementById('badge-core')?.classList.toggle('active', state.activeFilters.core);
-    }
-
-    // Restore checkboxes
-    if (saved.toggleLeaf !== undefined) document.getElementById('toggle-leaf').checked = saved.toggleLeaf;
-    if (saved.toggleDeprecated !== undefined) document.getElementById('toggle-deprecated').checked = saved.toggleDeprecated;
-    if (saved.toggleRoadmap !== undefined) document.getElementById('toggle-roadmap').checked = saved.toggleRoadmap;
-    if (saved.toggleCode !== undefined) document.getElementById('toggle-code').checked = saved.toggleCode;
-    if (saved.toggleIndirect !== undefined) {
-        state.indirectCoverage = saved.toggleIndirect;
-        document.getElementById('toggle-indirect').checked = saved.toggleIndirect;
-        if (saved.toggleIndirect) toggleIndirectCoverage();
-    }
-
-    // Restore dropdowns
-    if (saved.filterLevel) document.getElementById('filter-level').value = saved.filterLevel;
-    if (saved.filterStatus) document.getElementById('filter-status').value = saved.filterStatus;
-    if (saved.filterCov) document.getElementById('filter-cov').value = saved.filterCov;
-    if (saved.filterTopic) document.getElementById('filter-topic').value = saved.filterTopic;
-
-    // Restore tab
-    if (saved.activeTab) {
-        state.activeTab = saved.activeTab;
-        switchTab(saved.activeTab, false);
-    }
-
-    // Restore collapsed nodes (tree expand/collapse state)
-    if (saved.collapsedNodes && Array.isArray(saved.collapsedNodes)) {
-        state.collapsedNodes = new Set(saved.collapsedNodes);
-        // Update toggle button visuals
-        document.querySelectorAll('.tree-toggle').forEach(toggle => {
-            const nodeId = toggle.dataset.nodeId;
-            if (state.collapsedNodes.has(nodeId)) {
-                toggle.classList.remove('expanded');
-                toggle.classList.add('collapsed');
-            } else if (!toggle.classList.contains('leaf')) {
-                toggle.classList.remove('collapsed');
-                toggle.classList.add('expanded');
-            }
-        });
-    }
-
-    // Restore journey state
-    if (saved.collapsedJourneyGroups && Array.isArray(saved.collapsedJourneyGroups)) {
-        collapsedJourneyGroups = new Set(saved.collapsedJourneyGroups);
-    }
-    if (saved.journeySearch) {
-        const journeySearch = document.getElementById('journey-search');
-        if (journeySearch) journeySearch.value = saved.journeySearch;
-    }
-    if (saved.journeyGroupBy) {
-        const journeyGroupBy = document.getElementById('journey-group-by');
-        if (journeyGroupBy) {
-            journeyGroupBy.value = saved.journeyGroupBy;
-            // Apply grouping after DOM is ready
-            setTimeout(() => regroupJourneys(), 0);
-        }
-    }
-
-    // Restore file viewer split ratio
-    if (saved.splitRatio) {
-        state.splitRatio = saved.splitRatio;
-    }
-}
-
-function clearAllCookies() {
-    document.cookie = `${COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    // Reset to defaults
-    state.viewMode = 'hierarchical';
-    state.activeFilters = {
-        uncommitted: false, changed: false, code: false, tests: false, results: false, associated: false, core: false,
-        levelPrd: false, levelOps: false, levelDev: false
-    };
-    state.collapsedNodes.clear();
-    state.activeTab = 'requirements';
-
-    // Reset UI
-    document.querySelectorAll('[data-view]').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === 'hierarchical');
-    });
-    document.querySelectorAll('.stat-badge').forEach(badge => badge.classList.remove('active'));
-    document.querySelectorAll('.btn-group .btn').forEach(btn => {
-        if (!btn.dataset.view) btn.classList.remove('active');
-    });
-    document.getElementById('toggle-leaf').checked = false;
-    document.getElementById('toggle-deprecated').checked = false;
-    document.getElementById('toggle-roadmap').checked = false;
-    document.getElementById('toggle-code').checked = false;
-    document.getElementById('filter-id').value = '';
-    document.getElementById('filter-title').value = '';
-    document.getElementById('filter-level').value = '';
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-cov').value = '';
-    document.getElementById('filter-topic').value = '';
-
-    switchTab('requirements', false);
-    collapseAll();
-    alert('Preferences cleared! Page reset to defaults.');
-}
-
-{% endif %}

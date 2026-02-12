@@ -1,6 +1,4 @@
-// Partial: _divider.js.j2 — Resizable panel dividers
-
-{% if mode == 'edit' %}
+// Partial: _divider.js.j2 — Resizable panel dividers (unified for both modes)
 
 function initDividers() {
     initDivider('divider-left', 'nav-panel', 'left');
@@ -42,42 +40,3 @@ function initDivider(dividerId, panelId, side) {
         saveState();
     });
 }
-
-{% else %}
-
-(function() {
-    const divider = document.getElementById('split-divider');
-    const layout = document.getElementById('split-layout');
-    const panel = document.getElementById('file-viewer-panel');
-    let isDragging = false;
-
-    divider.addEventListener('mousedown', function(e) {
-        isDragging = true;
-        divider.classList.add('dragging');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', function(e) {
-        if (!isDragging) return;
-        const layoutRect = layout.getBoundingClientRect();
-        const totalWidth = layoutRect.width;
-        const mouseX = e.clientX - layoutRect.left;
-        // Calculate panel width as percentage (panel is on the right)
-        const panelPct = Math.max(15, Math.min(75, ((totalWidth - mouseX) / totalWidth) * 100));
-        panel.style.width = panelPct + '%';
-        state.splitRatio = panelPct;
-    });
-
-    document.addEventListener('mouseup', function() {
-        if (!isDragging) return;
-        isDragging = false;
-        divider.classList.remove('dragging');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        saveStateToCookie();
-    });
-})();
-
-{% endif %}
