@@ -3,7 +3,7 @@
 
 const COOKIE_NAME = MODE === 'edit' ? 'elspais_trace_edit_state' : 'elspais_trace_view_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 7;  // v7: unified 3-panel layout for both modes
+const COOKIE_VERSION = 8;  // v8: search in both modes, new toolbar filter toggles
 
 function saveState() {
     const stateToSave = {

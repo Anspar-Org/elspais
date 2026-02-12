@@ -2,6 +2,14 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.63.1] - 2026-02-12
+
+### Added
+
+- **Search in view mode**: Extracted search into shared `_search.js.j2` partial, enabling search in both static HTML and edit mode. `Ctrl+K` shortcut works in both modes (REQ-p00006-A, REQ-p00006-B)
+- **New toolbar filter toggles**: Added Hide Deprecated, Hide Roadmap, Code Refs, and Indirect Coverage toggle checkboxes to the unified filter toolbar
+- Cookie version bumped to v8 for new filter state keys
+
 ## [0.63.0] - 2026-02-12
 
 ### Changed

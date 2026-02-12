@@ -171,6 +171,10 @@ const editState = {
         changed: false,
         main: false,
         leaf: false,
+        deprecated: false,
+        roadmap: false,
+        codeRefs: false,
+        indirectCoverage: false,
         hiddenRepos: []
     },
     knownRepos: [],
@@ -206,6 +210,8 @@ const editState = {
 })();
 
 {% include "partials/js/_cookie-persistence.js.j2" %}
+
+{% include "partials/js/_search.js.j2" %}
 
 {% if mode == 'edit' %}
 {% include "partials/js/_edit-engine.js.j2" %}
@@ -312,6 +318,10 @@ document.addEventListener('keydown', function(e) {
             closeFileViewer();
         }
     }
+    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('search-input').focus();
+    }
     {% if mode == 'edit' %}
     if (e.key === 'e' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
@@ -321,10 +331,6 @@ document.addEventListener('keydown', function(e) {
         e.preventDefault();
         doUndo();
     }
-    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        document.getElementById('search-input').focus();
-    }
     {% endif %}
 });
 
@@ -332,8 +338,8 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     loadTreeData();  // loads tree data, updates header stats, renders nav tree
     initDividers();
-    {% if mode == 'edit' %}
     initSearch();
+    {% if mode == 'edit' %}
     refreshDirtyCount();
     {% endif %}
 
@@ -379,6 +385,14 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update checkboxes (null-guard)
             var leafCb = document.getElementById('edit-toggle-leaf');
             if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
+            var deprecatedCb = document.getElementById('edit-toggle-deprecated');
+            if (deprecatedCb) deprecatedCb.checked = !!editState.activeFilters.deprecated;
+            var roadmapCb = document.getElementById('edit-toggle-roadmap');
+            if (roadmapCb) roadmapCb.checked = !!editState.activeFilters.roadmap;
+            var codeRefsCb = document.getElementById('edit-toggle-codeRefs');
+            if (codeRefsCb) codeRefsCb.checked = !!editState.activeFilters.codeRefs;
+            var indirectCb = document.getElementById('edit-toggle-indirectCoverage');
+            if (indirectCb) indirectCb.checked = !!editState.activeFilters.indirectCoverage;
         }
         if (saved.filterStatus) {
             editState.filterStatus = saved.filterStatus;

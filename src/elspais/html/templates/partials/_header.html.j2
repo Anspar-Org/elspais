@@ -1,5 +1,6 @@
 {# Partial: _header.html.j2 — Unified header (both modes) #}
-{# Edit-specific elements (search, edit toggle, save/revert) wrapped in mode conditionals #}
+{# Implements: REQ-p00006-A, REQ-p00006-B #}
+{# Search available in both modes; edit controls (toggle, save/revert) wrapped in mode conditionals #}
 
 <header class="header">
     <div class="header-left">
@@ -24,14 +25,12 @@
         </div>
     </div>
 
-    {% if mode == 'edit' %}
     <div class="header-center">
         <div class="search-box" id="search-box">
             <input type="text" id="search-input" placeholder="Search requirements..." autocomplete="off">
             <div class="search-results" id="search-results"></div>
         </div>
     </div>
-    {% endif %}
 
     <div class="header-right">
         {% if mode == 'edit' %}

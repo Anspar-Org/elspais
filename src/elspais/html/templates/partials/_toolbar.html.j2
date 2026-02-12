@@ -1,5 +1,5 @@
 {# Partial: _toolbar.html.j2 — Unified filter toolbar (both modes) #}
-{# Uses nav-tree compatible filters: git, status, coverage, leaf #}
+{# Implements: REQ-p00006-A, REQ-p00006-B #}
 
 <div class="toolbar" id="edit-toolbar">
     <!-- Git Filters -->
@@ -27,6 +27,22 @@
         <label class="toggle-item">
             <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
             <span>Leaf Only</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-deprecated" onchange="toggleEditFilter('deprecated')">
+            <span>Hide Deprecated</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-roadmap" onchange="toggleEditFilter('roadmap')">
+            <span>Hide Roadmap</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-codeRefs" onchange="toggleEditFilter('codeRefs')">
+            <span>Code Refs</span>
+        </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-indirectCoverage" onchange="toggleEditFilter('indirectCoverage')">
+            <span>Indirect Cov</span>
         </label>
     </div>
 
