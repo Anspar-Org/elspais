@@ -166,7 +166,7 @@ function renderNavTree() {
     var hiddenRepos = af.hiddenRepos || [];
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
         af.uncommitted || af.changed || af.main || af.leaf ||
-        af.deprecated || af.roadmap || af.codeRefs || af.indirectCoverage ||
+        af.deprecated || af.roadmap ||
         hiddenRepos.length > 0 ||
         editState.filterStatus !== '' || editState.filterCoverage !== '';
 
@@ -212,10 +212,6 @@ function renderNavTree() {
             if (af.deprecated && r.status && r.status.toLowerCase() === 'deprecated') continue;
             // Hide Roadmap (when active, hide items with Roadmap/Planned status)
             if (af.roadmap && r.status && (r.status.toLowerCase() === 'roadmap' || r.status.toLowerCase() === 'planned')) continue;
-            // Code refs only (when active, show only items with coverage)
-            if (af.codeRefs && r.coverage === 'none') continue;
-            // Indirect coverage (when active, show only items with indirect/partial coverage)
-            if (af.indirectCoverage && r.coverage !== 'partial') continue;
             // Status dropdown
             if (editState.filterStatus && r.status !== editState.filterStatus) continue;
             // Coverage dropdown
@@ -394,8 +390,6 @@ function toggleEditFilter(key) {
         leaf: 'edit-toggle-leaf',
         deprecated: 'edit-toggle-deprecated',
         roadmap: 'edit-toggle-roadmap',
-        codeRefs: 'edit-toggle-codeRefs',
-        indirectCoverage: 'edit-toggle-indirectCoverage'
     };
     if (checkMap[key]) {
         var cb = document.getElementById(checkMap[key]);
@@ -435,7 +429,7 @@ function clearEditFilters() {
     editState.activeFilters = {
         levelPrd: false, levelOps: false, levelDev: false,
         uncommitted: false, changed: false, main: false, leaf: false,
-        deprecated: false, roadmap: false, codeRefs: false, indirectCoverage: false,
+        deprecated: false, roadmap: false,
         hiddenRepos: []
     };
     editState.filterStatus = '';
@@ -457,10 +451,6 @@ function clearEditFilters() {
     if (deprecatedCb) deprecatedCb.checked = false;
     var roadmapCb = document.getElementById('edit-toggle-roadmap');
     if (roadmapCb) roadmapCb.checked = false;
-    var codeRefsCb = document.getElementById('edit-toggle-codeRefs');
-    if (codeRefsCb) codeRefsCb.checked = false;
-    var indirectCb = document.getElementById('edit-toggle-indirectCoverage');
-    if (indirectCb) indirectCb.checked = false;
     renderNavTree();
     saveState();
 }

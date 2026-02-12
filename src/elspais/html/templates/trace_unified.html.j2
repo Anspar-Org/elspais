@@ -173,8 +173,6 @@ const editState = {
         leaf: false,
         deprecated: false,
         roadmap: false,
-        codeRefs: false,
-        indirectCoverage: false,
         hiddenRepos: []
     },
     knownRepos: [],
@@ -389,10 +387,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (deprecatedCb) deprecatedCb.checked = !!editState.activeFilters.deprecated;
             var roadmapCb = document.getElementById('edit-toggle-roadmap');
             if (roadmapCb) roadmapCb.checked = !!editState.activeFilters.roadmap;
-            var codeRefsCb = document.getElementById('edit-toggle-codeRefs');
-            if (codeRefsCb) codeRefsCb.checked = !!editState.activeFilters.codeRefs;
-            var indirectCb = document.getElementById('edit-toggle-indirectCoverage');
-            if (indirectCb) indirectCb.checked = !!editState.activeFilters.indirectCoverage;
         }
         if (saved.filterStatus) {
             editState.filterStatus = saved.filterStatus;
