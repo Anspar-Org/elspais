@@ -2,6 +2,14 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.63.2] - 2026-02-12
+
+### Changed
+
+- **Unified cookie persistence**: Single `elspais_trace_state` cookie shared between view and edit modes, replacing mode-specific `elspais_trace_edit_state`/`elspais_trace_view_state`. State (theme, font size, open cards, filters, panel widths) now seamlessly transfers between modes (REQ-p00006-A)
+- Added `clearState()` function for programmatic cookie reset
+- Cookie version bumped to v9
+
 ## [0.63.1] - 2026-02-12
 
 ### Added

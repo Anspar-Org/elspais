@@ -187,7 +187,7 @@ const editState = {
 // Apply theme early to prevent flash of wrong theme
 (function() {
     try {
-        var m = document.cookie.match(new RegExp('(^| )' + (MODE === 'edit' ? 'elspais_trace_edit_state' : 'elspais_trace_view_state') + '=([^;]+)'));
+        var m = document.cookie.match(new RegExp('(^| )elspais_trace_state=([^;]+)'));
         if (m) {
             var s = JSON.parse(decodeURIComponent(m[2]));
             if (s.theme) editState.theme = s.theme;
