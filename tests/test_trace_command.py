@@ -191,7 +191,7 @@ A. The implementation SHALL follow the spec.
         return spec_dir
 
     def test_trace_view_generates_interactive_html(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test trace --view generates interactive HTML."""
+        """Test trace --view generates interactive 3-panel HTML."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -215,12 +215,12 @@ A. The implementation SHALL follow the spec.
         assert output_path.exists()
         content = output_path.read_text()
 
-        # Check for interactive HTML structure
+        # Check for interactive 3-panel HTML structure
         assert "<!DOCTYPE html>" in content
         assert "Requirements Traceability" in content
-        assert "req-row" in content  # Interactive row class
-        assert "REQ-p00001" in content
-        assert "REQ-d00001" in content
+        assert "nav-tree-container" in content  # Nav tree panel
+        assert "card-stack-panel" in content  # Card stack panel
+        assert "switchNavTab" in content  # Nav tab switching JS
 
     def test_trace_view_default_output_path(self, temp_spec_dir: Path, monkeypatch):
         """Test trace --view uses default output path when none specified."""

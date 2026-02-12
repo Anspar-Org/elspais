@@ -1,36 +1,21 @@
-{# Partial: _file_viewer.html.j2 — Merged file viewer panel #}
-{# Edit: status badge (on-disk/has-mutations), simple close #}
-{# View: lang badge, rendered/source mode toggle, VS Code link #}
-
-{% if mode == 'edit' %}
+{# Partial: _file_viewer.html.j2 — Unified file viewer panel (both modes) #}
+{# Uses fv- prefix IDs. Status badge included in both modes. #}
 
 <aside class="file-viewer-panel" id="file-viewer-panel">
     <div class="file-viewer-header">
         <span class="file-viewer-path" id="fv-path">No file selected</span>
+        {% if mode == 'edit' %}
         <span class="fv-status" id="fv-status"></span>
+        {% endif %}
+        <span class="file-viewer-lang" id="fv-lang"></span>
+        <div class="file-viewer-mode-toggle" id="fv-mode-toggle" style="display:none;">
+            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
+            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
+        </div>
+        <a class="file-viewer-btn" id="fv-vscode" href="#" title="Open in VS Code" style="display:none;">VS Code</a>
         <button class="file-viewer-close-btn" onclick="closeFileViewer()" title="Close">&times;</button>
     </div>
     <div class="file-viewer-body" id="fv-body">
         <div class="file-viewer-placeholder">Select a source file to view</div>
     </div>
 </aside>
-
-{% else %}
-
-<aside class="file-viewer-panel" id="file-viewer-panel">
-    <div class="file-viewer-header">
-        <span class="file-viewer-path" id="file-viewer-path">No file selected</span>
-        <span class="file-viewer-lang" id="file-viewer-lang"></span>
-        <div class="file-viewer-mode-toggle" id="file-viewer-mode-toggle" style="display:none;">
-            <button class="file-viewer-mode-btn active" data-mode="rendered" onclick="setFileViewMode('rendered')">Rendered</button>
-            <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
-        </div>
-        <a class="file-viewer-btn" id="file-viewer-vscode" href="#" title="Open in VS Code">VS Code</a>
-        <button class="file-viewer-btn file-viewer-close" onclick="closeFileViewer()" title="Close panel">&times;</button>
-    </div>
-    <div class="file-viewer-body" id="file-viewer-body">
-        <!-- File content rendered here by JavaScript -->
-    </div>
-</aside>
-
-{% endif %}

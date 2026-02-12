@@ -18,6 +18,7 @@
 # Implements: REQ-d00067-E, REQ-d00067-F
 # Implements: REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
 # Implements: REQ-d00068-E, REQ-d00068-F
+# Implements: REQ-p00006-B
 # Implements: REQ-d00074-A, REQ-d00074-B, REQ-d00074-C, REQ-d00074-D
 """elspais.mcp.server - MCP server implementation.
 
@@ -30,6 +31,7 @@ without creating intermediate data structures (REQ-p00060-B).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +55,129 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Source path helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _relative_source_path(node: Any, graph: TraceGraph) -> str:
+    """Return the node's source file path, relative to repo root.
+
+    Some parsers (notably CodeRefParser) store absolute paths in
+    ``node.source.path``.  The REST layer and UI expect repo-relative
+    paths so that ``/api/file-content?path=…`` can safely join them
+    with the working directory.  This helper normalises the value.
+    """
+    if not node.source:
+        return ""
+    raw = node.source.path
+    if not raw:
+        return ""
+    p = Path(raw)
+    if p.is_absolute():
+        try:
+            return str(p.relative_to(graph.repo_root))
+        except ValueError:
+            return raw  # outside repo, keep as-is
+    return raw
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared coverage traversal iterator (REQ-d00066-B, REQ-d00066-D)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _iter_assertion_coverage(
+    req_node: Any,
+    kind_filter: NodeKind,
+) -> Iterator[tuple[Any, list[str]]]:
+    """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
+
+    Two-phase edge traversal:
+
+    Phase 1 — ``req_node.iter_outgoing_edges()``:
+      * If ``assertion_targets`` is set → those labels
+      * If absent → ALL assertion labels (indirect / blanket coverage)
+
+    Phase 2 — For each ASSERTION child → ``iter_outgoing_edges()``:
+      * Yields ``(node, [that_label])``
+
+    The same node may be yielded more than once (e.g. via both phases).
+    Callers are responsible for deduplication.
+    """
+    # Collect all assertion labels for the indirect-coverage case
+    all_labels: list[str] = []
+    assertion_children: list[tuple[Any, str]] = []  # (assertion_node, label)
+    for child in req_node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            all_labels.append(label)
+            assertion_children.append((child, label))
+
+    # Phase 1: REQ → kind_filter edges
+    for edge in req_node.iter_outgoing_edges():
+        target = edge.target
+        if target.kind != kind_filter:
+            continue
+        if edge.assertion_targets:
+            yield target, list(edge.assertion_targets)
+        else:
+            yield target, list(all_labels)
+
+    # Phase 2: ASSERTION → kind_filter edges
+    for assertion_node, label in assertion_children:
+        for edge in assertion_node.iter_outgoing_edges():
+            target = edge.target
+            if target.kind != kind_filter:
+                continue
+            yield target, [label]
+
+
+def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
+    """Unified TEST-node serializer (superset of all consumers).
+
+    Returns::
+
+        {"id", "label", "file", "line", "name",
+         "results": [{"id", "status", "duration", "file", "line"}]}
+    """
+    results: list[dict[str, Any]] = []
+    for child in test_node.iter_children():
+        if child.kind == NodeKind.TEST_RESULT:
+            results.append(
+                {
+                    "id": child.id,
+                    "status": child.get_field("status", "unknown"),
+                    "duration": child.get_field("duration", 0.0),
+                    "file": _relative_source_path(child, graph),
+                    "line": child.source.line if child.source else 0,
+                }
+            )
+    return {
+        "id": test_node.id,
+        "label": test_node.get_label(),
+        "file": _relative_source_path(test_node, graph),
+        "line": test_node.source.line if test_node.source else 0,
+        "name": test_node.get_field("name", ""),
+        "results": results,
+    }
+
+
+def _serialize_code_info(code_node: Any, graph: TraceGraph) -> dict[str, Any]:
+    """Unified CODE-node serializer.
+
+    Returns::
+
+        {"id", "label", "file", "line"}
+    """
+    return {
+        "id": code_node.id,
+        "label": code_node.get_label(),
+        "file": _relative_source_path(code_node, graph),
+        "line": code_node.source.line if code_node.source else 0,
+    }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Serializers (REQ-d00064)
@@ -82,7 +207,7 @@ def _serialize_assertion(node: Any) -> dict[str, Any]:
     }
 
 
-def _serialize_node_generic(node: Any) -> dict[str, Any]:
+def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[str, Any]:
     """Serialize any graph node to full format with kind-specific properties.
 
     Returns a common envelope (id, kind, title, source, parents, children,
@@ -221,7 +346,11 @@ def _serialize_node_generic(node: Any) -> dict[str, Any]:
         "kind": kind.value,
         "title": node.get_label(),
         "source": {
-            "path": node.source.path if node.source else None,
+            "path": (
+                _relative_source_path(node, graph)
+                if graph
+                else (node.source.path if node.source else None)
+            ),
             "line": node.source.line if node.source else None,
         },
         "keywords": keywords,
@@ -432,7 +561,7 @@ def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     node = graph.find_by_id(node_id)
     if node is None:
         return {"error": f"Node '{node_id}' not found"}
-    return _serialize_node_generic(node)
+    return _serialize_node_generic(node, graph)
 
 
 def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
@@ -455,7 +584,7 @@ def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     if node.kind != NodeKind.REQUIREMENT:
         return {"error": f"Node '{req_id}' is not a requirement"}
 
-    return _serialize_node_generic(node)
+    return _serialize_node_generic(node, graph)
 
 
 def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
@@ -603,7 +732,7 @@ def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
                 "is_moved": is_moved,
                 "is_new": node.get_metric("is_new", False),
             }
-            entry["source"] = node.source.path if node.source else None
+            entry["source"] = _relative_source_path(node, graph) or None
             changed.append(entry)
 
     summary = count_by_git_status(graph)
@@ -1183,7 +1312,6 @@ def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
         Dict with success, test_nodes, result_nodes, covered/uncovered assertions,
         and coverage statistics.
     """
-    # REQ-d00066-A: Get requirement by ID
     node = graph.find_by_id(req_id)
     if node is None:
         return {"success": False, "error": f"Requirement {req_id} not found"}
@@ -1191,106 +1319,40 @@ def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     if node.kind != NodeKind.REQUIREMENT:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
-    # Collect assertions from children
-    assertions: list[tuple[str, str]] = []  # [(assertion_id, label), ...]
-
+    # Collect assertions
+    assertions: list[tuple[str, str]] = []
     for child in node.iter_children():
         if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            assertions.append((child.id, label))
+            assertions.append((child.id, child.get_field("label", "")))
 
     assertion_ids = [a[0] for a in assertions]
+    label_to_id = {label: aid for aid, label in assertions}
 
-    # Track TEST nodes and covered assertions
+    # Deduplicated test serialization via shared iterator
+    seen_test_ids: set[str] = set()
     test_nodes: list[dict[str, Any]] = []
     result_nodes: list[dict[str, Any]] = []
     covered_assertion_ids: set[str] = set()
-    seen_test_ids: set[str] = set()  # Deduplicate tests
 
-    # REQ-d00066-B: Find TEST nodes via two patterns:
-    # 1. Edges from requirement with assertion_targets (real graph pattern)
-    # 2. Edges from assertions to TEST nodes (test fixture pattern)
+    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
+        # Track covered assertions
+        for label in labels:
+            if label in label_to_id:
+                covered_assertion_ids.add(label_to_id[label])
 
-    # Pattern 1: Edges from requirement (e.g., annotate_coverage pattern)
-    for edge in node.iter_outgoing_edges():
-        target = edge.target
-        if target.kind != NodeKind.TEST:
+        if test_node.id in seen_test_ids:
             continue
+        seen_test_ids.add(test_node.id)
 
-        if target.id not in seen_test_ids:
-            seen_test_ids.add(target.id)
-            test_nodes.append(
-                {
-                    "id": target.id,
-                    "label": target.get_label(),
-                    "file": target.get_field("file", ""),
-                    "name": target.get_field("name", ""),
-                }
-            )
+        info = _serialize_test_info(test_node, graph)
+        test_nodes.append(info)
+        # Flatten results for MCP contract compatibility
+        for r in info["results"]:
+            result_nodes.append({**r, "test_id": info["id"]})
 
-            # REQ-d00066-C: Get TEST_RESULT children
-            for child in target.iter_children():
-                if child.kind == NodeKind.TEST_RESULT:
-                    result_nodes.append(
-                        {
-                            "id": child.id,
-                            "status": child.get_field("status", "unknown"),
-                            "duration": child.get_field("duration", 0.0),
-                            "test_id": target.id,
-                        }
-                    )
-
-        # REQ-d00066-D: Track which assertions this test covers
-        if edge.assertion_targets:
-            for label in edge.assertion_targets:
-                # Find assertion ID by label
-                for aid, alabel in assertions:
-                    if alabel == label:
-                        covered_assertion_ids.add(aid)
-                        break
-
-    # Pattern 2: Edges from assertions (test fixture pattern)
-    for assertion_id, _label in assertions:
-        assertion_node = graph.find_by_id(assertion_id)
-        if assertion_node is None:
-            continue
-
-        for edge in assertion_node.iter_outgoing_edges():
-            target = edge.target
-            if target.kind != NodeKind.TEST:
-                continue
-
-            # This assertion is covered by this test
-            covered_assertion_ids.add(assertion_id)
-
-            if target.id not in seen_test_ids:
-                seen_test_ids.add(target.id)
-                test_nodes.append(
-                    {
-                        "id": target.id,
-                        "label": target.get_label(),
-                        "file": target.get_field("file", ""),
-                        "name": target.get_field("name", ""),
-                    }
-                )
-
-                # REQ-d00066-C: Get TEST_RESULT children
-                for child in target.iter_children():
-                    if child.kind == NodeKind.TEST_RESULT:
-                        result_nodes.append(
-                            {
-                                "id": child.id,
-                                "status": child.get_field("status", "unknown"),
-                                "duration": child.get_field("duration", 0.0),
-                                "test_id": target.id,
-                            }
-                        )
-
-    # REQ-d00066-E: Determine uncovered assertions
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
-    # REQ-d00066-F: Calculate coverage percentage
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
     coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
@@ -1302,6 +1364,126 @@ def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
         "result_nodes": result_nodes,
         "covered_assertions": covered_assertions,
         "uncovered_assertions": uncovered_assertions,
+        "total_assertions": total,
+        "covered_count": covered_count,
+        "coverage_pct": round(coverage_pct, 1),
+    }
+
+
+def _get_assertion_test_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+    """Build per-assertion test coverage map for a requirement.
+
+    Returns a structure mapping each assertion label to its tests and their
+    results, enabling the UI to show validation buttons per assertion.
+
+    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    and ``_serialize_test_info`` for the unified serializer.
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion test lists, coverage stats.
+    """
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    # Collect assertions
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    # Per-assertion buckets
+    assertion_tests: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_tests[label] = {"assertion_id": aid, "tests": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
+        info = _serialize_test_info(test_node, graph)
+        for label in labels:
+            if label not in assertion_tests:
+                continue
+            if test_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(test_node.id)
+            assertion_tests[label]["tests"].append(info)
+
+    total = len(assertions)
+    covered_count = sum(1 for label in assertion_tests if assertion_tests[label]["tests"])
+    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_tests": assertion_tests,
+        "total_assertions": total,
+        "covered_count": covered_count,
+        "coverage_pct": round(coverage_pct, 1),
+    }
+
+
+def _get_assertion_code_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+    """Build per-assertion code implementation map for a requirement.
+
+    Returns a structure mapping each assertion label to its CODE nodes,
+    enabling the UI to show "Implemented" buttons per assertion.
+
+    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    and ``_serialize_code_info`` for the unified serializer.
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion code lists, coverage stats.
+    """
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    # Collect assertions
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    # Per-assertion buckets
+    assertion_code: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_code[label] = {"assertion_id": aid, "code_refs": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE):
+        info = _serialize_code_info(code_node, graph)
+        for label in labels:
+            if label not in assertion_code:
+                continue
+            if code_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(code_node.id)
+            assertion_code[label]["code_refs"].append(info)
+
+    total = len(assertions)
+    covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
+    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_code": assertion_code,
         "total_assertions": total,
         "covered_count": covered_count,
         "coverage_pct": round(coverage_pct, 1),
@@ -1322,6 +1504,10 @@ def _get_uncovered_assertions(
     REQ-d00067-E: SHALL return parent requirement id and title for context.
     REQ-d00067-F: SHALL limit results to prevent unbounded response sizes.
 
+    Uses ``_iter_assertion_coverage`` to build the covered-labels set,
+    which correctly handles indirect coverage (tests with no
+    ``assertion_targets`` covering ALL assertions).
+
     Args:
         graph: The TraceGraph to query.
         req_id: Optional requirement ID to filter by. If None, scan all requirements.
@@ -1331,30 +1517,16 @@ def _get_uncovered_assertions(
         Dict with success and list of uncovered assertions with parent context.
     """
 
-    def _is_assertion_covered(assertion_node: Any) -> bool:
-        """Check if an assertion has any TEST coverage."""
-        # Check outgoing edges from assertion (test fixture pattern)
-        for edge in assertion_node.iter_outgoing_edges():
-            if edge.target.kind == NodeKind.TEST:
-                return True
-
-        # Check if parent requirement has edges to TEST with this assertion as target
-        for parent in assertion_node.iter_parents():
-            if parent.kind != NodeKind.REQUIREMENT:
-                continue
-            label = assertion_node.get_field("label", "")
-            for edge in parent.iter_outgoing_edges():
-                if edge.target.kind != NodeKind.TEST:
-                    continue
-                if edge.assertion_targets and label in edge.assertion_targets:
-                    return True
-
-        return False
+    def _covered_labels_for_req(req_node: Any) -> set[str]:
+        """Return the set of assertion labels covered by at least one TEST."""
+        covered: set[str] = set()
+        for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
+            covered.update(labels)
+        return covered
 
     uncovered: list[dict[str, Any]] = []
 
     if req_id is not None:
-        # REQ-d00067-B: Filter to specific requirement's assertions
         node = graph.find_by_id(req_id)
         if node is None:
             return {"success": False, "error": f"Requirement {req_id} not found"}
@@ -1362,13 +1534,14 @@ def _get_uncovered_assertions(
         if node.kind != NodeKind.REQUIREMENT:
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
+        covered = _covered_labels_for_req(node)
+
         for child in node.iter_children():
             if child.kind != NodeKind.ASSERTION:
                 continue
-            if _is_assertion_covered(child):
+            if child.get_field("label", "") in covered:
                 continue
 
-            # REQ-d00067-D, REQ-d00067-E: Include assertion and parent context
             uncovered.append(
                 {
                     "id": child.id,
@@ -1382,27 +1555,21 @@ def _get_uncovered_assertions(
             if len(uncovered) >= limit:
                 break
     else:
-        # REQ-d00067-A: Scan all assertions
-        # Group by parent requirement for sorted output
+        # REQ-d00067-A: Scan all requirements, collect uncovered assertions
         req_assertions: dict[str, list[Any]] = {}
 
-        for node in graph.nodes_by_kind(NodeKind.ASSERTION):
-            if _is_assertion_covered(node):
-                continue
+        for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            covered = _covered_labels_for_req(req_node)
 
-            # Find parent requirement
-            parent_req = None
-            for parent in node.iter_parents():
-                if parent.kind == NodeKind.REQUIREMENT:
-                    parent_req = parent
-                    break
+            for child in req_node.iter_children():
+                if child.kind != NodeKind.ASSERTION:
+                    continue
+                if child.get_field("label", "") in covered:
+                    continue
 
-            if parent_req is None:
-                continue
-
-            if parent_req.id not in req_assertions:
-                req_assertions[parent_req.id] = []
-            req_assertions[parent_req.id].append((node, parent_req))
+                if req_node.id not in req_assertions:
+                    req_assertions[req_node.id] = []
+                req_assertions[req_node.id].append((child, req_node))
 
         # Sort by requirement ID and build output
         for req_id_key in sorted(req_assertions.keys()):

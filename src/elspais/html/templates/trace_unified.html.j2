@@ -14,15 +14,15 @@
 /* Implements: REQ-p00006-A */
 {% include "partials/css/_base.css.j2" %}
 
-{% if mode == 'edit' %}
-/* Edit body overrides */
+/* 3-panel layout: fixed viewport */
 body {
     overflow: hidden;
     height: 100vh;
     display: flex;
     flex-direction: column;
 }
-{% include "partials/css/_header-edit.css.j2" %}
+
+{% include "partials/css/_header.css.j2" %}
 {% include "partials/css/_toolbar.css.j2" %}
 {% include "partials/css/_buttons.css.j2" %}
 {% include "partials/css/_toast.css.j2" %}
@@ -30,13 +30,21 @@ body {
 {% include "partials/css/_dividers.css.j2" %}
 {% include "partials/css/_card-stack.css.j2" %}
 {% include "partials/css/_edit-mode.css.j2" %}
-{% include "partials/css/_file-viewer-edit.css.j2" %}
+{% include "partials/css/_file-viewer.css.j2" %}
+/* Pygments syntax highlighting theme */
+{% if pygments_css %}
+{{ pygments_css }}
+{% endif %}
+{% if pygments_css_dark %}
+{{ pygments_css_dark }}
+{% endif %}
 {% include "partials/css/_status-badges.css.j2" %}
 {% include "partials/css/_coverage.css.j2" %}
+{% include "partials/css/_topic-tags.css.j2" %}
 {% include "partials/css/_legend.css.j2" %}
 {% include "partials/css/_journey.css.j2" %}
 {% include "partials/css/_dark-theme.css.j2" %}
-/* Edit responsive */
+/* Responsive */
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: flex-start; }
     .header-center { min-width: 100%; }
@@ -44,28 +52,9 @@ body {
     .nav-panel { width: 100% !important; max-width: 100% !important; height: 40vh; border-right: none; border-bottom: 1px solid #e9ecef; }
     .file-viewer-panel { width: 100% !important; max-width: 100% !important; border-left: none; border-top: 1px solid #e9ecef; }
 }
-{% else %}
-{% include "partials/css/_header.css.j2" %}
-{% include "partials/css/_toolbar.css.j2" %}
-{% include "partials/css/_tabs.css.j2" %}
-{% include "partials/css/_table.css.j2" %}
-{% include "partials/css/_tree-structure.css.j2" %}
-{% include "partials/css/_status-badges.css.j2" %}
-{% include "partials/css/_coverage.css.j2" %}
-{% include "partials/css/_topic-tags.css.j2" %}
-{% include "partials/css/_code-test-rows.css.j2" %}
-{% include "partials/css/_journey.css.j2" %}
-{% include "partials/css/_legend.css.j2" %}
-{% include "partials/css/_file-viewer.css.j2" %}
-{% include "partials/css/_responsive.css.j2" %}
-/* Pygments syntax highlighting theme */
-{% if pygments_css %}
-{{ pygments_css }}
-{% endif %}
-{% endif %}
     </style>
 </head>
-<body>
+<body{% if mode == 'edit' %} data-base-path="{{ base_path }}"{% endif %}>
 
 {% include "partials/_header.html.j2" %}
 
@@ -73,11 +62,8 @@ body {
 
 {% include "partials/_toolbar.html.j2" %}
 
-{% include "partials/_tabs.html.j2" %}
-
-{% if mode == 'edit' %}
 <!-- =====================================================================
-     3-PANEL LAYOUT
+     3-PANEL LAYOUT (both modes)
      ===================================================================== -->
 
 <div class="layout" id="layout">
@@ -122,184 +108,10 @@ body {
 
 </div>
 
-{% else %}
-<!-- =====================================================================
-     SPLIT LAYOUT: MAIN CONTENT + FILE VIEWER
-     ===================================================================== -->
-
-<div class="split-layout" id="split-layout">
-<main class="main-content" id="main-content">
-    <!-- Requirements Tab Content -->
-    <div class="tab-content active" id="content-requirements">
-        <h2 class="section-title">Traceability Tree - <span id="view-mode-label">Hierarchical View</span></h2>
-
-        <div class="table-container">
-        <table class="trace-table" id="trace-table">
-            <thead>
-                <tr>
-                    <th class="col-id">
-                        ID
-                        <input type="text" class="filter-input" id="filter-id" placeholder="e.g. p00001" oninput="applyFilters()">
-                    </th>
-                    <th class="col-title">
-                        TITLE
-                        <input type="text" class="filter-input" id="filter-title" placeholder="Search title..." oninput="applyFilters()">
-                    </th>
-                    <th class="col-level">
-                        LEVEL
-                        <select class="filter-select" id="filter-level" onchange="applyFilters()">
-                            <option value="">All</option>
-                            <option value="PRD">PRD</option>
-                            <option value="OPS">OPS</option>
-                            <option value="DEV">DEV</option>
-                        </select>
-                    </th>
-                    <th class="col-status">
-                        STATUS
-                        <select class="filter-select" id="filter-status" onchange="applyFilters()">
-                            <option value="">All</option>
-                            {% for status in statuses %}
-                            <option value="{{ status }}">{{ status }}</option>
-                            {% endfor %}
-                        </select>
-                    </th>
-                    <th class="col-cov">
-                        COV
-                        <select class="filter-select" id="filter-cov" onchange="applyFilters()">
-                            <option value="">All</option>
-                            <option value="none">○ None</option>
-                            <option value="partial">◐ Partial</option>
-                            <option value="full">● Full</option>
-                        </select>
-                    </th>
-                    <th class="col-topic">
-                        TOPIC
-                        <select class="filter-select" id="filter-topic" onchange="applyFilters()">
-                            <option value="">All</option>
-                            {% for topic in topics %}
-                            <option value="{{ topic }}">{{ topic }}</option>
-                            {% endfor %}
-                        </select>
-                    </th>
-                </tr>
-            </thead>
-            <tbody id="table-body">
-                {% for row in rows %}
-                <tr class="req-row {{ 'code-row' if row.is_code else '' }}{{ 'test-row' if row.is_test else '' }}{{ 'result-row ' + row.result_status if row.is_test_result else '' }}"
-                    data-id="{{ row.id }}"
-                    data-parent="{{ row.parent_id or '' }}"
-                    data-level="{{ row.level }}"
-                    data-status="{{ row.status }}"
-                    data-coverage="{{ row.coverage }}"
-                    data-coverage-indirect="{{ row.coverage_indirect }}"
-                    data-topic="{{ row.topic }}"
-                    data-depth="{{ row.depth }}"
-                    data-is-leaf="{{ 'true' if row.is_leaf else 'false' }}"
-                    data-is-changed="{{ 'true' if row.is_changed else 'false' }}"
-                    data-is-uncommitted="{{ 'true' if row.is_uncommitted else 'false' }}"
-                    data-is-roadmap="{{ 'true' if row.is_roadmap else 'false' }}"
-                    data-is-code="{{ 'true' if row.is_code else 'false' }}"
-                    data-is-test="{{ 'true' if row.is_test else 'false' }}"
-                    data-is-test-result="{{ 'true' if row.is_test_result else 'false' }}"
-                    data-result-status="{{ row.result_status }}"
-                    data-is-associated="{{ 'true' if row.is_associated else 'false' }}"
-                    data-has-children="{{ 'true' if row.has_children else 'false' }}"
-                    data-source-file="{{ row.source_file }}"
-                    data-source-line="{{ row.source_line }}">
-                    <td class="col-id">
-                        <div class="tree-cell">
-                            {% for i in range(row.depth) %}
-                            <span class="tree-indent"></span>
-                            {% endfor %}
-                            <button class="tree-toggle {{ 'expanded' if row.has_children else 'leaf' }}"
-                                    onclick="toggleNode('{{ row.id }}')"
-                                    data-node-id="{{ row.id }}"></button>
-                            {% if row.is_code %}
-                            <span class="code-icon">📄</span>
-                            {% elif row.is_test %}
-                            <span class="test-icon">🧪</span>
-                            {% elif row.is_test_result %}
-                            <span class="result-icon">{% if row.result_status == 'passed' %}✅{% elif row.result_status in ['failed', 'failure'] %}❌{% elif row.result_status == 'error' %}⚠️{% elif row.result_status == 'skipped' %}⏭️{% else %}📋{% endif %}</span>
-                            {% endif %}
-                            {% if row.source_file %}
-                            <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="req-id" title="Open in VS Code: {{ row.source_file }}:{{ row.source_line }}">{{ row.display_id | replace('REQ-', '') }}</a>
-                            {% else %}
-                            <span class="req-id">{{ row.display_id | replace('REQ-', '') }}</span>
-                            {% endif %}
-                            {% if row.assertions %}
-                            <span class="assertion-badges">
-                                {% for a in row.assertions %}
-                                <span class="assertion-badge">{{ a }}</span>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                    </td>
-                    <td class="col-title">
-                        {% if row.is_test_result %}
-                        {% if row.source_file %}
-                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
-                        {% else %}
-                        {{ row.title }}
-                        {% endif %}
-                        <span class="result-badge {{ row.result_status }}">{{ row.result_status }}</span>
-                        {% elif (row.is_test or row.is_code) and row.source_file %}
-                        <a href="vscode://file/{{ row.source_file }}:{{ row.source_line }}:1" class="file-link" title="Open in VS Code">{{ row.title }}</a>
-                        {% else %}
-                        {{ row.title }}
-                        {% endif %}
-                    </td>
-                    <td class="col-level">{{ row.level }}</td>
-                    <td class="col-status">
-                        {% if row.status %}
-                        <span class="status-badge {{ row.status|lower }}">
-                            {{ row.status }}
-                            {% if row.is_changed %}<span class="change-indicator">◆</span>{% endif %}
-                        </span>
-                        {% endif %}
-                    </td>
-                    <td class="col-cov">
-                        <div class="coverage-cell">
-                            {% if row.coverage == 'full' %}
-                            <span class="coverage-icon full">●</span>
-                            {% elif row.coverage == 'partial' %}
-                            <span class="coverage-icon partial">◐</span>
-                            {% else %}
-                            <span class="coverage-icon none">○</span>
-                            {% endif %}
-                            {% if row.has_failures %}
-                            <span class="warning-icon">⚡</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                    <td class="col-topic">
-                        <span class="topic-tag">{{ row.topic }}</span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-    </div>
-
-    <!-- User Journeys Tab Content -->
-    {% include "partials/_journey_tab.html.j2" %}
-</main>
-
-<div class="split-divider" id="split-divider"></div>
-
-{% include "partials/_file_viewer.html.j2" %}
-
-</div><!-- end split-layout -->
-
-{% endif %}
-
-{% if mode == 'edit' %}
-<!-- Journey content rendered in nav panel via switchNavTab('journey') -->
+<!-- Journey data container (journey card rendering reads from API) -->
 <div id="journey-data-container" style="display:none;">
     {% include "partials/_journey_tab.html.j2" %}
 </div>
-{% endif %}
 
 {% include "partials/_legend_modal.html.j2" %}
 
@@ -315,6 +127,18 @@ body {
 <script type="application/json" id="source-files">
 {{ source_files | tojson }}
 </script>
+
+<script type="application/json" id="node-index">
+{{ node_index | tojson }}
+</script>
+
+<script type="application/json" id="coverage-index">
+{{ coverage_index | tojson }}
+</script>
+
+<script type="application/json" id="status-data">
+{{ status_data | tojson }}
+</script>
 {% endif %}
 
 <!-- =====================================================================
@@ -326,8 +150,9 @@ const MODE = '{{ mode }}';
 
 {% include "partials/js/_utils.js.j2" %}
 
-{% if mode == 'edit' %}
-// State
+{% include "partials/js/_api-adapter.js.j2" %}
+
+// State (unified for both modes)
 const editState = {
     enabled: false,
     openCards: new Map(),
@@ -346,8 +171,8 @@ const editState = {
         changed: false,
         main: false,
         leaf: false,
-        hideTests: false,
-        hideResults: false,
+        deprecated: false,
+        roadmap: false,
         hiddenRepos: []
     },
     knownRepos: [],
@@ -360,7 +185,7 @@ const editState = {
 // Apply theme early to prevent flash of wrong theme
 (function() {
     try {
-        var m = document.cookie.match(/(^| )elspais_trace_edit_state=([^;]+)/);
+        var m = document.cookie.match(new RegExp('(^| )elspais_trace_state=([^;]+)'));
         if (m) {
             var s = JSON.parse(decodeURIComponent(m[2]));
             if (s.theme) editState.theme = s.theme;
@@ -381,43 +206,19 @@ const editState = {
         html.classList.add('dark-theme');
     }
 })();
-{% else %}
-// State
-const state = {
-    viewMode: 'hierarchical',
-    activeFilters: {
-        uncommitted: false,
-        changed: false,
-        code: false,
-        tests: false,
-        results: false,
-        associated: false,
-        core: false,
-        levelPrd: false,
-        levelOps: false,
-        levelDev: false
-    },
-    collapsedNodes: new Set(),
-    totalCount: {{ stats.total_count }},
-    activeTab: 'requirements',
-    treeData: JSON.parse(document.getElementById('tree-data').textContent),
-    sourceFiles: JSON.parse(document.getElementById('source-files').textContent),
-    fileViewerOpen: false,
-    currentFile: null,
-    fileViewMode: 'source',
-    splitRatio: 50,
-    indirectCoverage: false
-};
-{% endif %}
 
 {% include "partials/js/_cookie-persistence.js.j2" %}
 
+{% include "partials/js/_search.js.j2" %}
+
 {% if mode == 'edit' %}
 {% include "partials/js/_edit-engine.js.j2" %}
+{% endif %}
+
 {% include "partials/js/_nav-tree.js.j2" %}
 {% include "partials/js/_card-stack.js.j2" %}
 
-// Legend toggle (shared with view mode)
+// Legend toggle (both modes)
 function toggleLegend() {
     var modal = document.getElementById('legend-modal');
     modal.classList.toggle('visible');
@@ -428,12 +229,12 @@ function closeLegendOnOverlay(event) {
     }
 }
 
-// Journey ref click: open card in edit mode (replaces switchToReqTab)
+// Journey ref click: open card (both modes)
 function switchToReqTab(reqId) {
     openCard(reqId);
 }
 
-// Hamburger menu
+// Hamburger menu (both modes)
 function toggleHamburgerMenu() {
     document.getElementById('hamburger-dropdown').classList.toggle('visible');
 }
@@ -447,7 +248,7 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Font size
+// Font size (both modes)
 function adjustFontSize(delta) {
     var current = editState.fontSize || 14;
     var newSize = Math.max(10, Math.min(20, current + delta));
@@ -458,7 +259,7 @@ function adjustFontSize(delta) {
     saveState();
 }
 
-// Theme
+// Theme (both modes)
 function setTheme(theme) {
     editState.theme = theme;
     applyTheme();
@@ -492,7 +293,7 @@ if (window.matchMedia) {
     });
 }
 
-// Toolbar toggle
+// Toolbar toggle (both modes)
 function toggleToolbar() {
     editState.toolbarHidden = !editState.toolbarHidden;
     var toolbar = document.getElementById('edit-toolbar');
@@ -502,16 +303,10 @@ function toggleToolbar() {
     saveState();
 }
 
-{% else %}
-{% include "partials/js/_filter-engine.js.j2" %}
-{% include "partials/js/_journey-engine.js.j2" %}
-{% endif %}
-
 {% include "partials/js/_file-viewer.js.j2" %}
 {% include "partials/js/_divider.js.j2" %}
 
-{% if mode == 'edit' %}
-// Keyboard Shortcuts
+// Keyboard Shortcuts (both modes)
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         var legendModal = document.getElementById('legend-modal');
@@ -521,6 +316,11 @@ document.addEventListener('keydown', function(e) {
             closeFileViewer();
         }
     }
+    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('search-input').focus();
+    }
+    {% if mode == 'edit' %}
     if (e.key === 'e' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         toggleEditMode();
@@ -529,20 +329,19 @@ document.addEventListener('keydown', function(e) {
         e.preventDefault();
         doUndo();
     }
-    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        document.getElementById('search-input').focus();
-    }
+    {% endif %}
 });
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadTreeData();  // also updates header stats
-    initSearch();
+    loadTreeData();  // loads tree data, updates header stats, renders nav tree
     initDividers();
+    initSearch();
+    {% if mode == 'edit' %}
     refreshDirtyCount();
+    {% endif %}
 
-    const saved = loadState();
+    var saved = loadState();
     if (saved) {
         if (saved.activeNavTab) {
             // Migrate removed tabs to 'req'
@@ -552,41 +351,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 tab.classList.toggle('active', tab.dataset.kind === navTab);
             });
         }
+        {% if mode == 'edit' %}
         if (saved.editEnabled) {
             toggleEditMode();
         }
+        {% endif %}
         if (saved.collapsedTreeNodes && Array.isArray(saved.collapsedTreeNodes)) {
             editState.collapsedTreeNodes = new Set(saved.collapsedTreeNodes);
         }
         // Restore nav tree filters
         if (saved.activeFilters) {
             Object.assign(editState.activeFilters, saved.activeFilters);
-            // Update header stat badge dimmed state for level filters
-            document.getElementById('stat-prd').classList.toggle('dimmed', !!editState.activeFilters.levelPrd);
-            document.getElementById('stat-ops').classList.toggle('dimmed', !!editState.activeFilters.levelOps);
-            document.getElementById('stat-dev').classList.toggle('dimmed', !!editState.activeFilters.levelDev);
-            // Update core badge dimmed state (dimmed = hiding associated)
-            document.getElementById('stat-main').classList.toggle('dimmed', !!editState.activeFilters.main);
-            // Update tests/results badge dimmed state
-            document.getElementById('stat-tests').classList.toggle('dimmed', !!editState.activeFilters.hideTests);
-            document.getElementById('stat-results').classList.toggle('dimmed', !!editState.activeFilters.hideResults);
+            // Update header stat badge dimmed state (null-guard for elements)
+            var statPrd = document.getElementById('stat-prd');
+            var statOps = document.getElementById('stat-ops');
+            var statDev = document.getElementById('stat-dev');
+            var statMain = document.getElementById('stat-main');
+            if (statPrd) statPrd.classList.toggle('dimmed', !!editState.activeFilters.levelPrd);
+            if (statOps) statOps.classList.toggle('dimmed', !!editState.activeFilters.levelOps);
+            if (statDev) statDev.classList.toggle('dimmed', !!editState.activeFilters.levelDev);
+            if (statMain) statMain.classList.toggle('dimmed', !!editState.activeFilters.main);
             // Ensure hiddenRepos is an array
             if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
                 editState.activeFilters.hiddenRepos = [];
             }
-            // Update toolbar git filter buttons
-            document.getElementById('edit-btn-uncommitted').classList.toggle('active', !!editState.activeFilters.uncommitted);
-            document.getElementById('edit-btn-changed').classList.toggle('active', !!editState.activeFilters.changed);
-            // Update checkboxes
-            document.getElementById('edit-toggle-leaf').checked = !!editState.activeFilters.leaf;
+            // Update toolbar git filter buttons (null-guard)
+            var btnUncommitted = document.getElementById('edit-btn-uncommitted');
+            var btnChanged = document.getElementById('edit-btn-changed');
+            if (btnUncommitted) btnUncommitted.classList.toggle('active', !!editState.activeFilters.uncommitted);
+            if (btnChanged) btnChanged.classList.toggle('active', !!editState.activeFilters.changed);
+            // Update checkboxes (null-guard)
+            var leafCb = document.getElementById('edit-toggle-leaf');
+            if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
+            var deprecatedCb = document.getElementById('edit-toggle-deprecated');
+            if (deprecatedCb) deprecatedCb.checked = !!editState.activeFilters.deprecated;
+            var roadmapCb = document.getElementById('edit-toggle-roadmap');
+            if (roadmapCb) roadmapCb.checked = !!editState.activeFilters.roadmap;
         }
         if (saved.filterStatus) {
             editState.filterStatus = saved.filterStatus;
-            document.getElementById('edit-filter-status').value = saved.filterStatus;
+            var filterStatusSel = document.getElementById('edit-filter-status');
+            if (filterStatusSel) filterStatusSel.value = saved.filterStatus;
         }
         if (saved.filterCoverage) {
             editState.filterCoverage = saved.filterCoverage;
-            document.getElementById('edit-filter-coverage').value = saved.filterCoverage;
+            var filterCovSel = document.getElementById('edit-filter-coverage');
+            if (filterCovSel) filterCovSel.value = saved.filterCoverage;
         }
         // Restore font size
         if (saved.fontSize) {
@@ -611,14 +421,21 @@ document.addEventListener('DOMContentLoaded', function() {
             if (tb) tb.classList.add('toolbar-hidden');
             if (ftb) ftb.classList.add('dimmed');
         }
+        // Restore panel widths
+        if (saved.navPanelWidth) {
+            document.getElementById('nav-panel').style.width = saved.navPanelWidth;
+        }
+        if (saved.fileViewerWidth) {
+            document.getElementById('file-viewer-panel').style.width = saved.fileViewerWidth;
+        }
         if (saved.openCardIds && saved.openCardIds.length > 0) {
-            const collapsedSet = new Set(saved.collapsedCards || []);
-            const ids = saved.openCardIds.slice().reverse();
+            var collapsedSet = new Set(saved.collapsedCards || []);
+            var ids = saved.openCardIds.slice().reverse();
             (async function restoreCards() {
-                for (const id of ids) {
-                    // All cards: fetch via generic /api/node/ endpoint
-                    const data = await apiFetch('/api/node/' + encodeURIComponent(id));
-                    if (data && !data.error) {
+                for (var i = 0; i < ids.length; i++) {
+                    var id = ids[i];
+                    var data = await apiFetch('/api/node/' + encodeURIComponent(id));
+                    if (data) {
                         editState.openCards.set(id, {
                             data: data,
                             collapsed: collapsedSet.has(id),
@@ -630,6 +447,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 editState.openCardOrder.reverse();
                 renderCardStack();
                 updateNavSelection();
+                // Prefetch coverage for restored requirement cards
+                editState.openCards.forEach(function(info, id) {
+                    if (info.data && info.data.kind === 'requirement') {
+                        prefetchCoverage(id);
+                    }
+                });
+                {% if mode == 'edit' %}
                 if (editState.enabled) {
                     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
                         el.contentEditable = 'true';
@@ -638,40 +462,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         el.style.display = '';
                     });
                 }
+                {% endif %}
             })();
         }
     }
 });
-
-{% else %}
-// Keyboard Shortcuts
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        if (state.fileViewerOpen) {
-            closeFileViewer();
-        } else {
-            const modal = document.getElementById('legend-modal');
-            if (modal.classList.contains('visible')) {
-                toggleLegend();
-            }
-        }
-    }
-});
-
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    const hasSavedState = loadStateFromCookie();
-
-    if (hasSavedState) {
-        restoreState();
-    } else {
-        collapseAll();
-    }
-
-    interceptFileLinks();
-    applyFilters();
-});
-{% endif %}
 </script>
 
 </body>

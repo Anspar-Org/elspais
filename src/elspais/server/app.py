@@ -1,3 +1,4 @@
+# Implements: REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
 """elspais.server.app - Flask app factory and REST API routes.
 
@@ -21,6 +22,8 @@ from flask_cors import CORS
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.mcp.server import (
+    _get_assertion_code_map,
+    _get_assertion_test_map,
     _get_graph_status,
     _get_hierarchy,
     _get_mutation_log,
@@ -68,8 +71,19 @@ def create_app(
         static_folder=str(static_dir) if static_dir.exists() else None,
     )
 
+    # Always reload templates from disk (editable installs change files in-place)
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+
     # REQ-d00010-F: CORS support
     CORS(app)
+
+    # Disable browser caching for dev server (ensures fresh content on reload)
+    @app.after_request
+    def _no_cache(response):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     # State pattern matching MCP server
     _state: dict[str, Any] = {
@@ -92,6 +106,7 @@ def create_app(
         """
         try:
             from elspais.html.generator import HTMLGenerator
+            from elspais.html.highlighting import get_pygments_css
 
             gen = HTMLGenerator(_state["graph"], base_path=str(_state["working_dir"]))
             gen._annotate_git_state()
@@ -111,6 +126,12 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
+                pygments_css=get_pygments_css(),
+                pygments_css_dark=get_pygments_css(style="monokai", scope=".dark-theme .highlight"),
+                # Empty dicts — edit mode uses live API, not embedded data
+                node_index={},
+                coverage_index={},
+                status_data={},
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
@@ -201,15 +222,34 @@ def create_app(
             return jsonify([])
         return jsonify(_search(_state["graph"], query, field))
 
+    @app.route("/api/test-coverage/<req_id>")
+    def api_test_coverage(req_id: str):
+        """GET /api/test-coverage/<req_id> - Per-assertion test coverage map."""
+        result = _get_assertion_test_map(_state["graph"], req_id)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result)
+
+    @app.route("/api/code-coverage/<req_id>")
+    def api_code_coverage(req_id: str):
+        """GET /api/code-coverage/<req_id> - Per-assertion code implementation map."""
+        result = _get_assertion_code_map(_state["graph"], req_id)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result)
+
     @app.route("/api/tree-data")
     def api_tree_data():
         """GET /api/tree-data - Build tree data for nav panel.
 
         Produces a flat list of tree nodes with coverage, git state,
         and associated flags to enable filtering in edit mode.
-        Includes TEST and TEST_RESULT nodes as children of requirements.
+        Tests/results are NOT included — they live in per-assertion
+        validation panels instead.
         """
         import re
+
+        from elspais.html.generator import compute_validation_color
 
         g = _state["graph"]
         rows: list[dict[str, Any]] = []
@@ -246,12 +286,8 @@ def create_app(
             return rp or "CORE"
 
         def _walk(node, depth: int, parent_id: str | None) -> None:
-            """DFS traversal producing flat row list."""
-            if node.kind not in (
-                NodeKind.REQUIREMENT,
-                NodeKind.TEST,
-                NodeKind.TEST_RESULT,
-            ):
+            """DFS traversal producing flat row list (requirements only)."""
+            if node.kind != NodeKind.REQUIREMENT:
                 return
 
             visit_key = (node.id, parent_id or "__root__")
@@ -259,138 +295,58 @@ def create_app(
                 return
             visited.add(visit_key)
 
-            if node.kind == NodeKind.REQUIREMENT:
-                # Collect assertion letters
-                assertions = []
-                for child in node.iter_children():
-                    if child.kind == NodeKind.ASSERTION:
-                        label = child.get_field("label", "")
-                        if label:
-                            assertions.append(label)
+            # Collect assertion letters
+            assertions = []
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    label = child.get_field("label", "")
+                    if label:
+                        assertions.append(label)
 
-                # Check for requirement or test children
-                has_children = any(
-                    c.kind in (NodeKind.REQUIREMENT, NodeKind.TEST) for c in node.iter_children()
-                )
+            # Check for requirement children only
+            has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
 
-                coverage = node.get_field("coverage", "none")
-                is_changed = bool(node.get_field("is_changed", False))
-                is_uncommitted = bool(node.get_field("is_uncommitted", False))
+            coverage = node.get_field("coverage", "none")
+            is_changed = bool(node.get_field("is_changed", False))
+            is_uncommitted = bool(node.get_field("is_uncommitted", False))
+            val_color, val_tip = compute_validation_color(node)
 
-                rows.append(
-                    {
-                        "id": node.id,
-                        "kind": "requirement",
-                        "title": node.get_label() or "",
-                        "level": (node.get_field("level") or "").upper(),
-                        "status": (node.get_field("status") or "").upper(),
-                        "depth": depth,
-                        "parent_id": parent_id,
-                        "assertions": sorted(assertions),
-                        "has_children": has_children,
-                        "is_leaf": not has_children,
-                        "coverage": coverage,
-                        "is_changed": is_changed,
-                        "is_uncommitted": is_uncommitted,
-                        "is_associated": _is_associated(node),
-                        "is_test": False,
-                        "is_test_result": False,
-                        "result_status": "",
-                        "repo_prefix": _get_repo_prefix(node),
-                        "source_file": node.get_field("source_file", ""),
-                        "source_line": node.get_field("source_line", 0),
-                    }
-                )
+            rows.append(
+                {
+                    "id": node.id,
+                    "kind": "requirement",
+                    "title": node.get_label() or "",
+                    "level": (node.get_field("level") or "").upper(),
+                    "status": (node.get_field("status") or "").upper(),
+                    "depth": depth,
+                    "parent_id": parent_id,
+                    "assertions": sorted(assertions),
+                    "has_children": has_children,
+                    "is_leaf": not has_children,
+                    "coverage": coverage,
+                    "is_changed": is_changed,
+                    "is_uncommitted": is_uncommitted,
+                    "is_associated": _is_associated(node),
+                    "is_test": False,
+                    "is_test_result": False,
+                    "result_status": "",
+                    "repo_prefix": _get_repo_prefix(node),
+                    "source_file": node.get_field("source_file", ""),
+                    "source_line": node.get_field("source_line", 0),
+                    "validation_color": val_color,
+                    "validation_tip": val_tip,
+                }
+            )
 
-                # Recurse: requirement children first, then tests
-                for child in node.iter_children():
-                    if child.kind == NodeKind.REQUIREMENT:
-                        _walk(child, depth + 1, node.id)
-                for child in node.iter_children():
-                    if child.kind == NodeKind.TEST:
-                        _walk(child, depth + 1, node.id)
-
-            elif node.kind == NodeKind.TEST:
-                source_file = node.source.path if node.source else ""
-                source_line = node.source.line if node.source else 0
-                has_children = any(c.kind == NodeKind.TEST_RESULT for c in node.iter_children())
-
-                rows.append(
-                    {
-                        "id": node.id,
-                        "kind": "test",
-                        "title": node.get_label() or "",
-                        "level": "",
-                        "status": "",
-                        "depth": depth,
-                        "parent_id": parent_id,
-                        "assertions": [],
-                        "has_children": has_children,
-                        "is_leaf": not has_children,
-                        "coverage": "none",
-                        "is_changed": False,
-                        "is_uncommitted": False,
-                        "is_associated": False,
-                        "is_test": True,
-                        "is_test_result": False,
-                        "result_status": "",
-                        "repo_prefix": "CORE",
-                        "source_file": source_file,
-                        "source_line": source_line,
-                    }
-                )
-
-                # Recurse into test_result children
-                for child in node.iter_children():
-                    if child.kind == NodeKind.TEST_RESULT:
-                        _walk(child, depth + 1, node.id)
-
-            elif node.kind == NodeKind.TEST_RESULT:
-                source_file = node.source.path if node.source else ""
-                source_line = node.source.line if node.source else 0
-                result_status = (node.get_field("status", "") or "").lower()
-
-                rows.append(
-                    {
-                        "id": node.id,
-                        "kind": "test_result",
-                        "title": node.get_label() or "",
-                        "level": "",
-                        "status": "",
-                        "depth": depth,
-                        "parent_id": parent_id,
-                        "assertions": [],
-                        "has_children": False,
-                        "is_leaf": True,
-                        "coverage": "none",
-                        "is_changed": False,
-                        "is_uncommitted": False,
-                        "is_associated": False,
-                        "is_test": False,
-                        "is_test_result": True,
-                        "result_status": result_status,
-                        "repo_prefix": "CORE",
-                        "source_file": source_file,
-                        "source_line": source_line,
-                    }
-                )
+            # Recurse into requirement children only
+            for child in node.iter_children():
+                if child.kind == NodeKind.REQUIREMENT:
+                    _walk(child, depth + 1, node.id)
 
         # Start from roots
         for root in g.iter_roots():
             if root.kind == NodeKind.REQUIREMENT:
                 _walk(root, 0, None)
-
-        # Add orphan TEST nodes not reached from root traversal
-        visited_ids = {vk[0] for vk in visited}
-        for node in g.nodes_by_kind(NodeKind.TEST):
-            if node.id not in visited_ids:
-                _walk(node, 0, None)
-
-        # Add orphan TEST_RESULT nodes
-        visited_ids = {vk[0] for vk in visited}
-        for node in g.nodes_by_kind(NodeKind.TEST_RESULT):
-            if node.id not in visited_ids:
-                _walk(node, 0, None)
 
         # Add USER_JOURNEY nodes as root-level rows
         for node in g.nodes_by_kind(NodeKind.USER_JOURNEY):
@@ -437,6 +393,7 @@ def create_app(
         import os
 
         from elspais.graph.mutations import MutationLog
+        from elspais.html.highlighting import highlight_file_content
 
         rel_path = request.args.get("path", "")
         if not rel_path:
@@ -458,6 +415,9 @@ def create_app(
 
         lines = content.splitlines()
 
+        # Syntax highlighting via shared module
+        highlighted = highlight_file_content(rel_path, content)
+
         # Check which nodes in the mutation log are sourced from this file
         g = _state["graph"]
         mutation_log: MutationLog = g._mutation_log
@@ -478,6 +438,8 @@ def create_app(
         return jsonify(
             {
                 "lines": lines,
+                "highlighted_lines": highlighted["lines"],
+                "language": highlighted["language"],
                 "line_count": len(lines),
                 "has_pending_mutations": len(affected_node_ids) > 0,
                 "pending_mutation_count": len(affected_node_ids),

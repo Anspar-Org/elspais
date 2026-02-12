@@ -202,6 +202,8 @@ class TestParser:
         current_func_line: int = 0
         # Whether we've seen any function or class definition yet
         seen_def = False
+        # Track triple-quoted string state to skip indent analysis inside them
+        in_triple_quote = False
 
         # File-level default validates (# Tests REQ-xxx before any def/class)
         file_default_validates: list[str] = []
@@ -210,6 +212,18 @@ class TestParser:
         line_context: dict[int, tuple[str | None, str | None, int]] = {}
 
         for ln, text in lines:
+            # Track triple-quoted strings — toggle on odd occurrences of """ or '''
+            triple_count = text.count('"""') + text.count("'''")
+            was_in_triple = in_triple_quote
+            if triple_count % 2 == 1:
+                in_triple_quote = not in_triple_quote
+
+            # Skip indent-based context tracking inside or at boundaries of
+            # triple-quoted strings (content at column 0 would falsely clear class)
+            if in_triple_quote or was_in_triple:
+                line_context[ln] = (current_func, current_class, current_func_line)
+                continue
+
             # Track class definitions
             class_match = class_pattern.match(text)
             if class_match:

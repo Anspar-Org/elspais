@@ -1,23 +1,9 @@
-// Partial: _edit-engine.js.j2 — API helpers, toast, edit toggle, mutations, undo/save/revert, search
+// Partial: _edit-engine.js.j2 — toast, edit toggle, mutations, undo/save/revert, search
+// Note: apiFetch() is now defined in _api-adapter.js.j2 (shared by both modes)
 
 // =====================================================================
-// API Helpers
+// Mutation Helper
 // =====================================================================
-
-async function apiFetch(url, options) {
-    try {
-        const resp = await fetch(url, options);
-        const data = await resp.json();
-        if (!resp.ok && data.error) {
-            showToast(data.error, 'error');
-            return null;
-        }
-        return data;
-    } catch (err) {
-        showToast('Network error: ' + err.message, 'error');
-        return null;
-    }
-}
 
 async function mutate(endpoint, payload) {
     const data = await apiFetch(endpoint, {
@@ -197,6 +183,9 @@ async function refreshCard(nodeId) {
     const info = editState.openCards.get(nodeId);
     if (!info) return;
     info.data = data;
+    // Invalidate assertion caches for this requirement
+    delete assertionTestsCache[nodeId];
+    delete assertionCodeCache[nodeId];
     renderCardStack();
     // Restore edit mode state after re-render
     if (editState.enabled) {
@@ -249,78 +238,4 @@ async function doUndo() {
     }
 }
 
-// =====================================================================
-// Search
-// =====================================================================
-
-function initSearch() {
-    const input = document.getElementById('search-input');
-    const results = document.getElementById('search-results');
-
-    input.addEventListener('input', function() {
-        clearTimeout(editState.searchDebounce);
-        const query = input.value.trim();
-        if (query.length < 2) {
-            results.classList.remove('visible');
-            return;
-        }
-        editState.searchDebounce = setTimeout(function() {
-            performSearch(query);
-        }, 250);
-    });
-
-    input.addEventListener('focus', function() {
-        if (results.children.length > 0 && input.value.trim().length >= 2) {
-            results.classList.add('visible');
-        }
-    });
-
-    // Close search results on click outside
-    document.addEventListener('click', function(e) {
-        if (!document.getElementById('search-box').contains(e.target)) {
-            results.classList.remove('visible');
-        }
-    });
-
-    // Keyboard navigation
-    input.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            results.classList.remove('visible');
-            input.blur();
-        }
-        if (e.key === 'Enter') {
-            const first = results.querySelector('.search-result-item');
-            if (first) {
-                first.click();
-                results.classList.remove('visible');
-            }
-        }
-    });
-}
-
-async function performSearch(query) {
-    const data = await apiFetch('/api/search?q=' + encodeURIComponent(query));
-    const results = document.getElementById('search-results');
-    if (!data || data.length === 0) {
-        results.innerHTML = '<div style="padding:12px;color:#adb5bd;text-align:center;font-size:0.8rem;">No results</div>';
-        results.classList.add('visible');
-        return;
-    }
-
-    let html = '';
-    data.slice(0, 20).forEach(function(item) {
-        const level = (item.level || '').toUpperCase();
-        const levelColor = level === 'PRD' ? '#212529'
-            : level === 'OPS' ? '#fd7e14'
-            : level === 'DEV' ? '#20c997' : '#6c757d';
-        html += '<div class="search-result-item" onclick="openCard(\'' + item.id + '\'); ' +
-            'document.getElementById(\'search-results\').classList.remove(\'visible\');">';
-        html += '<span class="search-result-level" style="background:' + levelColor + ';color:white;">' + level + '</span>';
-        html += '<span class="search-result-id">' + item.id.replace('REQ-', '') + '</span>';
-        html += '<span class="search-result-title">' + escapeHtml(item.title || '') + '</span>';
-        html += '</div>';
-    });
-
-    results.innerHTML = html;
-    results.classList.add('visible');
-}
+// Search functions moved to _search.js.j2 (shared by both modes)

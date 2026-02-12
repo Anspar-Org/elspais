@@ -46,6 +46,8 @@ class TreeRow:
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
     coverage_indirect: str = "none"  # "none", "partial", "full" (including indirect)
+    validation_color: str = ""  # val-green/val-yellow-green/val-yellow/val-red/val-orange or ""
+    validation_tip: str = ""  # Hover tooltip explaining the validation color
     source_file: str = ""  # Relative path to source file
     source_line: int = 0  # Line number in source file
     result_status: str = ""  # For TEST_RESULT: passed/failed/error/skipped
@@ -85,6 +87,75 @@ class ViewStats:
     assertions_implemented: int = 0  # Assertions with CODE coverage
     assertions_tested: int = 0  # Assertions with TEST coverage
     assertions_validated: int = 0  # Assertions with passing TEST_RESULTs
+
+
+def compute_validation_color(node: GraphNode) -> tuple[str, str]:
+    """Compute a validation quality color for a requirement's Active status badge.
+
+    Inspects the node's pre-computed RollupMetrics to classify its
+    coverage/validation quality into a color tier:
+    - green: Full direct coverage, all assertions validated, no failures
+    - yellow-green: Full coverage including indirect, all validated, no failures
+    - yellow: Some coverage, no failures
+    - red: Has test failures
+    - orange: Anomalous (tests but no results, tests but no code, or no coverage)
+    - ("", ""): Non-Active status, or no assertions
+
+    Args:
+        node: A GraphNode with pre-computed rollup_metrics.
+
+    Returns:
+        Tuple of (css_class_suffix, reason_text). Both empty if no color applies.
+    """
+    from elspais.graph.metrics import RollupMetrics
+
+    status = (node.status or "").upper()
+    if status != "ACTIVE":
+        return ("", "")
+
+    rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return ("", "")
+
+    n = rollup.total_assertions
+
+    # Red: any test failures take priority
+    if rollup.has_failures:
+        return ("red", "Test failures detected")
+
+    # Green: full direct coverage AND all assertions validated
+    if rollup.coverage_pct == 100 and rollup.validated >= n:
+        return ("green", f"All {n} assertions covered and validated")
+
+    # Yellow-green: full coverage with indirect AND all validated with indirect
+    if rollup.indirect_coverage_pct == 100 and rollup.validated_with_indirect >= n:
+        return (
+            "yellow-green",
+            f"All {n} assertions validated (including indirect)",
+        )
+
+    # Orange: anomalous test/code gaps
+    if rollup.direct_tested > 0:
+        from elspais.graph import NodeKind
+
+        has_code = any(c.kind == NodeKind.CODE for c in node.iter_children())
+        # Tests exist but zero results (tests never run)
+        if rollup.validated == 0 and rollup.validated_with_indirect == 0:
+            return ("orange", f"Tests exist but no results ({rollup.direct_tested}/{n} tested)")
+        # Tests exist but no code implementation
+        if not has_code:
+            return (
+                "orange",
+                f"Tests exist but no code implementation ({rollup.direct_tested}/{n} tested)",
+            )
+
+    # Yellow: some coverage exists, no failures
+    if rollup.coverage_pct > 0 or rollup.indirect_coverage_pct > 0:
+        v = rollup.validated or rollup.validated_with_indirect
+        return ("yellow", f"Partial: {v}/{n} validated, {rollup.coverage_pct:.0f}% covered")
+
+    # Orange: assertions exist but zero coverage (anomalous)
+    return ("orange", f"No coverage ({n} assertions)")
 
 
 class HTMLGenerator:
@@ -152,6 +223,12 @@ class HTMLGenerator:
         # Collect source files with syntax highlighting for inline viewer
         source_files = self._collect_source_files() if embed_content else {}
         pygments_css = self._get_pygments_css() if source_files else ""
+        pygments_css_dark = self._get_pygments_css_dark() if source_files else ""
+
+        # Build embedded data indexes for view-mode apiFetch adapter
+        node_index = self._build_node_index() if embed_content else {}
+        coverage_index = self._build_coverage_index() if embed_content else {}
+        status_data = self._build_status_data() if embed_content else {}
 
         # Update journey count in stats
         stats.journey_count = len(journeys)
@@ -167,6 +244,10 @@ class HTMLGenerator:
             tree_data=tree_data,
             source_files=source_files,
             pygments_css=pygments_css,
+            pygments_css_dark=pygments_css_dark,
+            node_index=node_index,
+            coverage_index=coverage_index,
+            status_data=status_data,
             version=self.version,
             base_path=self.base_path,
         )
@@ -436,6 +517,7 @@ class HTMLGenerator:
             coverage, coverage_indirect, has_failures = (
                 ("none", "none", False) if is_impl_node else compute_coverage(node)
             )
+            val_color, val_tip = ("", "") if is_impl_node else compute_validation_color(node)
             assertion_letters = (
                 get_assertion_letters(node, parent_id)
                 if parent_assertions is None
@@ -473,6 +555,8 @@ class HTMLGenerator:
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
                 coverage_indirect=coverage_indirect,
+                validation_color=val_color,
+                validation_tip=val_tip,
                 topic=get_topic(node) if not is_impl_node else "",
                 depth=depth,
                 parent_id=(
@@ -723,6 +807,7 @@ class HTMLGenerator:
 
         data: dict[str, Any] = {}
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            vc, vt = compute_validation_color(node)
             data[node.id] = {
                 "id": node.id,
                 "label": node.get_label(),
@@ -730,12 +815,52 @@ class HTMLGenerator:
                 "level": (node.level or "").upper(),
                 "status": node.status,
                 "hash": node.hash,
+                "validation_color": vc,
+                "validation_tip": vt,
                 "source": {
                     "path": node.source.path if node.source else None,
                     "line": node.source.line if node.source else None,
                 },
             }
         return data
+
+    def _build_node_index(self) -> dict[str, Any]:
+        """Build node index for embedded JSON — matches /api/node/<id> response shape.
+
+        Delegates to the MCP server's _serialize_node_generic() to produce
+        identical JSON as the live API, ensuring view mode and edit mode
+        see the same data structure.
+        """
+        from elspais.mcp.server import _serialize_node_generic
+
+        index: dict[str, Any] = {}
+        for node in self.graph.all_nodes():
+            index[node.id] = _serialize_node_generic(node, self.graph)
+        return index
+
+    def _build_coverage_index(self) -> dict[str, Any]:
+        """Build per-requirement coverage index for embedded JSON.
+
+        Each entry is keyed by requirement ID and contains both test coverage
+        (matching /api/test-coverage/<id>) and code coverage
+        (matching /api/code-coverage/<id>) response shapes.
+        """
+        from elspais.graph import NodeKind
+        from elspais.mcp.server import _get_assertion_code_map, _get_assertion_test_map
+
+        index: dict[str, Any] = {}
+        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            index[node.id] = {
+                "test": _get_assertion_test_map(self.graph, node.id),
+                "code": _get_assertion_code_map(self.graph, node.id),
+            }
+        return index
+
+    def _build_status_data(self) -> dict[str, Any]:
+        """Build graph status data for embedded JSON — matches /api/status response shape."""
+        from elspais.mcp.server import _get_graph_status
+
+        return _get_graph_status(self.graph)
 
     def _collect_source_files(self) -> dict[str, Any]:
         """Collect source file contents with syntax highlighting for inline viewer.
@@ -748,24 +873,13 @@ class HTMLGenerator:
             Dict mapping file paths to their content data:
             {path: {lines: [highlighted_html_per_line], language: str, raw: str}}
         """
-        _MAX_FILE_SIZE = 512_000  # 500KB limit
+        from elspais.html.highlighting import MAX_FILE_SIZE, highlight_file_content
 
         # Collect unique source paths from all nodes
         paths: set[str] = set()
         for node in self.graph.all_nodes():
             if node.source and node.source.path:
                 paths.add(node.source.path)
-
-        # Try to import Pygments for syntax highlighting
-        try:
-            from pygments import highlight as pygments_highlight
-            from pygments.formatters import HtmlFormatter
-            from pygments.lexers import TextLexer, get_lexer_for_filename
-
-            has_pygments = True
-            formatter = HtmlFormatter(nowrap=True)
-        except ImportError:
-            has_pygments = False
 
         result: dict[str, Any] = {}
         for path in sorted(paths):
@@ -775,7 +889,7 @@ class HTMLGenerator:
                     continue
 
                 # Skip files that are too large
-                if file_path.stat().st_size > _MAX_FILE_SIZE:
+                if file_path.stat().st_size > MAX_FILE_SIZE:
                     continue
 
                 # Skip binary files (check first 8KB for null bytes)
@@ -785,42 +899,7 @@ class HTMLGenerator:
                         continue
 
                 raw_content = file_path.read_text(encoding="utf-8", errors="replace")
-                raw_lines = raw_content.split("\n")
-
-                # Determine language and apply highlighting
-                language = file_path.suffix.lstrip(".") or "text"
-                highlighted_lines: list[str] = []
-
-                if has_pygments:
-                    try:
-                        lexer = get_lexer_for_filename(path)
-                        language = lexer.name.lower()
-                    except Exception:
-                        lexer = TextLexer()
-                        language = "text"
-
-                    # Highlight the full content, then split by line
-                    # This preserves multi-line token state (e.g., docstrings)
-                    full_highlighted = pygments_highlight(raw_content, lexer, formatter)
-                    highlighted_lines = full_highlighted.split("\n")
-
-                    # Pygments may add a trailing empty string after final \n
-                    if highlighted_lines and highlighted_lines[-1] == "":
-                        highlighted_lines.pop()
-                else:
-                    # No Pygments: use HTML-escaped plain text
-                    import html
-
-                    highlighted_lines = [html.escape(line) for line in raw_lines]
-                    # Remove trailing empty line to match raw_lines
-                    if highlighted_lines and raw_content.endswith("\n"):
-                        highlighted_lines.pop()
-
-                result[path] = {
-                    "lines": highlighted_lines,
-                    "language": language,
-                    "raw": raw_content,
-                }
+                result[path] = highlight_file_content(path, raw_content)
             except (OSError, UnicodeDecodeError):
                 continue
 
@@ -832,13 +911,20 @@ class HTMLGenerator:
         Returns CSS rules scoped under .highlight for the file viewer panel.
         Returns empty string if Pygments is not installed.
         """
-        try:
-            from pygments.formatters import HtmlFormatter
+        from elspais.html.highlighting import get_pygments_css
 
-            formatter = HtmlFormatter(style="default")
-            return formatter.get_style_defs(".highlight")
-        except ImportError:
-            return ""
+        return get_pygments_css()
+
+    def _get_pygments_css_dark(self) -> str:
+        """Generate dark-theme Pygments CSS for syntax highlighting.
+
+        Returns CSS rules scoped under .dark-theme .highlight for the
+        file viewer panel when dark theme is active.
+        Returns empty string if Pygments is not installed.
+        """
+        from elspais.html.highlighting import get_pygments_css
+
+        return get_pygments_css(style="monokai", scope=".dark-theme .highlight")
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""
@@ -894,4 +980,4 @@ class HTMLGenerator:
         return journeys
 
 
-__all__ = ["HTMLGenerator"]
+__all__ = ["HTMLGenerator", "compute_validation_color"]
