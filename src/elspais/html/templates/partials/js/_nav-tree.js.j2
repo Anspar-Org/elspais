@@ -35,8 +35,22 @@ function updateHeaderStats() {
     apiFetch('/api/status').then(function(data) {
         if (!data) return;
         var nc = data.node_counts || {};
-        document.getElementById('stat-tests').textContent = 'Tests: ' + (nc.test || 0);
-        document.getElementById('stat-results').textContent = 'Results: ' + (nc.test_result || 0);
+        var testCount = nc.test || 0;
+        var resultCount = nc.test_result || 0;
+        var testBadge = document.getElementById('stat-tests');
+        var resultBadge = document.getElementById('stat-results');
+        if (testCount > 0) {
+            testBadge.textContent = 'Tests: ' + testCount;
+            testBadge.style.display = '';
+        } else {
+            testBadge.style.display = 'none';
+        }
+        if (resultCount > 0) {
+            resultBadge.textContent = 'Results: ' + resultCount;
+            resultBadge.style.display = '';
+        } else {
+            resultBadge.style.display = 'none';
+        }
 
         var assocRepos = data.associated_repos || [];
         // Build name lookup from API: { "CAL": "callisto", ... }
@@ -204,8 +218,8 @@ function renderNavTree() {
             // Git filters (when active, SHOW only matching)
             if (af.uncommitted && !r.is_uncommitted) continue;
             if (af.changed && !r.is_changed) continue;
-            // Main filter (show only main/non-associated)
-            if (af.main && r.is_associated) continue;
+            // Core filter (hide core/non-associated items)
+            if (af.main && !r.is_associated) continue;
             // Leaf only
             if (af.leaf && !r.is_leaf) continue;
             // Hide Deprecated (when active, hide items with Deprecated status)

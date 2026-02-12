@@ -101,7 +101,7 @@ function fvRenderContent(data, lineNumber) {
 
     if (fvState.fileViewMode === 'rendered' && fvState.currentFile && fvState.currentFile.endsWith('.md')) {
         // Rendered markdown view
-        var rawLines = (data.raw || (data.highlighted_lines || data.lines || []).join('\n')).split('\n');
+        var rawLines = data.lines || [];
         var html = '<div class="source-lines">';
         for (var i = 0; i < rawLines.length; i++) {
             var num = i + 1;
