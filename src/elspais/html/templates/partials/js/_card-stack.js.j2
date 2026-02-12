@@ -1,3 +1,4 @@
+// Implements: REQ-p00006-B
 // Partial: _card-stack.js.j2 — Card rendering, open/close
 
 // =====================================================================
@@ -23,6 +24,8 @@ async function openCard(nodeId) {
     editState.openCardOrder.unshift(nodeId);
 
     renderCardStack();
+    // Prefetch coverage data so buttons are colored immediately
+    if (data.kind === 'requirement') { prefetchCoverage(nodeId); }
     focusCard(nodeId);
     updateNavSelection();
     saveState();
@@ -107,6 +110,9 @@ function renderCardStack() {
 
     // Re-add empty element (hidden) for later
     body.appendChild(empty);
+
+    // Re-apply cached coverage colors after DOM rebuild
+    recolorCachedButtons();
 }
 
 function buildCardHtml(nodeId, data, collapsed) {
@@ -208,13 +214,25 @@ function buildCardHtml(nodeId, data, collapsed) {
             const assertionId = a.id || '';
             const label = a.label || '';
             const text = a.text || '';
-            html += '<div class="card-assertion" data-assertion-id="' + assertionId + '">';
+            html += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
+            html += '<div class="card-assertion">';
             html += '<span class="card-assertion-label">' + label + '</span>';
             html += '<span class="card-assertion-text editable-field" ' +
                 'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
                 'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
                 escapeHtml(text) + '</span>';
+            html += '<button class="assertion-implemented-btn" ' +
+                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
+                'onclick="event.stopPropagation(); toggleAssertionCode(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
+                'Implemented</button>';
+            html += '<button class="assertion-validation-btn" ' +
+                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
+                'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
+                'Validation</button>';
+            html += '</div>';
+            html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '</div>';
         });
         html += '</div>';
@@ -334,10 +352,10 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '</div></div>';
     }
 
-    // Description
+    // Journey body (full text with steps)
     if (props.description) {
-        html += '<div class="card-section"><div class="card-section-label">Description</div>';
-        html += '<div class="journey-card-description">' + escapeHtml(props.description) + '</div>';
+        html += '<div class="card-section"><div class="card-section-label">Journey Body</div>';
+        html += '<div class="journey-card-description">' + simpleMarkdown(props.description) + '</div>';
         html += '</div>';
     }
 
@@ -420,4 +438,283 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
     html += '</div>'; // end req-card
 
     return html;
+}
+
+// =====================================================================
+// Simple Markdown Renderer (for journey body text)
+// =====================================================================
+
+function simpleMarkdown(text) {
+    // Escape HTML first, then add minimal formatting
+    var lines = text.split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+        var line = escapeHtml(lines[i]);
+        // Bold: **text**
+        line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Headers: ## text -> bold
+        line = line.replace(/^(#{1,3})\s+(.+)$/, '<strong>$2</strong>');
+        // Numbered steps: 1. text
+        line = line.replace(/^(\d+)\.\s+/, '<strong>$1.</strong> ');
+        // Bullet items: - text
+        line = line.replace(/^(\s*)-\s+/, '$1&bull; ');
+        result.push(line);
+    }
+    return result.join('\n');
+}
+
+// =====================================================================
+// Coverage Prefetch — color buttons on card open
+// =====================================================================
+
+async function prefetchCoverage(nodeId) {
+    var testData = assertionTestsCache[nodeId]
+        ? Promise.resolve(assertionTestsCache[nodeId])
+        : apiFetch('/api/test-coverage/' + encodeURIComponent(nodeId));
+    var codeData = assertionCodeCache[nodeId]
+        ? Promise.resolve(assertionCodeCache[nodeId])
+        : apiFetch('/api/code-coverage/' + encodeURIComponent(nodeId));
+
+    var results = await Promise.all([testData, codeData]);
+
+    if (results[0] && results[0].success) {
+        assertionTestsCache[nodeId] = results[0];
+    }
+    if (results[1] && results[1].success) {
+        assertionCodeCache[nodeId] = results[1];
+    }
+    // Re-apply all cached colors (covers this card + any others in the DOM)
+    recolorCachedButtons();
+}
+
+function recolorCachedButtons() {
+    for (var reqId in assertionTestsCache) {
+        updateAllValidationButtons(reqId, assertionTestsCache[reqId]);
+    }
+    for (var reqId in assertionCodeCache) {
+        updateAllImplementedButtons(reqId, assertionCodeCache[reqId]);
+    }
+}
+
+// =====================================================================
+// Assertion Validation — Test Coverage Buttons
+// =====================================================================
+
+var assertionTestsCache = {};
+
+async function toggleAssertionTests(btn, reqId, label) {
+    var panelId = 'assertion-tests-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    // Toggle visibility
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch data if not cached
+    if (!assertionTestsCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/test-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load coverage data</div>';
+            return;
+        }
+        assertionTestsCache[reqId] = data;
+        // Update ALL validation buttons for this requirement
+        updateAllValidationButtons(reqId, data);
+    }
+
+    renderAssertionTests(panel, reqId, label, assertionTestsCache[reqId]);
+}
+
+function renderAssertionTests(panel, reqId, label, data) {
+    var assertionData = data.assertion_tests[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var tests = assertionData.tests;
+    if (tests.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No tests cover this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < tests.length; i++) {
+        var t = tests[i];
+        var statusIcon = '';
+        var statusClass = '';
+        // Determine overall status from results
+        var hasResults = t.results && t.results.length > 0;
+        if (hasResults) {
+            var allPassed = t.results.every(function(r) { return r.status === 'passed'; });
+            var anyFailed = t.results.some(function(r) { return r.status === 'failed' || r.status === 'failure' || r.status === 'error'; });
+            if (allPassed) { statusIcon = '&#x2705;'; statusClass = 'test-passed'; }
+            else if (anyFailed) { statusIcon = '&#x274C;'; statusClass = 'test-failed'; }
+            else { statusIcon = '&#x2753;'; statusClass = ''; }
+        } else {
+            statusIcon = '&#x2796;'; statusClass = 'test-no-result';
+        }
+
+        var testLabel = escapeHtml(t.label || t.id);
+
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (t.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(t.file) + '\', ' + (t.line || 0) + ')">' + testLabel + '</a>';
+        } else {
+            html += '<span class="assertion-test-link">' + testLabel + '</span>';
+        }
+        // Result file link (e.g., test-results.xml)
+        if (hasResults && t.results[0].file) {
+            html += ' <a class="assertion-result-file-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(t.results[0].file) + '\', ' + (t.results[0].line || 0) +
+                ')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function updateAllValidationButtons(reqId, data) {
+    var buttons = document.querySelectorAll('.assertion-validation-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_tests[label];
+        if (!assertionData) continue;
+
+        // Remove previous state classes
+        btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
+
+        var tests = assertionData.tests;
+        if (tests.length === 0) {
+            btn.classList.add('validation-fail');
+            continue;
+        }
+
+        // Collect all results across all tests for this assertion
+        var allResults = [];
+        for (var j = 0; j < tests.length; j++) {
+            if (tests[j].results) {
+                for (var k = 0; k < tests[j].results.length; k++) {
+                    allResults.push(tests[j].results[k].status);
+                }
+            }
+        }
+
+        if (allResults.length === 0) {
+            // Tests exist but no results loaded — tests ARE coverage
+            btn.classList.add('validation-pass');
+        } else {
+            var allPassed = allResults.every(function(s) { return s === 'passed'; });
+            var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
+            if (allPassed) {
+                btn.classList.add('validation-pass');
+            } else if (anyFailed) {
+                btn.classList.add('validation-partial');
+            } else {
+                // Unknown statuses (skipped, etc.) — still covered
+                btn.classList.add('validation-pass');
+            }
+        }
+    }
+}
+
+// =====================================================================
+// Assertion Implementation — Code Coverage Buttons
+// =====================================================================
+
+var assertionCodeCache = {};
+
+async function toggleAssertionCode(btn, reqId, label) {
+    var panelId = 'assertion-code-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    // Toggle visibility
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch data if not cached
+    if (!assertionCodeCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/code-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load implementation data</div>';
+            return;
+        }
+        assertionCodeCache[reqId] = data;
+        // Update ALL implemented buttons for this requirement
+        updateAllImplementedButtons(reqId, data);
+    }
+
+    renderAssertionCode(panel, reqId, label, assertionCodeCache[reqId]);
+}
+
+function renderAssertionCode(panel, reqId, label, data) {
+    var assertionData = data.assertion_code[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var codeRefs = assertionData.code_refs;
+    if (codeRefs.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No code implements this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < codeRefs.length; i++) {
+        var c = codeRefs[i];
+        // Extract short filename from full path
+        var fileName = c.file ? c.file.split('/').pop() : c.id;
+
+        html += '<div class="assertion-test-item">';
+        html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
+        if (c.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(c.file) + '\', ' + (c.line || 0) + ')">' +
+                escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
+        } else {
+            html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function updateAllImplementedButtons(reqId, data) {
+    var buttons = document.querySelectorAll('.assertion-implemented-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_code[label];
+        if (!assertionData) continue;
+
+        // Remove previous state classes
+        btn.classList.remove('implemented-yes', 'implemented-no');
+
+        var codeRefs = assertionData.code_refs;
+        if (codeRefs.length > 0) {
+            btn.classList.add('implemented-yes');
+        } else {
+            btn.classList.add('implemented-no');
+        }
+    }
 }

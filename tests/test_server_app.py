@@ -101,6 +101,59 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture
+def coverage_graph():
+    """Create a graph with test coverage for API testing."""
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+
+    req_node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Platform Security")
+    req_node._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
+
+    assertion_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL encrypt data")
+    assertion_a._content = {"label": "A"}
+    req_node.add_child(assertion_a)
+
+    assertion_b = GraphNode(id="REQ-p00001-B", kind=NodeKind.ASSERTION, label="SHALL use TLS")
+    assertion_b._content = {"label": "B"}
+    req_node.add_child(assertion_b)
+
+    # Test node linked to assertion A
+    test_node = GraphNode(
+        id="test:test_encrypt.py::test_encrypt", kind=NodeKind.TEST, label="test_encrypt"
+    )
+    test_node._content = {"file": "test_encrypt.py", "name": "test_encrypt"}
+    assertion_a.link(test_node, EdgeKind.VALIDATES)
+
+    # Test result
+    result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.TEST_RESULT, label="passed")
+    result_node._content = {"status": "passed", "duration": 0.5}
+    test_node.add_child(result_node)
+
+    graph._roots = [req_node]
+    graph._index = {
+        "REQ-p00001": req_node,
+        "REQ-p00001-A": assertion_a,
+        "REQ-p00001-B": assertion_b,
+        "test:test_encrypt.py::test_encrypt": test_node,
+        "result:test_encrypt": result_node,
+    }
+    return graph
+
+
+@pytest.fixture
+def coverage_app(coverage_graph):
+    """Create Flask test app with coverage graph."""
+    application = create_app(repo_root=Path("/test/repo"), graph=coverage_graph, config={})
+    application.config["TESTING"] = True
+    return application
+
+
+@pytest.fixture
+def coverage_client(coverage_app):
+    """Create Flask test client for coverage tests."""
+    return coverage_app.test_client()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # App Factory Tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -243,6 +296,53 @@ class TestGetSearch:
         resp = client.get("/api/search?q=REQ-p00001&field=id")
         data = resp.get_json()
         assert len(data) >= 1
+
+
+class TestGetTestCoverage:
+    """Validates REQ-d00010-A: GET /api/test-coverage/<req_id>."""
+
+    def test_REQ_d00010_A_test_coverage_found(self, coverage_client):
+        """GET /api/test-coverage returns per-assertion test map."""
+        resp = coverage_client.get("/api/test-coverage/REQ-p00001")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["req_id"] == "REQ-p00001"
+        assert "assertion_tests" in data
+        assert "A" in data["assertion_tests"]
+        assert "B" in data["assertion_tests"]
+
+    def test_REQ_d00010_A_test_coverage_assertion_has_tests(self, coverage_client):
+        """Covered assertion A includes test entries with results."""
+        resp = coverage_client.get("/api/test-coverage/REQ-p00001")
+        data = resp.get_json()
+        a_tests = data["assertion_tests"]["A"]["tests"]
+        assert len(a_tests) >= 1
+        assert a_tests[0]["id"] == "test:test_encrypt.py::test_encrypt"
+        assert len(a_tests[0]["results"]) >= 1
+        assert a_tests[0]["results"][0]["status"] == "passed"
+
+    def test_REQ_d00010_A_test_coverage_uncovered_assertion(self, coverage_client):
+        """Uncovered assertion B has empty test list."""
+        resp = coverage_client.get("/api/test-coverage/REQ-p00001")
+        data = resp.get_json()
+        b_tests = data["assertion_tests"]["B"]["tests"]
+        assert len(b_tests) == 0
+
+    def test_REQ_d00010_A_test_coverage_stats(self, coverage_client):
+        """Coverage stats reflect 1 of 2 assertions covered."""
+        resp = coverage_client.get("/api/test-coverage/REQ-p00001")
+        data = resp.get_json()
+        assert data["total_assertions"] == 2
+        assert data["covered_count"] == 1
+        assert data["coverage_pct"] == 50.0
+
+    def test_REQ_d00010_A_test_coverage_not_found(self, coverage_client):
+        """GET /api/test-coverage returns 404 for unknown ID."""
+        resp = coverage_client.get("/api/test-coverage/REQ-NOPE")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
 
 
 class TestGetTreeData:
