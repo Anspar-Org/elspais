@@ -169,19 +169,42 @@ class TestBuildInstallSpec:
 class TestInstallLocal:
     """Validates REQ-p00001-A: Local editable installation."""
 
+    @patch("elspais.commands.install_cmd._print_shell_hint")
     @patch("elspais.commands.install_cmd._show_active_version")
+    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
     @patch("subprocess.run")
-    def test_REQ_p00001_A_pipx_command(self, mock_run, mock_version):
+    def test_REQ_p00001_A_pipx_two_step(self, mock_run, *_):
+        """pipx uses two-step: install --force, then runpip -e."""
         mock_run.return_value = MagicMock(returncode=0)
         source = Path("/home/dev/elspais")
         result = install_cmd.install_local(source, "pipx")
         assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert cmd == ["pipx", "install", "--editable", str(source), "--force"]
+        assert mock_run.call_count == 2
+        # Step 1: pipx install <path> --force
+        step1 = mock_run.call_args_list[0][0][0]
+        assert step1 == ["pipx", "install", str(source), "--force"]
+        # Step 2: pipx runpip elspais install -e <path>
+        step2 = mock_run.call_args_list[1][0][0]
+        assert step2 == ["pipx", "runpip", "elspais", "install", "-e", str(source)]
 
+    @patch("elspais.commands.install_cmd._print_shell_hint")
     @patch("elspais.commands.install_cmd._show_active_version")
+    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
     @patch("subprocess.run")
-    def test_REQ_p00001_A_uv_command(self, mock_run, mock_version):
+    def test_REQ_p00001_A_pipx_with_extras(self, mock_run, *_):
+        mock_run.return_value = MagicMock(returncode=0)
+        source = Path("/home/dev/elspais")
+        result = install_cmd.install_local(source, "pipx", extras=["mcp", "all"])
+        assert result == 0
+        # Step 2 should include extras in the spec
+        step2 = mock_run.call_args_list[1][0][0]
+        assert step2[-1] == f"{source}[mcp,all]"
+
+    @patch("elspais.commands.install_cmd._print_shell_hint")
+    @patch("elspais.commands.install_cmd._show_active_version")
+    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
+    @patch("subprocess.run")
+    def test_REQ_p00001_A_uv_command(self, mock_run, *_):
         mock_run.return_value = MagicMock(returncode=0)
         source = Path("/home/dev/elspais")
         result = install_cmd.install_local(source, "uv")
@@ -189,19 +212,21 @@ class TestInstallLocal:
         cmd = mock_run.call_args[0][0]
         assert cmd == ["uv", "tool", "install", "--editable", str(source), "--force"]
 
-    @patch("elspais.commands.install_cmd._show_active_version")
     @patch("subprocess.run")
-    def test_REQ_p00001_A_with_extras(self, mock_run, mock_version):
-        mock_run.return_value = MagicMock(returncode=0)
+    def test_REQ_p00001_A_pipx_step1_failure_returns_1(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stderr="boom")
         source = Path("/home/dev/elspais")
-        result = install_cmd.install_local(source, "pipx", extras=["mcp", "all"])
-        assert result == 0
-        cmd = mock_run.call_args[0][0]
-        assert f"{source}[mcp,all]" in cmd[3]
+        result = install_cmd.install_local(source, "pipx")
+        assert result == 1
+        # Only step 1 should have been called
+        assert mock_run.call_count == 1
 
     @patch("subprocess.run")
-    def test_REQ_p00001_A_failure_returns_1(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stderr="boom")
+    def test_REQ_p00001_A_pipx_step2_failure_returns_1(self, mock_run):
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # step 1 succeeds
+            MagicMock(returncode=1, stderr="editable failed"),  # step 2 fails
+        ]
         source = Path("/home/dev/elspais")
         result = install_cmd.install_local(source, "pipx")
         assert result == 1

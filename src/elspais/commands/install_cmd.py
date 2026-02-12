@@ -131,7 +131,7 @@ def install_local(
     install_spec = _build_install_spec(str(source_root), extras)
 
     if tool == "pipx":
-        cmd = ["pipx", "install", "--editable", install_spec, "--force"]
+        return _pipx_install_editable(source_root, install_spec, extras, verbose)
     elif tool == "uv":
         cmd = ["uv", "tool", "install", "--editable", install_spec, "--force"]
     else:
@@ -155,6 +155,53 @@ def install_local(
             file=sys.stderr,
         )
         if not verbose and result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return 1
+
+    _patch_argcomplete_marker()
+    _show_active_version()
+    _print_shell_hint()
+    return 0
+
+
+def _pipx_install_editable(
+    source_root: Path,
+    install_spec: str,
+    extras: list[str] | None,
+    verbose: bool,
+) -> int:
+    """Install editable into pipx using a two-step workaround.
+
+    pipx 1.x silently ignores --editable for local paths, doing a regular
+    install instead. We work around this by:
+    1. ``pipx install <path> --force`` to create the venv + entry point
+    2. ``pipx runpip elspais install -e <path>[extras]`` to replace the
+       package inside the venv with a true editable install
+    """
+    capture = not verbose
+
+    # Step 1: create the venv with entry point
+    step1_cmd = ["pipx", "install", str(source_root), "--force"]
+    print(f"Installing local elspais from {source_root}")
+    if extras:
+        print(f"  Extras: {', '.join(extras)}")
+    print(f"  Step 1: {' '.join(step1_cmd)}")
+
+    result = subprocess.run(step1_cmd, capture_output=capture, text=True)
+    if result.returncode != 0:
+        print("Error: pipx install failed", file=sys.stderr)
+        if capture and result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return 1
+
+    # Step 2: replace with editable install inside the venv
+    step2_cmd = ["pipx", "runpip", "elspais", "install", "-e", install_spec]
+    print(f"  Step 2: {' '.join(step2_cmd)}")
+
+    result = subprocess.run(step2_cmd, capture_output=capture, text=True)
+    if result.returncode != 0:
+        print("Error: editable install into pipx venv failed", file=sys.stderr)
+        if capture and result.stderr:
             print(result.stderr, file=sys.stderr)
         return 1
 
