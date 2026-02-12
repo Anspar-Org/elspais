@@ -158,6 +158,7 @@ def install_local(
             print(result.stderr, file=sys.stderr)
         return 1
 
+    _patch_argcomplete_marker()
     _show_active_version()
     return 0
 
@@ -212,8 +213,37 @@ def uninstall_local(
             print(result.stderr, file=sys.stderr)
         return 1
 
+    _patch_argcomplete_marker()
     _show_active_version()
     return 0
+
+
+def _patch_argcomplete_marker() -> None:
+    """Inject PYTHON_ARGCOMPLETE_OK marker into the elspais entry point.
+
+    pip/pipx-generated console scripts don't include the magic comment
+    that argcomplete's shell function checks (first 1024 bytes) to
+    decide whether to activate completion. Without it, tab-completion
+    silently stops working after a reinstall.
+    """
+    entry_point = shutil.which("elspais")
+    if not entry_point:
+        return
+
+    marker = "# PYTHON_ARGCOMPLETE_OK"
+    try:
+        script = Path(entry_point).read_text(encoding="utf-8")
+        if marker in script:
+            return  # already patched
+
+        # Insert marker after the shebang line
+        lines = script.split("\n", 1)
+        if len(lines) == 2 and lines[0].startswith("#!"):
+            patched = f"{lines[0]}\n{marker}\n{lines[1]}"
+            Path(entry_point).write_text(patched, encoding="utf-8")
+            print(f"  Patched {entry_point} with {marker}")
+    except (OSError, PermissionError) as e:
+        print(f"  Warning: Could not patch argcomplete marker: {e}", file=sys.stderr)
 
 
 def _show_active_version() -> None:

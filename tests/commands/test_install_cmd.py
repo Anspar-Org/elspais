@@ -403,3 +403,47 @@ class TestParseExtras:
         args = argparse.Namespace(extras=None)
         result = install_cmd._parse_extras(args)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _patch_argcomplete_marker
+# ---------------------------------------------------------------------------
+
+
+class TestPatchArgcompleteMarker:
+    """Validates REQ-p00001-A: Argcomplete marker injection in entry point."""
+
+    def test_REQ_p00001_A_patches_shebang_script(self, tmp_path):
+        script = tmp_path / "elspais"
+        script.write_text("#!/usr/bin/python\nimport sys\nsys.exit(0)\n")
+        with patch("shutil.which", return_value=str(script)):
+            install_cmd._patch_argcomplete_marker()
+        content = script.read_text()
+        assert "# PYTHON_ARGCOMPLETE_OK" in content
+        # Marker should be on line 2 (after shebang)
+        lines = content.splitlines()
+        assert lines[0].startswith("#!")
+        assert lines[1] == "# PYTHON_ARGCOMPLETE_OK"
+
+    def test_REQ_p00001_A_idempotent(self, tmp_path):
+        script = tmp_path / "elspais"
+        script.write_text("#!/usr/bin/python\n# PYTHON_ARGCOMPLETE_OK\nimport sys\n")
+        with patch("shutil.which", return_value=str(script)):
+            install_cmd._patch_argcomplete_marker()
+        content = script.read_text()
+        assert content.count("PYTHON_ARGCOMPLETE_OK") == 1
+
+    def test_REQ_p00001_A_skips_when_not_found(self):
+        with patch("shutil.which", return_value=None):
+            # Should not raise
+            install_cmd._patch_argcomplete_marker()
+
+    def test_REQ_p00001_A_handles_permission_error(self, tmp_path):
+        script = tmp_path / "elspais"
+        script.write_text("#!/usr/bin/python\nimport sys\n")
+        with (
+            patch("shutil.which", return_value=str(script)),
+            patch.object(Path, "write_text", side_effect=PermissionError("denied")),
+        ):
+            # Should not raise, just warn
+            install_cmd._patch_argcomplete_marker()
