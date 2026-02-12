@@ -1,0 +1,314 @@
+# Implements: REQ-p00001-A
+"""
+elspais.commands.install_cmd - Manage elspais installation (local dev / PyPI).
+
+Provides install/uninstall of local editable development versions,
+replacing the current global pipx/uv installation.
+"""
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def detect_tool(preferred: str | None = None) -> str | None:
+    """Detect available package tool (pipx or uv).
+
+    Args:
+        preferred: If set, only check this tool.
+
+    Returns:
+        Tool name ("pipx" or "uv") or None if not found.
+    """
+    if preferred:
+        return preferred if shutil.which(preferred) else None
+
+    for tool in ("pipx", "uv"):
+        if shutil.which(tool):
+            return tool
+    return None
+
+
+def find_source_root(override_path: Path | None = None) -> Path | None:
+    """Find the elspais source root directory.
+
+    Walks up from this file's location to find pyproject.toml
+    with name="elspais".
+
+    Args:
+        override_path: Explicit path to use instead of auto-detection.
+
+    Returns:
+        Path to source root, or None if not found.
+    """
+    if override_path:
+        return _validate_source_root(override_path)
+
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        candidate = current / "pyproject.toml"
+        if candidate.exists() and _is_elspais_project(candidate):
+            return current
+        current = current.parent
+    return None
+
+
+def _validate_source_root(path: Path) -> Path | None:
+    """Validate that a path is an elspais source root."""
+    path = path.resolve()
+    pyproject = path / "pyproject.toml"
+    if pyproject.exists() and _is_elspais_project(pyproject):
+        return path
+    return None
+
+
+def _is_elspais_project(pyproject_path: Path) -> bool:
+    """Check if a pyproject.toml belongs to the elspais project."""
+    import tomlkit
+
+    try:
+        content = pyproject_path.read_text(encoding="utf-8")
+        data = tomlkit.parse(content)
+        return data.get("project", {}).get("name") == "elspais"
+    except Exception:
+        return False
+
+
+def detect_installed_extras() -> list[str]:
+    """Detect which elspais extras are currently installed.
+
+    Returns:
+        List of extra names that have their dependencies satisfied.
+    """
+    import importlib.util
+
+    extras_deps: dict[str, list[str]] = {
+        "mcp": ["mcp"],
+        "trace-view": ["jinja2", "pygments"],
+        "trace-review": ["jinja2", "pygments", "flask", "flask_cors"],
+        "completion": ["argcomplete"],
+    }
+
+    installed = []
+    for extra, deps in extras_deps.items():
+        if all(importlib.util.find_spec(dep) is not None for dep in deps):
+            installed.append(extra)
+
+    # trace-review is a superset of trace-view; don't duplicate
+    if "trace-review" in installed and "trace-view" in installed:
+        installed.remove("trace-view")
+
+    return installed
+
+
+def _build_install_spec(base: str, extras: list[str] | None) -> str:
+    """Build a pip/pipx install spec string with optional extras."""
+    if extras:
+        return f"{base}[{','.join(extras)}]"
+    return base
+
+
+def install_local(
+    source_root: Path,
+    tool: str,
+    extras: list[str] | None = None,
+    verbose: bool = False,
+) -> int:
+    """Install elspais from local source as editable.
+
+    Args:
+        source_root: Path to the elspais source directory.
+        tool: Package tool to use ("pipx" or "uv").
+        extras: Optional extras to install (e.g., ["mcp", "all"]).
+        verbose: Show subprocess output.
+
+    Returns:
+        Exit code (0 = success).
+    """
+    install_spec = _build_install_spec(str(source_root), extras)
+
+    if tool == "pipx":
+        cmd = ["pipx", "install", "--editable", install_spec, "--force"]
+    elif tool == "uv":
+        cmd = ["uv", "tool", "install", "--editable", install_spec, "--force"]
+    else:
+        print(f"Error: Unsupported tool '{tool}'", file=sys.stderr)
+        return 1
+
+    print(f"Installing local elspais from {source_root}")
+    if extras:
+        print(f"  Extras: {', '.join(extras)}")
+    print(f"  Using: {' '.join(cmd)}")
+
+    result = subprocess.run(
+        cmd,
+        capture_output=not verbose,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print(
+            f"Error: Installation failed (exit code {result.returncode})",
+            file=sys.stderr,
+        )
+        if not verbose and result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return 1
+
+    _show_active_version()
+    return 0
+
+
+def uninstall_local(
+    tool: str,
+    extras: list[str] | None = None,
+    version: str | None = None,
+    verbose: bool = False,
+) -> int:
+    """Revert to PyPI release version.
+
+    Args:
+        tool: Package tool to use ("pipx" or "uv").
+        extras: Extras to install with the PyPI version.
+        version: Specific PyPI version to install (default: latest).
+        verbose: Show subprocess output.
+
+    Returns:
+        Exit code (0 = success).
+    """
+    base = f"elspais=={version}" if version else "elspais"
+    install_spec = _build_install_spec(base, extras)
+
+    if tool == "pipx":
+        cmd = ["pipx", "install", install_spec, "--force"]
+    elif tool == "uv":
+        cmd = ["uv", "tool", "install", install_spec, "--force"]
+    else:
+        print(f"Error: Unsupported tool '{tool}'", file=sys.stderr)
+        return 1
+
+    print("Reverting to PyPI version of elspais")
+    if extras:
+        print(f"  Extras: {', '.join(extras)}")
+    if version:
+        print(f"  Version: {version}")
+    print(f"  Using: {' '.join(cmd)}")
+
+    result = subprocess.run(
+        cmd,
+        capture_output=not verbose,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print(
+            f"Error: Installation failed (exit code {result.returncode})",
+            file=sys.stderr,
+        )
+        if not verbose and result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return 1
+
+    _show_active_version()
+    return 0
+
+
+def _show_active_version() -> None:
+    """Print the currently active elspais version."""
+    try:
+        result = subprocess.run(
+            ["elspais", "--version"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(f"  Active: {result.stdout.strip()}")
+    except FileNotFoundError:
+        print("  Warning: elspais command not found in PATH", file=sys.stderr)
+
+
+# --- CLI dispatchers ---
+
+
+def run(args: argparse.Namespace) -> int:
+    """Dispatch install subcommand."""
+    action = getattr(args, "install_action", None)
+    if action == "local":
+        return _run_install_local(args)
+    print("Usage: elspais install local [options]", file=sys.stderr)
+    return 1
+
+
+def run_uninstall(args: argparse.Namespace) -> int:
+    """Dispatch uninstall subcommand."""
+    action = getattr(args, "uninstall_action", None)
+    if action == "local":
+        return _run_uninstall_local(args)
+    print("Usage: elspais uninstall local [options]", file=sys.stderr)
+    return 1
+
+
+def _run_install_local(args: argparse.Namespace) -> int:
+    """Handle 'elspais install local'."""
+    verbose = getattr(args, "verbose", False)
+    tool_name = getattr(args, "tool", None)
+    tool = detect_tool(tool_name)
+    if tool is None:
+        if tool_name:
+            print(f"Error: '{tool_name}' not found in PATH.", file=sys.stderr)
+        else:
+            print("Error: Neither pipx nor uv found in PATH.", file=sys.stderr)
+            print("Install pipx: python -m pip install pipx", file=sys.stderr)
+            print(
+                "Install uv:   curl -LsSf https://astral.sh/uv/install.sh | sh",
+                file=sys.stderr,
+            )
+        return 1
+
+    override = Path(args.path) if getattr(args, "path", None) else None
+    source_root = find_source_root(override)
+    if source_root is None:
+        if override:
+            print(
+                f"Error: '{override}' is not an elspais source directory.",
+                file=sys.stderr,
+            )
+        else:
+            print("Error: Cannot find elspais source directory.", file=sys.stderr)
+            print(
+                "Use --path to specify the source directory explicitly.",
+                file=sys.stderr,
+            )
+        return 1
+
+    extras = _parse_extras(args)
+    return install_local(source_root, tool, extras, verbose)
+
+
+def _run_uninstall_local(args: argparse.Namespace) -> int:
+    """Handle 'elspais uninstall local'."""
+    verbose = getattr(args, "verbose", False)
+    tool_name = getattr(args, "tool", None)
+    tool = detect_tool(tool_name)
+    if tool is None:
+        if tool_name:
+            print(f"Error: '{tool_name}' not found in PATH.", file=sys.stderr)
+        else:
+            print("Error: Neither pipx nor uv found in PATH.", file=sys.stderr)
+        return 1
+
+    extras = _parse_extras(args)
+    version_arg = getattr(args, "version", None)
+    return uninstall_local(tool, extras, version_arg, verbose)
+
+
+def _parse_extras(args: argparse.Namespace) -> list[str] | None:
+    """Parse --extras argument or auto-detect installed extras."""
+    extras_arg = getattr(args, "extras", None)
+    if extras_arg:
+        return [e.strip() for e in extras_arg.split(",")]
+    detected = detect_installed_extras()
+    return detected or None
