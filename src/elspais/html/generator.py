@@ -493,9 +493,14 @@ class HTMLGenerator:
             depth: int,
             parent_id: str | None,
             parent_assertions: list[str] | None = None,
+            ancestor_ids: frozenset[str] | None = None,
         ) -> None:
             """DFS traversal to build rows."""
-            # Avoid infinite loops - track by (id, depth, parent)
+            # Detect cycles - if this node is already an ancestor, skip
+            if ancestor_ids and node.id in ancestor_ids:
+                return
+
+            # Avoid duplicate (id, depth, parent) entries
             key = (node.id, depth, parent_id)
             if key in visited_at_depth:
                 return
@@ -646,8 +651,9 @@ class HTMLGenerator:
 
             children_to_visit.sort(key=sort_key)
 
+            current_ancestors = (ancestor_ids or frozenset()) | {node.id}
             for child, assertions in children_to_visit:
-                traverse(child, depth + 1, node.id, assertions)
+                traverse(child, depth + 1, node.id, assertions, current_ancestors)
 
         # Start traversal from roots
         for root in self.graph.iter_roots():
