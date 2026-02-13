@@ -459,6 +459,74 @@ def get_associate_spec_directories(
 get_sponsor_spec_directories = get_associate_spec_directories
 
 
+def discover_associate_from_path(
+    repo_path: Path,
+) -> Associate | None:
+    """Discover associate identity by reading a repo's .elspais.toml.
+
+    Reads {repo_path}/.elspais.toml and extracts associate configuration.
+    Returns None (with warning) if the path is invalid, has no config,
+    or isn't configured as an associated repository.
+
+    Args:
+        repo_path: Path to the associate repository root.
+
+    Returns:
+        Associate object if valid, None otherwise.
+    """
+    # Implements: REQ-p00005-D
+    import sys
+
+    repo_path = Path(repo_path)
+
+    if not repo_path.exists():
+        print(
+            f"Associate path does not exist: {repo_path}",
+            file=sys.stderr,
+        )
+        return None
+
+    config_file = repo_path / ".elspais.toml"
+    if not config_file.exists():
+        print(
+            f"No .elspais.toml found in associate path: {repo_path}",
+            file=sys.stderr,
+        )
+        return None
+
+    from elspais.config import parse_toml_document
+
+    config = parse_toml_document(config_file.read_text(encoding="utf-8"))
+
+    project_type = config.get("project", {}).get("type")
+    if project_type != "associated":
+        print(
+            f"Repository at {repo_path} has project.type='{project_type}', "
+            f"expected 'associated'",
+            file=sys.stderr,
+        )
+        return None
+
+    prefix = config.get("associated", {}).get("prefix")
+    if not prefix:
+        print(
+            f"Associated repository at {repo_path} is missing " f"[associated] prefix",
+            file=sys.stderr,
+        )
+        return None
+
+    name = config.get("project", {}).get("name", repo_path.name)
+    spec_path = config.get("directories", {}).get("spec", "spec")
+
+    return Associate(
+        name=name,
+        code=prefix,
+        enabled=True,
+        path=str(repo_path),
+        spec_path=spec_path,
+    )
+
+
 __all__ = [
     "Associate",
     "Sponsor",  # alias
@@ -473,4 +541,5 @@ __all__ = [
     "resolve_sponsor_spec_dir",  # alias
     "get_associate_spec_directories",
     "get_sponsor_spec_directories",  # alias
+    "discover_associate_from_path",
 ]
