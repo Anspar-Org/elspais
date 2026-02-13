@@ -27,10 +27,11 @@ def test_REQ_p00005_C_loads_associates_from_paths_config(tmp_path):
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
 
     config = {"associates": {"paths": [str(repo)]}}
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 1
     assert dirs[0] == repo / "spec"
+    assert errors == []
 
 
 def test_REQ_p00005_C_loads_multiple_associates(tmp_path):
@@ -39,21 +40,22 @@ def test_REQ_p00005_C_loads_multiple_associates(tmp_path):
     repo2 = _make_associate_repo(tmp_path, "europa", "EUR")
 
     config = {"associates": {"paths": [str(repo1), str(repo2)]}}
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 2
+    assert errors == []
 
 
-def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path, capsys):
+def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path):
     """Skips invalid paths and continues with valid ones."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
 
     config = {"associates": {"paths": ["/nonexistent", str(repo)]}}
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 1
-    captured = capsys.readouterr()
-    assert "does not exist" in captured.err
+    assert len(errors) == 1
+    assert "does not exist" in errors[0]
 
 
 def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
@@ -65,19 +67,21 @@ def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
         "sponsors": {},
         "associates": {"paths": [str(repo)]},
     }
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 1
+    assert errors == []
 
 
 def test_REQ_p00005_C_empty_paths_array(tmp_path):
     """Empty paths array returns no directories."""
     config = {"associates": {"paths": []}}
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
     assert dirs == []
+    assert errors == []
 
 
-def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path, capsys):
+def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path):
     """Reports error when associate repo exists but spec dir is missing."""
     repo = tmp_path / "no-spec"
     repo.mkdir()
@@ -89,6 +93,8 @@ def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path, capsys):
     # Note: NOT creating spec/ directory
 
     config = {"associates": {"paths": [str(repo)]}}
-    dirs = get_associate_spec_directories(config, tmp_path)
+    dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 0
+    assert len(errors) == 1
+    assert "Spec directory not found" in errors[0]

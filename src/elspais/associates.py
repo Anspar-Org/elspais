@@ -430,7 +430,7 @@ resolve_sponsor_spec_dir = resolve_associate_spec_dir
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
-) -> list[Path]:
+) -> tuple[list[Path], list[str]]:
     """
     Get all associate spec directories from configuration.
 
@@ -439,12 +439,14 @@ def get_associate_spec_directories(
         base_path: Base path to resolve relative paths (defaults to cwd)
 
     Returns:
-        List of existing associate spec directory paths
+        Tuple of (spec_dirs, errors). errors contains messages for any
+        configured associate paths that could not be resolved.
     """
     if base_path is None:
         base_path = Path.cwd()
 
     spec_dirs = []
+    errors: list[str] = []
 
     # 1. Legacy sponsors YAML loading (existing behavior)
     associates_config = load_associates_config(config, base_path)
@@ -458,14 +460,17 @@ def get_associate_spec_directories(
     associate_paths = config.get("associates", {}).get("paths", [])
     for repo_path_str in associate_paths:
         repo_path = Path(repo_path_str)
-        associate = discover_associate_from_path(repo_path)
-        if associate is None:
+        result = discover_associate_from_path(repo_path)
+        if isinstance(result, str):
+            errors.append(result)
             continue
-        spec_dir = repo_path / associate.spec_path
+        spec_dir = repo_path / result.spec_path
         if spec_dir.exists() and spec_dir.is_dir():
             spec_dirs.append(spec_dir)
+        else:
+            errors.append(f"Spec directory not found: {spec_dir}")
 
-    return spec_dirs
+    return spec_dirs, errors
 
 
 # Alias for backwards compatibility
@@ -474,38 +479,28 @@ get_sponsor_spec_directories = get_associate_spec_directories
 
 def discover_associate_from_path(
     repo_path: Path,
-) -> Associate | None:
+) -> Associate | str:
     """Discover associate identity by reading a repo's .elspais.toml.
 
     Reads {repo_path}/.elspais.toml and extracts associate configuration.
-    Returns None (with warning) if the path is invalid, has no config,
+    Returns an error message string if the path is invalid, has no config,
     or isn't configured as an associated repository.
 
     Args:
         repo_path: Path to the associate repository root.
 
     Returns:
-        Associate object if valid, None otherwise.
+        Associate object if valid, error message string otherwise.
     """
     # Implements: REQ-p00005-D
-    import sys
-
     repo_path = Path(repo_path)
 
     if not repo_path.exists():
-        print(
-            f"Associate path does not exist: {repo_path}",
-            file=sys.stderr,
-        )
-        return None
+        return f"Associate path does not exist: {repo_path}"
 
     config_file = repo_path / ".elspais.toml"
     if not config_file.exists():
-        print(
-            f"No .elspais.toml found in associate path: {repo_path}",
-            file=sys.stderr,
-        )
-        return None
+        return f"No .elspais.toml found in associate path: {repo_path}"
 
     from elspais.config import parse_toml_document
 
@@ -513,20 +508,14 @@ def discover_associate_from_path(
 
     project_type = config.get("project", {}).get("type")
     if project_type != "associated":
-        print(
+        return (
             f"Repository at {repo_path} has project.type='{project_type}', "
-            f"expected 'associated'",
-            file=sys.stderr,
+            f"expected 'associated'"
         )
-        return None
 
     prefix = config.get("associated", {}).get("prefix")
     if not prefix:
-        print(
-            f"Associated repository at {repo_path} is missing " f"[associated] prefix",
-            file=sys.stderr,
-        )
-        return None
+        return f"Associated repository at {repo_path} is missing [associated] prefix"
 
     name = config.get("project", {}).get("name", repo_path.name)
     spec_path = config.get("directories", {}).get("spec", "spec")

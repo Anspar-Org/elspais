@@ -4,7 +4,7 @@ Validates REQ-p00005-D: Discover associate identity from target repo's config.
 Validates REQ-p00005-E: Clear config error for invalid paths/configs.
 """
 
-from elspais.associates import discover_associate_from_path
+from elspais.associates import Associate, discover_associate_from_path
 
 
 def test_REQ_p00005_D_discovers_associate_from_valid_repo(tmp_path):
@@ -19,6 +19,7 @@ def test_REQ_p00005_D_discovers_associate_from_valid_repo(tmp_path):
     (repo / "spec").mkdir()
 
     result = discover_associate_from_path(repo)
+    assert isinstance(result, Associate)
     assert result.name == "callisto"
     assert result.code == "CAL"
     assert result.spec_path == "spec"
@@ -28,7 +29,8 @@ def test_REQ_p00005_D_discovers_associate_from_valid_repo(tmp_path):
 def test_REQ_p00005_E_error_when_path_does_not_exist(tmp_path):
     """Reports error for non-existent path."""
     result = discover_associate_from_path(tmp_path / "nonexistent")
-    assert result is None
+    assert isinstance(result, str)
+    assert "does not exist" in result
 
 
 def test_REQ_p00005_E_error_when_no_toml(tmp_path):
@@ -36,7 +38,8 @@ def test_REQ_p00005_E_error_when_no_toml(tmp_path):
     repo = tmp_path / "bare"
     repo.mkdir()
     result = discover_associate_from_path(repo)
-    assert result is None
+    assert isinstance(result, str)
+    assert ".elspais.toml" in result
 
 
 def test_REQ_p00005_E_error_when_not_associated_type(tmp_path):
@@ -45,7 +48,8 @@ def test_REQ_p00005_E_error_when_not_associated_type(tmp_path):
     repo.mkdir()
     (repo / ".elspais.toml").write_text('[project]\nname = "core"\ntype = "core"\n')
     result = discover_associate_from_path(repo)
-    assert result is None
+    assert isinstance(result, str)
+    assert "expected 'associated'" in result
 
 
 def test_REQ_p00005_E_error_when_missing_prefix(tmp_path):
@@ -54,7 +58,8 @@ def test_REQ_p00005_E_error_when_missing_prefix(tmp_path):
     repo.mkdir()
     (repo / ".elspais.toml").write_text('[project]\nname = "no-prefix"\ntype = "associated"\n')
     result = discover_associate_from_path(repo)
-    assert result is None
+    assert isinstance(result, str)
+    assert "missing" in result
 
 
 def test_REQ_p00005_D_defaults_spec_path_to_spec(tmp_path):
@@ -65,4 +70,5 @@ def test_REQ_p00005_D_defaults_spec_path_to_spec(tmp_path):
         '[project]\nname = "minimal"\ntype = "associated"\n\n' '[associated]\nprefix = "MIN"\n'
     )
     result = discover_associate_from_path(repo)
+    assert isinstance(result, Associate)
     assert result.spec_path == "spec"
