@@ -444,12 +444,25 @@ def get_associate_spec_directories(
     if base_path is None:
         base_path = Path.cwd()
 
-    associates_config = load_associates_config(config, base_path)
     spec_dirs = []
 
+    # 1. Legacy sponsors YAML loading (existing behavior)
+    associates_config = load_associates_config(config, base_path)
     for associate in associates_config.associates:
         spec_dir = resolve_associate_spec_dir(associate, associates_config, base_path)
         if spec_dir:
+            spec_dirs.append(spec_dir)
+
+    # 2. Path-based loading (reads from config["associates"]["paths"])
+    # Implements: REQ-p00005-C
+    associate_paths = config.get("associates", {}).get("paths", [])
+    for repo_path_str in associate_paths:
+        repo_path = Path(repo_path_str)
+        associate = discover_associate_from_path(repo_path)
+        if associate is None:
+            continue
+        spec_dir = repo_path / associate.spec_path
+        if spec_dir.exists() and spec_dir.is_dir():
             spec_dirs.append(spec_dir)
 
     return spec_dirs
