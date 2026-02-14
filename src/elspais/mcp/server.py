@@ -2585,6 +2585,27 @@ The graph is the single source of truth - all tools read directly from it.
   - Validates requirement exists before modifying files
   - Refreshes graph after insertion
 
+### Subtree Extraction
+- `get_subtree(root_id, depth=0, include_kinds="", format="markdown")` - Extract subgraph
+  - depth: 0 = unlimited, N = max N levels from root
+  - include_kinds: comma-separated NodeKind values (empty = smart defaults)
+  - format: "markdown" (indented headings), "flat" (JSON with nodes/edges/stats),
+    "nested" (recursive JSON with children arrays)
+  - Includes coverage summary stats per requirement node
+  - Deduplicates in DAG structures
+
+### Cursor Protocol (Incremental Iteration)
+- `open_cursor(query, params={}, batch_size=1)` - Open cursor over query results
+  - query: "subtree", "search", "hierarchy", "query_nodes",
+    "test_coverage", "uncovered_assertions"
+  - params: query-specific parameters (e.g. {root_id: "REQ-p00001"})
+  - batch_size: -1 (assertions as separate items), 0 (nodes with inline assertions),
+    1 (nodes with children summaries)
+  - Returns first item + total/position/remaining metadata
+  - Opening a new cursor auto-closes any previous cursor
+- `cursor_next(count=1)` - Get next items and advance position
+- `cursor_info()` - Check position/total/remaining without advancing
+
 ## Requirement Levels
 
 Requirements follow a three-tier hierarchy:
@@ -2635,6 +2656,16 @@ Use `save_branch=True` to create a safety branch before modifications, allowing 
 2. mutate_add_assertion() to add assertions
 3. get_mutation_log() to review changes
 4. undo_last_mutation() if needed
+
+**Extracting a scoped subtree for sub-agent consumption:**
+1. get_subtree("REQ-p00001") for markdown overview
+2. get_subtree("REQ-p00001", format="flat") for structured data
+3. get_subtree("REQ-p00001", depth=2) to limit depth
+
+**Incrementally exploring results with cursor:**
+1. open_cursor("subtree", {"root_id": "REQ-p00001"}, batch_size=0)
+2. cursor_info() to check how many items remain
+3. cursor_next() to get next item, repeat as needed
 
 **After editing spec files:**
 1. refresh_graph() to rebuild
