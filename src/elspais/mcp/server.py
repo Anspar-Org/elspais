@@ -60,6 +60,7 @@ from elspais.graph.annotators import (
 )
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 
@@ -474,6 +475,69 @@ def _refresh_graph(
     }, new_graph
 
 
+def _matches_query(
+    node: GraphNode,
+    field: str,
+    regex: bool,
+    compiled_pattern: re.Pattern[str] | None,
+    query_lower: str | None,
+) -> bool:
+    """Check if a node matches a query against specified fields.
+
+    Reusable matching logic shared by search() and scoped_search().
+
+    REQ-d00061-B: Supports field parameter (id, title, body, keywords, all).
+    REQ-d00061-C: Supports regex=True for regex matching.
+    REQ-p00050-D: Single code path for query matching.
+
+    Args:
+        node: The graph node to check.
+        field: Which field(s) to match: "id", "title", "body", "keywords", or "all".
+        regex: Whether to use regex matching.
+        compiled_pattern: Pre-compiled regex pattern (required when regex=True).
+        query_lower: Lowercased query string (required when regex=False).
+    """
+    # Implements: REQ-d00061-B, REQ-d00061-C, REQ-p00050-D
+    if field in ("id", "all"):
+        if regex:
+            if compiled_pattern.search(node.id):  # type: ignore[union-attr]
+                return True
+        else:
+            if query_lower in node.id.lower():  # type: ignore[operator]
+                return True
+
+    if field in ("title", "all"):
+        title = node.get_label() or ""
+        if regex:
+            if compiled_pattern.search(title):  # type: ignore[union-attr]
+                return True
+        else:
+            if query_lower in title.lower():  # type: ignore[operator]
+                return True
+
+    if field in ("body", "all"):
+        body = node.get_field("body_text", "")
+        if body:
+            if regex:
+                if compiled_pattern.search(body):  # type: ignore[union-attr]
+                    return True
+            else:
+                if query_lower in body.lower():  # type: ignore[operator]
+                    return True
+
+    if field in ("keywords", "all"):
+        keywords = node.get_field("keywords", [])
+        for keyword in keywords:
+            if regex:
+                if compiled_pattern.search(keyword):  # type: ignore[union-attr]
+                    return True
+            else:
+                if query_lower in keyword.lower():  # type: ignore[operator]
+                    return True
+
+    return False
+
+
 def _search(
     graph: TraceGraph,
     query: str,
@@ -492,9 +556,11 @@ def _search(
     results = []
 
     # Compile pattern if regex mode
+    compiled_pattern = None
+    query_lower = None
     if regex:
         try:
-            pattern = re.compile(query, re.IGNORECASE)
+            compiled_pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             return []
     else:
@@ -502,49 +568,7 @@ def _search(
         query_lower = query.lower()
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        match = False
-
-        if field in ("id", "all"):
-            if regex:
-                if pattern.search(node.id):
-                    match = True
-            else:
-                if query_lower in node.id.lower():
-                    match = True
-
-        if not match and field in ("title", "all"):
-            title = node.get_label() or ""
-            if regex:
-                if pattern.search(title):
-                    match = True
-            else:
-                if query_lower in title.lower():
-                    match = True
-
-        if not match and field in ("body", "all"):
-            body = node.get_field("body_text", "")
-            if body:
-                if regex:
-                    if pattern.search(body):
-                        match = True
-                else:
-                    if query_lower in body.lower():
-                        match = True
-
-        if not match and field in ("keywords", "all"):
-            # Search in keywords field
-            keywords = node.get_field("keywords", [])
-            for keyword in keywords:
-                if regex:
-                    if pattern.search(keyword):
-                        match = True
-                        break
-                else:
-                    if query_lower in keyword.lower():
-                        match = True
-                        break
-
-        if match:
+        if _matches_query(node, field, regex, compiled_pattern, query_lower):
             results.append(_serialize_requirement_summary(node))
             if len(results) >= limit:
                 break
