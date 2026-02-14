@@ -2,6 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.65.0] - 2026-02-13
+
+### Added
+
+- **CLI-based associate registration**: Register associate repositories via `elspais config add associates.paths /path/to/repo` instead of manually editing config files. Auto-discovers associate identity (name, prefix, spec path) from the target repo's `.elspais.toml` (REQ-p00005-C, REQ-p00005-D)
+- **Structured error reporting for associate paths**: Invalid associate paths return error messages instead of silently skipping, enabling CI pipelines to detect misconfigured associates (REQ-p00005-E)
+
 ## [0.63.3] - 2026-02-12
 
 ### Changed
