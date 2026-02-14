@@ -43,7 +43,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Node Mutation API**: TraceGraph provides mutation methods with full undo support
 **Assertion Mutation API**: TraceGraph provides assertion-specific mutations
 **Edge Mutation API**: TraceGraph provides edge (relationship) mutations
-**MCP Tools** (`elspais[mcp]`): The MCP server provides tools to explore and manipulate the graph for a system
+**MCP Tools** (`elspais[mcp]`): The MCP server provides tools to explore and manipulate the graph for a system. Includes `get_subtree()` for scoped subgraph extraction (markdown/flat/nested formats) and a cursor protocol (`open_cursor`/`cursor_next`/`cursor_info`) for incremental iteration over any read query.
 **Unified References Configuration** (`[references]`): Configurable reference parsing for all parser types
 
 **Multi-Language Comment Support:**

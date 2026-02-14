@@ -32,6 +32,8 @@
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | 08-mcp-server.md         | 82d8f37e |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
 | REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
+| REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
+| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | c1ed85a6 |
 
 ## Development Requirements (DEV)
 
@@ -70,6 +72,8 @@
 | REQ-d00072 | Link Suggestion Core Engine                  | 07-graph-architecture.md | 2cd50cdc |
 | REQ-d00073 | Link Suggestion CLI Command                  | 07-graph-architecture.md | 44fd54e9 |
 | REQ-d00074 | MCP Link Suggestion Tools                    | 08-mcp-server.md         | e438ff5e |
+| REQ-d00075 | Subtree Extraction Implementation            | 08-mcp-server.md         | a53f60cc |
+| REQ-d00076 | Cursor Protocol Implementation               | 08-mcp-server.md         | 753def07 |
 
 ## User Journeys (JNY)
 
