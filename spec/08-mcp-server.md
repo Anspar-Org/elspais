@@ -405,7 +405,7 @@ F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarch
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
-*End* *MCP Cursor Protocol* | **Hash**: 32de0d0d
+*End* *MCP Cursor Protocol* | **Hash**: 743877c3
 
 ---
 
@@ -475,7 +475,7 @@ E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor 
 
 Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
 
-*End* *MCP Minimize Requirement Set Tool* | **Hash**: 461abb64
+*End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
 
 ---
 
@@ -498,7 +498,7 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 
 Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
 
-*End* *Minimize Requirement Set Implementation* | **Hash**: 6e02e418
+*End* *Minimize Requirement Set Implementation* | **Hash**: a4977d0f
 
 ---
 
@@ -520,7 +520,7 @@ E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maint
 
 Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
 
-*End* *MCP Scoped Search Tool* | **Hash**: bd001dba
+*End* *MCP Scoped Search Tool* | **Hash**: e1cb96d9
 
 ---
 
@@ -543,7 +543,7 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 
 Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
 
-*End* *Scoped Search Implementation* | **Hash**: 08e82fe6
+*End* *Scoped Search Implementation* | **Hash**: 51b2219c
 
 ---
 
@@ -564,7 +564,7 @@ D. The tool SHALL pass through all results unchanged when no ancestor relationsh
 
 Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
 
-*End* *MCP Discover Requirements Tool* | **Hash**: 31785423
+*End* *MCP Discover Requirements Tool* | **Hash**: fea647ee
 
 ---
 
@@ -585,7 +585,7 @@ D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds
 
 Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
 
-*End* *Discover Requirements Implementation* | **Hash**: a9bb07cb
+*End* *Discover Requirements Implementation* | **Hash**: 8498aa7c
 
 ---
 

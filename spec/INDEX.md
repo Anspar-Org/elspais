@@ -33,10 +33,10 @@
 | REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
 | REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
 | REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
-| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 32de0d0d |
-| REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | 461abb64 |
-| REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | bd001dba |
-| REQ-o00071 | MCP Discover Requirements Tool      | 08-mcp-server.md         | 31785423 |
+| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 743877c3 |
+| REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | c667abd2 |
+| REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | e1cb96d9 |
+| REQ-o00071 | MCP Discover Requirements Tool      | 08-mcp-server.md         | fea647ee |
 
 ## Development Requirements (DEV)
 
@@ -77,9 +77,9 @@
 | REQ-d00074 | MCP Link Suggestion Tools                    | 08-mcp-server.md         | e438ff5e |
 | REQ-d00075 | Subtree Extraction Implementation            | 08-mcp-server.md         | a53f60cc |
 | REQ-d00076 | Cursor Protocol Implementation               | 08-mcp-server.md         | 753def07 |
-| REQ-d00077 | Minimize Requirement Set Implementation       | 08-mcp-server.md         | 6e02e418 |
-| REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 08e82fe6 |
-| REQ-d00079 | Discover Requirements Implementation          | 08-mcp-server.md         | a9bb07cb |
+| REQ-d00077 | Minimize Requirement Set Implementation      | 08-mcp-server.md         | a4977d0f |
+| REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 51b2219c |
+| REQ-d00079 | Discover Requirements Implementation         | 08-mcp-server.md         | 8498aa7c |
 
 ## User Journeys (JNY)
 
