@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.71.0] - 2026-02-14
+
+### Added
+
+- **`discover_requirements` MCP tool**: Chains `scoped_search` with `minimize_requirement_set` to search within a subgraph and return only the most-specific matches, pruning ancestor requirements superseded by more-specific descendants (REQ-o00071, REQ-d00079)
+
 ## [0.70.0] - 2026-02-14
 
 ### Added

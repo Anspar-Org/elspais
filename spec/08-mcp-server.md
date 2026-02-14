@@ -547,6 +547,48 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 ---
 
+## REQ-o00071: MCP Discover Requirements Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
+
+## Assertions
+
+A. `discover_requirements(query, scope_id, direction, field, regex, include_assertions, limit, edge_kinds)` SHALL accept scoped search parameters plus an edge_kinds filter for ancestor pruning.
+B. The tool SHALL chain `scoped_search` results through `minimize_requirement_set` to remove ancestors already covered by more-specific descendants in the result set.
+C. The tool SHALL return results in scoped_search format containing only the minimal set, plus pruned items with `superseded_by` metadata.
+D. The tool SHALL pass through all results unchanged when no ancestor relationships exist between matches.
+
+## Rationale
+
+Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
+
+*End* *MCP Discover Requirements Tool* | **Hash**: 31785423
+
+---
+
+## REQ-d00079: Discover Requirements Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00071
+
+The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
+
+## Assertions
+
+A. `_discover_requirements()` SHALL call `_scoped_search()` to get candidate results, then extract requirement IDs and pass them to `_minimize_requirement_set()`.
+B. The helper SHALL return `{results, pruned, stats}` where results contains only minimal-set items in scoped_search summary format.
+C. The helper SHALL preserve `matched_assertions` metadata from scoped_search on items that remain in the minimal set.
+D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds string parsing.
+
+## Rationale
+
+Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
+
+*End* *Discover Requirements Implementation* | **Hash**: a9bb07cb
+
+---
+
 ## Architecture Diagram
 
 ```text

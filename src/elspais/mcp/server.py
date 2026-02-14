@@ -769,6 +769,79 @@ def _scoped_search(
     return {"results": results, "scope_id": scope_id, "direction": direction}
 
 
+def _discover_requirements(
+    graph: TraceGraph,
+    query: str,
+    scope_id: str,
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    include_assertions: bool = False,
+    limit: int = 50,
+    edge_kinds: set[EdgeKind] | None = None,
+) -> dict[str, Any]:
+    """Search within a subgraph and return only the most-specific matches.
+
+    Chains _scoped_search() with _minimize_requirement_set() to prune
+    ancestors from results.
+
+    REQ-d00079-A: Calls _scoped_search(), extracts IDs, passes to _minimize_requirement_set().
+    REQ-d00079-B: Returns {results, pruned, stats} with minimal-set items.
+    REQ-d00079-C: Preserves matched_assertions metadata on minimal-set items.
+    REQ-o00071-B: Chains scoped_search through minimize_requirement_set.
+    """
+    # Implements: REQ-o00071-A, REQ-o00071-B, REQ-o00071-C, REQ-o00071-D
+    # Implements: REQ-d00079-A, REQ-d00079-B, REQ-d00079-C
+
+    if edge_kinds is None:
+        edge_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+
+    # REQ-d00079-A: Get candidates via scoped_search
+    scoped_result = _scoped_search(
+        graph, query, scope_id, direction, field, regex, include_assertions, limit
+    )
+
+    # Propagate errors
+    if "error" in scoped_result:
+        return scoped_result
+
+    candidates = scoped_result.get("results", [])
+    if not candidates:
+        return {
+            "results": [],
+            "pruned": [],
+            "scope_id": scope_id,
+            "direction": direction,
+            "stats": {"candidate_count": 0, "minimal_count": 0, "pruned_count": 0},
+        }
+
+    # Extract IDs and call minimize
+    candidate_ids = [r["id"] for r in candidates]
+    minimize_result = _minimize_requirement_set(graph, candidate_ids, edge_kinds)
+
+    # Build lookup for candidate data (preserves matched_assertions)
+    candidate_lookup = {r["id"]: r for r in candidates}
+    minimal_ids = {r["id"] for r in minimize_result["minimal_set"]}
+
+    # REQ-d00079-C: Preserve matched_assertions from scoped_search
+    results = [candidate_lookup[rid] for rid in candidate_ids if rid in minimal_ids]
+
+    # Build pruned list with superseded_by from minimize
+    pruned = minimize_result["pruned"]
+
+    return {
+        "results": results,
+        "pruned": pruned,
+        "scope_id": scope_id,
+        "direction": direction,
+        "stats": {
+            "candidate_count": len(candidates),
+            "minimal_count": len(results),
+            "pruned_count": len(pruned),
+        },
+    }
+
+
 def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
@@ -3054,6 +3127,61 @@ def create_server(
         """
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
+        )
+
+    @mcp.tool()
+    def discover_requirements(
+        query: str,
+        scope_id: str,
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        include_assertions: bool = False,
+        limit: int = 50,
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Search within a subgraph and return only the most-specific matches.
+
+        Chains scoped_search with minimize_requirement_set to prune ancestors
+        from results, returning only the most-specific requirements that match.
+
+        REQ-d00079-D: Delegates to helper, performing only edge_kinds parsing.
+
+        Args:
+            query: Search string or regex pattern.
+            scope_id: Root node ID defining the search scope.
+            direction: "descendants" (default) or "ancestors".
+            field: Field to search: 'id', 'title', 'body', or 'all'.
+            regex: If True, treat query as regex pattern.
+            include_assertions: If True, also match assertion text.
+            limit: Maximum results to return (default 50).
+            edge_kinds: Comma-separated edge kinds for ancestor pruning.
+                Default: "implements,refines".
+
+        Returns:
+            Dict with results (minimal set), pruned (with superseded_by),
+            scope_id, direction, and stats.
+        """
+        # REQ-d00079-D: Parse edge_kinds and delegate
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _discover_requirements(
+            _state["graph"],
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
+            include_assertions,
+            limit,
+            parsed_kinds,
         )
 
     @mcp.tool()

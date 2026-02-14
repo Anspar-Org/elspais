@@ -36,6 +36,7 @@
 | REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 32de0d0d |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | 461abb64 |
 | REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | bd001dba |
+| REQ-o00071 | MCP Discover Requirements Tool      | 08-mcp-server.md         | 31785423 |
 
 ## Development Requirements (DEV)
 
@@ -78,6 +79,7 @@
 | REQ-d00076 | Cursor Protocol Implementation               | 08-mcp-server.md         | 753def07 |
 | REQ-d00077 | Minimize Requirement Set Implementation       | 08-mcp-server.md         | 6e02e418 |
 | REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 08e82fe6 |
+| REQ-d00079 | Discover Requirements Implementation          | 08-mcp-server.md         | a9bb07cb |
 
 ## User Journeys (JNY)
 
