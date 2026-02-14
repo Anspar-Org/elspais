@@ -382,7 +382,7 @@ F. The subtree tool SHALL include coverage summary statistics for requirement no
 
 LLM agents need scoped requirement subsets for sub-agent consumption. Extracting a subtree avoids context pollution from the full graph.
 
-*End* *MCP Subtree Extraction Tool* | **Hash**: 00000000
+*End* *MCP Subtree Extraction Tool* | **Hash**: ab29e315
 
 ---
 
@@ -405,7 +405,7 @@ F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarch
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
-*End* *MCP Cursor Protocol* | **Hash**: 00000000
+*End* *MCP Cursor Protocol* | **Hash**: c1ed85a6
 
 ---
 
@@ -429,7 +429,7 @@ G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder struct
 
 BFS with depth tracking and kind filtering provides the flexible subtree extraction that `GraphNode.walk()` alone cannot deliver, while staying in the MCP layer.
 
-*End* *Subtree Extraction Implementation* | **Hash**: 00000000
+*End* *Subtree Extraction Implementation* | **Hash**: a53f60cc
 
 ---
 
@@ -453,7 +453,7 @@ G. The implementation SHALL reuse existing serializers: `_serialize_requirement_
 
 A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
 
-*End* *Cursor Protocol Implementation* | **Hash**: 00000000
+*End* *Cursor Protocol Implementation* | **Hash**: 753def07
 
 ---
 
