@@ -502,6 +502,51 @@ Separating the helper from the tool wrapper enables reuse by `discover_requireme
 
 ---
 
+## REQ-o00070: MCP Scoped Search Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
+
+## Assertions
+
+A. `scoped_search(query, scope_id, direction, field, regex, include_assertions, limit)` SHALL accept a query string, scope node ID, and direction ("descendants" or "ancestors").
+B. The tool SHALL restrict search results to nodes reachable from the scope node in the specified direction, including the scope node itself.
+C. When `include_assertions=True`, the tool SHALL also match against assertion text and include `matched_assertions` metadata on matching parent requirements.
+D. The tool SHALL return an error when the scope_id is not found in the graph.
+E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maintaining a single code path per REQ-p00050-D.
+
+## Rationale
+
+Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
+
+*End* *MCP Scoped Search Tool* | **Hash**: bd001dba
+
+---
+
+## REQ-d00078: Scoped Search Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00070
+
+The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
+
+## Assertions
+
+A. `_collect_scope_ids(graph, scope_id, direction)` SHALL return a set of node IDs reachable from scope_id: BFS via `iter_children()` for "descendants", recursive walk via `iter_parents()` for "ancestors".
+B. The scope set SHALL include scope_id itself and use a visited set to prevent cycles in DAG structures.
+C. `_scoped_search()` SHALL iterate only REQUIREMENT nodes whose IDs are in the scope set, using `_matches_query()` for matching.
+D. When `include_assertions=True`, the helper SHALL check assertion text of each in-scope requirement and attach `matched_assertions` metadata when assertions match.
+E. The helper SHALL return serialized results in the same format as `_search()`, plus `scope_id` and `direction` metadata.
+F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter validation.
+
+## Rationale
+
+Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
+
+*End* *Scoped Search Implementation* | **Hash**: 08e82fe6
+
+---
+
 ## Architecture Diagram
 
 ```text

@@ -665,6 +665,110 @@ def _minimize_requirement_set(
     }
 
 
+def _collect_scope_ids(
+    graph: TraceGraph,
+    scope_id: str,
+    direction: str,
+) -> set[str] | None:
+    """Collect node IDs reachable from scope_id in the given direction.
+
+    REQ-d00078-A: BFS via iter_children() for descendants, walk via iter_parents() for ancestors.
+    REQ-d00078-B: Includes scope_id itself, uses visited set for DAG dedup.
+
+    Returns:
+        Set of reachable node IDs, or None if scope_id not found.
+    """
+    # Implements: REQ-d00078-A, REQ-d00078-B
+    scope_node = graph.find_by_id(scope_id)
+    if scope_node is None:
+        return None
+
+    visited: set[str] = {scope_id}
+    stack: list[GraphNode] = [scope_node]
+
+    while stack:
+        current = stack.pop()
+        if direction == "descendants":
+            neighbors = current.iter_children()
+        else:  # ancestors
+            neighbors = current.iter_parents()
+        for neighbor in neighbors:
+            if neighbor.id not in visited:
+                visited.add(neighbor.id)
+                stack.append(neighbor)
+
+    return visited
+
+
+def _scoped_search(
+    graph: TraceGraph,
+    query: str,
+    scope_id: str,
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    include_assertions: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Search requirements within a scoped subgraph.
+
+    REQ-d00078-C: Iterates only REQUIREMENT nodes in the scope set.
+    REQ-d00078-D: Checks assertion text when include_assertions=True.
+    REQ-d00078-E: Returns results plus scope_id and direction metadata.
+    REQ-o00070-E: Reuses _matches_query() for matching.
+    """
+    # Implements: REQ-o00070-A, REQ-o00070-B, REQ-o00070-C, REQ-o00070-D, REQ-o00070-E
+    # Implements: REQ-d00078-C, REQ-d00078-D, REQ-d00078-E
+
+    # REQ-o00070-D: Return error if scope_id not found
+    scope_ids = _collect_scope_ids(graph, scope_id, direction)
+    if scope_ids is None:
+        return {"error": f"Scope node '{scope_id}' not found"}
+
+    # Compile pattern for matching
+    compiled_pattern = None
+    query_lower = None
+    if regex:
+        try:
+            compiled_pattern = re.compile(query, re.IGNORECASE)
+        except re.error:
+            return {"results": [], "scope_id": scope_id, "direction": direction}
+    else:
+        query_lower = query.lower()
+
+    results: list[dict[str, Any]] = []
+
+    # REQ-d00078-C: Iterate only REQUIREMENT nodes in scope
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.id not in scope_ids:
+            continue
+
+        matched = _matches_query(node, field, regex, compiled_pattern, query_lower)
+        matched_assertions: list[dict[str, Any]] = []
+
+        # REQ-d00078-D / REQ-o00070-C: Check assertion text
+        if include_assertions:
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    assertion_text = child.get_label() or ""
+                    if regex:
+                        if compiled_pattern and compiled_pattern.search(assertion_text):
+                            matched_assertions.append(_serialize_assertion(child))
+                    else:
+                        if query_lower and query_lower in assertion_text.lower():
+                            matched_assertions.append(_serialize_assertion(child))
+
+        if matched or matched_assertions:
+            entry = _serialize_requirement_summary(node)
+            if matched_assertions:
+                entry["matched_assertions"] = matched_assertions
+            results.append(entry)
+            if len(results) >= limit:
+                break
+
+    return {"results": results, "scope_id": scope_id, "direction": direction}
+
+
 def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
@@ -2904,6 +3008,39 @@ def create_server(
         if not parsed_kinds:
             parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
         return _minimize_requirement_set(_state["graph"], req_ids, parsed_kinds)
+
+    @mcp.tool()
+    def scoped_search(
+        query: str,
+        scope_id: str,
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        include_assertions: bool = False,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Search requirements within a subgraph rooted at scope_id.
+
+        Restricts search to descendants or ancestors of the scope node,
+        preventing over-matching across unrelated parts of the graph.
+
+        REQ-d00078-F: Delegates to helper, performing only parameter validation.
+
+        Args:
+            query: Search string or regex pattern.
+            scope_id: Root node ID defining the search scope.
+            direction: "descendants" (default) or "ancestors".
+            field: Field to search: 'id', 'title', 'body', or 'all'.
+            regex: If True, treat query as regex pattern.
+            include_assertions: If True, also match assertion text.
+            limit: Maximum results to return (default 50).
+
+        Returns:
+            Dict with results list, scope_id, and direction.
+        """
+        return _scoped_search(
+            _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
+        )
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:

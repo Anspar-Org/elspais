@@ -35,6 +35,7 @@
 | REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
 | REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | c1ed85a6 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | 461abb64 |
+| REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | bd001dba |
 
 ## Development Requirements (DEV)
 
@@ -76,6 +77,7 @@
 | REQ-d00075 | Subtree Extraction Implementation            | 08-mcp-server.md         | a53f60cc |
 | REQ-d00076 | Cursor Protocol Implementation               | 08-mcp-server.md         | 753def07 |
 | REQ-d00077 | Minimize Requirement Set Implementation       | 08-mcp-server.md         | 6e02e418 |
+| REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 08e82fe6 |
 
 ## User Journeys (JNY)
 
