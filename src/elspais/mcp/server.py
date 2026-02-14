@@ -2825,6 +2825,7 @@ The graph is the single source of truth - all tools read directly from it.
 3. `search(query)` - Find requirements by keyword
 4. `get_requirement(req_id)` - Get full details including assertions
 5. `get_hierarchy(req_id)` - Navigate parent/child relationships
+6. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
 
 ## Tools Overview
 
@@ -2836,8 +2837,19 @@ The graph is the single source of truth - all tools read directly from it.
 - `search(query, field="all", regex=False, limit=50)` - Find requirements
   - field: "id", "title", "body", or "all"
   - regex: treat query as regex pattern
+- `scoped_search(query, scope_id, direction="descendants", ...)` - Search within a subgraph
+  - Restricts search to descendants or ancestors of scope_id
+  - include_assertions: also match against assertion text
+  - Returns results with scope context metadata
 - `get_requirement(req_id)` - Full details with assertions and relationships
 - `get_hierarchy(req_id)` - Ancestors (to roots) and direct children
+- `minimize_requirement_set(req_ids, edge_kinds="")` - Prune to most-specific
+  - Removes ancestors that are superseded by more-specific descendants
+  - Returns minimal_set, pruned items with superseded_by, and stats
+- `discover_requirements(query, scope_id, ...)` - Search + minimize in one step
+  - Chains scoped_search with minimize_requirement_set
+  - Returns only the most-specific matches within a subgraph
+  - Pruned ancestors include superseded_by metadata
 
 ### Workspace Context
 - `get_workspace_info()` - Repo path, project name, configuration
@@ -2901,7 +2913,7 @@ The graph is the single source of truth - all tools read directly from it.
 ### Cursor Protocol (Incremental Iteration)
 - `open_cursor(query, params={}, batch_size=1)` - Open cursor over query results
   - query: "subtree", "search", "hierarchy", "query_nodes",
-    "test_coverage", "uncovered_assertions"
+    "test_coverage", "uncovered_assertions", "scoped_search"
   - params: query-specific parameters (e.g. {root_id: "REQ-p00001"})
   - batch_size: -1 (assertions as separate items), 0 (nodes with inline assertions),
     1 (nodes with children summaries)
@@ -2970,6 +2982,11 @@ Use `save_branch=True` to create a safety branch before modifications, allowing 
 1. open_cursor("subtree", {"root_id": "REQ-p00001"}, batch_size=0)
 2. cursor_info() to check how many items remain
 3. cursor_next() to get next item, repeat as needed
+
+**Discovering requirements for a ticket:**
+1. discover_requirements("authentication", scope_id="REQ-p00001") for most-specific matches
+2. get_requirement() on each result for full details and assertions
+3. Or use scoped_search() + minimize_requirement_set() separately for more control
 
 **After editing spec files:**
 1. refresh_graph() to rebuild

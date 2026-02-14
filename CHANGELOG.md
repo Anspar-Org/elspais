@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.72.0] - 2026-02-14
+
+### Changed
+
+- **MCP server instructions**: Document `scoped_search`, `minimize_requirement_set`, and `discover_requirements` tools in Quick Start, Tools Overview, and Common Patterns sections
+
 ## [0.71.0] - 2026-02-14
 
 ### Added
