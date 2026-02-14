@@ -399,13 +399,13 @@ B. `cursor_next(count)` SHALL return the next `count` items and advance the curs
 C. `cursor_info()` SHALL return cursor position, total count, and remaining count without advancing.
 D. The cursor protocol SHALL support a single active cursor, with opening a new cursor auto-closing the previous.
 E. The cursor protocol SHALL support `batch_size` semantics: `-1` for assertions as first-class items, `0` for nodes with inline assertions, `1` for nodes with children previews.
-F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`.
+F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`, `scoped_search`.
 
 ## Rationale
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
-*End* *MCP Cursor Protocol* | **Hash**: c1ed85a6
+*End* *MCP Cursor Protocol* | **Hash**: 32de0d0d
 
 ---
 

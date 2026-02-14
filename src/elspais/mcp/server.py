@@ -2544,7 +2544,7 @@ def _materialize_cursor_items(
 
     REQ-d00076-B: Dispatches to existing query helpers.
     REQ-o00068-F: Supports subtree, search, hierarchy, query_nodes,
-                  test_coverage, uncovered_assertions.
+                  test_coverage, uncovered_assertions, scoped_search.
     """
     if query == "subtree":
         root_id = params.get("root_id", "")
@@ -2627,6 +2627,20 @@ def _materialize_cursor_items(
         if not result.get("success"):
             return []
         return result.get("uncovered", [])
+
+    elif query == "scoped_search":
+        # Implements: REQ-o00068-F, REQ-d00076-B
+        result = _scoped_search(
+            graph,
+            query=params.get("query", ""),
+            scope_id=params.get("scope_id", ""),
+            direction=params.get("direction", "descendants"),
+            field=params.get("field", "all"),
+            regex=params.get("regex", False),
+            include_assertions=params.get("include_assertions", False),
+            limit=params.get("limit", 50),
+        )
+        return result.get("results", [])
 
     else:
         return []

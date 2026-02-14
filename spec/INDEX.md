@@ -33,7 +33,7 @@
 | REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
 | REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
 | REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
-| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | c1ed85a6 |
+| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 32de0d0d |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | 461abb64 |
 | REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | bd001dba |
 
