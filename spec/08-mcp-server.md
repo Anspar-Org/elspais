@@ -363,6 +363,100 @@ MCP exposure enables AI agents to discover and apply link suggestions during cod
 
 ---
 
+## REQ-o00067: MCP Subtree Extraction Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a subtree extraction tool for scoped subgraph retrieval.
+
+## Assertions
+
+A. `get_subtree(root_id, depth, include_kinds, format)` SHALL extract a subgraph rooted at a given node using BFS traversal.
+B. The subtree tool SHALL support depth limiting where `depth=0` means unlimited and `depth=N` limits to N levels from root.
+C. The subtree tool SHALL support kind filtering via `include_kinds` parameter with conservative defaults per root kind.
+D. The subtree tool SHALL support three output formats: `markdown`, `flat`, and `nested`.
+E. The subtree tool SHALL deduplicate nodes in DAG structures using a visited set.
+F. The subtree tool SHALL include coverage summary statistics for requirement nodes.
+
+## Rationale
+
+LLM agents need scoped requirement subsets for sub-agent consumption. Extracting a subtree avoids context pollution from the full graph.
+
+*End* *MCP Subtree Extraction Tool* | **Hash**: 00000000
+
+---
+
+## REQ-o00068: MCP Cursor Protocol
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a general-purpose cursor protocol for incremental iteration over read query results.
+
+## Assertions
+
+A. `open_cursor(query, params, batch_size)` SHALL materialize query results and return the first item with metadata.
+B. `cursor_next(count)` SHALL return the next `count` items and advance the cursor position.
+C. `cursor_info()` SHALL return cursor position, total count, and remaining count without advancing.
+D. The cursor protocol SHALL support a single active cursor, with opening a new cursor auto-closing the previous.
+E. The cursor protocol SHALL support `batch_size` semantics: `-1` for assertions as first-class items, `0` for nodes with inline assertions, `1` for nodes with children previews.
+F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`.
+
+## Rationale
+
+LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
+
+*End* *MCP Cursor Protocol* | **Hash**: 00000000
+
+---
+
+## REQ-d00075: Subtree Extraction Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00067
+
+The subtree extraction tool SHALL be implemented as MCP-layer helpers that consume the graph iterator API.
+
+## Assertions
+
+A. `_collect_subtree(graph, root_id, depth, include_kinds)` SHALL perform BFS using `node.iter_children()` with depth tracking and a visited set for DAG deduplication.
+B. `_compute_coverage_summary(req_node)` SHALL reuse `_iter_assertion_coverage()` to return `{total, covered, pct}`.
+C. `_subtree_to_markdown(collected, graph)` SHALL render indented headings with assertion bullets and coverage stats.
+D. `_subtree_to_flat(collected, graph, root_id)` SHALL return `{root_id, nodes, edges, stats}` as a flat structure.
+E. `_subtree_to_nested(root_node, depth_limit, kind_filter, graph)` SHALL return recursive JSON with `children` arrays.
+F. Conservative kind defaults SHALL include `REQUIREMENT` + `ASSERTION` for requirement roots, and `USER_JOURNEY` for journey roots.
+G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder structures.
+
+## Rationale
+
+BFS with depth tracking and kind filtering provides the flexible subtree extraction that `GraphNode.walk()` alone cannot deliver, while staying in the MCP layer.
+
+*End* *Subtree Extraction Implementation* | **Hash**: 00000000
+
+---
+
+## REQ-d00076: Cursor Protocol Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00068
+
+The cursor protocol SHALL be implemented as a `CursorState` dataclass with three MCP tool wrappers.
+
+## Assertions
+
+A. `CursorState` SHALL store query, params, batch_size, materialized items list, and position counter.
+B. `_materialize_cursor_items(query, params, batch_size, graph)` SHALL dispatch to existing query helpers and reshape results based on batch_size.
+C. The cursor SHALL be stored in `_state["cursor"]` as a single instance; opening a new cursor SHALL discard the previous.
+D. `open_cursor` SHALL return the first item, total count, and query metadata.
+E. `cursor_next` SHALL return items at `[position:position+count]` and advance position, returning empty list at end.
+F. `cursor_info` SHALL be read-only, returning `{position, total, remaining, query, batch_size}`.
+G. The implementation SHALL reuse existing serializers: `_serialize_requirement_summary()`, `_serialize_assertion()`, `_serialize_node_summary()`.
+
+## Rationale
+
+A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
+
+*End* *Cursor Protocol Implementation* | **Hash**: 00000000
+
+---
+
 ## Architecture Diagram
 
 ```text

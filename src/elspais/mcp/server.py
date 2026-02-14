@@ -20,6 +20,13 @@
 # Implements: REQ-d00068-E, REQ-d00068-F
 # Implements: REQ-p00006-B
 # Implements: REQ-d00074-A, REQ-d00074-B, REQ-d00074-C, REQ-d00074-D
+# Implements: REQ-o00067-A, REQ-o00067-B, REQ-o00067-C, REQ-o00067-D, REQ-o00067-E, REQ-o00067-F
+# Implements: REQ-d00075-A, REQ-d00075-B, REQ-d00075-C, REQ-d00075-D
+# Implements: REQ-d00075-E, REQ-d00075-F, REQ-d00075-G
+# Implements: REQ-o00068-A, REQ-o00068-B, REQ-o00068-C, REQ-o00068-D
+# Implements: REQ-o00068-E, REQ-o00068-F
+# Implements: REQ-d00076-A, REQ-d00076-B, REQ-d00076-C, REQ-d00076-D
+# Implements: REQ-d00076-E, REQ-d00076-F, REQ-d00076-G
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.
@@ -1891,6 +1898,613 @@ def _apply_link_impl(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Subtree Extraction (REQ-o00067, REQ-d00075)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Conservative kind defaults per root kind (REQ-d00075-F)
+_SUBTREE_KIND_DEFAULTS: dict[NodeKind, set[NodeKind]] = {
+    NodeKind.REQUIREMENT: {NodeKind.REQUIREMENT, NodeKind.ASSERTION},
+    NodeKind.USER_JOURNEY: {NodeKind.USER_JOURNEY},
+}
+
+
+def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
+    """Lightweight coverage summary reusing _iter_assertion_coverage().
+
+    REQ-d00075-B: Returns {total, covered, pct}.
+    """
+    # Count total assertions
+    total = 0
+    for child in req_node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            total += 1
+
+    if total == 0:
+        return {"total": 0, "covered": 0, "pct": 0.0}
+
+    # Collect covered assertion labels from both TEST and CODE edges
+    covered_labels: set[str] = set()
+    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
+        covered_labels.update(labels)
+    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.CODE):
+        covered_labels.update(labels)
+
+    covered = len(covered_labels)
+    return {
+        "total": total,
+        "covered": covered,
+        "pct": round(covered / total * 100, 1) if total > 0 else 0.0,
+    }
+
+
+def _collect_subtree(
+    graph: TraceGraph,
+    root_id: str,
+    depth: int = 0,
+    include_kinds: set[NodeKind] | None = None,
+) -> list[tuple[Any, int]]:
+    """BFS from root with depth tracking, kind filtering, DAG dedup.
+
+    REQ-d00075-A: Uses node.iter_children() with visited set.
+    REQ-o00067-A: BFS traversal from root.
+    REQ-o00067-B: depth=0 means unlimited, depth=N limits to N levels.
+    REQ-o00067-E: Deduplicates via visited set.
+
+    Returns:
+        List of (node, depth_level) tuples in BFS order.
+    """
+    root_node = graph.find_by_id(root_id)
+    if root_node is None:
+        return []
+
+    # Determine kind filter (REQ-o00067-C, REQ-d00075-F)
+    if include_kinds is None:
+        include_kinds = _SUBTREE_KIND_DEFAULTS.get(
+            root_node.kind,
+            {root_node.kind},
+        )
+        # Always include ASSERTION when REQUIREMENT is present
+        if NodeKind.REQUIREMENT in include_kinds:
+            include_kinds = include_kinds | {NodeKind.ASSERTION}
+
+    visited: set[str] = {root_id}
+    result: list[tuple[Any, int]] = [(root_node, 0)]
+    queue: list[tuple[Any, int]] = [(root_node, 0)]
+
+    while queue:
+        current, current_depth = queue.pop(0)
+
+        # Depth limit: don't expand children beyond limit
+        if depth > 0 and current_depth >= depth:
+            continue
+
+        for child in current.iter_children():
+            if child.id in visited:
+                continue
+            if child.kind not in include_kinds:
+                continue
+            visited.add(child.id)
+            result.append((child, current_depth + 1))
+            queue.append((child, current_depth + 1))
+
+    return result
+
+
+def _subtree_to_markdown(
+    collected: list[tuple[Any, int]],
+    graph: TraceGraph,
+) -> str:
+    """Render subtree as indented markdown.
+
+    REQ-d00075-C: Indented headings + assertion bullets + coverage stats.
+    """
+    if not collected:
+        return "*(empty subtree)*"
+
+    lines: list[str] = []
+    for node, depth_level in collected:
+        indent = "  " * depth_level
+
+        if node.kind == NodeKind.ASSERTION:
+            label = node.get_field("label", "")
+            text = node.get_label()
+            lines.append(f"{indent}- **{label}**: {text}")
+        elif node.kind == NodeKind.REQUIREMENT:
+            level_str = node.get_field("level", "")
+            status = node.get_field("status", "")
+            title = node.get_label()
+            # Coverage summary (REQ-o00067-F)
+            cov = _compute_coverage_summary(node)
+            cov_str = f" [{cov['covered']}/{cov['total']} covered, {cov['pct']}%]"
+            lines.append(
+                f"{indent}{'#' * min(depth_level + 1, 6)} {node.id}: {title} "
+                f"({level_str}, {status}){cov_str}"
+            )
+        else:
+            title = node.get_label()
+            lines.append(f"{indent}{'#' * min(depth_level + 1, 6)} {node.id}: {title}")
+
+    return "\n".join(lines)
+
+
+def _subtree_to_flat(
+    collected: list[tuple[Any, int]],
+    graph: TraceGraph,
+    root_id: str,
+) -> dict[str, Any]:
+    """Render subtree as flat JSON structure.
+
+    REQ-d00075-D: Returns {root_id, nodes, edges, stats}.
+    """
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    total_reqs = 0
+    total_assertions = 0
+
+    for node, depth_level in collected:
+        entry: dict[str, Any] = {
+            "id": node.id,
+            "kind": node.kind.value,
+            "title": node.get_label(),
+            "depth": depth_level,
+        }
+
+        if node.kind == NodeKind.REQUIREMENT:
+            entry["level"] = node.get_field("level")
+            entry["status"] = node.get_field("status")
+            entry["coverage"] = _compute_coverage_summary(node)
+            total_reqs += 1
+        elif node.kind == NodeKind.ASSERTION:
+            entry["label"] = node.get_field("label")
+            entry["text"] = node.get_label()
+            total_assertions += 1
+
+        nodes.append(entry)
+
+        # Collect edges to children that are in the collected set
+        collected_ids = {n.id for n, _ in collected}
+        for edge in node.iter_outgoing_edges():
+            if edge.target.id in collected_ids:
+                edges.append(
+                    {
+                        "source": node.id,
+                        "target": edge.target.id,
+                        "kind": edge.kind.value,
+                    }
+                )
+
+    return {
+        "root_id": root_id,
+        "nodes": nodes,
+        "edges": edges,
+        "stats": {
+            "total_nodes": len(nodes),
+            "requirements": total_reqs,
+            "assertions": total_assertions,
+        },
+    }
+
+
+def _subtree_to_nested(
+    node: Any,
+    depth_limit: int,
+    kind_filter: set[NodeKind],
+    graph: TraceGraph,
+    _current_depth: int = 0,
+    _visited: set[str] | None = None,
+) -> dict[str, Any]:
+    """Render subtree as recursive nested JSON.
+
+    REQ-d00075-E: Recursive JSON with children arrays.
+    """
+    if _visited is None:
+        _visited = set()
+    _visited.add(node.id)
+
+    entry: dict[str, Any] = {
+        "id": node.id,
+        "kind": node.kind.value,
+        "title": node.get_label(),
+    }
+
+    if node.kind == NodeKind.REQUIREMENT:
+        entry["level"] = node.get_field("level")
+        entry["status"] = node.get_field("status")
+        entry["coverage"] = _compute_coverage_summary(node)
+    elif node.kind == NodeKind.ASSERTION:
+        entry["label"] = node.get_field("label")
+        entry["text"] = node.get_label()
+
+    # Recurse into children
+    children: list[dict[str, Any]] = []
+    if depth_limit == 0 or _current_depth < depth_limit:
+        for child in node.iter_children():
+            if child.id in _visited:
+                continue
+            if child.kind not in kind_filter:
+                continue
+            children.append(
+                _subtree_to_nested(
+                    child,
+                    depth_limit,
+                    kind_filter,
+                    graph,
+                    _current_depth + 1,
+                    _visited,
+                )
+            )
+    entry["children"] = children
+    return entry
+
+
+def _get_subtree(
+    graph: TraceGraph,
+    root_id: str,
+    depth: int = 0,
+    include_kinds: str = "",
+    format: str = "markdown",
+) -> dict[str, Any]:
+    """Dispatcher for subtree extraction.
+
+    REQ-o00067-A through REQ-o00067-F.
+    """
+    root_node = graph.find_by_id(root_id)
+    if root_node is None:
+        return {"error": f"Node '{root_id}' not found"}
+
+    # Parse kind filter
+    kind_set: set[NodeKind] | None = None
+    if include_kinds:
+        kind_set = set()
+        for k in include_kinds.split(","):
+            k = k.strip().lower()
+            try:
+                kind_set.add(NodeKind(k))
+            except ValueError:
+                return {"error": f"Unknown node kind: '{k}'"}
+
+    if format == "nested":
+        # Nested uses recursive approach directly
+        if kind_set is None:
+            kind_set = _SUBTREE_KIND_DEFAULTS.get(
+                root_node.kind,
+                {root_node.kind},
+            )
+            if NodeKind.REQUIREMENT in kind_set:
+                kind_set = kind_set | {NodeKind.ASSERTION}
+        result = _subtree_to_nested(root_node, depth, kind_set, graph)
+        return {"format": "nested", "root_id": root_id, "tree": result}
+
+    # BFS-based formats: markdown and flat
+    collected = _collect_subtree(graph, root_id, depth, kind_set)
+
+    if format == "markdown":
+        return {
+            "format": "markdown",
+            "root_id": root_id,
+            "content": _subtree_to_markdown(collected, graph),
+        }
+    elif format == "flat":
+        return {
+            "format": "flat",
+            **_subtree_to_flat(collected, graph, root_id),
+        }
+    else:
+        return {"error": f"Unknown format: '{format}'. Use 'markdown', 'flat', or 'nested'."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cursor Protocol (REQ-o00068, REQ-d00076)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CursorState:
+    """Single-cursor state for incremental iteration over query results.
+
+    REQ-d00076-A: Stores query, params, batch_size, materialized items, position.
+    """
+
+    __slots__ = ("query", "params", "batch_size", "items", "position")
+
+    def __init__(
+        self,
+        query: str,
+        params: dict[str, Any],
+        batch_size: int,
+        items: list[dict[str, Any]],
+    ) -> None:
+        self.query = query
+        self.params = params
+        self.batch_size = batch_size
+        self.items = items
+        self.position: int = 0
+
+
+def _reshape_for_batch_size(
+    nodes: list[tuple[Any, int]],
+    batch_size: int,
+    graph: TraceGraph,
+) -> list[dict[str, Any]]:
+    """Reshape collected nodes based on batch_size semantics.
+
+    REQ-o00068-E: batch_size controls item granularity.
+      -1: Assertions as first-class items
+       0: Each node is one item (requirements include assertions inline)
+       1: Each node is one item + immediate children summaries
+
+    REQ-d00076-G: Reuses existing serializers.
+    """
+    items: list[dict[str, Any]] = []
+
+    for node, depth in nodes:
+        if batch_size == -1:
+            # Assertions as first-class items
+            if node.kind == NodeKind.REQUIREMENT:
+                items.append(
+                    {
+                        "id": node.id,
+                        "kind": "requirement",
+                        "title": node.get_label(),
+                        "level": node.get_field("level"),
+                        "status": node.get_field("status"),
+                        "depth": depth,
+                    }
+                )
+                # Emit each assertion as a separate item
+                for child in node.iter_children():
+                    if child.kind == NodeKind.ASSERTION:
+                        items.append(_serialize_assertion(child))
+            elif node.kind == NodeKind.ASSERTION:
+                # Already emitted inline above when parent was processed;
+                # skip if traversed independently
+                continue
+            else:
+                items.append(_serialize_node_summary(node))
+
+        elif batch_size == 0:
+            # Each node is one item with assertions inline
+            if node.kind == NodeKind.REQUIREMENT:
+                assertions = []
+                for child in node.iter_children():
+                    if child.kind == NodeKind.ASSERTION:
+                        assertions.append(_serialize_assertion(child))
+                items.append(
+                    {
+                        "id": node.id,
+                        "kind": "requirement",
+                        "title": node.get_label(),
+                        "level": node.get_field("level"),
+                        "status": node.get_field("status"),
+                        "depth": depth,
+                        "assertions": assertions,
+                        "coverage": _compute_coverage_summary(node),
+                    }
+                )
+            elif node.kind == NodeKind.ASSERTION:
+                continue  # Inlined in parent
+            else:
+                items.append(_serialize_node_summary(node))
+
+        else:
+            # batch_size >= 1: Node + immediate children summaries
+            if node.kind == NodeKind.REQUIREMENT:
+                assertions = []
+                for child in node.iter_children():
+                    if child.kind == NodeKind.ASSERTION:
+                        assertions.append(_serialize_assertion(child))
+                children_summaries = []
+                for child in node.iter_children():
+                    if child.kind == NodeKind.REQUIREMENT:
+                        children_summaries.append(_serialize_requirement_summary(child))
+                items.append(
+                    {
+                        "id": node.id,
+                        "kind": "requirement",
+                        "title": node.get_label(),
+                        "level": node.get_field("level"),
+                        "status": node.get_field("status"),
+                        "depth": depth,
+                        "assertions": assertions,
+                        "coverage": _compute_coverage_summary(node),
+                        "children": children_summaries,
+                    }
+                )
+            elif node.kind == NodeKind.ASSERTION:
+                continue  # Inlined in parent
+            else:
+                items.append(_serialize_node_summary(node))
+
+    return items
+
+
+def _materialize_cursor_items(
+    query: str,
+    params: dict[str, Any],
+    batch_size: int,
+    graph: TraceGraph,
+) -> list[dict[str, Any]]:
+    """Run query and reshape results for cursor iteration.
+
+    REQ-d00076-B: Dispatches to existing query helpers.
+    REQ-o00068-F: Supports subtree, search, hierarchy, query_nodes,
+                  test_coverage, uncovered_assertions.
+    """
+    if query == "subtree":
+        root_id = params.get("root_id", "")
+        depth = params.get("depth", 0)
+        include_kinds_str = params.get("include_kinds", "")
+
+        # Parse kind filter
+        kind_set: set[NodeKind] | None = None
+        if include_kinds_str:
+            kind_set = set()
+            for k in include_kinds_str.split(","):
+                k = k.strip().lower()
+                try:
+                    kind_set.add(NodeKind(k))
+                except ValueError:
+                    return []
+
+        collected = _collect_subtree(graph, root_id, depth, kind_set)
+        return _reshape_for_batch_size(collected, batch_size, graph)
+
+    elif query == "search":
+        results = _search(
+            graph,
+            query=params.get("query", ""),
+            field=params.get("field", "all"),
+            regex=params.get("regex", False),
+            limit=params.get("limit", 50),
+        )
+        return results  # Already serialized dicts
+
+    elif query == "hierarchy":
+        result = _get_hierarchy(graph, params.get("req_id", ""))
+        if "error" in result:
+            return []
+        # Flatten: ancestors then children
+        items: list[dict[str, Any]] = []
+        for anc in result.get("ancestors", []):
+            anc["_section"] = "ancestor"
+            items.append(anc)
+        for child in result.get("children", []):
+            child["_section"] = "child"
+            items.append(child)
+        return items
+
+    elif query == "query_nodes":
+        kw_str = params.get("keywords")
+        kw_list = None
+        if kw_str:
+            kw_list = [k.strip() for k in kw_str.split(",") if k.strip()]
+        filters: dict[str, str] = {}
+        if params.get("level"):
+            filters["level"] = params["level"]
+        if params.get("status"):
+            filters["status"] = params["status"]
+        if params.get("actor"):
+            filters["actor"] = params["actor"]
+        result = _query_nodes(
+            graph,
+            kind=params.get("kind"),
+            keywords=kw_list,
+            match_all=params.get("match_all", True),
+            filters=filters or None,
+            limit=params.get("limit", 50),
+        )
+        return result.get("results", [])
+
+    elif query == "test_coverage":
+        result = _get_test_coverage(graph, params.get("req_id", ""))
+        if not result.get("success"):
+            return []
+        # Return test nodes as items
+        return result.get("test_nodes", [])
+
+    elif query == "uncovered_assertions":
+        result = _get_uncovered_assertions(
+            graph,
+            req_id=params.get("req_id"),
+            limit=params.get("limit", 100),
+        )
+        if not result.get("success"):
+            return []
+        return result.get("uncovered", [])
+
+    else:
+        return []
+
+
+def _open_cursor(
+    state: dict[str, Any],
+    query: str,
+    params: dict[str, Any],
+    batch_size: int,
+) -> dict[str, Any]:
+    """Open a new cursor, auto-closing any previous one.
+
+    REQ-o00068-A: Materializes results and returns first item + metadata.
+    REQ-o00068-D: Single active cursor; new cursor discards previous.
+    REQ-d00076-C: Stored in _state["cursor"].
+    REQ-d00076-D: Returns first item, total count, and query metadata.
+    """
+    graph = state["graph"]
+    items = _materialize_cursor_items(query, params, batch_size, graph)
+
+    cursor = CursorState(
+        query=query,
+        params=params,
+        batch_size=batch_size,
+        items=items,
+    )
+    state["cursor"] = cursor
+
+    first_item = items[0] if items else None
+    if first_item is not None:
+        cursor.position = 1
+
+    return {
+        "success": True,
+        "query": query,
+        "batch_size": batch_size,
+        "total": len(items),
+        "position": cursor.position,
+        "remaining": len(items) - cursor.position,
+        "current": first_item,
+    }
+
+
+def _cursor_next(
+    state: dict[str, Any],
+    count: int = 1,
+) -> dict[str, Any]:
+    """Advance cursor and return next items.
+
+    REQ-o00068-B: Returns next count items, advances position.
+    REQ-d00076-E: Returns items at [position:position+count], empty at end.
+    """
+    cursor = state.get("cursor")
+    if cursor is None:
+        return {"success": False, "error": "No active cursor. Use open_cursor() first."}
+
+    start = cursor.position
+    end = min(start + count, len(cursor.items))
+    items = cursor.items[start:end]
+    cursor.position = end
+
+    return {
+        "success": True,
+        "items": items,
+        "count": len(items),
+        "position": cursor.position,
+        "total": len(cursor.items),
+        "remaining": len(cursor.items) - cursor.position,
+    }
+
+
+def _cursor_info(
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Return cursor position info without advancing.
+
+    REQ-o00068-C: Returns position/total/remaining without advancing.
+    REQ-d00076-F: Read-only, returns {position, total, remaining, query, batch_size}.
+    """
+    cursor = state.get("cursor")
+    if cursor is None:
+        return {"success": False, "error": "No active cursor. Use open_cursor() first."}
+
+    return {
+        "success": True,
+        "position": cursor.position,
+        "total": len(cursor.items),
+        "remaining": len(cursor.items) - cursor.position,
+        "query": cursor.query,
+        "batch_size": cursor.batch_size,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP Server Instructions
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2747,6 +3361,95 @@ def create_server(
             line=line,
             requirement_id=requirement_id,
         )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Subtree Extraction Tool (REQ-o00067)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def get_subtree(
+        root_id: str,
+        depth: int = 0,
+        include_kinds: str = "",
+        format: str = "markdown",
+    ) -> dict[str, Any]:
+        """Extract a subgraph rooted at a given node.
+
+        Returns a scoped subtree for focused analysis. Supports three output
+        formats and configurable depth/kind filtering.
+
+        Args:
+            root_id: Required node ID to root the subtree at.
+            depth: Max depth from root (0 = unlimited, N = N levels).
+            include_kinds: Comma-separated NodeKind values to include.
+                Empty string uses conservative defaults per root kind.
+            format: Output format: 'markdown', 'flat', or 'nested'.
+
+        Returns:
+            Subtree data in the requested format.
+        """
+        return _get_subtree(
+            _state["graph"],
+            root_id=root_id,
+            depth=depth,
+            include_kinds=include_kinds,
+            format=format,
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Cursor Protocol Tools (REQ-o00068)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def open_cursor(
+        query: str,
+        params: dict[str, Any] | None = None,
+        batch_size: int = 1,
+    ) -> dict[str, Any]:
+        """Open a cursor for incremental iteration over query results.
+
+        Materializes query results and returns the first item. Opening a new
+        cursor auto-closes any previous cursor.
+
+        Args:
+            query: Query type: 'subtree', 'search', 'hierarchy',
+                'query_nodes', 'test_coverage', 'uncovered_assertions'.
+            params: Query-specific parameters as a dict.
+            batch_size: Item granularity (-1=assertions first-class,
+                0=nodes with inline assertions, 1=nodes with children).
+
+        Returns:
+            First item, total count, and cursor metadata.
+        """
+        return _open_cursor(
+            _state,
+            query=query,
+            params=params or {},
+            batch_size=batch_size,
+        )
+
+    @mcp.tool()
+    def cursor_next(
+        count: int = 1,
+    ) -> dict[str, Any]:
+        """Advance cursor and return next items.
+
+        Args:
+            count: Number of items to return (default 1).
+
+        Returns:
+            Next items, position, and remaining count.
+        """
+        return _cursor_next(_state, count=count)
+
+    @mcp.tool()
+    def cursor_info() -> dict[str, Any]:
+        """Get cursor position info without advancing.
+
+        Returns:
+            Current position, total, remaining, query type, and batch_size.
+        """
+        return _cursor_info(_state)
 
     return mcp
 
