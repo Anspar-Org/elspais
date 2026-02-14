@@ -169,8 +169,13 @@ def build_graph(
 
     # 2b. Add sponsor/associate spec directories if enabled
     if scan_sponsors:
-        sponsor_dirs = get_associate_spec_directories(config, repo_root)
+        sponsor_dirs, associate_errors = get_associate_spec_directories(config, repo_root)
         spec_dirs = list(spec_dirs) + sponsor_dirs
+        if associate_errors:
+            import sys
+
+            for err in associate_errors:
+                print(f"Warning: {err}", file=sys.stderr)
 
     # 3. Create default pattern config and reference resolver
     default_pattern_config = PatternConfig.from_dict(config.get("patterns", {}))

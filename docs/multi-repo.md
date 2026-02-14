@@ -212,6 +212,43 @@ Alternative to config, create a `.core-repo` file:
 
 This takes precedence over the config file path.
 
+## CLI-Based Associate Registration
+
+Instead of manually editing configuration files, register associate repositories via the CLI. This is especially useful in CI/CD pipelines where repos are cloned to varying paths.
+
+### Register an Associate
+
+```bash
+# In the core repository
+cd core-platform/
+
+# Register an associate by its filesystem path
+elspais config add associates.paths /path/to/associated-callisto
+```
+
+This appends the path to the `associates.paths` array in `.elspais.toml`. The tool then auto-discovers the associate's identity (name, prefix, spec directory) by reading that repo's `.elspais.toml`.
+
+### How Discovery Works
+
+When a path is registered, elspais reads `{path}/.elspais.toml` and checks:
+
+1. The file exists
+2. `project.type` is `"associated"`
+3. `[associated] prefix` is set
+
+If any check fails, a clear error message is returned (e.g., `"Associate path does not exist: /bad/path"`).
+
+### Error Handling
+
+Invalid paths produce structured errors that callers can inspect:
+
+```bash
+# This registers the path but discovery will fail at validate time
+elspais config add associates.paths /nonexistent/repo
+elspais validate --mode combined
+# Error: Associate path does not exist: /nonexistent/repo
+```
+
 ## CI/CD Integration
 
 ### GitHub Actions Example
@@ -227,17 +264,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Checkout core repo for cross-validation
+      # Checkout associate repos for combined validation
       - uses: actions/checkout@v4
         with:
-          repository: org/core-platform
-          path: core-platform
+          repository: org/associated-callisto
+          path: associated-callisto
 
       - name: Install elspais
         run: pip install elspais==${{ vars.ELSPAIS_VERSION }}
 
+      # Register associates by path (auto-discovers identity)
+      - name: Register associates
+        run: elspais config add associates.paths associated-callisto
+
       - name: Validate
-        run: elspais validate --core-repo core-platform
+        run: elspais validate --mode combined
 ```
 
 ## Manifest Mode (Future)

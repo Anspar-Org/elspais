@@ -135,13 +135,21 @@ This architecture supports:
 - Modular development with clear interface contracts
 - Combined views for regulatory submissions
 
+CI/CD pipelines and diverse developer environments mean associated repositories may be located at different filesystem paths on each machine. Rather than requiring each environment to maintain a separate override file, the tool treats all cross-repository resolution as a local path concern: CI systems clone repos and then configure paths via the CLI, developers set paths to match their local directory layout, and the associated repository's own configuration file declares its identity (project type, namespace prefix). This keeps repository topology — which repos exist and where they are hosted — as a CI/infrastructure concern outside the tool, while the tool focuses on discovering and validating whatever local repos it is pointed at.
+
 ## Assertions
 
 A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
 
 B. The tool SHALL generate combined traceability matrices spanning multiple repositories.
 
-*End* *Multi-Repository Requirements* | **Hash**: b419c8ac
+C. The tool SHALL support CLI-based configuration of associate repository paths so that external systems can register associates without manually editing configuration files.
+
+D. The tool SHALL discover an associated repository's identity — including its project type and namespace prefix — by reading that repository's own configuration file.
+
+E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
+
+*End* *Multi-Repository Requirements* | **Hash**: 4b4e2765
 ---
 
 # REQ-p00006: Interactive Traceability Viewer

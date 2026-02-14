@@ -8,7 +8,7 @@
 | REQ-p00002 | Requirements Validation                          | prd-elspais.md           | e8f0e4eb |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-elspais.md           | b935bd53 |
 | REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | 846fefad |
-| REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | b419c8ac |
+| REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | 4b4e2765 |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-elspais.md           | b3dd4d1a |
 | REQ-p00007 | Collaborative Review System                      | prd-elspais.md           | f275694a |
 | REQ-p00008 | Review User Interface                            | prd-elspais.md           | 2c550af9 |
