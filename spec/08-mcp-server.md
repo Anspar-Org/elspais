@@ -457,6 +457,51 @@ A single-cursor model with materialized items provides simple, predictable itera
 
 ---
 
+## REQ-o00069: MCP Minimize Requirement Set Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
+
+## Assertions
+
+A. `minimize_requirement_set(req_ids, edge_kinds)` SHALL accept a list of requirement IDs and an optional edge kinds filter defaulting to "implements,refines".
+B. The tool SHALL return a minimal set containing only requirements that are not ancestors of other requirements in the input set.
+C. The tool SHALL return pruned requirements with metadata indicating which input member(s) supersede each pruned item.
+D. The tool SHALL report unknown IDs separately in a `not_found` list without failing the operation.
+E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor relationships, configurable via the `edge_kinds` parameter.
+
+## Rationale
+
+Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
+
+*End* *MCP Minimize Requirement Set Tool* | **Hash**: 461abb64
+
+---
+
+## REQ-d00077: Minimize Requirement Set Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00069
+
+The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
+
+## Assertions
+
+A. `_minimize_requirement_set(graph, req_ids, edge_kinds)` SHALL resolve each ID via the graph index, separating found and not_found IDs.
+B. For each found requirement, the helper SHALL walk UP via `iter_outgoing_edges()` filtered by the parsed edge_kinds set, collecting transitive ancestor IDs.
+C. A requirement R SHALL be pruned if another requirement C in the input set has R in its ancestor set.
+D. For each pruned requirement, the helper SHALL record which set member(s) supersede it in a `superseded_by` field.
+E. The helper SHALL return `{minimal_set, pruned, not_found, stats}` with serialized requirement summaries.
+F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter parsing and edge_kinds string-to-set conversion.
+
+## Rationale
+
+Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
+
+*End* *Minimize Requirement Set Implementation* | **Hash**: 6e02e418
+
+---
+
 ## Architecture Diagram
 
 ```text

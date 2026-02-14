@@ -576,6 +576,95 @@ def _search(
     return results
 
 
+def _minimize_requirement_set(
+    graph: TraceGraph,
+    req_ids: list[str],
+    edge_kinds: set[EdgeKind],
+) -> dict[str, Any]:
+    """Prune a requirement set to its most-specific members.
+
+    Removes ancestors already covered by more-specific descendants in the set.
+
+    REQ-d00077-A: Resolves each ID via graph index, separating found/not_found.
+    REQ-d00077-B: Walks UP via iter_outgoing_edges() filtered by edge_kinds.
+    REQ-d00077-C: Prunes req R if another req C has R in its ancestor set.
+    REQ-d00077-D: Records superseded_by for each pruned req.
+    REQ-d00077-E: Returns {minimal_set, pruned, not_found, stats}.
+    """
+    # Implements: REQ-o00069-A, REQ-o00069-B, REQ-o00069-C, REQ-o00069-D, REQ-o00069-E
+    # Implements: REQ-d00077-A, REQ-d00077-B, REQ-d00077-C, REQ-d00077-D, REQ-d00077-E
+
+    # REQ-d00077-A: Resolve IDs, separating found/not_found
+    found: dict[str, GraphNode] = {}
+    not_found: list[str] = []
+    for req_id in req_ids:
+        node = graph.find_by_id(req_id)
+        if node is not None and node.kind == NodeKind.REQUIREMENT:
+            found[req_id] = node
+        else:
+            not_found.append(req_id)
+
+    if not found:
+        return {
+            "minimal_set": [],
+            "pruned": [],
+            "not_found": not_found,
+            "stats": {"input_count": len(req_ids), "minimal_count": 0, "pruned_count": 0},
+        }
+
+    found_ids = set(found.keys())
+
+    # REQ-d00077-B: For each found req, collect transitive ancestors
+    ancestor_map: dict[str, set[str]] = {}
+    for req_id, node in found.items():
+        ancestors: set[str] = set()
+        visited: set[str] = set()
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            for edge in current.iter_outgoing_edges():
+                if edge.kind in edge_kinds:
+                    parent = edge.target
+                    if parent.id not in visited:
+                        visited.add(parent.id)
+                        ancestors.add(parent.id)
+                        stack.append(parent)
+        ancestor_map[req_id] = ancestors
+
+    # REQ-d00077-C: Prune — R is redundant if another C in the set has R in its ancestors
+    # REQ-d00077-D: Record superseded_by
+    pruned_items: dict[str, list[str]] = {}  # pruned_id -> [superseding_ids]
+    for req_id in found_ids:
+        for other_id in found_ids:
+            if other_id != req_id and req_id in ancestor_map[other_id]:
+                if req_id not in pruned_items:
+                    pruned_items[req_id] = []
+                pruned_items[req_id].append(other_id)
+
+    minimal_ids = found_ids - set(pruned_items.keys())
+
+    # REQ-d00077-E: Build result
+    minimal_set = [
+        _serialize_requirement_summary(found[rid]) for rid in req_ids if rid in minimal_ids
+    ]
+    pruned = [
+        {**_serialize_requirement_summary(found[rid]), "superseded_by": sorted(pruned_items[rid])}
+        for rid in req_ids
+        if rid in pruned_items
+    ]
+
+    return {
+        "minimal_set": minimal_set,
+        "pruned": pruned,
+        "not_found": not_found,
+        "stats": {
+            "input_count": len(req_ids),
+            "minimal_count": len(minimal_set),
+            "pruned_count": len(pruned),
+        },
+    }
+
+
 def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
@@ -2781,6 +2870,40 @@ def create_server(
             List of matching requirement summaries.
         """
         return _search(_state["graph"], query, field, regex, limit)
+
+    @mcp.tool()
+    def minimize_requirement_set(
+        req_ids: list[str],
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Prune a requirement set to its most-specific members.
+
+        Removes ancestors already covered by more-specific descendants in the
+        input set. Useful when agents list both leaf requirements and their
+        broad ancestors for a ticket.
+
+        REQ-d00077-F: Delegates to helper, performing only parameter parsing.
+
+        Args:
+            req_ids: List of requirement IDs to minimize.
+            edge_kinds: Comma-separated edge kinds to follow when determining
+                ancestry. Default: "implements,refines".
+
+        Returns:
+            Dict with minimal_set, pruned (with superseded_by metadata),
+            not_found, and stats.
+        """
+        # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _minimize_requirement_set(_state["graph"], req_ids, parsed_kinds)
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:

@@ -34,6 +34,7 @@
 | REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
 | REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
 | REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | c1ed85a6 |
+| REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | 461abb64 |
 
 ## Development Requirements (DEV)
 
@@ -74,6 +75,7 @@
 | REQ-d00074 | MCP Link Suggestion Tools                    | 08-mcp-server.md         | e438ff5e |
 | REQ-d00075 | Subtree Extraction Implementation            | 08-mcp-server.md         | a53f60cc |
 | REQ-d00076 | Cursor Protocol Implementation               | 08-mcp-server.md         | 753def07 |
+| REQ-d00077 | Minimize Requirement Set Implementation       | 08-mcp-server.md         | 6e02e418 |
 
 ## User Journeys (JNY)
 
