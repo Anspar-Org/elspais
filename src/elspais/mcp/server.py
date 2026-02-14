@@ -60,6 +60,7 @@ from elspais.graph.annotators import (
 )
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 
@@ -474,6 +475,69 @@ def _refresh_graph(
     }, new_graph
 
 
+def _matches_query(
+    node: GraphNode,
+    field: str,
+    regex: bool,
+    compiled_pattern: re.Pattern[str] | None,
+    query_lower: str | None,
+) -> bool:
+    """Check if a node matches a query against specified fields.
+
+    Reusable matching logic shared by search() and scoped_search().
+
+    REQ-d00061-B: Supports field parameter (id, title, body, keywords, all).
+    REQ-d00061-C: Supports regex=True for regex matching.
+    REQ-p00050-D: Single code path for query matching.
+
+    Args:
+        node: The graph node to check.
+        field: Which field(s) to match: "id", "title", "body", "keywords", or "all".
+        regex: Whether to use regex matching.
+        compiled_pattern: Pre-compiled regex pattern (required when regex=True).
+        query_lower: Lowercased query string (required when regex=False).
+    """
+    # Implements: REQ-d00061-B, REQ-d00061-C, REQ-p00050-D
+    if field in ("id", "all"):
+        if regex:
+            if compiled_pattern.search(node.id):  # type: ignore[union-attr]
+                return True
+        else:
+            if query_lower in node.id.lower():  # type: ignore[operator]
+                return True
+
+    if field in ("title", "all"):
+        title = node.get_label() or ""
+        if regex:
+            if compiled_pattern.search(title):  # type: ignore[union-attr]
+                return True
+        else:
+            if query_lower in title.lower():  # type: ignore[operator]
+                return True
+
+    if field in ("body", "all"):
+        body = node.get_field("body_text", "")
+        if body:
+            if regex:
+                if compiled_pattern.search(body):  # type: ignore[union-attr]
+                    return True
+            else:
+                if query_lower in body.lower():  # type: ignore[operator]
+                    return True
+
+    if field in ("keywords", "all"):
+        keywords = node.get_field("keywords", [])
+        for keyword in keywords:
+            if regex:
+                if compiled_pattern.search(keyword):  # type: ignore[union-attr]
+                    return True
+            else:
+                if query_lower in keyword.lower():  # type: ignore[operator]
+                    return True
+
+    return False
+
+
 def _search(
     graph: TraceGraph,
     query: str,
@@ -492,9 +556,11 @@ def _search(
     results = []
 
     # Compile pattern if regex mode
+    compiled_pattern = None
+    query_lower = None
     if regex:
         try:
-            pattern = re.compile(query, re.IGNORECASE)
+            compiled_pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             return []
     else:
@@ -502,54 +568,278 @@ def _search(
         query_lower = query.lower()
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        match = False
-
-        if field in ("id", "all"):
-            if regex:
-                if pattern.search(node.id):
-                    match = True
-            else:
-                if query_lower in node.id.lower():
-                    match = True
-
-        if not match and field in ("title", "all"):
-            title = node.get_label() or ""
-            if regex:
-                if pattern.search(title):
-                    match = True
-            else:
-                if query_lower in title.lower():
-                    match = True
-
-        if not match and field in ("body", "all"):
-            body = node.get_field("body_text", "")
-            if body:
-                if regex:
-                    if pattern.search(body):
-                        match = True
-                else:
-                    if query_lower in body.lower():
-                        match = True
-
-        if not match and field in ("keywords", "all"):
-            # Search in keywords field
-            keywords = node.get_field("keywords", [])
-            for keyword in keywords:
-                if regex:
-                    if pattern.search(keyword):
-                        match = True
-                        break
-                else:
-                    if query_lower in keyword.lower():
-                        match = True
-                        break
-
-        if match:
+        if _matches_query(node, field, regex, compiled_pattern, query_lower):
             results.append(_serialize_requirement_summary(node))
             if len(results) >= limit:
                 break
 
     return results
+
+
+def _minimize_requirement_set(
+    graph: TraceGraph,
+    req_ids: list[str],
+    edge_kinds: set[EdgeKind],
+) -> dict[str, Any]:
+    """Prune a requirement set to its most-specific members.
+
+    Removes ancestors already covered by more-specific descendants in the set.
+
+    REQ-d00077-A: Resolves each ID via graph index, separating found/not_found.
+    REQ-d00077-B: Walks UP via iter_outgoing_edges() filtered by edge_kinds.
+    REQ-d00077-C: Prunes req R if another req C has R in its ancestor set.
+    REQ-d00077-D: Records superseded_by for each pruned req.
+    REQ-d00077-E: Returns {minimal_set, pruned, not_found, stats}.
+    """
+    # Implements: REQ-o00069-A, REQ-o00069-B, REQ-o00069-C, REQ-o00069-D, REQ-o00069-E
+    # Implements: REQ-d00077-A, REQ-d00077-B, REQ-d00077-C, REQ-d00077-D, REQ-d00077-E
+
+    # REQ-d00077-A: Resolve IDs, separating found/not_found
+    found: dict[str, GraphNode] = {}
+    not_found: list[str] = []
+    for req_id in req_ids:
+        node = graph.find_by_id(req_id)
+        if node is not None and node.kind == NodeKind.REQUIREMENT:
+            found[req_id] = node
+        else:
+            not_found.append(req_id)
+
+    if not found:
+        return {
+            "minimal_set": [],
+            "pruned": [],
+            "not_found": not_found,
+            "stats": {"input_count": len(req_ids), "minimal_count": 0, "pruned_count": 0},
+        }
+
+    found_ids = set(found.keys())
+
+    # REQ-d00077-B: For each found req, collect transitive ancestors
+    ancestor_map: dict[str, set[str]] = {}
+    for req_id, node in found.items():
+        ancestors: set[str] = set()
+        visited: set[str] = set()
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            for edge in current.iter_outgoing_edges():
+                if edge.kind in edge_kinds:
+                    parent = edge.target
+                    if parent.id not in visited:
+                        visited.add(parent.id)
+                        ancestors.add(parent.id)
+                        stack.append(parent)
+        ancestor_map[req_id] = ancestors
+
+    # REQ-d00077-C: Prune — R is redundant if another C in the set has R in its ancestors
+    # REQ-d00077-D: Record superseded_by
+    pruned_items: dict[str, list[str]] = {}  # pruned_id -> [superseding_ids]
+    for req_id in found_ids:
+        for other_id in found_ids:
+            if other_id != req_id and req_id in ancestor_map[other_id]:
+                if req_id not in pruned_items:
+                    pruned_items[req_id] = []
+                pruned_items[req_id].append(other_id)
+
+    minimal_ids = found_ids - set(pruned_items.keys())
+
+    # REQ-d00077-E: Build result
+    minimal_set = [
+        _serialize_requirement_summary(found[rid]) for rid in req_ids if rid in minimal_ids
+    ]
+    pruned = [
+        {**_serialize_requirement_summary(found[rid]), "superseded_by": sorted(pruned_items[rid])}
+        for rid in req_ids
+        if rid in pruned_items
+    ]
+
+    return {
+        "minimal_set": minimal_set,
+        "pruned": pruned,
+        "not_found": not_found,
+        "stats": {
+            "input_count": len(req_ids),
+            "minimal_count": len(minimal_set),
+            "pruned_count": len(pruned),
+        },
+    }
+
+
+def _collect_scope_ids(
+    graph: TraceGraph,
+    scope_id: str,
+    direction: str,
+) -> set[str] | None:
+    """Collect node IDs reachable from scope_id in the given direction.
+
+    REQ-d00078-A: BFS via iter_children() for descendants, walk via iter_parents() for ancestors.
+    REQ-d00078-B: Includes scope_id itself, uses visited set for DAG dedup.
+
+    Returns:
+        Set of reachable node IDs, or None if scope_id not found.
+    """
+    # Implements: REQ-d00078-A, REQ-d00078-B
+    scope_node = graph.find_by_id(scope_id)
+    if scope_node is None:
+        return None
+
+    visited: set[str] = {scope_id}
+    stack: list[GraphNode] = [scope_node]
+
+    while stack:
+        current = stack.pop()
+        if direction == "descendants":
+            neighbors = current.iter_children()
+        else:  # ancestors
+            neighbors = current.iter_parents()
+        for neighbor in neighbors:
+            if neighbor.id not in visited:
+                visited.add(neighbor.id)
+                stack.append(neighbor)
+
+    return visited
+
+
+def _scoped_search(
+    graph: TraceGraph,
+    query: str,
+    scope_id: str,
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    include_assertions: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Search requirements within a scoped subgraph.
+
+    REQ-d00078-C: Iterates only REQUIREMENT nodes in the scope set.
+    REQ-d00078-D: Checks assertion text when include_assertions=True.
+    REQ-d00078-E: Returns results plus scope_id and direction metadata.
+    REQ-o00070-E: Reuses _matches_query() for matching.
+    """
+    # Implements: REQ-o00070-A, REQ-o00070-B, REQ-o00070-C, REQ-o00070-D, REQ-o00070-E
+    # Implements: REQ-d00078-C, REQ-d00078-D, REQ-d00078-E
+
+    # REQ-o00070-D: Return error if scope_id not found
+    scope_ids = _collect_scope_ids(graph, scope_id, direction)
+    if scope_ids is None:
+        return {"error": f"Scope node '{scope_id}' not found"}
+
+    # Compile pattern for matching
+    compiled_pattern = None
+    query_lower = None
+    if regex:
+        try:
+            compiled_pattern = re.compile(query, re.IGNORECASE)
+        except re.error:
+            return {"results": [], "scope_id": scope_id, "direction": direction}
+    else:
+        query_lower = query.lower()
+
+    results: list[dict[str, Any]] = []
+
+    # REQ-d00078-C: Iterate only REQUIREMENT nodes in scope
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.id not in scope_ids:
+            continue
+
+        matched = _matches_query(node, field, regex, compiled_pattern, query_lower)
+        matched_assertions: list[dict[str, Any]] = []
+
+        # REQ-d00078-D / REQ-o00070-C: Check assertion text
+        if include_assertions:
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    assertion_text = child.get_label() or ""
+                    if regex:
+                        if compiled_pattern and compiled_pattern.search(assertion_text):
+                            matched_assertions.append(_serialize_assertion(child))
+                    else:
+                        if query_lower and query_lower in assertion_text.lower():
+                            matched_assertions.append(_serialize_assertion(child))
+
+        if matched or matched_assertions:
+            entry = _serialize_requirement_summary(node)
+            if matched_assertions:
+                entry["matched_assertions"] = matched_assertions
+            results.append(entry)
+            if len(results) >= limit:
+                break
+
+    return {"results": results, "scope_id": scope_id, "direction": direction}
+
+
+def _discover_requirements(
+    graph: TraceGraph,
+    query: str,
+    scope_id: str,
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    include_assertions: bool = False,
+    limit: int = 50,
+    edge_kinds: set[EdgeKind] | None = None,
+) -> dict[str, Any]:
+    """Search within a subgraph and return only the most-specific matches.
+
+    Chains _scoped_search() with _minimize_requirement_set() to prune
+    ancestors from results.
+
+    REQ-d00079-A: Calls _scoped_search(), extracts IDs, passes to _minimize_requirement_set().
+    REQ-d00079-B: Returns {results, pruned, stats} with minimal-set items.
+    REQ-d00079-C: Preserves matched_assertions metadata on minimal-set items.
+    REQ-o00071-B: Chains scoped_search through minimize_requirement_set.
+    """
+    # Implements: REQ-o00071-A, REQ-o00071-B, REQ-o00071-C, REQ-o00071-D
+    # Implements: REQ-d00079-A, REQ-d00079-B, REQ-d00079-C
+
+    if edge_kinds is None:
+        edge_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+
+    # REQ-d00079-A: Get candidates via scoped_search
+    scoped_result = _scoped_search(
+        graph, query, scope_id, direction, field, regex, include_assertions, limit
+    )
+
+    # Propagate errors
+    if "error" in scoped_result:
+        return scoped_result
+
+    candidates = scoped_result.get("results", [])
+    if not candidates:
+        return {
+            "results": [],
+            "pruned": [],
+            "scope_id": scope_id,
+            "direction": direction,
+            "stats": {"candidate_count": 0, "minimal_count": 0, "pruned_count": 0},
+        }
+
+    # Extract IDs and call minimize
+    candidate_ids = [r["id"] for r in candidates]
+    minimize_result = _minimize_requirement_set(graph, candidate_ids, edge_kinds)
+
+    # Build lookup for candidate data (preserves matched_assertions)
+    candidate_lookup = {r["id"]: r for r in candidates}
+    minimal_ids = {r["id"] for r in minimize_result["minimal_set"]}
+
+    # REQ-d00079-C: Preserve matched_assertions from scoped_search
+    results = [candidate_lookup[rid] for rid in candidate_ids if rid in minimal_ids]
+
+    # Build pruned list with superseded_by from minimize
+    pruned = minimize_result["pruned"]
+
+    return {
+        "results": results,
+        "pruned": pruned,
+        "scope_id": scope_id,
+        "direction": direction,
+        "stats": {
+            "candidate_count": len(candidates),
+            "minimal_count": len(results),
+            "pruned_count": len(pruned),
+        },
+    }
 
 
 def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
@@ -2327,7 +2617,7 @@ def _materialize_cursor_items(
 
     REQ-d00076-B: Dispatches to existing query helpers.
     REQ-o00068-F: Supports subtree, search, hierarchy, query_nodes,
-                  test_coverage, uncovered_assertions.
+                  test_coverage, uncovered_assertions, scoped_search.
     """
     if query == "subtree":
         root_id = params.get("root_id", "")
@@ -2410,6 +2700,20 @@ def _materialize_cursor_items(
         if not result.get("success"):
             return []
         return result.get("uncovered", [])
+
+    elif query == "scoped_search":
+        # Implements: REQ-o00068-F, REQ-d00076-B
+        result = _scoped_search(
+            graph,
+            query=params.get("query", ""),
+            scope_id=params.get("scope_id", ""),
+            direction=params.get("direction", "descendants"),
+            field=params.get("field", "all"),
+            regex=params.get("regex", False),
+            include_assertions=params.get("include_assertions", False),
+            limit=params.get("limit", 50),
+        )
+        return result.get("results", [])
 
     else:
         return []
@@ -2521,6 +2825,7 @@ The graph is the single source of truth - all tools read directly from it.
 3. `search(query)` - Find requirements by keyword
 4. `get_requirement(req_id)` - Get full details including assertions
 5. `get_hierarchy(req_id)` - Navigate parent/child relationships
+6. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
 
 ## Tools Overview
 
@@ -2532,8 +2837,19 @@ The graph is the single source of truth - all tools read directly from it.
 - `search(query, field="all", regex=False, limit=50)` - Find requirements
   - field: "id", "title", "body", or "all"
   - regex: treat query as regex pattern
+- `scoped_search(query, scope_id, direction="descendants", ...)` - Search within a subgraph
+  - Restricts search to descendants or ancestors of scope_id
+  - include_assertions: also match against assertion text
+  - Returns results with scope context metadata
 - `get_requirement(req_id)` - Full details with assertions and relationships
 - `get_hierarchy(req_id)` - Ancestors (to roots) and direct children
+- `minimize_requirement_set(req_ids, edge_kinds="")` - Prune to most-specific
+  - Removes ancestors that are superseded by more-specific descendants
+  - Returns minimal_set, pruned items with superseded_by, and stats
+- `discover_requirements(query, scope_id, ...)` - Search + minimize in one step
+  - Chains scoped_search with minimize_requirement_set
+  - Returns only the most-specific matches within a subgraph
+  - Pruned ancestors include superseded_by metadata
 
 ### Workspace Context
 - `get_workspace_info()` - Repo path, project name, configuration
@@ -2597,7 +2913,7 @@ The graph is the single source of truth - all tools read directly from it.
 ### Cursor Protocol (Incremental Iteration)
 - `open_cursor(query, params={}, batch_size=1)` - Open cursor over query results
   - query: "subtree", "search", "hierarchy", "query_nodes",
-    "test_coverage", "uncovered_assertions"
+    "test_coverage", "uncovered_assertions", "scoped_search"
   - params: query-specific parameters (e.g. {root_id: "REQ-p00001"})
   - batch_size: -1 (assertions as separate items), 0 (nodes with inline assertions),
     1 (nodes with children summaries)
@@ -2666,6 +2982,11 @@ Use `save_branch=True` to create a safety branch before modifications, allowing 
 1. open_cursor("subtree", {"root_id": "REQ-p00001"}, batch_size=0)
 2. cursor_info() to check how many items remain
 3. cursor_next() to get next item, repeat as needed
+
+**Discovering requirements for a ticket:**
+1. discover_requirements("authentication", scope_id="REQ-p00001") for most-specific matches
+2. get_requirement() on each result for full details and assertions
+3. Or use scoped_search() + minimize_requirement_set() separately for more control
 
 **After editing spec files:**
 1. refresh_graph() to rebuild
@@ -2757,6 +3078,128 @@ def create_server(
             List of matching requirement summaries.
         """
         return _search(_state["graph"], query, field, regex, limit)
+
+    @mcp.tool()
+    def minimize_requirement_set(
+        req_ids: list[str],
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Prune a requirement set to its most-specific members.
+
+        Removes ancestors already covered by more-specific descendants in the
+        input set. Useful when agents list both leaf requirements and their
+        broad ancestors for a ticket.
+
+        REQ-d00077-F: Delegates to helper, performing only parameter parsing.
+
+        Args:
+            req_ids: List of requirement IDs to minimize.
+            edge_kinds: Comma-separated edge kinds to follow when determining
+                ancestry. Default: "implements,refines".
+
+        Returns:
+            Dict with minimal_set, pruned (with superseded_by metadata),
+            not_found, and stats.
+        """
+        # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _minimize_requirement_set(_state["graph"], req_ids, parsed_kinds)
+
+    @mcp.tool()
+    def scoped_search(
+        query: str,
+        scope_id: str,
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        include_assertions: bool = False,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Search requirements within a subgraph rooted at scope_id.
+
+        Restricts search to descendants or ancestors of the scope node,
+        preventing over-matching across unrelated parts of the graph.
+
+        REQ-d00078-F: Delegates to helper, performing only parameter validation.
+
+        Args:
+            query: Search string or regex pattern.
+            scope_id: Root node ID defining the search scope.
+            direction: "descendants" (default) or "ancestors".
+            field: Field to search: 'id', 'title', 'body', or 'all'.
+            regex: If True, treat query as regex pattern.
+            include_assertions: If True, also match assertion text.
+            limit: Maximum results to return (default 50).
+
+        Returns:
+            Dict with results list, scope_id, and direction.
+        """
+        return _scoped_search(
+            _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
+        )
+
+    @mcp.tool()
+    def discover_requirements(
+        query: str,
+        scope_id: str,
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        include_assertions: bool = False,
+        limit: int = 50,
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Search within a subgraph and return only the most-specific matches.
+
+        Chains scoped_search with minimize_requirement_set to prune ancestors
+        from results, returning only the most-specific requirements that match.
+
+        REQ-d00079-D: Delegates to helper, performing only edge_kinds parsing.
+
+        Args:
+            query: Search string or regex pattern.
+            scope_id: Root node ID defining the search scope.
+            direction: "descendants" (default) or "ancestors".
+            field: Field to search: 'id', 'title', 'body', or 'all'.
+            regex: If True, treat query as regex pattern.
+            include_assertions: If True, also match assertion text.
+            limit: Maximum results to return (default 50).
+            edge_kinds: Comma-separated edge kinds for ancestor pruning.
+                Default: "implements,refines".
+
+        Returns:
+            Dict with results (minimal set), pruned (with superseded_by),
+            scope_id, direction, and stats.
+        """
+        # REQ-d00079-D: Parse edge_kinds and delegate
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _discover_requirements(
+            _state["graph"],
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
+            include_assertions,
+            limit,
+            parsed_kinds,
+        )
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:

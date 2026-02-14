@@ -2,6 +2,42 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.72.0] - 2026-02-14
+
+### Changed
+
+- **MCP server instructions**: Document `scoped_search`, `minimize_requirement_set`, and `discover_requirements` tools in Quick Start, Tools Overview, and Common Patterns sections
+
+## [0.71.0] - 2026-02-14
+
+### Added
+
+- **`discover_requirements` MCP tool**: Chains `scoped_search` with `minimize_requirement_set` to search within a subgraph and return only the most-specific matches, pruning ancestor requirements superseded by more-specific descendants (REQ-o00071, REQ-d00079)
+
+## [0.70.0] - 2026-02-14
+
+### Added
+
+- **Cursor support for `scoped_search`**: Register `scoped_search` as a cursor query type, enabling paginated iteration through scoped search results via `open_cursor("scoped_search", {...})` (REQ-o00068-F, REQ-d00076-B)
+
+## [0.69.0] - 2026-02-14
+
+### Added
+
+- **`scoped_search` MCP tool**: Restricts keyword search to descendants or ancestors of a scope node, preventing over-matching across unrelated parts of the graph. Supports assertion text matching via `include_assertions` parameter (REQ-o00070, REQ-d00078)
+
+## [0.68.0] - 2026-02-14
+
+### Added
+
+- **`minimize_requirement_set` MCP tool**: Prunes a set of requirement IDs to most-specific members by removing ancestors covered by more-specific descendants. Returns minimal set, pruned items with `superseded_by` metadata, and stats (REQ-o00069, REQ-d00077)
+
+## [0.67.0] - 2026-02-14
+
+### Changed
+
+- **Extract `_matches_query()` helper**: Refactored per-node matching logic out of `_search()` into a reusable `_matches_query()` function for shared use by `search()` and future `scoped_search()` (REQ-d00061-B, REQ-d00061-C, REQ-p00050-D)
+
 ## [0.65.0] - 2026-02-13
 
 ### Added

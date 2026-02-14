@@ -399,13 +399,13 @@ B. `cursor_next(count)` SHALL return the next `count` items and advance the curs
 C. `cursor_info()` SHALL return cursor position, total count, and remaining count without advancing.
 D. The cursor protocol SHALL support a single active cursor, with opening a new cursor auto-closing the previous.
 E. The cursor protocol SHALL support `batch_size` semantics: `-1` for assertions as first-class items, `0` for nodes with inline assertions, `1` for nodes with children previews.
-F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`.
+F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`, `scoped_search`.
 
 ## Rationale
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
-*End* *MCP Cursor Protocol* | **Hash**: c1ed85a6
+*End* *MCP Cursor Protocol* | **Hash**: 743877c3
 
 ---
 
@@ -454,6 +454,138 @@ G. The implementation SHALL reuse existing serializers: `_serialize_requirement_
 A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
 
 *End* *Cursor Protocol Implementation* | **Hash**: 753def07
+
+---
+
+## REQ-o00069: MCP Minimize Requirement Set Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
+
+## Assertions
+
+A. `minimize_requirement_set(req_ids, edge_kinds)` SHALL accept a list of requirement IDs and an optional edge kinds filter defaulting to "implements,refines".
+B. The tool SHALL return a minimal set containing only requirements that are not ancestors of other requirements in the input set.
+C. The tool SHALL return pruned requirements with metadata indicating which input member(s) supersede each pruned item.
+D. The tool SHALL report unknown IDs separately in a `not_found` list without failing the operation.
+E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor relationships, configurable via the `edge_kinds` parameter.
+
+## Rationale
+
+Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
+
+*End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
+
+---
+
+## REQ-d00077: Minimize Requirement Set Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00069
+
+The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
+
+## Assertions
+
+A. `_minimize_requirement_set(graph, req_ids, edge_kinds)` SHALL resolve each ID via the graph index, separating found and not_found IDs.
+B. For each found requirement, the helper SHALL walk UP via `iter_outgoing_edges()` filtered by the parsed edge_kinds set, collecting transitive ancestor IDs.
+C. A requirement R SHALL be pruned if another requirement C in the input set has R in its ancestor set.
+D. For each pruned requirement, the helper SHALL record which set member(s) supersede it in a `superseded_by` field.
+E. The helper SHALL return `{minimal_set, pruned, not_found, stats}` with serialized requirement summaries.
+F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter parsing and edge_kinds string-to-set conversion.
+
+## Rationale
+
+Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
+
+*End* *Minimize Requirement Set Implementation* | **Hash**: a4977d0f
+
+---
+
+## REQ-o00070: MCP Scoped Search Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
+
+## Assertions
+
+A. `scoped_search(query, scope_id, direction, field, regex, include_assertions, limit)` SHALL accept a query string, scope node ID, and direction ("descendants" or "ancestors").
+B. The tool SHALL restrict search results to nodes reachable from the scope node in the specified direction, including the scope node itself.
+C. When `include_assertions=True`, the tool SHALL also match against assertion text and include `matched_assertions` metadata on matching parent requirements.
+D. The tool SHALL return an error when the scope_id is not found in the graph.
+E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maintaining a single code path per REQ-p00050-D.
+
+## Rationale
+
+Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
+
+*End* *MCP Scoped Search Tool* | **Hash**: e1cb96d9
+
+---
+
+## REQ-d00078: Scoped Search Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00070
+
+The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
+
+## Assertions
+
+A. `_collect_scope_ids(graph, scope_id, direction)` SHALL return a set of node IDs reachable from scope_id: BFS via `iter_children()` for "descendants", recursive walk via `iter_parents()` for "ancestors".
+B. The scope set SHALL include scope_id itself and use a visited set to prevent cycles in DAG structures.
+C. `_scoped_search()` SHALL iterate only REQUIREMENT nodes whose IDs are in the scope set, using `_matches_query()` for matching.
+D. When `include_assertions=True`, the helper SHALL check assertion text of each in-scope requirement and attach `matched_assertions` metadata when assertions match.
+E. The helper SHALL return serialized results in the same format as `_search()`, plus `scope_id` and `direction` metadata.
+F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter validation.
+
+## Rationale
+
+Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
+
+*End* *Scoped Search Implementation* | **Hash**: 51b2219c
+
+---
+
+## REQ-o00071: MCP Discover Requirements Tool
+
+**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+
+The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
+
+## Assertions
+
+A. `discover_requirements(query, scope_id, direction, field, regex, include_assertions, limit, edge_kinds)` SHALL accept scoped search parameters plus an edge_kinds filter for ancestor pruning.
+B. The tool SHALL chain `scoped_search` results through `minimize_requirement_set` to remove ancestors already covered by more-specific descendants in the result set.
+C. The tool SHALL return results in scoped_search format containing only the minimal set, plus pruned items with `superseded_by` metadata.
+D. The tool SHALL pass through all results unchanged when no ancestor relationships exist between matches.
+
+## Rationale
+
+Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
+
+*End* *MCP Discover Requirements Tool* | **Hash**: fea647ee
+
+---
+
+## REQ-d00079: Discover Requirements Implementation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00071
+
+The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
+
+## Assertions
+
+A. `_discover_requirements()` SHALL call `_scoped_search()` to get candidate results, then extract requirement IDs and pass them to `_minimize_requirement_set()`.
+B. The helper SHALL return `{results, pruned, stats}` where results contains only minimal-set items in scoped_search summary format.
+C. The helper SHALL preserve `matched_assertions` metadata from scoped_search on items that remain in the minimal set.
+D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds string parsing.
+
+## Rationale
+
+Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
+
+*End* *Discover Requirements Implementation* | **Hash**: 8498aa7c
 
 ---
 
