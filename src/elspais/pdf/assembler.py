@@ -63,7 +63,7 @@ class MarkdownAssembler:
         parts.append("---")
         parts.append(f'title: "{self._title}"')
         parts.append("toc: true")
-        parts.append("toc-depth: 3")
+        parts.append("toc-depth: 2")
         parts.append("---")
         parts.append("")
 
@@ -118,19 +118,12 @@ class MarkdownAssembler:
         source = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", source)
         source_lines = source.split("\n")
 
-        # Detect the heading level used for requirements in this file
-        req_level = self._detect_req_heading_level(source_lines)
-        in_requirement = False
+        seen_file_title = False
 
-        lines: list[str] = []
+        lines: list[str] = ["\\newpage", ""]
         for line in source_lines:
             # Strip horizontal rules (requirement separators)
             if line.strip() == "---":
-                continue
-
-            # Strip footer lines
-            if _FOOTER_RE.match(line.strip()):
-                in_requirement = False
                 continue
 
             # Requirement heading → \newpage + ### with anchor
@@ -142,18 +135,17 @@ class MarkdownAssembler:
                 lines.append("\\newpage")
                 lines.append("")
                 lines.append(f"### {rest} {{#{req_id}}}")
-                in_requirement = True
                 continue
 
             # Other headings
             if line.startswith("#"):
-                level = len(line) - len(line.lstrip("#"))
                 text = line.lstrip("#").lstrip()
-                if not in_requirement or level < req_level:
-                    # Pre-requirement or file-level heading
+                if not seen_file_title:
+                    # First heading in the file → section (appears in TOC)
                     lines.append(f"## {text}")
+                    seen_file_title = True
                 else:
-                    # Sub-section within a requirement (any level at or below req)
+                    # All other non-requirement headings → excluded from TOC
                     lines.append(f"#### {text}")
                 continue
 

@@ -55,6 +55,7 @@ def run(args: argparse.Namespace) -> int:
     from elspais.pdf.assembler import MarkdownAssembler
 
     title = getattr(args, "title", None) or "Requirements Specification"
+    cover = getattr(args, "cover", None)
     assembler = MarkdownAssembler(graph, title=title)
     markdown_content = assembler.assemble()
 
@@ -69,6 +70,7 @@ def run(args: argparse.Namespace) -> int:
         output_path=Path(output_path),
         engine=engine,
         template=template,
+        cover=cover,
     )
 
     if rc == 0:

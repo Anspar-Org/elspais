@@ -120,7 +120,7 @@ Common rules to skip:
     validate_parser.add_argument(
         "--fix",
         action="store_true",
-        help="Auto-fix issues that can be corrected programmatically (hashes, status)",
+        help="Auto-fix issues (hashes, status, assertion spacing)",
     )
     validate_parser.add_argument(
         "--dry-run",
@@ -736,6 +736,7 @@ Examples:
   elspais pdf --title "My Project Specs"     # Custom title
   elspais pdf --template custom.latex        # Custom LaTeX template
   elspais pdf --engine lualatex              # Use lualatex instead of xelatex
+  elspais pdf --cover cover.md               # Custom cover page from Markdown file
 
 Prerequisites:
   pandoc:   https://pandoc.org/installing.html
@@ -766,6 +767,13 @@ Prerequisites:
         default=None,
         help="Document title (default: project name from config)",
         metavar="TITLE",
+    )
+    pdf_parser.add_argument(
+        "--cover",
+        type=Path,
+        default=None,
+        help="Markdown file for custom cover page (replaces default title page)",
+        metavar="PATH",
     )
 
     # install command

@@ -5,8 +5,14 @@
 % Page geometry
 \usepackage[margin=1in]{geometry}
 
-% Font encoding
+% Font — Verdana preferred (FDA recommendation), DejaVu Sans fallback
 \usepackage{fontspec}
+\IfFontExistsTF{Verdana}{
+  \setmainfont{Verdana}
+}{
+  \setmainfont{DejaVu Sans}
+}
+\setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
 
 % Better typography
 \usepackage{microtype}
@@ -30,8 +36,13 @@
 % Better list formatting
 \usepackage{enumitem}
 
-% Graphics support
+% Graphics support — constrain images to page dimensions
 \usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
 
 % Long tables
 \usepackage{longtable,booktabs}
@@ -86,6 +97,14 @@
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
+% TOC number width — accommodate deep numbering like 3.11.18
+\usepackage[titles]{tocloft}
+\setlength{\cftchapnumwidth}{2em}
+\setlength{\cftsecnumwidth}{3.5em}
+\setlength{\cftsubsecnumwidth}{5.5em}
+\setlength{\cftsecindent}{2em}
+\setlength{\cftsubsecindent}{5.5em}
+
 % Chapter/section formatting - remove "Chapter N" prefix
 \usepackage{titlesec}
 \titleformat{\chapter}[hang]{\Huge\bfseries}{}{0pt}{}
@@ -108,7 +127,12 @@
 \begin{document}
 
 % Title page
+$if(cover-tex)$
+\input{$cover-tex$}
+$else$
 \maketitle
+$endif$
+\clearpage
 
 % Table of contents
 $if(toc)$

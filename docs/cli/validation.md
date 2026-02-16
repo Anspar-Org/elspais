@@ -23,6 +23,7 @@ The `--fix` flag automatically corrects:
 - Missing hash → Computes and inserts from assertion text
 - Stale hash → Recomputes from current content
 - Missing Status field → Adds default "Active"
+- Assertion spacing → Inserts blank lines between consecutive assertion lines
 
 **Not fixable (report only):**
 
@@ -48,11 +49,12 @@ Skip specific validation rules:
 
 **Available Patterns:**
 
-  `hash.missing`     Hash footer is missing
-  `hash.mismatch`    Hash doesn't match content
-  `hash.*`           All hash rules
-  `hierarchy.*`      All hierarchy rules
-  `format.*`         All format rules
+  `hash.missing`                Hash footer is missing
+  `hash.mismatch`              Hash doesn't match content
+  `hash.*`                     All hash rules
+  `hierarchy.*`                All hierarchy rules
+  `format.*`                   All format rules
+  `format.assertion_spacing`   Consecutive assertions need blank line separation
 
 ## Common Validation Errors
 

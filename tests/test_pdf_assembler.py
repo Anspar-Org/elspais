@@ -325,7 +325,7 @@ class TestYAMLMetadata:
         graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
-        assert "toc-depth: 3" in output
+        assert "toc-depth: 2" in output
 
 
 class TestTopicIndex:
