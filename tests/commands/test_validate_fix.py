@@ -304,3 +304,57 @@ A. The system SHALL do something.
         content = spec_file.read_text()
         # Original status should be unchanged
         assert "**Status**: Draft" in content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: assertion spacing check and fix
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAssertionSpacing:
+    """Tests for format.assertion_spacing check and fix."""
+
+    def test_REQ_p00080_E_detects_consecutive_assertions(self, tmp_path):
+        """Consecutive assertion lines without blank separation are detected."""
+        from elspais.commands.validate import _check_assertion_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            "## Assertions\n\nA. First SHALL.\nB. Second SHALL.\nC. Third SHALL.\n"
+        )
+        issues = _check_assertion_spacing(spec_file)
+        assert len(issues) == 2  # Lines 4 and 5 (B and C)
+
+    def test_REQ_p00080_E_no_issue_when_spaced(self, tmp_path):
+        """Properly spaced assertions produce no issues."""
+        from elspais.commands.validate import _check_assertion_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            "## Assertions\n\nA. First SHALL.\n\nB. Second SHALL.\n\nC. Third SHALL.\n"
+        )
+        issues = _check_assertion_spacing(spec_file)
+        assert issues == []
+
+    def test_REQ_p00080_E_fix_inserts_blank_lines(self, tmp_path):
+        """Fix inserts blank lines between consecutive assertion lines."""
+        from elspais.commands.validate import _fix_assertion_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text(
+            "## Assertions\n\nA. First SHALL.\nB. Second SHALL.\nC. Third SHALL.\n"
+        )
+        inserted = _fix_assertion_spacing(spec_file)
+        assert inserted == 2
+        content = spec_file.read_text()
+        assert "A. First SHALL.\n\nB. Second SHALL.\n\nC. Third SHALL." in content
+
+    def test_REQ_p00080_E_fix_is_idempotent(self, tmp_path):
+        """Running fix twice doesn't add extra blank lines."""
+        from elspais.commands.validate import _fix_assertion_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("## Assertions\n\nA. First SHALL.\nB. Second SHALL.\n")
+        _fix_assertion_spacing(spec_file)
+        inserted = _fix_assertion_spacing(spec_file)
+        assert inserted == 0

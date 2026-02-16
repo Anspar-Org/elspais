@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -168,6 +169,34 @@ def run(args: argparse.Namespace) -> int:
                 }
             )
 
+    # Check assertion line spacing per source file
+    checked_files: set[str] = set()
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not node.source or not node.source.path:
+            continue
+        file_path = node.source.path
+        if file_path in checked_files:
+            continue
+        checked_files.add(file_path)
+        resolved = repo_root / file_path
+        if not resolved.exists():
+            continue
+        spacing_issues = _check_assertion_spacing(resolved)
+        for line_num in spacing_issues:
+            issue = {
+                "rule": "format.assertion_spacing",
+                "id": file_path,
+                "message": (
+                    f"{file_path}:{line_num}: Consecutive assertion lines "
+                    f"need blank line separation"
+                ),
+                "fixable": True,
+                "fix_type": "assertion_spacing",
+                "file": str(resolved),
+            }
+            warnings.append(issue)
+            fixable.append(issue)
+
     # Filter by skip rules
     skip_rules = getattr(args, "skip_rule", None) or []
     if skip_rules:
@@ -236,6 +265,45 @@ def run(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+_ASSERTION_LINE_RE = re.compile(r"^[A-Z]\. ")
+
+
+def _check_assertion_spacing(file_path: Path) -> list[int]:
+    """Check for consecutive assertion lines with no blank line between them.
+
+    Returns list of 1-indexed line numbers where a second assertion
+    immediately follows a previous assertion with no separating blank line.
+    """
+    lines = file_path.read_text(encoding="utf-8").split("\n")
+    issues: list[int] = []
+    for i in range(len(lines) - 1):
+        if _ASSERTION_LINE_RE.match(lines[i]) and _ASSERTION_LINE_RE.match(lines[i + 1]):
+            issues.append(i + 2)  # 1-indexed, report the second line
+    return issues
+
+
+def _fix_assertion_spacing(file_path: Path) -> int:
+    """Insert blank lines between consecutive assertion lines.
+
+    Returns number of blank lines inserted.
+    """
+    lines = file_path.read_text(encoding="utf-8").split("\n")
+    result: list[str] = []
+    inserted = 0
+    for i, line in enumerate(lines):
+        result.append(line)
+        if (
+            _ASSERTION_LINE_RE.match(line)
+            and i + 1 < len(lines)
+            and _ASSERTION_LINE_RE.match(lines[i + 1])
+        ):
+            result.append("")
+            inserted += 1
+    if inserted:
+        file_path.write_text("\n".join(result), encoding="utf-8")
+    return inserted
+
+
 def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
     """Apply fixes to spec files.
 
@@ -252,6 +320,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
     from elspais.mcp.file_mutations import add_status_to_file, update_hash_in_file
 
     fixed = 0
+    spacing_fixed_files: set[str] = set()
     for issue in fixable:
         fix_type = issue.get("fix_type")
         file_path = issue.get("file")
@@ -282,5 +351,12 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
                 fixed += 1
             else:
                 print(f"Warning: {error}", file=sys.stderr)
+
+        elif fix_type == "assertion_spacing":
+            # Fix consecutive assertion lines — deduplicate per file
+            if file_path not in spacing_fixed_files:
+                spacing_fixed_files.add(file_path)
+                inserted = _fix_assertion_spacing(Path(file_path))
+                fixed += inserted
 
     return fixed
