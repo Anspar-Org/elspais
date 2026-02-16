@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.73.0] - 2026-02-15
+
+### Added
+
+- **`elspais pdf` command**: Compile spec files into a professional PDF document using Pandoc + xelatex. Groups requirements by level (PRD/OPS/DEV), orders files by graph depth, generates table of contents, per-requirement page breaks, and an alphabetized topic index with hyperlinks. Custom LaTeX template included (REQ-p00080)
+
 ## [0.72.0] - 2026-02-14
 
 ### Changed

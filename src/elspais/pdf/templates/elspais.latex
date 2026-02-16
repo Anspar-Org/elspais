@@ -1,0 +1,80 @@
+% elspais PDF template for pandoc
+% Minimal custom template for requirements specification documents
+\documentclass[11pt,letterpaper]{report}
+
+% Page geometry
+\usepackage[margin=1in]{geometry}
+
+% Font encoding
+\usepackage{fontspec}
+
+% Better typography
+\usepackage{microtype}
+
+% Colors for links
+\usepackage[dvipsnames]{xcolor}
+
+% Hyperlinks - clickable TOC and index
+\usepackage[
+  colorlinks=true,
+  linkcolor=NavyBlue,
+  urlcolor=NavyBlue,
+  bookmarks=true,
+  bookmarksnumbered=true,
+  pdfstartview=FitH
+]{hyperref}
+
+% Better list formatting
+\usepackage{enumitem}
+
+% Graphics support
+\usepackage{graphicx}
+
+% Long tables
+\usepackage{longtable,booktabs}
+
+% Code blocks
+\usepackage{fancyvrb}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\},fontsize=\small}
+
+% Header and footer
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small $title$}
+\fancyhead[R]{\small \today}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Chapter/section formatting - remove "Chapter N" prefix
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]{\Huge\bfseries}{}{0pt}{}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+% Paragraph spacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% Tight list support (pandoc)
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+% Title page
+\title{$title$}
+\date{\today}
+
+\begin{document}
+
+% Title page
+\maketitle
+
+% Table of contents
+$if(toc)$
+\tableofcontents
+\clearpage
+$endif$
+
+$body$
+
+\end{document}

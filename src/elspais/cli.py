@@ -24,6 +24,7 @@ from elspais.commands import (
     init,
     install_cmd,
     link_suggest,
+    pdf_cmd,
     reformat_cmd,
     rules_cmd,
     trace,
@@ -723,6 +724,50 @@ First, install the completion extra:
         help="Remove completion from your shell rc file",
     )
 
+    # pdf command
+    pdf_parser = subparsers.add_parser(
+        "pdf",
+        help="Compile spec files into a PDF document (requires pandoc + xelatex)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais pdf                                # Generate spec-output.pdf
+  elspais pdf --output review.pdf            # Custom output path
+  elspais pdf --title "My Project Specs"     # Custom title
+  elspais pdf --template custom.latex        # Custom LaTeX template
+  elspais pdf --engine lualatex              # Use lualatex instead of xelatex
+
+Prerequisites:
+  pandoc:   https://pandoc.org/installing.html
+  xelatex:  Install TeX Live, MiKTeX, or MacTeX
+""",
+    )
+    pdf_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("spec-output.pdf"),
+        help="Output PDF file path (default: spec-output.pdf)",
+        metavar="PATH",
+    )
+    pdf_parser.add_argument(
+        "--engine",
+        default="xelatex",
+        help="PDF engine: xelatex (default), lualatex, pdflatex",
+        metavar="ENGINE",
+    )
+    pdf_parser.add_argument(
+        "--template",
+        type=Path,
+        help="Custom pandoc LaTeX template (default: bundled template)",
+        metavar="PATH",
+    )
+    pdf_parser.add_argument(
+        "--title",
+        default=None,
+        help="Document title (default: project name from config)",
+        metavar="TITLE",
+    )
+
     # install command
     install_parser = subparsers.add_parser(
         "install",
@@ -987,6 +1032,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("Usage: elspais link suggest [options]")
                 return 1
+        elif args.command == "pdf":
+            return pdf_cmd.run(args)
         elif args.command == "install":
             return install_cmd.run(args)
         elif args.command == "uninstall":

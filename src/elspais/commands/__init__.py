@@ -14,6 +14,7 @@ __all__ = [
     "init",
     "install_cmd",
     "link_suggest",
+    "pdf_cmd",
     "reformat_cmd",
     "rules_cmd",
     "trace",
