@@ -106,6 +106,8 @@ class MarkdownAssembler:
             return []
 
         source = resolved.read_text(encoding="utf-8")
+        # Strip control characters that break LaTeX (keep \n \r \t)
+        source = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", source)
         source_lines = source.split("\n")
 
         # Detect the heading level used for requirements in this file

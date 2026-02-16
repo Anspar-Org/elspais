@@ -11,6 +11,9 @@
 % Better typography
 \usepackage{microtype}
 
+% Math symbols (for \square etc.)
+\usepackage{amssymb}
+
 % Colors for links
 \usepackage[dvipsnames]{xcolor}
 
