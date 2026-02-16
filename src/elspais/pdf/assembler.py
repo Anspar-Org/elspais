@@ -205,7 +205,10 @@ class MarkdownAssembler:
     def _render_requirement(self, node: GraphNode) -> list[str]:
         """Render a single requirement as Markdown lines.
 
-        Includes page break, heading, metadata line, body sections, and assertions.
+        Uses the preserved body_text from the graph node, which is a line-by-line
+        copy of everything between the requirement header and footer in the source
+        spec file. Section headings (## → ####) are downgraded to fit the document
+        hierarchy (# level group, ## file, ### requirement).
         """
         lines: list[str] = []
 
@@ -219,28 +222,16 @@ class MarkdownAssembler:
         lines.append(f"### {req_id}: {title} {{#{req_id}}}")
         lines.append("")
 
-        # Metadata line
-        level = (node.level or "?").upper()
-        status = node.status or "?"
-        lines.append(f"**Level**: {level} | **Status**: {status}")
-        lines.append("")
-
-        # Render children in document order (REMAINDER sections + ASSERTION nodes)
-        for child in node.iter_children():
-            if child.kind == NodeKind.REMAINDER:
-                heading = child.get_field("heading", "")
-                text = child.get_field("text", "")
-                if heading:
-                    lines.append(f"#### {heading}")
-                    lines.append("")
-                if text:
-                    lines.append(text.rstrip())
-                    lines.append("")
-            elif child.kind == NodeKind.ASSERTION:
-                label = child.get_field("label", "")
-                text = child.get_label()
-                lines.append(f"{label}. {text}")
-                lines.append("")
+        # Use body_text directly — preserves all original content
+        body_text = node.get_field("body_text", "")
+        if body_text:
+            for line in body_text.split("\n"):
+                # Downgrade ## headings to #### to fit document hierarchy
+                if line.startswith("## "):
+                    lines.append("####" + line[2:])
+                else:
+                    lines.append(line)
+            lines.append("")
 
         return lines
 

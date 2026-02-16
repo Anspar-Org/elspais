@@ -30,7 +30,24 @@ def _make_graph() -> TraceGraph:
         label="Authentication",
         source=SourceLocation(path="spec/prd-auth.md", line=1),
     )
-    prd._content = {"level": "PRD", "status": "Active", "hash": "aaa11111", "body_text": ""}
+    prd._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "aaa11111",
+        "body_text": (
+            "**Level**: PRD | **Status**: Active | **Implements**: -\n"
+            "\n"
+            "## Rationale\n"
+            "\n"
+            "Users need authentication.\n"
+            "\n"
+            "Topics: auth, security\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The tool SHALL authenticate users.\n"
+        ),
+    }
     graph._index["REQ-p00001"] = prd
     graph._roots.append(prd)
 
@@ -67,7 +84,18 @@ def _make_graph() -> TraceGraph:
         label="Login Form",
         source=SourceLocation(path="spec/dev-login.md", line=1),
     )
-    dev._content = {"level": "DEV", "status": "Active", "hash": "bbb22222", "body_text": ""}
+    dev._content = {
+        "level": "DEV",
+        "status": "Active",
+        "hash": "bbb22222",
+        "body_text": (
+            "**Level**: DEV | **Status**: Active\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. Login form SHALL validate email.\n"
+        ),
+    }
     graph._index["REQ-d00001"] = dev
     prd.add_child(dev)
 
@@ -89,7 +117,12 @@ def _make_graph() -> TraceGraph:
         label="Session Management",
         source=SourceLocation(path="spec/dev-session.md", line=1),
     )
-    dev2._content = {"level": "DEV", "status": "Active", "hash": "ccc33333", "body_text": ""}
+    dev2._content = {
+        "level": "DEV",
+        "status": "Active",
+        "hash": "ccc33333",
+        "body_text": "**Level**: DEV | **Status**: Active\n",
+    }
     graph._index["REQ-d00002"] = dev2
     prd.add_child(dev2)
 
