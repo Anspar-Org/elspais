@@ -153,6 +153,16 @@ class MarkdownAssembler:
             if ".mmd)" in line:
                 line = self._resolve_mermaid_images(line, file_path)
 
+            # Ensure blank line before first list item so Pandoc renders as a list
+            stripped = line.lstrip()
+            if (
+                stripped.startswith("- ")
+                and lines
+                and lines[-1].strip()
+                and not lines[-1].lstrip().startswith("- ")
+            ):
+                lines.append("")
+
             lines.append(line)
 
         # Trim trailing blank lines

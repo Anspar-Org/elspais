@@ -358,3 +358,60 @@ class TestAssertionSpacing:
         _fix_assertion_spacing(spec_file)
         inserted = _fix_assertion_spacing(spec_file)
         assert inserted == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: list item spacing check and fix
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestListSpacing:
+    """Tests for format.list_spacing check and fix."""
+
+    def test_detects_list_after_text(self, tmp_path):
+        """List item immediately after text is detected."""
+        from elspais.commands.validate import _check_list_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("A. The system SHALL support:\n- Item one\n- Item two\n")
+        issues = _check_list_spacing(spec_file)
+        assert len(issues) == 1  # Only the first - after text
+
+    def test_no_issue_when_blank_line_before_list(self, tmp_path):
+        """Properly spaced list produces no issues."""
+        from elspais.commands.validate import _check_list_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("A. The system SHALL support:\n\n- Item one\n- Item two\n")
+        issues = _check_list_spacing(spec_file)
+        assert issues == []
+
+    def test_fix_inserts_blank_line(self, tmp_path):
+        """Fix inserts blank line before first list item."""
+        from elspais.commands.validate import _fix_list_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("A. The system SHALL support:\n- Item one\n- Item two\n")
+        inserted = _fix_list_spacing(spec_file)
+        assert inserted == 1
+        content = spec_file.read_text()
+        assert "SHALL support:\n\n- Item one\n- Item two" in content
+
+    def test_fix_is_idempotent(self, tmp_path):
+        """Running fix twice doesn't add extra blank lines."""
+        from elspais.commands.validate import _fix_list_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("A. The system SHALL support:\n- Item one\n- Item two\n")
+        _fix_list_spacing(spec_file)
+        inserted = _fix_list_spacing(spec_file)
+        assert inserted == 0
+
+    def test_consecutive_list_items_not_flagged(self, tmp_path):
+        """Consecutive list items without blank lines are fine."""
+        from elspais.commands.validate import _check_list_spacing
+
+        spec_file = tmp_path / "test.md"
+        spec_file.write_text("\n- Item one\n- Item two\n- Item three\n")
+        issues = _check_list_spacing(spec_file)
+        assert issues == []

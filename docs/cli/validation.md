@@ -24,6 +24,7 @@ The `--fix` flag automatically corrects:
 - Stale hash → Recomputes from current content
 - Missing Status field → Adds default "Active"
 - Assertion spacing → Inserts blank lines between consecutive assertion lines
+- List spacing → Inserts blank line before list items that follow text
 
 **Not fixable (report only):**
 
@@ -55,6 +56,7 @@ Skip specific validation rules:
   `hierarchy.*`                All hierarchy rules
   `format.*`                   All format rules
   `format.assertion_spacing`   Consecutive assertions need blank line separation
+  `format.list_spacing`        List items need blank line before first item
 
 ## Common Validation Errors
 

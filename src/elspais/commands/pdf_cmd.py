@@ -43,10 +43,12 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
     )

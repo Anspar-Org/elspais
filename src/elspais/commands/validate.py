@@ -197,6 +197,22 @@ def run(args: argparse.Namespace) -> int:
             warnings.append(issue)
             fixable.append(issue)
 
+        list_issues = _check_list_spacing(resolved)
+        for line_num in list_issues:
+            issue = {
+                "rule": "format.list_spacing",
+                "id": file_path,
+                "message": (
+                    f"{file_path}:{line_num}: List item needs blank line "
+                    f"before it for proper Markdown rendering"
+                ),
+                "fixable": True,
+                "fix_type": "list_spacing",
+                "file": str(resolved),
+            }
+            warnings.append(issue)
+            fixable.append(issue)
+
     # Filter by skip rules
     skip_rules = getattr(args, "skip_rule", None) or []
     if skip_rules:
@@ -304,6 +320,53 @@ def _fix_assertion_spacing(file_path: Path) -> int:
     return inserted
 
 
+_LIST_ITEM_RE = re.compile(r"^\s*- ")
+
+
+def _check_list_spacing(file_path: Path) -> list[int]:
+    """Check for list items that immediately follow a non-blank, non-list line.
+
+    Pandoc requires a blank line before the first list item to render it as a
+    proper list. Without it, the list items are appended as inline text.
+
+    Returns list of 1-indexed line numbers where a list item needs a preceding blank line.
+    """
+    lines = file_path.read_text(encoding="utf-8").split("\n")
+    issues: list[int] = []
+    for i in range(1, len(lines)):
+        if (
+            _LIST_ITEM_RE.match(lines[i])
+            and lines[i - 1].strip()
+            and not _LIST_ITEM_RE.match(lines[i - 1])
+        ):
+            issues.append(i + 1)  # 1-indexed
+    return issues
+
+
+def _fix_list_spacing(file_path: Path) -> int:
+    """Insert blank lines before list items that follow non-blank, non-list lines.
+
+    Returns number of blank lines inserted.
+    """
+    lines = file_path.read_text(encoding="utf-8").split("\n")
+    result: list[str] = []
+    inserted = 0
+    for i, line in enumerate(lines):
+        if (
+            _LIST_ITEM_RE.match(line)
+            and i > 0
+            and result
+            and result[-1].strip()
+            and not _LIST_ITEM_RE.match(result[-1])
+        ):
+            result.append("")
+            inserted += 1
+        result.append(line)
+    if inserted:
+        file_path.write_text("\n".join(result), encoding="utf-8")
+    return inserted
+
+
 def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
     """Apply fixes to spec files.
 
@@ -357,6 +420,13 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
             if file_path not in spacing_fixed_files:
                 spacing_fixed_files.add(file_path)
                 inserted = _fix_assertion_spacing(Path(file_path))
+                fixed += inserted
+
+        elif fix_type == "list_spacing":
+            # Fix list items missing preceding blank line — deduplicate per file
+            if file_path not in spacing_fixed_files:
+                spacing_fixed_files.add(file_path)
+                inserted = _fix_list_spacing(Path(file_path))
                 fixed += inserted
 
     return fixed
