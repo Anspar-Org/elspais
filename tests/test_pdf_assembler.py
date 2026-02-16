@@ -18,35 +18,96 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.pdf.assembler import MarkdownAssembler
 
+# ---------------------------------------------------------------------------
+# Spec file content for on-disk test fixtures
+# ---------------------------------------------------------------------------
 
-def _make_graph() -> TraceGraph:
-    """Build a test graph with PRD and DEV requirements."""
+_PRD_AUTH_MD = """\
+# PRD Authentication
+
+Topics: auth, security
+
+---
+
+# REQ-p00001: Authentication
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Rationale
+
+Users need authentication.
+
+Topics: auth, security
+
+## Assertions
+
+A. The tool SHALL authenticate users.
+
+*End* *Authentication* | **Hash**: aaa11111
+
+---
+"""
+
+_DEV_LOGIN_MD = """\
+# DEV Login
+
+---
+
+# REQ-d00001: Login Form
+
+**Level**: DEV | **Status**: Active
+
+## Assertions
+
+A. Login form SHALL validate email.
+
+*End* *Login Form* | **Hash**: bbb22222
+
+---
+"""
+
+_DEV_SESSION_MD = """\
+# DEV Session
+
+---
+
+# REQ-d00002: Session Management
+
+**Level**: DEV | **Status**: Active
+
+*End* *Session Management* | **Hash**: ccc33333
+
+---
+"""
+
+
+def _make_graph(base_dir: Path | None = None) -> TraceGraph:
+    """Build a test graph with PRD and DEV requirements.
+
+    If base_dir is provided, creates spec files on disk and sets repo_root
+    so that _render_file() can read them.
+    """
     graph = TraceGraph()
+
+    if base_dir is not None:
+        graph.repo_root = base_dir
+        spec_dir = base_dir / "spec"
+        spec_dir.mkdir(parents=True, exist_ok=True)
+        (spec_dir / "prd-auth.md").write_text(_PRD_AUTH_MD, encoding="utf-8")
+        (spec_dir / "dev-login.md").write_text(_DEV_LOGIN_MD, encoding="utf-8")
+        (spec_dir / "dev-session.md").write_text(_DEV_SESSION_MD, encoding="utf-8")
 
     # PRD requirement in prd-auth.md (root, depth 0)
     prd = GraphNode(
         id="REQ-p00001",
         kind=NodeKind.REQUIREMENT,
         label="Authentication",
-        source=SourceLocation(path="spec/prd-auth.md", line=1),
+        source=SourceLocation(path="spec/prd-auth.md", line=7),
     )
     prd._content = {
         "level": "PRD",
         "status": "Active",
         "hash": "aaa11111",
-        "body_text": (
-            "**Level**: PRD | **Status**: Active | **Implements**: -\n"
-            "\n"
-            "## Rationale\n"
-            "\n"
-            "Users need authentication.\n"
-            "\n"
-            "Topics: auth, security\n"
-            "\n"
-            "## Assertions\n"
-            "\n"
-            "A. The tool SHALL authenticate users.\n"
-        ),
     }
     graph._index["REQ-p00001"] = prd
     graph._roots.append(prd)
@@ -56,7 +117,7 @@ def _make_graph() -> TraceGraph:
         id="REQ-p00001-A",
         kind=NodeKind.ASSERTION,
         label="The tool SHALL authenticate users.",
-        source=SourceLocation(path="spec/prd-auth.md", line=10),
+        source=SourceLocation(path="spec/prd-auth.md", line=19),
     )
     prd_assert._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = prd_assert
@@ -67,7 +128,7 @@ def _make_graph() -> TraceGraph:
         id="REQ-p00001:section:0",
         kind=NodeKind.REMAINDER,
         label="Rationale",
-        source=SourceLocation(path="spec/prd-auth.md", line=5),
+        source=SourceLocation(path="spec/prd-auth.md", line=12),
     )
     rationale._content = {
         "heading": "Rationale",
@@ -82,19 +143,12 @@ def _make_graph() -> TraceGraph:
         id="REQ-d00001",
         kind=NodeKind.REQUIREMENT,
         label="Login Form",
-        source=SourceLocation(path="spec/dev-login.md", line=1),
+        source=SourceLocation(path="spec/dev-login.md", line=5),
     )
     dev._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "bbb22222",
-        "body_text": (
-            "**Level**: DEV | **Status**: Active\n"
-            "\n"
-            "## Assertions\n"
-            "\n"
-            "A. Login form SHALL validate email.\n"
-        ),
     }
     graph._index["REQ-d00001"] = dev
     prd.add_child(dev)
@@ -104,7 +158,7 @@ def _make_graph() -> TraceGraph:
         id="REQ-d00001-A",
         kind=NodeKind.ASSERTION,
         label="Login form SHALL validate email.",
-        source=SourceLocation(path="spec/dev-login.md", line=10),
+        source=SourceLocation(path="spec/dev-login.md", line=13),
     )
     dev_assert._content = {"label": "A"}
     graph._index["REQ-d00001-A"] = dev_assert
@@ -115,13 +169,12 @@ def _make_graph() -> TraceGraph:
         id="REQ-d00002",
         kind=NodeKind.REQUIREMENT,
         label="Session Management",
-        source=SourceLocation(path="spec/dev-session.md", line=1),
+        source=SourceLocation(path="spec/dev-session.md", line=5),
     )
     dev2._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "ccc33333",
-        "body_text": "**Level**: DEV | **Status**: Active\n",
     }
     graph._index["REQ-d00002"] = dev2
     prd.add_child(dev2)
@@ -173,9 +226,9 @@ class TestLevelPartitioning:
         assert "spec/dev-login.md" in buckets.get("DEV", [])
         assert "spec/dev-session.md" in buckets.get("DEV", [])
 
-    def test_REQ_p00080_B_level_headings_in_output(self):
+    def test_REQ_p00080_B_level_headings_in_output(self, tmp_path):
         """Assembled output contains level group headings."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "# Product Requirements" in output
@@ -209,54 +262,67 @@ class TestGraphDepthOrdering:
 
 
 class TestRequirementRendering:
-    """Validates REQ-p00080-E: Page breaks before requirements."""
+    """Validates REQ-p00080-E: Page breaks and heading structure."""
 
-    def test_REQ_p00080_E_page_break_before_requirement(self):
+    def test_REQ_p00080_E_page_break_before_requirement(self, tmp_path):
         """Each requirement is preceded by \\newpage."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
-        # Count newpage directives - should be one per requirement
         assert output.count("\\newpage") >= 3  # At least PRD, DEV1, DEV2
 
-    def test_REQ_p00080_E_requirement_heading_with_anchor(self):
+    def test_REQ_p00080_E_requirement_heading_with_anchor(self, tmp_path):
         """Requirement headings include the ID as an anchor."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "### REQ-p00001: Authentication {#REQ-p00001}" in output
 
-    def test_REQ_p00080_E_assertions_rendered(self):
+    def test_REQ_p00080_E_assertions_rendered(self, tmp_path):
         """Assertions appear under their parent requirement."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "A. The tool SHALL authenticate users." in output
 
-    def test_REQ_p00080_E_sections_rendered(self):
-        """REMAINDER sections appear with their headings."""
-        graph = _make_graph()
+    def test_REQ_p00080_E_sections_rendered(self, tmp_path):
+        """Sub-sections within requirements render at #### level."""
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "#### Rationale" in output
         assert "Users need authentication." in output
 
+    def test_REQ_p00080_E_file_heading_at_level_two(self, tmp_path):
+        """File-level headings (before first requirement) render at ## level."""
+        graph = _make_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph)
+        output = asm.assemble()
+        assert "## PRD Authentication" in output
+
+    def test_REQ_p00080_E_footer_lines_stripped(self, tmp_path):
+        """*End* footer lines are not included in output."""
+        graph = _make_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph)
+        output = asm.assemble()
+        assert "*End*" not in output
+
 
 class TestYAMLMetadata:
     """Validates REQ-p00080-C: YAML metadata for TOC."""
 
-    def test_REQ_p00080_C_yaml_header_present(self):
+    def test_REQ_p00080_C_yaml_header_present(self, tmp_path):
         """Output starts with YAML metadata block."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph, title="Test Doc")
         output = asm.assemble()
         assert output.startswith("---\n")
         assert 'title: "Test Doc"' in output
         assert "toc: true" in output
 
-    def test_REQ_p00080_C_toc_depth(self):
+    def test_REQ_p00080_C_toc_depth(self, tmp_path):
         """YAML metadata includes toc-depth."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "toc-depth: 3" in output
@@ -284,22 +350,28 @@ class TestTopicIndex:
         assert "auth" in topics
         assert "security" in topics
 
-    def test_REQ_p00080_D_index_rendered_with_links(self):
+    def test_REQ_p00080_D_topics_from_file(self, tmp_path):
+        """Topics are extracted from pre-requirement Topics: lines in files."""
+        graph = _make_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph)
+        topics = asm._topics_from_file("spec/prd-auth.md")
+        assert "auth" in topics
+        assert "security" in topics
+
+    def test_REQ_p00080_D_index_rendered_with_links(self, tmp_path):
         """Topic index entries contain hyperlinks to requirements."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "# Topic Index" in output
-        # Check for hyperlink format
         assert "[REQ-p00001](#REQ-p00001)" in output
 
-    def test_REQ_p00080_D_index_alphabetized(self):
+    def test_REQ_p00080_D_index_alphabetized(self, tmp_path):
         """Topic index is alphabetized."""
-        graph = _make_graph()
+        graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         groups = asm._group_by_file()
         index_lines = asm._build_topic_index(groups)
-        # Filter to topic lines only (bold entries)
         topic_lines = [line for line in index_lines if line.startswith("**")]
         topics = [line.split("**")[1] for line in topic_lines]
         assert topics == sorted(topics, key=str.lower)

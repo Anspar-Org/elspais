@@ -1,8 +1,8 @@
 # Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E
 """Markdown assembler for PDF compilation.
 
-Reads from the traceability graph and produces a structured Markdown document
-suitable for Pandoc conversion to PDF.
+Uses the graph for file ordering metadata (level, depth), then reads the
+source spec files directly to preserve all content faithfully.
 """
 from __future__ import annotations
 
@@ -24,12 +24,19 @@ _LEVEL_HEADINGS = {
 # Prefixes stripped for topic extraction
 _LEVEL_PREFIXES = re.compile(r"^(?:prd|ops|dev|\d+)-?", re.IGNORECASE)
 
+# Matches requirement heading lines at any heading level: # REQ-xxx or ## REQ-xxx
+_REQ_HEADING_RE = re.compile(r"^(#{1,3})\s+(REQ-\S+)")
+
+# Matches footer lines: *End* *Title* | **Hash**: ...
+_FOOTER_RE = re.compile(r"^\*End\*")
+
 
 class MarkdownAssembler:
-    """Assembles structured Markdown from the traceability graph.
+    """Assembles structured Markdown from spec files.
 
-    Groups requirements by level (PRD/OPS/DEV), orders files by graph depth,
-    and generates a topic index.
+    Uses the graph only for metadata: which files contain requirements,
+    what level they belong to, and how to order them by graph depth.
+    Content comes directly from the source spec files.
     """
 
     def __init__(self, graph: TraceGraph, title: str = "Requirements Specification") -> None:
@@ -69,13 +76,7 @@ class MarkdownAssembler:
             sorted_files = self._sort_files_by_depth(files, file_groups)
 
             for file_path in sorted_files:
-                nodes = file_groups[file_path]
-                file_stem = Path(file_path).stem
-                parts.append(f"## {file_stem}")
-                parts.append("")
-
-                for node in nodes:
-                    parts.extend(self._render_requirement(node))
+                parts.extend(self._render_file(file_path))
 
         # Topic index
         index_section = self._build_topic_index(file_groups)
@@ -85,6 +86,99 @@ class MarkdownAssembler:
             parts.extend(index_section)
 
         return "\n".join(parts)
+
+    # ------------------------------------------------------------------
+    # File rendering — reads source files directly
+    # ------------------------------------------------------------------
+
+    def _render_file(self, file_path: str) -> list[str]:
+        """Render a spec file's content with adjusted heading levels.
+
+        Reads the file directly. Detects the heading level used for requirements
+        in this file (e.g., `#` or `##`), then adjusts all headings so that:
+        - File title → `##`
+        - Requirement headings → `###` with anchor and page break
+        - Sub-sections within requirements → `####`
+        - `---` separators and `*End*` footer lines → stripped
+        """
+        resolved = self._resolve_path(file_path)
+        if not resolved or not resolved.exists():
+            return []
+
+        source = resolved.read_text(encoding="utf-8")
+        source_lines = source.split("\n")
+
+        # Detect the heading level used for requirements in this file
+        req_level = self._detect_req_heading_level(source_lines)
+        in_requirement = False
+
+        lines: list[str] = []
+        for line in source_lines:
+            # Strip horizontal rules (requirement separators)
+            if line.strip() == "---":
+                continue
+
+            # Strip footer lines
+            if _FOOTER_RE.match(line.strip()):
+                in_requirement = False
+                continue
+
+            # Requirement heading → \newpage + ### with anchor
+            req_match = _REQ_HEADING_RE.match(line)
+            if req_match:
+                hashes = req_match.group(1)
+                req_id = req_match.group(2).rstrip(":")
+                rest = line[len(hashes) + 1 :]
+                lines.append("\\newpage")
+                lines.append("")
+                lines.append(f"### {rest} {{#{req_id}}}")
+                in_requirement = True
+                continue
+
+            # Other headings
+            if line.startswith("#"):
+                level = len(line) - len(line.lstrip("#"))
+                text = line.lstrip("#").lstrip()
+                if not in_requirement or level < req_level:
+                    # Pre-requirement or file-level heading
+                    lines.append(f"## {text}")
+                else:
+                    # Sub-section within a requirement (any level at or below req)
+                    lines.append(f"#### {text}")
+                continue
+
+            lines.append(line)
+
+        # Trim trailing blank lines
+        while lines and not lines[-1].strip():
+            lines.pop()
+        lines.append("")
+
+        return lines
+
+    @staticmethod
+    def _detect_req_heading_level(source_lines: list[str]) -> int:
+        """Detect the Markdown heading level used for requirements in a file.
+
+        Returns the number of '#' characters (1 for `#`, 2 for `##`, etc.).
+        Defaults to 1 if no requirement headings found.
+        """
+        for line in source_lines:
+            m = _REQ_HEADING_RE.match(line)
+            if m:
+                return len(m.group(1))
+        return 1
+
+    def _resolve_path(self, file_path: str) -> Path | None:
+        """Resolve a source path to an absolute Path."""
+        p = Path(file_path)
+        if p.is_absolute() and p.exists():
+            return p
+        # Try relative to repo root
+        candidate = self._graph.repo_root / file_path
+        if candidate.exists():
+            return candidate
+        return None
 
     # ------------------------------------------------------------------
     # File grouping
@@ -199,43 +293,6 @@ class MarkdownAssembler:
         return depth
 
     # ------------------------------------------------------------------
-    # Requirement rendering
-    # ------------------------------------------------------------------
-
-    def _render_requirement(self, node: GraphNode) -> list[str]:
-        """Render a single requirement as Markdown lines.
-
-        Uses the preserved body_text from the graph node, which is a line-by-line
-        copy of everything between the requirement header and footer in the source
-        spec file. Section headings (## → ####) are downgraded to fit the document
-        hierarchy (# level group, ## file, ### requirement).
-        """
-        lines: list[str] = []
-
-        # Page break before each requirement
-        lines.append("\\newpage")
-        lines.append("")
-
-        # Requirement heading with anchor
-        req_id = node.id
-        title = node.get_label()
-        lines.append(f"### {req_id}: {title} {{#{req_id}}}")
-        lines.append("")
-
-        # Use body_text directly — preserves all original content
-        body_text = node.get_field("body_text", "")
-        if body_text:
-            for line in body_text.split("\n"):
-                # Downgrade ## headings to #### to fit document hierarchy
-                if line.startswith("## "):
-                    lines.append("####" + line[2:])
-                else:
-                    lines.append(line)
-            lines.append("")
-
-        return lines
-
-    # ------------------------------------------------------------------
     # Topic index
     # ------------------------------------------------------------------
 
@@ -244,8 +301,8 @@ class MarkdownAssembler:
 
         Topic sources:
         1. Filename words (strip level prefix, split on '-')
-        2. File-level Topics: lines from REMAINDER nodes
-        3. Requirement-level Topics: lines from REMAINDER children
+        2. File-level Topics: lines (scanned from source file)
+        3. Requirement-level Topics: lines (from REMAINDER children in graph)
 
         Returns:
             List of Markdown lines for the index section.
@@ -260,8 +317,8 @@ class MarkdownAssembler:
                 for node in nodes:
                     index[topic].add((node.id, node.get_label()))
 
-            # Source 2: file-level REMAINDER nodes with Topics: lines
-            file_topics = self._topics_from_file_remainders(file_path)
+            # Source 2: file-level Topics: lines (scan file directly)
+            file_topics = self._topics_from_file(file_path)
             for topic in file_topics:
                 for node in nodes:
                     index[topic].add((node.id, node.get_label()))
@@ -302,21 +359,23 @@ class MarkdownAssembler:
         words = [w for w in cleaned.split("-") if w]
         return words
 
-    def _topics_from_file_remainders(self, file_path: str) -> list[str]:
-        """Extract topics from file-level REMAINDER nodes containing Topics: lines."""
+    def _topics_from_file(self, file_path: str) -> list[str]:
+        """Extract Topics: lines from the pre-requirement section of a file."""
+        resolved = self._resolve_path(file_path)
+        if not resolved or not resolved.exists():
+            return []
+        text = resolved.read_text(encoding="utf-8")
         topics: list[str] = []
-        for node in self._graph.nodes_by_kind(NodeKind.REMAINDER):
-            if not node.source or node.source.path != file_path:
-                continue
-            # Only consider file-level remainders (no parent that is a REQUIREMENT)
-            is_file_level = True
-            for parent in node.iter_parents():
-                if parent.kind == NodeKind.REQUIREMENT:
-                    is_file_level = False
-                    break
-            if not is_file_level:
-                continue
-            topics.extend(self._extract_topics_line(node))
+        for line in text.split("\n"):
+            # Stop at first requirement heading
+            if _REQ_HEADING_RE.match(line):
+                break
+            match = re.match(r"Topics:\s*(.+)", line, re.IGNORECASE)
+            if match:
+                for t in match.group(1).split(","):
+                    t = t.strip()
+                    if t:
+                        topics.append(t)
         return topics
 
     @staticmethod
@@ -325,20 +384,12 @@ class MarkdownAssembler:
         topics: list[str] = []
         for child in req_node.iter_children():
             if child.kind == NodeKind.REMAINDER:
-                topics.extend(MarkdownAssembler._extract_topics_line(child))
-        return topics
-
-    @staticmethod
-    def _extract_topics_line(node: GraphNode) -> list[str]:
-        """Extract topics from a REMAINDER node's text matching 'Topics: ...' pattern."""
-        text = node.get_field("text", "") or ""
-        topics: list[str] = []
-        for line in text.split("\n"):
-            match = re.match(r"Topics:\s*(.+)", line, re.IGNORECASE)
-            if match:
-                raw = match.group(1)
-                for t in raw.split(","):
-                    t = t.strip()
-                    if t:
-                        topics.append(t)
+                text = child.get_field("text", "") or ""
+                for line in text.split("\n"):
+                    match = re.match(r"Topics:\s*(.+)", line, re.IGNORECASE)
+                    if match:
+                        for t in match.group(1).split(","):
+                            t = t.strip()
+                            if t:
+                                topics.append(t)
         return topics
