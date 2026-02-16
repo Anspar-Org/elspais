@@ -6,7 +6,10 @@ source spec files directly to preserve all content faithfully.
 """
 from __future__ import annotations
 
+import logging
 import re
+import shutil
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 
@@ -29,6 +32,11 @@ _REQ_HEADING_RE = re.compile(r"^(#{1,3})\s+(REQ-\S+)")
 
 # Matches footer lines: *End* *Title* | **Hash**: ...
 _FOOTER_RE = re.compile(r"^\*End\*")
+
+# Matches Markdown image references to .mmd files: ![alt](path.mmd)
+_MMD_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\()([^)]+\.mmd)(\))")
+
+log = logging.getLogger(__name__)
 
 
 class MarkdownAssembler:
@@ -149,6 +157,10 @@ class MarkdownAssembler:
                     lines.append(f"#### {text}")
                 continue
 
+            # Replace .mmd image references with .png
+            if ".mmd)" in line:
+                line = self._resolve_mermaid_images(line, file_path)
+
             lines.append(line)
 
         # Trim trailing blank lines
@@ -181,6 +193,68 @@ class MarkdownAssembler:
         if candidate.exists():
             return candidate
         return None
+
+    # ------------------------------------------------------------------
+    # Mermaid diagram resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_mermaid_images(self, line: str, source_file: str) -> str:
+        """Replace .mmd image references with .png equivalents.
+
+        For each ![alt](path.mmd) reference:
+        1. Look for path.png alongside the .mmd file
+        2. If not found, generate it using mmdc (mermaid CLI)
+        3. Replace the reference with the absolute .png path
+        """
+
+        def _replace_mmd(match: re.Match) -> str:
+            prefix = match.group(1)  # ![alt](
+            mmd_path = match.group(2)  # relative/path.mmd
+            suffix = match.group(3)  # )
+
+            # Resolve .mmd path relative to the source file's directory
+            source_dir = Path(source_file).parent
+            mmd_resolved = self._graph.repo_root / source_dir / mmd_path
+            if not mmd_resolved.exists():
+                # Try relative to repo root
+                mmd_resolved = self._graph.repo_root / mmd_path
+            if not mmd_resolved.exists():
+                return match.group(0)  # Leave unchanged
+
+            png_path = mmd_resolved.with_suffix(".png")
+
+            # Use existing .png if available
+            if not png_path.exists():
+                png_path = self._generate_mermaid_png(mmd_resolved, png_path)
+                if png_path is None:
+                    return match.group(0)
+
+            return f"{prefix}{png_path}{suffix}"
+
+        return _MMD_IMAGE_RE.sub(_replace_mmd, line)
+
+    @staticmethod
+    def _generate_mermaid_png(mmd_path: Path, png_path: Path) -> Path | None:
+        """Generate a PNG from a Mermaid .mmd file using mmdc.
+
+        Returns the PNG path on success, None on failure.
+        """
+        mmdc = shutil.which("mmdc")
+        if not mmdc:
+            log.warning("mmdc not found, cannot render %s", mmd_path.name)
+            return None
+
+        try:
+            subprocess.run(
+                [mmdc, "-i", str(mmd_path), "-o", str(png_path), "-b", "white"],
+                capture_output=True,
+                timeout=30,
+                check=True,
+            )
+            return png_path
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            log.warning("Failed to render %s: %s", mmd_path.name, exc)
+            return None
 
     # ------------------------------------------------------------------
     # File grouping
