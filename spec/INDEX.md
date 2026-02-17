@@ -18,6 +18,7 @@
 | REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | 20f51345 |
 
 ## Operations Requirements (OPS)
 
