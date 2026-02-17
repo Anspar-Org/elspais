@@ -2,6 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.73.1] - 2026-02-17
+
+### Fixed
+
+- **Homebrew pipeline**: Fully automated bottle build and publish (no manual labeling step)
+- **Formula conflicts**: Added `conflicts_with` between `elspais` and `elspais-core` formulas
+
 ## [0.73.0] - 2026-02-15
 
 ### Added
