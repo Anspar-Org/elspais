@@ -4,7 +4,7 @@
       "command": "python3",
       "args": ["-m", "elspais.mcp"],
       "env": {
-        "PYTHONPATH": "/home/metagamer/elspais-worktrees/final-viewtrace-port/src"
+        "PYTHONPATH": "./src"
       }
     }
   }
