@@ -78,6 +78,6 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          repository: Anspar-Org/homebrew-elspais
+          repository: Anspar-Org/homebrew-anspar
           event-type: update-formula
-          client-payload: '{"version": "${{ steps.version.outputs.version }}"}'
+          client-payload: '{"package": "elspais", "version": "${{ steps.version.outputs.version }}"}'
