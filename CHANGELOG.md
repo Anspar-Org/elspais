@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.73.2] - 2026-02-17
+
+### Fixed
+
+- **Homebrew pipeline**: Use PAT for PR creation and label automation to enable fully hands-free pipeline
+
 ## [0.73.1] - 2026-02-17
 
 ### Fixed
