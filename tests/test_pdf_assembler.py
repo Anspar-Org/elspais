@@ -300,12 +300,12 @@ class TestRequirementRendering:
         output = asm.assemble()
         assert "## PRD Authentication" in output
 
-    def test_REQ_p00080_E_footer_lines_stripped(self, tmp_path):
-        """*End* footer lines are not included in output."""
+    def test_REQ_p00080_E_footer_lines_present(self, tmp_path):
+        """*End* footer lines are preserved in output."""
         graph = _make_graph(base_dir=tmp_path)
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
-        assert "*End*" not in output
+        assert "*End*" in output
 
 
 class TestYAMLMetadata:
