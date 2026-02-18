@@ -97,6 +97,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short --ignore=tests/_obsolete"
+markers = [
+    "e2e: end-to-end tests requiring external tools (claude CLI)",
+]
 
 [tool.black]
 line-length = 100

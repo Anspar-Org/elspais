@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "elspais": {
-      "command": "python3",
-      "args": ["-m", "elspais.mcp"],
-      "env": {
-        "PYTHONPATH": "./src"
-      }
+      "command": "elspais",
+      "args": ["mcp", "serve"]
     }
   }
 }
