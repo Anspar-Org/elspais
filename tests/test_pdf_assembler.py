@@ -117,6 +117,26 @@ A. The associated system SHALL authenticate.
 ---
 """
 
+_PRD_CHILD_MD = """\
+# PRD Child Feature
+
+Topics: child-feature
+
+---
+
+# REQ-p00002: Child Feature
+
+**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL provide a child feature.
+
+*End* *Child Feature* | **Hash**: fff66666
+
+---
+"""
+
 
 def _make_graph(base_dir: Path | None = None) -> TraceGraph:
     """Build a test graph with PRD and DEV requirements.
@@ -469,16 +489,18 @@ class TestOverviewMode:
         assert "Callisto Auth" in output
 
     def test_REQ_p00080_F_max_depth_filters_core(self, tmp_path):
-        """max_depth limits core PRD files by graph depth."""
+        """max_depth excludes core PRD files whose min depth >= threshold."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        # Add a depth-1 core PRD to test filtering
+        # Add a depth-1 core PRD in a separate file
+        spec_dir = tmp_path / "spec"
+        (spec_dir / "prd-child.md").write_text(_PRD_CHILD_MD, encoding="utf-8")
         prd2 = GraphNode(
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
-            label="Child PRD",
-            source=SourceLocation(path="spec/prd-auth.md", line=50),
+            label="Child Feature",
+            source=SourceLocation(path="spec/prd-child.md", line=7),
         )
-        prd2._content = {"level": "PRD", "status": "Active"}
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "fff66666"}
         graph._index["REQ-p00002"] = prd2
         prd = graph.find_by_id("REQ-p00001")
         prd.add_child(prd2)
@@ -488,6 +510,8 @@ class TestOverviewMode:
         output = asm.assemble()
         # Root PRD (depth 0) included
         assert "Authentication" in output
+        # Depth-1 core PRD in separate file excluded
+        assert "Child Feature" not in output
         # Associated PRD included (no depth limit on associates)
         assert "Callisto Auth" in output
 
@@ -504,6 +528,16 @@ class TestOverviewMode:
         asm = MarkdownAssembler(graph, title="My Custom", overview=True)
         output = asm.assemble()
         assert 'title: "My Custom"' in output
+
+    def test_REQ_p00080_F_topic_index_excludes_non_prd(self, tmp_path):
+        """Topic index in overview mode only references rendered PRD files."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, overview=True)
+        output = asm.assemble()
+        # Topic index should not reference OPS or DEV requirements
+        assert "REQ-o00001" not in output
+        assert "REQ-d00001" not in output
+        assert "REQ-d00002" not in output
 
     def test_REQ_p00080_F_non_overview_unchanged(self, tmp_path):
         """Without overview flag, all levels still appear."""

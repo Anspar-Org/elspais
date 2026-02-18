@@ -117,8 +117,18 @@ class MarkdownAssembler:
             for file_path in sorted_files:
                 parts.extend(self._render_file(file_path))
 
-        # Topic index
-        index_section = self._build_topic_index(file_groups)
+        # Topic index — scope to rendered files only in overview mode
+        if self._overview:
+            rendered_files: set[str] = set()
+            for level in levels_to_emit:
+                bucket = level_buckets.get(level, [])
+                if self._max_depth is not None:
+                    bucket = self._filter_by_depth(bucket, file_groups)
+                rendered_files.update(bucket)
+            index_groups = {k: v for k, v in file_groups.items() if k in rendered_files}
+        else:
+            index_groups = file_groups
+        index_section = self._build_topic_index(index_groups)
         if index_section:
             parts.append("# Topic Index")
             parts.append("")
