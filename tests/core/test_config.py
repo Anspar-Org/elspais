@@ -38,15 +38,13 @@ class TestLoadConfig:
 
     def test_load_from_toml_file(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write(
-                """\
+            f.write("""\
 [patterns]
 prefix = "MYREQ"
 
 [spec]
 directories = ["specs"]
-"""
-            )
+""")
             f.flush()
 
             config = load_config(Path(f.name))
@@ -75,7 +73,7 @@ class TestFindConfigFile:
 
             found = find_config_file(Path(tmpdir))
 
-            assert found == config_path
+            assert found.resolve() == config_path.resolve()
 
     def test_returns_none_when_not_found(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +95,7 @@ class TestFindGitRoot:
 
             root = find_git_root(Path(tmpdir))
 
-            assert root == Path(tmpdir)
+            assert root.resolve() == Path(tmpdir).resolve()
 
     def test_finds_git_root_from_subdirectory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -109,7 +107,7 @@ class TestFindGitRoot:
 
             root = find_git_root(subdir)
 
-            assert root == Path(tmpdir)
+            assert root.resolve() == Path(tmpdir).resolve()
 
     def test_returns_none_when_not_in_repo(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -129,7 +127,7 @@ class TestFindGitRoot:
             root = find_git_root(Path(tmpdir))
 
             # Should still recognize this as a git root
-            assert root == Path(tmpdir)
+            assert root.resolve() == Path(tmpdir).resolve()
 
     def test_defaults_to_cwd(self):
         # Should not raise when called without arguments

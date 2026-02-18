@@ -92,16 +92,16 @@ Compile spec files into a PDF document.
 
 **Prerequisites:**
 
-  pandoc:   https://pandoc.org/installing.html
-  xelatex:  Install TeX Live, MiKTeX, or MacTeX
+- pandoc: <https://pandoc.org/installing.html>
+- xelatex: Install TeX Live, MiKTeX, or MacTeX
 
 **Overview Mode:**
 
-  Generates a lighter document for stakeholders:
-  - Only PRD-level requirements from all repos
-  - No OPS or DEV requirements
-  - Default title: "Product Requirements Overview"
-  - `--max-depth` limits core PRD depth (associates always fully included)
+Generates a lighter document for stakeholders:
+- Only PRD-level requirements from all repos
+- No OPS or DEV requirements
+- Default title: "Product Requirements Overview"
+- `--max-depth` limits core PRD depth (associates always fully included)
 
 ## hash
 
