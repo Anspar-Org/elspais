@@ -70,6 +70,39 @@ Generate traceability matrix and reports.
   `--server`       Start review server
   `--port PORT`    Port for review server
 
+## pdf
+
+Compile spec files into a PDF document.
+
+  $ elspais pdf                              # Generate spec-output.pdf
+  $ elspais pdf --output review.pdf          # Custom output path
+  $ elspais pdf --title "My Project Specs"   # Custom title
+  $ elspais pdf --overview                   # PRD-only stakeholder overview
+  $ elspais pdf --overview --max-depth 2     # Overview with depth limit
+
+**Options:**
+
+  `--output PATH`       Output PDF file path (default: spec-output.pdf)
+  `--engine ENGINE`     PDF engine: xelatex (default), lualatex, pdflatex
+  `--template PATH`     Custom pandoc LaTeX template
+  `--title TITLE`       Document title
+  `--cover PATH`        Markdown file for custom cover page
+  `--overview`          Generate stakeholder overview (PRD only, no OPS/DEV)
+  `--max-depth N`       Max graph depth for core PRDs in overview mode
+
+**Prerequisites:**
+
+  pandoc:   https://pandoc.org/installing.html
+  xelatex:  Install TeX Live, MiKTeX, or MacTeX
+
+**Overview Mode:**
+
+  Generates a lighter document for stakeholders:
+  - Only PRD-level requirements from all repos
+  - No OPS or DEV requirements
+  - Default title: "Product Requirements Overview"
+  - `--max-depth` limits core PRD depth (associates always fully included)
+
 ## hash
 
 Manage requirement content hashes.
