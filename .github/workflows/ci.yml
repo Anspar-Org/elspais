@@ -82,6 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Install package with dev dependencies
         run: pip install -e ".[dev,all]"
 
