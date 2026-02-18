@@ -6,12 +6,18 @@ and communicates via newline-delimited JSON-RPC 2.0.
 """
 
 import json
+import shutil
 import subprocess
-import sys
 
 import pytest
 
 pytest.importorskip("mcp")
+
+_ELSPAIS = shutil.which("elspais")
+pytestmark = pytest.mark.skipif(
+    _ELSPAIS is None,
+    reason="elspais CLI not found on PATH",
+)
 
 
 def _send(proc, obj: dict) -> None:
@@ -59,7 +65,7 @@ def _initialize(proc) -> dict:
 def mcp_server():
     """Start MCP server as subprocess with stdio transport."""
     proc = subprocess.Popen(
-        [sys.executable, "-m", "elspais", "mcp", "serve"],
+        [_ELSPAIS, "mcp", "serve"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

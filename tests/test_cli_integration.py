@@ -6,11 +6,17 @@ Invokes elspais as a subprocess to verify real command execution.
 
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+_ELSPAIS = shutil.which("elspais")
+
+pytestmark = pytest.mark.skipif(
+    _ELSPAIS is None,
+    reason="elspais CLI not found on PATH",
+)
 
 requires_pandoc = pytest.mark.skipif(
     shutil.which("pandoc") is None,
@@ -26,7 +32,7 @@ requires_xelatex = pytest.mark.skipif(
 def _run_elspais(*args: str, cwd: str | Path | None = None) -> subprocess.CompletedProcess:
     """Run elspais as a subprocess."""
     return subprocess.run(
-        [sys.executable, "-m", "elspais", *args],
+        [_ELSPAIS, *args],
         capture_output=True,
         text=True,
         cwd=cwd,
