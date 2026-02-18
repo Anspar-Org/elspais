@@ -5,7 +5,6 @@ elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 Assembles a structured Markdown document from the traceability graph,
 then invokes Pandoc with a custom LaTeX template to produce a PDF.
 """
-
 from __future__ import annotations
 
 import argparse

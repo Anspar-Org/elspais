@@ -10,7 +10,6 @@ Provides functionality to modify requirements in-place:
 
 File I/O is delegated to ``utilities.spec_writer``.
 """
-
 from __future__ import annotations
 
 import argparse

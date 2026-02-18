@@ -4,7 +4,6 @@ elspais.cli - Command-line interface.
 
 Main entry point for the elspais CLI tool.
 """
-
 from __future__ import annotations
 
 import argparse

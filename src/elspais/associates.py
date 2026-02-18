@@ -5,7 +5,6 @@ elspais.associates - Associate repository configuration loading.
 Provides functions for loading associate configurations from YAML files
 and resolving associate spec directories.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

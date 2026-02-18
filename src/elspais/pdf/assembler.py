@@ -4,7 +4,6 @@
 Uses the graph for file ordering metadata (level, depth), then reads the
 source spec files directly to preserve all content faithfully.
 """
-
 from __future__ import annotations
 
 import logging

@@ -4,7 +4,6 @@
 Provides functions for calculating and verifying SHA-256 based content hashes.
 Ported from core/hasher.py.
 """
-
 from __future__ import annotations
 
 import hashlib
