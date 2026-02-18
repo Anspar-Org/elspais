@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-E
+# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F
 """
 elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 
@@ -54,11 +54,21 @@ def run(args: argparse.Namespace) -> int:
     )
 
     # Assemble Markdown from graph
+    from elspais.config import get_config
     from elspais.pdf.assembler import MarkdownAssembler
+    from elspais.utilities.patterns import PatternConfig
 
-    title = getattr(args, "title", None) or "Requirements Specification"
+    config = get_config(config_path, repo_root)
+    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+
+    title = getattr(args, "title", None)
     cover = getattr(args, "cover", None)
-    assembler = MarkdownAssembler(graph, title=title)
+    overview = getattr(args, "overview", False)
+    max_depth = getattr(args, "max_depth", None)
+    assembler = MarkdownAssembler(
+        graph, title=title, overview=overview, max_depth=max_depth,
+        pattern_config=pattern_config,
+    )
     markdown_content = assembler.assemble()
 
     # Invoke Pandoc to produce PDF

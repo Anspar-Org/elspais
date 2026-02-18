@@ -737,6 +737,8 @@ Examples:
   elspais pdf --template custom.latex        # Custom LaTeX template
   elspais pdf --engine lualatex              # Use lualatex instead of xelatex
   elspais pdf --cover cover.md               # Custom cover page from Markdown file
+  elspais pdf --overview                     # PRD-only stakeholder overview
+  elspais pdf --overview --max-depth 2       # Overview with depth limit
 
 Prerequisites:
   pandoc:   https://pandoc.org/installing.html
@@ -774,6 +776,19 @@ Prerequisites:
         default=None,
         help="Markdown file for custom cover page (replaces default title page)",
         metavar="PATH",
+    )
+    pdf_parser.add_argument(
+        "--overview",
+        action="store_true",
+        default=False,
+        help="Generate stakeholder overview (PRD requirements only, no OPS/DEV)",
+    )
+    pdf_parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=None,
+        help="Max graph depth for core PRDs in overview mode (0=roots only, 1=+children, ...)",
+        metavar="N",
     )
 
     # install command
