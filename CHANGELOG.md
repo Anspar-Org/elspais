@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [0.73.2] - 2026-02-17
 
+### Added
+
+- **`elspais pdf --overview`**: Generate stakeholder-oriented PDFs with only PRD-level requirements. Optional `--max-depth` flag limits core PRD graph depth while always including associated-repo PRDs (REQ-p00080-F)
+
 ### Fixed
 
 - **Homebrew pipeline**: Use PAT for PR creation and label automation to enable fully hands-free pipeline

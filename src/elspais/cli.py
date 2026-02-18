@@ -737,6 +737,8 @@ Examples:
   elspais pdf --template custom.latex        # Custom LaTeX template
   elspais pdf --engine lualatex              # Use lualatex instead of xelatex
   elspais pdf --cover cover.md               # Custom cover page from Markdown file
+  elspais pdf --overview                     # PRD-only stakeholder overview
+  elspais pdf --overview --max-depth 2       # Overview with depth limit
 
 Prerequisites:
   pandoc:   https://pandoc.org/installing.html
@@ -774,6 +776,19 @@ Prerequisites:
         default=None,
         help="Markdown file for custom cover page (replaces default title page)",
         metavar="PATH",
+    )
+    pdf_parser.add_argument(
+        "--overview",
+        action="store_true",
+        default=False,
+        help="Generate stakeholder overview (PRD requirements only, no OPS/DEV)",
+    )
+    pdf_parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=None,
+        help="Max graph depth for core PRDs in overview mode (0=roots only, 1=+children, ...)",
+        metavar="N",
     )
 
     # install command
@@ -849,35 +864,16 @@ Examples:
         help="MCP server commands (requires elspais[mcp])",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Claude Code Configuration:
-  Add to ~/.claude/claude_desktop_config.json:
+elspais MCP Server - Model Context Protocol integration for Claude Code.
 
-    {
-      "mcpServers": {
-        "elspais": {
-          "command": "elspais",
-          "args": ["mcp", "serve"],
-          "cwd": "/path/to/your/project"
-        }
-      }
-    }
+Commands:
+  elspais mcp serve              Start MCP server (stdio transport)
+  elspais mcp install            Register with Claude Code (current project)
+  elspais mcp install --global   Register with Claude Code (all projects)
+  elspais mcp uninstall          Remove from Claude Code
 
-  Set "cwd" to the directory containing your .elspais.toml config.
-
-Resources:
-  requirements://all           List all requirements
-  requirements://{id}          Get requirement details
-  requirements://level/{level} Filter by PRD/OPS/DEV
-  content-rules://list         List content rules
-  content-rules://{file}       Get content rule content
-  config://current             Current configuration
-
-Tools:
-  validate          Run validation rules
-  parse_requirement Parse requirement text
-  search            Search requirements by pattern
-  get_requirement   Get requirement details
-  analyze           Analyze hierarchy/orphans/coverage
+Quick start:
+  elspais mcp install --global   # One-time setup
 """,
     )
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
@@ -892,6 +888,30 @@ Tools:
         choices=["stdio", "sse", "streamable-http"],
         default="stdio",
         help="Transport type (default: stdio)",
+    )
+
+    # mcp install
+    mcp_install = mcp_subparsers.add_parser(
+        "install",
+        help="Register elspais MCP server with Claude Code",
+    )
+    mcp_install.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="Install for all projects (user scope) instead of current project only",
+    )
+
+    # mcp uninstall
+    mcp_uninstall = mcp_subparsers.add_parser(
+        "uninstall",
+        help="Remove elspais MCP server from Claude Code",
+    )
+    mcp_uninstall.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="Remove from user scope",
     )
 
     # link command
@@ -1106,6 +1126,11 @@ def version_command(args: argparse.Namespace) -> int:
 
 def mcp_command(args: argparse.Namespace) -> int:
     """Handle MCP server commands."""
+    if args.mcp_action == "install":
+        return _mcp_install(global_scope=args.global_scope)
+    elif args.mcp_action == "uninstall":
+        return _mcp_uninstall(global_scope=args.global_scope)
+
     try:
         from elspais.mcp.server import run_server
     except ImportError:
@@ -1128,8 +1153,82 @@ def mcp_command(args: argparse.Namespace) -> int:
             print("\nServer stopped.")
         return 0
     else:
-        print("Usage: elspais mcp serve")
+        print("Usage: elspais mcp {serve|install|uninstall}")
         return 1
+
+
+def _claude_env() -> dict[str, str]:
+    """Return env dict with Claude nesting guards removed.
+
+    ``claude mcp add`` refuses to run inside an active Claude Code session.
+    Strip the sentinel variables so the subprocess succeeds even when
+    ``elspais mcp install`` is invoked from a Claude Code terminal.
+    """
+    import os
+
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+    return env
+
+
+def _mcp_install(global_scope: bool = False) -> int:
+    """Register elspais MCP server with Claude Code."""
+    import shutil
+    import subprocess
+
+    claude = shutil.which("claude")
+    if not claude:
+        print("Error: 'claude' not found on PATH.", file=sys.stderr)
+        print(
+            "Install Claude Code: https://docs.anthropic.com/claude-code",
+            file=sys.stderr,
+        )
+        return 1
+
+    elspais_bin = shutil.which("elspais")
+    if not elspais_bin:
+        print("Error: 'elspais' not found on PATH.", file=sys.stderr)
+        return 1
+
+    cmd = [claude, "mcp", "add", "elspais", "--transport", "stdio"]
+    if global_scope:
+        cmd.extend(["--scope", "user"])
+    cmd.extend(["--", "elspais", "mcp", "serve"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+    if result.returncode != 0:
+        print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+        return 1
+
+    scope_label = "all projects (user scope)" if global_scope else "current project (local scope)"
+    print(f"elspais MCP server registered for {scope_label}.")
+    if not global_scope:
+        print("Tip: Use --global to make elspais MCP available in all projects.")
+    return 0
+
+
+def _mcp_uninstall(global_scope: bool = False) -> int:
+    """Remove elspais MCP server from Claude Code."""
+    import shutil
+    import subprocess
+
+    claude = shutil.which("claude")
+    if not claude:
+        print("Error: 'claude' not found on PATH.", file=sys.stderr)
+        return 1
+
+    cmd = [claude, "mcp", "remove", "elspais"]
+    if global_scope:
+        cmd.extend(["--scope", "user"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+    if result.returncode != 0:
+        print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+        return 1
+
+    print("elspais MCP server removed.")
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
 """Tests for the MarkdownAssembler.
 
 Validates:
@@ -6,6 +6,7 @@ Validates:
 - REQ-p00080-C: TOC generation via YAML metadata
 - REQ-p00080-D: Topic index generation
 - REQ-p00080-E: Page breaks before requirements
+- REQ-p00080-F: Overview PDF filtering
 """
 from __future__ import annotations
 
@@ -76,6 +77,62 @@ _DEV_SESSION_MD = """\
 **Level**: DEV | **Status**: Active
 
 *End* *Session Management* | **Hash**: ccc33333
+
+---
+"""
+
+_OPS_DEPLOY_MD = """\
+# OPS Deployment
+
+---
+
+# REQ-o00001: Deployment Pipeline
+
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL deploy via CI.
+
+*End* *Deployment Pipeline* | **Hash**: ddd44444
+
+---
+"""
+
+_ASSOC_PRD_MD = """\
+# Associated Product
+
+---
+
+# REQ-CAL-p00001: Callisto Auth
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The associated system SHALL authenticate.
+
+*End* *Callisto Auth* | **Hash**: eee55555
+
+---
+"""
+
+_PRD_CHILD_MD = """\
+# PRD Child Feature
+
+Topics: child-feature
+
+---
+
+# REQ-p00002: Child Feature
+
+**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL provide a child feature.
+
+*End* *Child Feature* | **Hash**: fff66666
 
 ---
 """
@@ -178,6 +235,41 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
     }
     graph._index["REQ-d00002"] = dev2
     prd.add_child(dev2)
+
+    return graph
+
+
+def _make_overview_graph(base_dir: Path | None = None) -> TraceGraph:
+    """Build a test graph with PRD, OPS, DEV, and associated-repo PRD."""
+    graph = _make_graph(base_dir)
+
+    if base_dir is not None:
+        spec_dir = base_dir / "spec"
+        (spec_dir / "ops-deploy.md").write_text(_OPS_DEPLOY_MD, encoding="utf-8")
+        (spec_dir / "assoc-prd.md").write_text(_ASSOC_PRD_MD, encoding="utf-8")
+
+    # OPS requirement (depth 1, child of PRD root)
+    ops = GraphNode(
+        id="REQ-o00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Deployment Pipeline",
+        source=SourceLocation(path="spec/ops-deploy.md", line=5),
+    )
+    ops._content = {"level": "OPS", "status": "Active", "hash": "ddd44444"}
+    graph._index["REQ-o00001"] = ops
+    prd = graph.find_by_id("REQ-p00001")
+    prd.add_child(ops)
+
+    # Associated-repo PRD (root, depth 0) — detected by PatternValidator
+    assoc = GraphNode(
+        id="REQ-CAL-p00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Callisto Auth",
+        source=SourceLocation(path="spec/assoc-prd.md", line=5),
+    )
+    assoc._content = {"level": "PRD", "status": "Active", "hash": "eee55555"}
+    graph._index["REQ-CAL-p00001"] = assoc
+    graph._roots.append(assoc)
 
     return graph
 
@@ -375,3 +467,83 @@ class TestTopicIndex:
         topic_lines = [line for line in index_lines if line.startswith("**")]
         topics = [line.split("**")[1] for line in topic_lines]
         assert topics == sorted(topics, key=str.lower)
+
+
+class TestOverviewMode:
+    """Validates REQ-p00080-F: Overview PDF filtering."""
+
+    def test_REQ_p00080_F_excludes_ops_and_dev(self, tmp_path):
+        """Overview mode only includes PRD-level sections."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, overview=True)
+        output = asm.assemble()
+        assert "# Product Requirements" in output
+        assert "# Operational Requirements" not in output
+        assert "# Development Requirements" not in output
+
+    def test_REQ_p00080_F_includes_associated_prd(self, tmp_path):
+        """Overview mode includes PRD from associated repos."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, overview=True)
+        output = asm.assemble()
+        assert "Callisto Auth" in output
+
+    def test_REQ_p00080_F_max_depth_filters_core(self, tmp_path):
+        """max_depth excludes core PRD files whose min depth >= threshold."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        # Add a depth-1 core PRD in a separate file
+        spec_dir = tmp_path / "spec"
+        (spec_dir / "prd-child.md").write_text(_PRD_CHILD_MD, encoding="utf-8")
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Child Feature",
+            source=SourceLocation(path="spec/prd-child.md", line=7),
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "fff66666"}
+        graph._index["REQ-p00002"] = prd2
+        prd = graph.find_by_id("REQ-p00001")
+        prd.add_child(prd2)
+
+        # max_depth=1 means only depth 0
+        asm = MarkdownAssembler(graph, overview=True, max_depth=1)
+        output = asm.assemble()
+        # Root PRD (depth 0) included
+        assert "Authentication" in output
+        # Depth-1 core PRD in separate file excluded
+        assert "Child Feature" not in output
+        # Associated PRD included (no depth limit on associates)
+        assert "Callisto Auth" in output
+
+    def test_REQ_p00080_F_default_title(self, tmp_path):
+        """Overview mode uses 'Product Requirements Overview' as default title."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, overview=True)
+        output = asm.assemble()
+        assert 'title: "Product Requirements Overview"' in output
+
+    def test_REQ_p00080_F_custom_title_overrides(self, tmp_path):
+        """Explicit title overrides the overview default."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, title="My Custom", overview=True)
+        output = asm.assemble()
+        assert 'title: "My Custom"' in output
+
+    def test_REQ_p00080_F_topic_index_excludes_non_prd(self, tmp_path):
+        """Topic index in overview mode only references rendered PRD files."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph, overview=True)
+        output = asm.assemble()
+        # Topic index should not reference OPS or DEV requirements
+        assert "REQ-o00001" not in output
+        assert "REQ-d00001" not in output
+        assert "REQ-d00002" not in output
+
+    def test_REQ_p00080_F_non_overview_unchanged(self, tmp_path):
+        """Without overview flag, all levels still appear."""
+        graph = _make_overview_graph(base_dir=tmp_path)
+        asm = MarkdownAssembler(graph)
+        output = asm.assemble()
+        assert "# Product Requirements" in output
+        assert "# Operational Requirements" in output
+        assert "# Development Requirements" in output

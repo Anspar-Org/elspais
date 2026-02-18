@@ -26,4 +26,6 @@ D. The tool SHALL generate an alphabetized topic index with entries derived from
 
 E. The tool SHALL insert page breaks before each requirement heading to ensure each requirement starts on a new page.
 
-*End* *Spec-to-PDF Compilation* | **Hash**: 20f51345
+F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
+
+*End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf

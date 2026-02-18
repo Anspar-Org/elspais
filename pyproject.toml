@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.73.2"
+version = "0.74.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,7 +32,7 @@ dependencies = ["tomlkit>=0.12"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
+    "black==25.12.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
@@ -97,6 +97,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short --ignore=tests/_obsolete"
+markers = [
+    "e2e: end-to-end tests requiring external tools (claude CLI)",
+]
 
 [tool.black]
 line-length = 100

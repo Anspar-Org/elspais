@@ -1,0 +1,46 @@
+# Implements: REQ-o00066-A
+name: Build CI Image (Manual)
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/anspar-org/elspais-ci
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute Dockerfile hash
+        id: hash
+        run: |
+          HASH=$(sha256sum .github/docker/Dockerfile | cut -c1-7)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/docker/Dockerfile
+          push: true
+          build-args: PYTHON_VERSION=${{ matrix.python-version }}
+          tags: |
+            ${{ env.IMAGE_BASE }}:py${{ matrix.python-version }}-sha-${{ steps.hash.outputs.hash }}
+            ${{ env.IMAGE_BASE }}:py${{ matrix.python-version }}
