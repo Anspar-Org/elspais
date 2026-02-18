@@ -4,6 +4,7 @@ elspais.commands.completion - Shell tab-completion setup.
 
 Generates and installs shell completion scripts using argcomplete.
 """
+
 from __future__ import annotations
 
 import os

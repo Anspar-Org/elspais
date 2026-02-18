@@ -5,6 +5,7 @@ elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 Assembles a structured Markdown document from the traceability graph,
 then invokes Pandoc with a custom LaTeX template to produce a PDF.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -66,7 +67,10 @@ def run(args: argparse.Namespace) -> int:
     overview = getattr(args, "overview", False)
     max_depth = getattr(args, "max_depth", None)
     assembler = MarkdownAssembler(
-        graph, title=title, overview=overview, max_depth=max_depth,
+        graph,
+        title=title,
+        overview=overview,
+        max_depth=max_depth,
         pattern_config=pattern_config,
     )
     markdown_content = assembler.assemble()

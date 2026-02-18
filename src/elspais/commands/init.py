@@ -4,6 +4,7 @@ elspais.commands.init - Initialize configuration command.
 
 Creates .elspais.toml configuration file.
 """
+
 from __future__ import annotations
 
 import argparse

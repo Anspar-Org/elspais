@@ -7,6 +7,7 @@ Detects changes to requirement files using git:
 - Changes vs main/master branch
 - Moved requirements (comparing current location to committed state)
 """
+
 from __future__ import annotations
 
 import argparse
