@@ -99,7 +99,7 @@ if git rev-parse origin/main >/dev/null 2>&1; then
         NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 
         # Update pyproject.toml and commit
-        sed -i "s/^version = \"${MAIN_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+        sed "s/^version = \"${MAIN_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml > pyproject.toml.tmp && mv pyproject.toml.tmp pyproject.toml
         git add pyproject.toml
         git commit --no-verify -m "chore: auto-bump version to ${NEW_VERSION}"
 
