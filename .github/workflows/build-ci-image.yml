@@ -1,0 +1,42 @@
+# Implements: REQ-o00066-A
+name: Build CI Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/docker/Dockerfile"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/elspais-ci
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/docker/Dockerfile
+          push: true
+          build-args: PYTHON_VERSION=${{ matrix.python-version }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python-version }}
