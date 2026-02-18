@@ -4,12 +4,76 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/anspar-org/elspais-ci
 
 jobs:
+  compute-hash:
+    name: Compute Dockerfile Hash
+    runs-on: ubuntu-latest
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute Dockerfile hash
+        id: hash
+        run: |
+          HASH=$(sha256sum .github/docker/Dockerfile | cut -c1-7)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+  prepare-image:
+    name: Prepare CI Image (Python ${{ matrix.python-version }})
+    needs: compute-hash
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if candidate image exists
+        id: check
+        run: |
+          TAG="py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}"
+          if docker manifest inspect "${{ env.IMAGE_BASE }}:${TAG}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image $TAG already exists, skipping build"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Image $TAG not found, will build"
+          fi
+
+      - name: Build and push candidate image
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/docker/Dockerfile
+          push: true
+          build-args: PYTHON_VERSION=${{ matrix.python-version }}
+          tags: ${{ env.IMAGE_BASE }}:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
+
   test:
     name: Test (Python ${{ matrix.python-version }})
+    needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
-    container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}
+    container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +87,34 @@ jobs:
 
       - name: Run tests
         run: pytest --tb=short -q
+
+  promote-image:
+    name: Promote CI Image (Python ${{ matrix.python-version }})
+    needs: [compute-hash, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Install crane
+        run: |
+          curl -sL https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | tar -xz crane
+          sudo mv crane /usr/local/bin/
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Promote candidate to production tag
+        run: |
+          CANDIDATE="py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}"
+          PRODUCTION="py${{ matrix.python-version }}"
+          echo "Promoting $CANDIDATE -> $PRODUCTION"
+          crane tag "${{ env.IMAGE_BASE }}:${CANDIDATE}" "${PRODUCTION}"
 
   lint:
     name: Lint
