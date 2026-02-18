@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
 """Markdown assembler for PDF compilation.
 
 Uses the graph for file ordering metadata (level, depth), then reads the
@@ -15,6 +15,7 @@ from pathlib import Path
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 # Level display names and sort order
 _LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
@@ -47,9 +48,26 @@ class MarkdownAssembler:
     Content comes directly from the source spec files.
     """
 
-    def __init__(self, graph: TraceGraph, title: str = "Requirements Specification") -> None:
+    def __init__(
+        self,
+        graph: TraceGraph,
+        title: str | None = None,
+        overview: bool = False,
+        max_depth: int | None = None,
+        pattern_config: PatternConfig | None = None,
+    ) -> None:
         self._graph = graph
-        self._title = title
+        self._overview = overview
+        self._max_depth = max_depth
+        if title:
+            self._title = title
+        elif overview:
+            self._title = "Product Requirements Overview"
+        else:
+            self._title = "Requirements Specification"
+        if pattern_config is None:
+            pattern_config = PatternConfig.from_dict({})
+        self._pattern_validator = PatternValidator(pattern_config)
 
     def assemble(self) -> str:
         """Assemble the complete Markdown document.
@@ -72,10 +90,23 @@ class MarkdownAssembler:
         level_buckets = self._partition_by_level(file_groups)
 
         # Emit each level group
-        for level in ("PRD", "OPS", "DEV"):
+        if self._overview:
+            levels_to_emit = ("PRD",)
+        else:
+            levels_to_emit = ("PRD", "OPS", "DEV")
+
+        for level in levels_to_emit:
             files = level_buckets.get(level, [])
             if not files:
                 continue
+
+            # Apply max_depth filter for core files in overview mode
+            if self._overview and self._max_depth is not None:
+                files = self._filter_by_depth(files, file_groups)
+
+            if not files:
+                continue
+
             heading = _LEVEL_HEADINGS.get(level, level)
             parts.append(f"# {heading}")
             parts.append("")
@@ -369,6 +400,39 @@ class MarkdownAssembler:
             else:
                 break
         return depth
+
+    def _is_associated_node(self, node: GraphNode) -> bool:
+        """Check if a node belongs to an associated repository.
+
+        Uses PatternValidator.parse() to detect associated-repo IDs
+        (e.g., REQ-CAL-p00001 has parsed.associated == "CAL").
+        """
+        parsed = self._pattern_validator.parse(node.id)
+        return parsed is not None and parsed.associated is not None
+
+    def _filter_by_depth(
+        self,
+        file_paths: list[str],
+        file_groups: dict[str, list[GraphNode]],
+    ) -> list[str]:
+        """Filter files by max depth, excluding associated-repo files from filtering.
+
+        Associated-repo files (detected via PatternValidator) are always included.
+        Core files are included only if their minimum depth < max_depth.
+        """
+        result: list[str] = []
+        for path in file_paths:
+            nodes = file_groups.get(path, [])
+            if any(self._is_associated_node(n) for n in nodes):
+                result.append(path)
+                continue
+            min_depth = min(
+                (self._node_depth(n) for n in nodes),
+                default=999,
+            )
+            if min_depth < self._max_depth:
+                result.append(path)
+        return result
 
     # ------------------------------------------------------------------
     # Topic index
