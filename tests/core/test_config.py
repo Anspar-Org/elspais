@@ -38,13 +38,15 @@ class TestLoadConfig:
 
     def test_load_from_toml_file(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write("""\
+            f.write(
+                """\
 [patterns]
 prefix = "MYREQ"
 
 [spec]
 directories = ["specs"]
-""")
+"""
+            )
             f.flush()
 
             config = load_config(Path(f.name))
@@ -61,6 +63,58 @@ directories = ["specs"]
 
             # Should have default values merged in
             assert config.get("patterns.prefix") == "REQ"
+
+
+class TestLocalConfigOverride:
+    """Tests for .elspais.local.toml deep-merge support."""
+
+    def test_local_toml_merges_over_base(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / ".elspais.toml"
+            base.write_text('[patterns]\nprefix = "REQ"\n')
+
+            local = Path(tmpdir) / ".elspais.local.toml"
+            local.write_text('[associates]\npaths = ["/home/dev/other-repo"]\n')
+
+            config = load_config(base)
+
+            assert config.get("patterns.prefix") == "REQ"
+            assert config.get("associates.paths") == ["/home/dev/other-repo"]
+
+    def test_local_toml_overrides_base_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / ".elspais.toml"
+            base.write_text('[patterns]\nprefix = "REQ"\n')
+
+            local = Path(tmpdir) / ".elspais.local.toml"
+            local.write_text('[patterns]\nprefix = "LOCAL"\n')
+
+            config = load_config(base)
+
+            assert config.get("patterns.prefix") == "LOCAL"
+
+    def test_missing_local_toml_is_silently_ignored(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write('[patterns]\nprefix = "REQ"\n')
+            f.flush()
+
+            config = load_config(Path(f.name))
+
+            assert config.get("patterns.prefix") == "REQ"
+
+    def test_local_toml_deep_merges_nested_sections(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / ".elspais.toml"
+            base.write_text('[spec]\ndirectories = ["spec"]\npatterns = ["*.md"]\n')
+
+            local = Path(tmpdir) / ".elspais.local.toml"
+            local.write_text('[spec]\ndirectories = ["spec", "extra-specs"]\n')
+
+            config = load_config(base)
+
+            assert config.get("spec.directories") == ["spec", "extra-specs"]
+            # patterns should remain from base (deep-merge preserves siblings)
+            assert config.get("spec.patterns") == ["*.md"]
 
 
 class TestFindConfigFile:

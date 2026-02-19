@@ -1,4 +1,8 @@
 # elspais configuration for elspais project itself
+#
+# Tip: Create .elspais.local.toml alongside this file for developer-local
+# overrides (e.g. associate paths). It is deep-merged and gitignored.
+
 [project]
 name = "elspais"
 version = "0.1.0"

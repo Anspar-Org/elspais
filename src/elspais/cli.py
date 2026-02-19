@@ -483,6 +483,10 @@ Configuration File:
   Location: elspais config path
   View all: elspais config show
 
+Local Overrides:
+  Place a .elspais.local.toml alongside .elspais.toml for developer-local
+  settings (gitignored). It is deep-merged on top of the base config.
+
 Quick Start (.elspais.toml):
   [project]
   name = "my-project"

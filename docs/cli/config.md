@@ -9,6 +9,24 @@ or parent directories up to the git repository root.
   $ elspais config path   # Show config location
   $ elspais config show   # View all settings
 
+## Local Overrides (.elspais.local.toml)
+
+Place a `.elspais.local.toml` file alongside `.elspais.toml` for
+developer-local settings that should not be committed. This file
+is deep-merged on top of the base config, following the same pattern
+as `docker-compose.override.yml` or `.env.local`.
+
+```toml
+# .elspais.local.toml (gitignored)
+[associates]
+paths = ["/home/dev/other-repo"]
+```
+
+**Load order:** defaults → `.elspais.toml` → `.elspais.local.toml` → env vars
+
+Each layer deep-merges over the previous one, so you only need to
+specify the keys you want to override. Environment variables always win.
+
 ## Complete Configuration Reference
 
 ### [project] Section
