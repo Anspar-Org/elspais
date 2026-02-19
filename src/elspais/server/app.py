@@ -85,6 +85,26 @@ def create_app(
         response.headers["Expires"] = "0"
         return response
 
+    # Build whitelist of allowed directories for file serving.
+    # Includes repo root + directories containing graph source files
+    # that live outside the repo (e.g. associated repo files).
+    repo_resolved = repo_root.resolve()
+    allowed_roots: list[Path] = [repo_resolved]
+    for node in graph.all_nodes():
+        if node.source and node.source.path:
+            p = Path(node.source.path)
+            if p.is_absolute():
+                resolved = p.resolve()
+                if not resolved.is_relative_to(repo_resolved):
+                    # Find the repo root (.elspais.toml) for this path
+                    candidate = resolved.parent
+                    while candidate != candidate.parent:
+                        if (candidate / ".elspais.toml").exists():
+                            if candidate not in allowed_roots:
+                                allowed_roots.append(candidate)
+                            break
+                        candidate = candidate.parent
+
     # State pattern matching MCP server
     _state: dict[str, Any] = {
         "graph": graph,
@@ -399,10 +419,14 @@ def create_app(
         if not rel_path:
             return jsonify({"error": "path parameter required"}), 400
 
-        # Resolve to absolute path, constrained to repo root
-        abs_path = (_state["working_dir"] / rel_path).resolve()
-        repo_resolved = _state["working_dir"].resolve()
-        if not str(abs_path).startswith(str(repo_resolved)):
+        # Resolve to absolute path; if the path is already absolute
+        # (e.g. from an associated repo outside the main repo), use it
+        # directly; otherwise join with working_dir.
+        p = Path(rel_path)
+        abs_path = (p if p.is_absolute() else (_state["working_dir"] / rel_path)).resolve()
+
+        # Security: path must be under repo root or an allowed associate dir
+        if not any(abs_path.is_relative_to(root) for root in allowed_roots):
             return jsonify({"error": "path outside repository"}), 403
 
         if not abs_path.exists():

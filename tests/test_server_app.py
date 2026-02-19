@@ -727,6 +727,68 @@ class TestGetFileContent:
         resp = client.get("/api/file-content?path=nonexistent.py")
         assert resp.status_code == 404
 
+    def test_REQ_p00006_A_file_content_associated_repo_absolute_path(self, tmp_path):
+        """Files from associated repos outside main repo can be loaded via absolute path."""
+        from elspais.graph.GraphNode import SourceLocation
+
+        # Simulate main repo at tmp_path/main and associate at tmp_path/assoc
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+        assoc_repo = tmp_path / "assoc"
+        assoc_spec = assoc_repo / "spec"
+        assoc_spec.mkdir(parents=True)
+
+        # Write a .elspais.toml in the associate repo so it's discovered as a root
+        (assoc_repo / ".elspais.toml").write_text('[project]\nname = "assoc"\n')
+
+        # Write a spec file in the associate repo
+        spec_file = assoc_spec / "requirements.md"
+        spec_file.write_text("# REQ-A-p00001: Test Requirement\n")
+
+        # Build graph with a node whose source path is the absolute path
+        # (this is what happens when associated repos are outside the main repo)
+        graph = TraceGraph(repo_root=main_repo)
+        node = GraphNode(
+            id="REQ-A-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Test Requirement",
+            source=SourceLocation(path=str(spec_file), line=1),
+        )
+        node._content = {"level": "PRD", "status": "Active"}
+        graph._index[node.id] = node
+        graph._roots.append(node)
+
+        app = create_app(repo_root=main_repo, graph=graph, config={})
+
+        with app.test_client() as c:
+            # Request using absolute path (as _relative_source_path returns for out-of-repo files)
+            resp = c.get(f"/api/file-content?path={spec_file}")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["lines"][0] == "# REQ-A-p00001: Test Requirement"
+
+    def test_REQ_p00006_A_file_content_rejects_arbitrary_absolute_path(self, tmp_path):
+        """Absolute paths outside repo root and allowed dirs are rejected."""
+        import tempfile
+
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+
+        # Create a file outside any allowed directory
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w") as f:
+            f.write("secret data")
+            outside_path = f.name
+
+        try:
+            graph = TraceGraph(repo_root=main_repo)
+            app = create_app(repo_root=main_repo, graph=graph, config={})
+
+            with app.test_client() as c:
+                resp = c.get(f"/api/file-content?path={outside_path}")
+                assert resp.status_code == 403
+        finally:
+            Path(outside_path).unlink(missing_ok=True)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORS Tests
