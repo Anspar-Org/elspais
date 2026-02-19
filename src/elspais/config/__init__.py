@@ -142,6 +142,10 @@ class ConfigLoader:
 def load_config(config_path: Path) -> ConfigLoader:
     """Load configuration from a TOML file.
 
+    Loads config_path, then deep-merges .elspais.local.toml (if present
+    alongside it) on top — following the docker-compose.override.yml / .env.local
+    convention for developer-local overrides.
+
     Args:
         config_path: Path to the .elspais.toml file.
 
@@ -151,6 +155,13 @@ def load_config(config_path: Path) -> ConfigLoader:
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
     merged = _merge_configs(DEFAULT_CONFIG, user_config)
+
+    # Deep-merge developer-local overrides if present
+    local_path = config_path.parent / ".elspais.local.toml"
+    if local_path.is_file():
+        local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
+        merged = _merge_configs(merged, local_config)
+
     merged = _apply_env_overrides(merged)
     return ConfigLoader(merged)
 
