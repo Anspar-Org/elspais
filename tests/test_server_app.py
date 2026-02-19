@@ -738,12 +738,17 @@ class TestGetFileContent:
         assoc_spec = assoc_repo / "spec"
         assoc_spec.mkdir(parents=True)
 
-        # Write a .elspais.toml in the associate repo so it's discovered as a root
-        (assoc_repo / ".elspais.toml").write_text('[project]\nname = "assoc"\n')
+        # Write a .elspais.toml that marks this as an associated repo
+        (assoc_repo / ".elspais.toml").write_text(
+            '[project]\nname = "assoc"\ntype = "associated"\n\n[associated]\nprefix = "A"\n'
+        )
 
         # Write a spec file in the associate repo
         spec_file = assoc_spec / "requirements.md"
         spec_file.write_text("# REQ-A-p00001: Test Requirement\n")
+
+        # Config registers the associate repo path for discovery
+        config = {"associates": {"paths": [str(assoc_repo)]}}
 
         # Build graph with a node whose source path is the absolute path
         # (this is what happens when associated repos are outside the main repo)
@@ -758,7 +763,7 @@ class TestGetFileContent:
         graph._index[node.id] = node
         graph._roots.append(node)
 
-        app = create_app(repo_root=main_repo, graph=graph, config={})
+        app = create_app(repo_root=main_repo, graph=graph, config=config)
 
         with app.test_client() as c:
             # Request using absolute path (as _relative_source_path returns for out-of-repo files)

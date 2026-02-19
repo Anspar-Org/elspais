@@ -23,6 +23,11 @@ async function apiFetch(url, options) {
     }
 }
 
+// ── Heartbeat: keeps server alive while browser tab is open ──
+setInterval(function() {
+    fetch('/api/heartbeat', {method: 'POST'}).catch(function() {});
+}, 10000);
+
 {% else %}
 // ── View mode: read from embedded JSON ──
 var _embeddedData = {

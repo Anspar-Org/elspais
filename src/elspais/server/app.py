@@ -86,24 +86,24 @@ def create_app(
         return response
 
     # Build whitelist of allowed directories for file serving.
-    # Includes repo root + directories containing graph source files
-    # that live outside the repo (e.g. associated repo files).
+    # Includes repo root + associated repo roots discovered via config.
     repo_resolved = repo_root.resolve()
     allowed_roots: list[Path] = [repo_resolved]
-    for node in graph.all_nodes():
-        if node.source and node.source.path:
-            p = Path(node.source.path)
-            if p.is_absolute():
-                resolved = p.resolve()
-                if not resolved.is_relative_to(repo_resolved):
-                    # Find the repo root (.elspais.toml) for this path
-                    candidate = resolved.parent
-                    while candidate != candidate.parent:
-                        if (candidate / ".elspais.toml").exists():
-                            if candidate not in allowed_roots:
-                                allowed_roots.append(candidate)
-                            break
-                        candidate = candidate.parent
+    try:
+        from elspais.associates import get_associate_spec_directories
+
+        spec_dirs, _ = get_associate_spec_directories(config, repo_root)
+        for spec_dir in spec_dirs:
+            # Walk up from spec dir to find .elspais.toml (the repo root)
+            candidate = spec_dir.resolve()
+            while candidate != candidate.parent:
+                if (candidate / ".elspais.toml").exists():
+                    if candidate not in allowed_roots:
+                        allowed_roots.append(candidate)
+                    break
+                candidate = candidate.parent
+    except Exception:
+        pass  # Associates not configured; repo root is the only allowed dir
 
     # State pattern matching MCP server
     _state: dict[str, Any] = {
@@ -404,7 +404,10 @@ def create_app(
 
     @app.route("/api/file-content")
     def api_file_content():
-        """GET /api/file-content?path=<relative_path> - Read a file from disk.
+        """GET /api/file-content?path=<path> - Read a file from disk.
+
+        The path may be relative (to the repo root) or absolute (for
+        associated repo files outside the main repo tree).
 
         Returns the file content as an array of lines with metadata about
         whether the file has pending in-memory mutations that would change
@@ -455,8 +458,13 @@ def create_app(
                 continue
             node = g.find_by_id(node_id)
             if node and node.source and node.source.path:
-                node_path = str((_state["working_dir"] / node.source.path).resolve())
-                if node_path == str(abs_path):
+                source_path = Path(node.source.path)
+                node_path = (
+                    source_path
+                    if source_path.is_absolute()
+                    else (_state["working_dir"] / source_path)
+                ).resolve()
+                if node_path == abs_path:
                     affected_node_ids.add(node_id)
 
         return jsonify(
@@ -581,6 +589,67 @@ def create_app(
         result = _undo_last_mutation(_state["graph"])
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
+
+    # ─────────────────────────────────────────────────────────────────
+    # Server lifecycle endpoints
+    # ─────────────────────────────────────────────────────────────────
+
+    # Heartbeat tracking: server shuts down if no browser pings within timeout.
+    # Only activates after the first heartbeat (so the server survives startup).
+    _heartbeat: dict[str, float] = {"last": 0.0, "active": False}
+    _HEARTBEAT_TIMEOUT = 30  # seconds without a ping before shutdown
+
+    @app.route("/api/heartbeat", methods=["POST"])
+    def api_heartbeat():
+        """POST /api/heartbeat - Browser keep-alive ping."""
+        import sys
+
+        _heartbeat["last"] = time.time()
+        if not _heartbeat["active"]:
+            _heartbeat["active"] = True
+            print("[heartbeat] Browser connected — auto-shutdown enabled.", file=sys.stderr)
+            _start_heartbeat_monitor()
+        return jsonify({"ok": True})
+
+    def _start_heartbeat_monitor():
+        """Background thread that exits the server when heartbeats stop."""
+        import os
+        import sys
+        import threading
+
+        def _monitor():
+            while True:
+                time.sleep(5)
+                elapsed = time.time() - _heartbeat["last"]
+                if elapsed > _HEARTBEAT_TIMEOUT:
+                    print(
+                        f"\n[heartbeat] No browser ping for {int(elapsed)}s "
+                        f"(timeout: {_HEARTBEAT_TIMEOUT}s) — shutting down.",
+                        file=sys.stderr,
+                    )
+                    os._exit(0)
+                elif elapsed > _HEARTBEAT_TIMEOUT / 2:
+                    print(
+                        f"[heartbeat] No browser ping for {int(elapsed)}s "
+                        f"(shutdown in {_HEARTBEAT_TIMEOUT - int(elapsed)}s)",
+                        file=sys.stderr,
+                    )
+
+        t = threading.Thread(target=_monitor, daemon=True)
+        t.start()
+
+    @app.route("/api/shutdown", methods=["POST"])
+    def api_shutdown():
+        """POST /api/shutdown - Gracefully stop the server."""
+        import os
+        import sys
+        import threading
+
+        print("\nShutdown requested via API.", file=sys.stderr)
+        # Respond before exiting so the caller gets confirmation
+        response = jsonify({"success": True, "message": "Server shutting down"})
+        threading.Timer(0.5, lambda: os._exit(0)).start()
+        return response
 
     # ─────────────────────────────────────────────────────────────────
     # Persistence endpoints (REQ-o00063-F)
