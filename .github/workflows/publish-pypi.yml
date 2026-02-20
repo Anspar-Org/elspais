@@ -141,7 +141,7 @@ jobs:
         id: slack_user
         if: steps.pr.outputs.found == 'true'
         env:
-          SLACK_TOKEN: ${{ secrets.SLACK_4_GH }}
+          SLACK_TOKEN: ${{ secrets.SLACK_APP_OATH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
           AUTHOR="${{ steps.pr.outputs.author }}"
