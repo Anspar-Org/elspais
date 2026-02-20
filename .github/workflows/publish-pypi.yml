@@ -217,6 +217,7 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_4_GH }}
+          errors: true
           payload: |
             channel: "${{ steps.channel.outputs.id }}"
             text: "${{ steps.message.outputs.text }}"
