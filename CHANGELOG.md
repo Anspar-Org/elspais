@@ -2,6 +2,11 @@
 
 All notable changes to elspais will be documented in this file.
 
+## 0.79.0
+
+- Add `elspais associate` command for managing associated repo links
+- Environment variable overrides now support JSON lists and booleans
+
 ## 0.78.0
 
 - Add `elspais doctor` command for environment and installation diagnostics

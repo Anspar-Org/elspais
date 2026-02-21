@@ -359,6 +359,27 @@ Run health checks across configuration, spec files, code, and tests.
   `-j, --json`     Output as JSON
   `-v, --verbose`  Show additional details
 
+## associate
+
+Manage links to associated repositories.
+
+  $ elspais associate /path/to/repo    # Link a specific associate
+  $ elspais associate --all            # Auto-discover and link all
+  $ elspais associate --list           # Show linked associates
+  $ elspais associate --unlink NAME    # Remove a link
+
+**Options:**
+
+  `--all`            Auto-discover and link all associates
+  `--list`           Show status of linked associates
+  `--unlink NAME`    Remove a linked associate
+
+**Notes:**
+
+  Links are stored in `.elspais.local.toml` (gitignored, not shared)
+  Validates target has `project.type = "associated"` in its config
+  Accepts a path or a name (searches sibling directories)
+
 ## mcp
 
 MCP (Model Context Protocol) server commands.
