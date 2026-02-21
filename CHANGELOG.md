@@ -11,6 +11,10 @@ All notable changes to elspais will be documented in this file.
 - **Flask search passthrough**: `/api/search` now accepts `limit` and `regex` query parameters (REQ-d00061-E, REQ-d00061-C)
 - **GUI tree text filter**: Toolbar text input filters the nav tree via server-side search with debounced API calls, intersecting with existing button/dropdown filters (REQ-o00060-C)
 
+### Changed
+
+- **MCP tool docstrings**: Updated `search()`, `scoped_search()`, and `discover_requirements()` to document multi-term query syntax and scoring
+
 ## 0.79.0
 
 - Add `elspais associate` command for managing associated repo links

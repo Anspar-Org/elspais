@@ -3148,14 +3148,26 @@ def create_server(
     ) -> list[dict[str, Any]]:
         """Search requirements by ID, title, or content.
 
+        Supports multi-term queries when regex=False:
+        - Space-separated terms: implicit AND (all must match)
+        - ``OR`` between terms: disjunctive matching (``auth OR password``)
+        - ``(...)`` grouping: explicit precedence (``(auth OR pin) security``)
+        - ``"..."`` phrases: exact contiguous substring
+        - ``-term``: exclude nodes matching the term
+        - ``=term``: exact keyword set match (vs substring)
+
+        Results are scored by field match quality (ID > title > keyword > body)
+        and sorted by relevance score descending. Each result includes a
+        ``score`` field.
+
         Args:
-            query: Search string or regex pattern.
-            field: Field to search: 'id', 'title', 'body', or 'all'.
-            regex: If True, treat query as regex pattern.
+            query: Search string, multi-term expression, or regex pattern.
+            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
+            regex: If True, treat query as regex pattern (disables multi-term).
             limit: Maximum results to return (default 50).
 
         Returns:
-            List of matching requirement summaries.
+            List of matching requirement summaries, sorted by relevance.
         """
         return _search(_state["graph"], query, field, regex, limit)
 
@@ -3208,19 +3220,23 @@ def create_server(
         Restricts search to descendants or ancestors of the scope node,
         preventing over-matching across unrelated parts of the graph.
 
+        Supports the same multi-term query syntax as ``search()`` when
+        regex=False (AND/OR, grouping, phrases, exclusion, exact keywords).
+        Results include relevance scores and are sorted by score descending.
+
         REQ-d00078-F: Delegates to helper, performing only parameter validation.
 
         Args:
-            query: Search string or regex pattern.
+            query: Search string, multi-term expression, or regex pattern.
             scope_id: Root node ID defining the search scope.
             direction: "descendants" (default) or "ancestors".
-            field: Field to search: 'id', 'title', 'body', or 'all'.
-            regex: If True, treat query as regex pattern.
+            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
+            regex: If True, treat query as regex pattern (disables multi-term).
             include_assertions: If True, also match assertion text.
             limit: Maximum results to return (default 50).
 
         Returns:
-            Dict with results list, scope_id, and direction.
+            Dict with results list (scored and sorted), scope_id, and direction.
         """
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
@@ -3242,21 +3258,24 @@ def create_server(
         Chains scoped_search with minimize_requirement_set to prune ancestors
         from results, returning only the most-specific requirements that match.
 
+        Supports the same multi-term query syntax as ``search()`` when
+        regex=False (AND/OR, grouping, phrases, exclusion, exact keywords).
+
         REQ-d00079-D: Delegates to helper, performing only edge_kinds parsing.
 
         Args:
-            query: Search string or regex pattern.
+            query: Search string, multi-term expression, or regex pattern.
             scope_id: Root node ID defining the search scope.
             direction: "descendants" (default) or "ancestors".
-            field: Field to search: 'id', 'title', 'body', or 'all'.
-            regex: If True, treat query as regex pattern.
+            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
+            regex: If True, treat query as regex pattern (disables multi-term).
             include_assertions: If True, also match assertion text.
             limit: Maximum results to return (default 50).
             edge_kinds: Comma-separated edge kinds for ancestor pruning.
                 Default: "implements,refines".
 
         Returns:
-            Dict with results (minimal set), pruned (with superseded_by),
+            Dict with results (minimal set, scored), pruned (with superseded_by),
             scope_id, direction, and stats.
         """
         # REQ-d00079-D: Parse edge_kinds and delegate
