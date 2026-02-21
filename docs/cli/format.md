@@ -27,7 +27,7 @@ B. The system SHALL NOT do something prohibited.
 
 ## ID Format
 
-  **REQ-<type><number>**
+  `REQ-<type><number>`
 
   Types:
     `p` = PRD (Product)     e.g., REQ-p00001
