@@ -381,6 +381,7 @@ def resolve_associate_spec_dir(
     associate: Associate,
     config: AssociatesConfig,
     base_path: Path | None = None,
+    canonical_root: Path | None = None,
 ) -> Path | None:
     """
     Resolve the spec directory path for an associate.
@@ -391,10 +392,12 @@ def resolve_associate_spec_dir(
         associate: Associate configuration
         config: Overall associates configuration
         base_path: Base path to resolve relative paths (defaults to cwd)
+        canonical_root: Canonical (non-worktree) repo root for cross-repo paths
 
     Returns:
         Path to associate spec directory, or None if not found
     """
+    # Implements: REQ-p00005-F
     if base_path is None:
         base_path = Path.cwd()
 
@@ -410,8 +413,11 @@ def resolve_associate_spec_dir(
             return spec_dir
 
     # Fall back to default path
+    # Use canonical_root for cross-repo paths (..), base_path for internal paths
     if associate.path:
-        spec_dir = base_path / associate.path / associate.spec_path
+        is_cross_repo = canonical_root and ".." in str(associate.path)
+        resolve_base = canonical_root if is_cross_repo else base_path
+        spec_dir = resolve_base / associate.path / associate.spec_path
         if spec_dir.exists() and spec_dir.is_dir():
             return spec_dir
 
@@ -430,6 +436,7 @@ resolve_sponsor_spec_dir = resolve_associate_spec_dir
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
+    canonical_root: Path | None = None,
 ) -> tuple[list[Path], list[str]]:
     """
     Get all associate spec directories from configuration.
@@ -437,11 +444,13 @@ def get_associate_spec_directories(
     Args:
         config: Main elspais configuration dictionary
         base_path: Base path to resolve relative paths (defaults to cwd)
+        canonical_root: Canonical (non-worktree) repo root for cross-repo paths
 
     Returns:
         Tuple of (spec_dirs, errors). errors contains messages for any
         configured associate paths that could not be resolved.
     """
+    # Implements: REQ-p00005-F
     if base_path is None:
         base_path = Path.cwd()
 
@@ -451,7 +460,9 @@ def get_associate_spec_directories(
     # 1. Legacy sponsors YAML loading (existing behavior)
     associates_config = load_associates_config(config, base_path)
     for associate in associates_config.associates:
-        spec_dir = resolve_associate_spec_dir(associate, associates_config, base_path)
+        spec_dir = resolve_associate_spec_dir(
+            associate, associates_config, base_path, canonical_root=canonical_root
+        )
         if spec_dir:
             spec_dirs.append(spec_dir)
 
@@ -460,6 +471,8 @@ def get_associate_spec_directories(
     associate_paths = config.get("associates", {}).get("paths", [])
     for repo_path_str in associate_paths:
         repo_path = Path(repo_path_str)
+        if not repo_path.is_absolute() and canonical_root:
+            repo_path = canonical_root / repo_path
         result = discover_associate_from_path(repo_path)
         if isinstance(result, str):
             errors.append(result)
