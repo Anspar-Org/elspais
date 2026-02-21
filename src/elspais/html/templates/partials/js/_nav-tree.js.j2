@@ -178,11 +178,13 @@ function renderNavTree() {
     const totalBeforeFilter = filteredRows.length;
     const af = editState.activeFilters;
     var hiddenRepos = af.hiddenRepos || [];
+    const hasTextFilter = editState.textMatchIds !== null;
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
         af.uncommitted || af.changed || af.main || af.leaf ||
         af.deprecated || af.roadmap ||
         hiddenRepos.length > 0 ||
-        editState.filterStatus !== '' || editState.filterCoverage !== '';
+        editState.filterStatus !== '' || editState.filterCoverage !== '' ||
+        hasTextFilter;
 
     // Track which rows are direct filter matches (vs ancestor context)
     var matchSet = null;
@@ -230,6 +232,8 @@ function renderNavTree() {
             if (editState.filterStatus && r.status !== editState.filterStatus) continue;
             // Coverage dropdown
             if (editState.filterCoverage && r.coverage !== editState.filterCoverage) continue;
+            // Text filter (intersect with search API results)
+            if (hasTextFilter && !editState.textMatchIds.has(r.id)) continue;
             matchIndices.add(i);
         }
         directMatchCount = matchIndices.size;
@@ -440,6 +444,44 @@ function applyEditFilters() {
     saveState();
 }
 
+// =====================================================================
+// Tree Text Filter (calls /api/search)
+// =====================================================================
+
+var _treeTextTimer = null;
+
+function onTreeTextFilter() {
+    var input = document.getElementById('edit-filter-text');
+    var text = input ? input.value.trim() : '';
+    editState.filterText = text;
+
+    if (_treeTextTimer) clearTimeout(_treeTextTimer);
+
+    if (!text) {
+        editState.textMatchIds = null;
+        renderNavTree();
+        saveState();
+        return;
+    }
+
+    _treeTextTimer = setTimeout(function() {
+        apiFetch('/api/search?q=' + encodeURIComponent(text) + '&limit=500')
+            .then(function(results) {
+                if (!results) {
+                    editState.textMatchIds = new Set();
+                } else {
+                    var ids = new Set();
+                    for (var i = 0; i < results.length; i++) {
+                        ids.add(results[i].id);
+                    }
+                    editState.textMatchIds = ids;
+                }
+                renderNavTree();
+                saveState();
+            });
+    }, 250);
+}
+
 function clearEditFilters() {
     // Reset all filter state
     editState.activeFilters = {
@@ -450,6 +492,10 @@ function clearEditFilters() {
     };
     editState.filterStatus = '';
     editState.filterCoverage = '';
+    editState.filterText = '';
+    editState.textMatchIds = null;
+    var textInput = document.getElementById('edit-filter-text');
+    if (textInput) textInput.value = '';
     // Reset header stat badge states
     document.querySelectorAll('.stat-badge').forEach(function(b) {
         b.classList.remove('dimmed');

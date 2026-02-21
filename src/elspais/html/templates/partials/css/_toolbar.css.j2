@@ -104,6 +104,27 @@
     cursor: pointer;
 }
 
+/* Text filter input */
+.filter-text-input {
+    padding: 6px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #495057;
+    background: white;
+    min-width: 180px;
+    flex: 1;
+    max-width: 320px;
+}
+.filter-text-input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+.filter-text-input::placeholder {
+    color: #adb5bd;
+}
+
 /* Dim context-only rows (ancestors shown for tree structure but not matching the filter) */
 .nav-tree-row.filter-dim {
     opacity: 0.35;
