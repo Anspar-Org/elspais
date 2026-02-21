@@ -199,15 +199,19 @@ class TestMcpInstallE2E:
         return result.stdout
 
     def test_e2e_install_and_uninstall(self, capsys):
-        # Install at user scope so it doesn't collide with .mcp.json
-        rc = _mcp_install(global_scope=True)
-        assert rc == 0, capsys.readouterr().err
+        # Remove any existing registration so install starts clean
+        _mcp_uninstall(global_scope=True)
+        capsys.readouterr()  # discard uninstall output
 
-        listing = self._claude_mcp_list()
-        # claude mcp list shows "<name>: <command> - <status>"
-        assert "elspais" in listing
-        assert "elspais mcp serve" in listing
+        try:
+            # Install at user scope so it doesn't collide with .mcp.json
+            rc = _mcp_install(global_scope=True)
+            assert rc == 0, capsys.readouterr().err
 
-        # Uninstall
-        rc = _mcp_uninstall(global_scope=True)
-        assert rc == 0, capsys.readouterr().err
+            listing = self._claude_mcp_list()
+            # claude mcp list shows "<name>: <command> - <status>"
+            assert "elspais" in listing
+            assert "elspais mcp serve" in listing
+        finally:
+            # Always clean up, even if assertions fail
+            _mcp_uninstall(global_scope=True)

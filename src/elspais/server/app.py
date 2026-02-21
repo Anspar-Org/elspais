@@ -609,7 +609,8 @@ def create_app(
         _heartbeat["last"] = time.time()
         if not _heartbeat["active"]:
             _heartbeat["active"] = True
-            print("[heartbeat] Browser connected — auto-shutdown enabled.", file=sys.stderr)
+            if app.config.get("ELSPAIS_DEBUG"):
+                print("[heartbeat] Browser connected — auto-shutdown enabled.", file=sys.stderr)
             _start_heartbeat_monitor()
         return jsonify({"ok": True})
 
@@ -624,18 +625,20 @@ def create_app(
                 time.sleep(5)
                 elapsed = time.time() - _heartbeat["last"]
                 if elapsed > _HEARTBEAT_TIMEOUT:
-                    print(
-                        f"\n[heartbeat] No browser ping for {int(elapsed)}s "
-                        f"(timeout: {_HEARTBEAT_TIMEOUT}s) — shutting down.",
-                        file=sys.stderr,
-                    )
+                    if app.config.get("ELSPAIS_DEBUG"):
+                        print(
+                            f"\n[heartbeat] No browser ping for {int(elapsed)}s "
+                            f"(timeout: {_HEARTBEAT_TIMEOUT}s) — shutting down.",
+                            file=sys.stderr,
+                        )
                     os._exit(0)
                 elif elapsed > _HEARTBEAT_TIMEOUT / 2:
-                    print(
-                        f"[heartbeat] No browser ping for {int(elapsed)}s "
-                        f"(shutdown in {_HEARTBEAT_TIMEOUT - int(elapsed)}s)",
-                        file=sys.stderr,
-                    )
+                    if app.config.get("ELSPAIS_DEBUG"):
+                        print(
+                            f"[heartbeat] No browser ping for {int(elapsed)}s "
+                            f"(shutdown in {_HEARTBEAT_TIMEOUT - int(elapsed)}s)",
+                            file=sys.stderr,
+                        )
 
         t = threading.Thread(target=_monitor, daemon=True)
         t.start()

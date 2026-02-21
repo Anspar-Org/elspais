@@ -16,24 +16,30 @@ These options work with all commands:
 Validate requirements format, links, hashes, and hierarchy.
 
   $ elspais validate                   # Check all rules
-  $ elspais validate --fix             # Auto-fix fixable issues
-  $ elspais validate --fix --dry-run   # Preview fixes
   $ elspais validate -j                # Output JSON for tooling
+  $ elspais validate --mode core        # Exclude associated repo specs
+  $ elspais validate --mode associate   # Local specs only, suppress cross-repo warnings
+
+To auto-fix issues, use: `elspais fix`
 
 **Options:**
 
-  `--fix`               Auto-fix hashes and formatting issues
-  `--dry-run`           Preview fixes without modifying (use with --fix)
-  `--skip-rule RULE`    Skip validation rules (repeatable)
   `-j, --json`          Output requirements as JSON
+  `--export`            Export requirements as JSON dict keyed by ID
+  `--mode {core,combined,associate}`  core: only local specs, associate: local specs with cross-repo warnings suppressed, combined: include associated repos
 
-**Skip Rule Patterns:**
+## fix
 
-  `hash.*`        All hash rules
-  `hash.missing`  Hash footer is missing
-  `hash.mismatch` Hash doesn't match content
-  `hierarchy.*`   All hierarchy rules
-  `format.*`      All format rules
+Auto-fix spec file issues (hashes, formatting).
+
+  $ elspais fix                   # Fix all issues
+  $ elspais fix --dry-run         # Preview fixes without applying
+  $ elspais fix REQ-p00001        # Fix hash for a specific requirement
+
+**Options:**
+
+  `REQ_ID`        Specific requirement ID to fix (hash only)
+  `--dry-run`     Show what would be fixed without making changes
 
 ## trace
 
@@ -102,25 +108,6 @@ Generates a lighter document for stakeholders:
 - No OPS or DEV requirements
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
-
-## hash
-
-Manage requirement content hashes.
-
-  $ elspais hash verify             # Check without changes
-  $ elspais hash update             # Update all stale hashes
-  $ elspais hash update REQ-p00001  # Update specific requirement
-  $ elspais hash update --dry-run   # Preview changes
-
-**Subcommands:**
-
-  `verify`            Verify hashes without modifying files
-  `update [REQ_ID]`   Update hashes (optionally for one requirement)
-
-**Options for update:**
-
-  `--dry-run`   Show changes without applying
-  `--json`      Output results as JSON for tooling
 
 ## analyze
 

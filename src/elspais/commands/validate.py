@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from elspais.graph import NodeKind
 
 
-def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+def compute_hash_for_node(node, hash_mode: str) -> str | None:
     """Compute the content hash for a requirement node.
 
     Supports two modes (per spec/requirements-spec.md Hash Definition):
@@ -72,7 +72,7 @@ def run(args: argparse.Namespace) -> int:
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    scan_sponsors = mode != "core"
+    scan_sponsors = mode == "combined"
 
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
@@ -113,27 +113,38 @@ def run(args: argparse.Namespace) -> int:
     warnings = []
     fixable = []  # Issues that can be auto-fixed
 
+    # Implements: REQ-p00005-A
+    # In associate mode, suppress orphan warnings for requirements whose
+    # parent is in the (deliberately unloaded) core repo.
+    if mode == "associate":
+        has_external_parent = {br.source_id for br in graph.broken_references()}
+    else:
+        has_external_parent = set()
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         # Implements: REQ-p00002-B
         # Check for orphan requirements (no parents except roots)
         if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
-            warnings.append(
-                {
-                    "rule": "hierarchy.orphan",
-                    "id": node.id,
-                    "message": f"Requirement {node.id} has no parent (orphan)",
-                }
-            )
+            if node.id in has_external_parent:
+                pass  # Cross-repo parent — expected in associate mode
+            else:
+                warnings.append(
+                    {
+                        "rule": "hierarchy.orphan",
+                        "id": node.id,
+                        "message": f"Requirement {node.id} has no parent (orphan)",
+                    }
+                )
 
         # Implements: REQ-p00002-C
         # Check for hash presence and correctness
         hash_mode = getattr(graph, "hash_mode", "full-text")
-        computed_hash = _compute_hash_for_node(node, hash_mode)
+        computed_hash = compute_hash_for_node(node, hash_mode)
         stored_hash = node.hash
 
         if computed_hash:
             if not stored_hash:
-                # Missing hash - fixable
+                # Missing hash - integrity failure, fixable
                 issue = {
                     "rule": "hash.missing",
                     "id": node.id,
@@ -143,11 +154,11 @@ def run(args: argparse.Namespace) -> int:
                     "computed_hash": computed_hash,
                     "file": str(repo_root / node.source.path) if node.source else None,
                 }
-                warnings.append(issue)
+                errors.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
             elif stored_hash != computed_hash:
-                # Hash mismatch - fixable
+                # Hash mismatch - integrity failure, fixable
                 issue = {
                     "rule": "hash.mismatch",
                     "id": node.id,
@@ -158,7 +169,7 @@ def run(args: argparse.Namespace) -> int:
                     "computed_hash": computed_hash,
                     "file": str(repo_root / node.source.path) if node.source else None,
                 }
-                warnings.append(issue)
+                errors.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
         elif not stored_hash:
@@ -279,6 +290,13 @@ def run(args: argparse.Namespace) -> int:
             )
         elif unfixed_warnings:
             print(f"\n{len(unfixed_warnings)} warnings", file=sys.stderr)
+
+        # Hint about fix command when fixable issues exist and not in fix mode
+        if fixable and not fix_mode:
+            print(
+                f"\nRun 'elspais fix' to auto-fix {len(fixable)} issue(s).",
+                file=sys.stderr,
+            )
 
     return 1 if errors else 0
 

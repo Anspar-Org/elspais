@@ -64,7 +64,7 @@ Addresses: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 ## Steps
 
 1. Janet receives access to the project repository at the tagged release commit.
-2. She runs `elspais hash verify` to confirm all content hashes match their requirement bodies. No tampering or undocumented changes are detected.
+2. She runs `elspais validate` to confirm all content hashes match their requirement bodies. No tampering or undocumented changes are detected.
 3. She runs `elspais analyze orphans` to identify any requirements without valid parent links. The tool reports zero orphans.
 4. She runs `elspais validate -v` to perform a comprehensive validation. All format, hierarchy, and traceability checks pass.
 5. She generates a complete traceability matrix with `elspais trace --format csv -o audit-trace.csv` for inclusion in the validation package.
@@ -91,7 +91,7 @@ Addresses: REQ-p00003, REQ-p00004
 
 1. Janet runs `elspais changed --base-branch v2.0 --json` to get a machine-readable list of all requirement changes since the last release.
 2. The output shows three modified requirements and one new requirement.
-3. She runs `elspais hash verify` and identifies that REQ-p00008 has a hash mismatch, confirming its content changed.
+3. She runs `elspais validate` and identifies that REQ-p00008 has a hash mismatch, confirming its content changed.
 4. She uses git diff to review the exact changes to REQ-p00008's assertions: one assertion was strengthened with a more specific threshold.
 5. She checks the hierarchy with `elspais analyze hierarchy` to identify all DEV requirements that implement REQ-p00008.
 6. She verifies that the downstream DEV requirements were updated to reflect the tighter threshold.

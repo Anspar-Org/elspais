@@ -29,7 +29,7 @@ B. The system SHALL <do another thing>.
 ---
 Level codes: p = PRD (Product), o = OPS (Operations), d = DEV (Development)
 Implements: Use "-" for top-level requirements, or REQ-pXXXXX for children
-Hash: Run `elspais hash update` to compute automatically
+Hash: Run `elspais fix` to compute automatically
 """
 
 REQUIREMENT_TEMPLATE_PRD = REQUIREMENT_TEMPLATE.format(
@@ -183,7 +183,7 @@ A. The system SHALL <do something>.
 
 1. **Assertions** - Use SHALL for required behavior
 2. **Implements** - Children reference parents (dev -> ops -> prd)
-3. **Hash** - Auto-computed with `elspais hash update`
+3. **Hash** - Auto-computed with `elspais fix`
 4. **Sequential labels** - A, B, C... don't skip letters
 
 Run `elspais validate` to check format compliance.

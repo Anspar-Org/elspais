@@ -175,13 +175,15 @@ class TestValidateJsonStillWorks:
 
         result = run(args)
 
-        assert result == 0
+        # Fixture has stale hash → hash.mismatch is an error
+        assert result == 1
         captured = capsys.readouterr()
         data = json.loads(captured.out)
 
         # Should be validation results format (not a dict keyed by ID)
         assert isinstance(data, dict)
         assert "valid" in data
+        assert data["valid"] is False
         assert "errors" in data
         assert "warnings" in data
         assert "requirements_count" in data

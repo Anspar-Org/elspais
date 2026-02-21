@@ -1,14 +1,13 @@
 # Validates REQ-p00001-C, REQ-p00004-A
-"""Tests for elspais hash update command.
+"""Tests for elspais fix command (hash update functionality).
 
 Tests REQ-p00001-C: detect changes to requirements using content hashing.
 Tests REQ-p00004-A: compute and verify content hashes for change detection.
 
-The hash update command updates requirement hashes in spec files:
-- elspais hash update: Update all stale hashes
-- elspais hash update REQ-xxx: Update specific requirement
+The fix command updates requirement hashes in spec files:
+- elspais fix: Fix all stale hashes (delegates to validate --fix)
+- elspais fix REQ-xxx: Fix specific requirement hash
 - --dry-run: Show changes without applying
-- --json: Machine-readable output
 """
 
 import os
@@ -291,12 +290,12 @@ A. The system SHALL do something.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: _update_hashes command implementation
+# Test: fix command implementation
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestUpdateHashesCommand:
-    """Tests for the hash update command.
+    """Tests for the fix command.
 
     Validates REQ-p00001-C: detect changes to requirements using content hashing.
     """
@@ -305,15 +304,17 @@ class TestUpdateHashesCommand:
         """--dry-run shows what would be changed but doesn't modify files."""
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
-            hash_action="update",
+            req_id=None,
+            dry_run=True,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            dry_run=True,
-            req_id=None,
-            json_output=False,
+            canonical_root=None,
+            quiet=False,
+            verbose=False,
+            mode="combined",
         )
 
         result = run(args)
@@ -334,15 +335,17 @@ class TestUpdateHashesCommand:
         """Update all stale hashes in spec files."""
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
-            hash_action="update",
+            req_id=None,
+            dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            dry_run=False,
-            req_id=None,
-            json_output=False,
+            canonical_root=None,
+            quiet=False,
+            verbose=False,
+            mode="combined",
         )
 
         result = run(args)
@@ -360,15 +363,14 @@ class TestUpdateHashesCommand:
         """Update hash for a specific requirement only."""
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
-            hash_action="update",
+            req_id="REQ-p00001",
+            dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            dry_run=False,
-            req_id="REQ-p00001",
-            json_output=False,
+            canonical_root=None,
         )
 
         result = run(args)
@@ -382,30 +384,39 @@ class TestUpdateHashesCommand:
         assert "00000000" in content  # REQ-p00002 hash NOT updated
 
     def test_REQ_p00001_C_verify_after_update_passes(self, git_repo_with_stale_hash):
-        """After update, hash verify should pass."""
+        """After fix, validate should pass."""
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
+        from elspais.commands.validate import run as validate_run
 
-        # First update
-        update_args = argparse.Namespace(
-            hash_action="update",
-            spec_dir=git_repo_with_stale_hash / "spec",
-            config=git_repo_with_stale_hash / ".elspais.toml",
-            dry_run=False,
+        # First fix all hashes
+        fix_args = argparse.Namespace(
             req_id=None,
-            json_output=False,
-        )
-        run(update_args)
-
-        # Then verify - should pass (return 0)
-        verify_args = argparse.Namespace(
-            hash_action="verify",
+            dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
+            canonical_root=None,
             quiet=False,
+            verbose=False,
+            mode="combined",
         )
-        result = run(verify_args)
+        run(fix_args)
+
+        # Then validate - should pass (return 0)
+        verify_args = argparse.Namespace(
+            spec_dir=git_repo_with_stale_hash / "spec",
+            config=git_repo_with_stale_hash / ".elspais.toml",
+            fix=False,
+            dry_run=False,
+            skip_rule=None,
+            json=False,
+            quiet=False,
+            export=False,
+            mode="combined",
+            canonical_root=None,
+        )
+        result = validate_run(verify_args)
 
         assert result == 0
 
@@ -509,18 +520,20 @@ A. The system SHALL do something.
             check=True,
         )
 
-        # Run hash update
+        # Run fix command
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
-            hash_action="update",
+            req_id=None,
+            dry_run=False,
             spec_dir=spec_dir,
             config=config,
-            dry_run=False,
-            req_id=None,
-            json_output=False,
+            canonical_root=None,
+            quiet=False,
+            verbose=False,
+            mode="combined",
         )
         run(args)
 
@@ -626,18 +639,20 @@ A. The system SHALL do something.
             check=True,
         )
 
-        # Run hash update to get correct hash for v1
+        # Run fix command to get correct hash for v1
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
-            hash_action="update",
+            req_id=None,
+            dry_run=False,
             spec_dir=spec_dir,
             config=config,
-            dry_run=False,
-            req_id=None,
-            json_output=False,
+            canonical_root=None,
+            quiet=False,
+            verbose=False,
+            mode="combined",
         )
         run(args)
 
@@ -657,7 +672,7 @@ A. The system SHALL do something.
 """
         )
 
-        # Run hash update again
+        # Run fix command again
         run(args)
 
         # Hash should have CHANGED because intro text changed
@@ -669,33 +684,39 @@ A. The system SHALL do something.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: Verify hint and warning output
+# Test: Validate hint output
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestHashCommandOutput:
-    """Tests for hash command user-facing output messages.
+    """Tests for validate command hint about fix command.
 
     Validates REQ-p00001-C: detect changes to requirements using content hashing.
     """
 
     def test_REQ_p00001_C_verify_shows_run_update_hint(self, git_repo_with_stale_hash, capsys):
-        """hash verify shows 'run hash update' hint when mismatches found."""
+        """validate shows 'elspais fix' hint when mismatches found."""
         import argparse
 
-        from elspais.commands.hash_cmd import run
+        from elspais.commands.validate import run
 
         args = argparse.Namespace(
-            hash_action="verify",
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
+            fix=False,
+            dry_run=False,
+            skip_rule=None,
+            json=False,
             quiet=False,
+            export=False,
+            mode="combined",
+            canonical_root=None,
         )
 
         result = run(args)
 
-        # Should fail (mismatches exist)
+        # Hash mismatches are integrity errors
         assert result == 1
 
         captured = capsys.readouterr()
-        assert "hash update" in captured.err.lower() or "hash update" in captured.out.lower()
+        assert "elspais fix" in captured.err.lower() or "elspais fix" in captured.out.lower()

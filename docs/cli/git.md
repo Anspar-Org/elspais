@@ -48,13 +48,12 @@ The interactive trace view (`elspais trace --view`) shows:
 #!/bin/sh
 # .git/hooks/pre-commit
 elspais validate || exit 1
-elspais hash verify || echo "Warning: stale hashes"
 ```
 
 ## Workflow
 
 1. Edit requirements
 2. $ elspais validate  # Check format
-3. $ elspais hash update  # Update hashes
+3. $ elspais fix  # Fix hashes and formatting
 4. $ elspais changed  # Review what changed
 5. Commit with message referencing requirement IDs

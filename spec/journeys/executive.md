@@ -64,7 +64,7 @@ Addresses: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00006
 ## Steps
 
 1. Priya asks the DevOps engineer to run the full validation suite: `elspais validate -v` on the tagged release.
-2. She asks the validation consultant to independently verify hash integrity with `elspais hash verify`.
+2. She asks the validation consultant to independently verify hash integrity with `elspais validate`.
 3. The team generates a complete traceability matrix in multiple formats: HTML for interactive review and CSV for the inspector's spreadsheet.
 4. They generate the coverage report showing test-to-requirement mapping with pass/fail status.
 5. The validation consultant confirms: zero orphaned requirements, all hashes match, all hierarchy links valid.

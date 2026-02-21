@@ -10,8 +10,8 @@ elspais provides hash-based verification of requirement content, but lacks the h
 
 | Command | Purpose |
 | --- | --- |
-| `elspais hash verify` | Check if hashes match current content |
-| `elspais hash update` | Update hashes in spec files |
+| `elspais validate` | Check if hashes match current content |
+| `elspais fix` | Fix hashes and formatting in spec files |
 | `elspais changed` | Show git-level changes to spec files |
 | `elspais trace` | Generate traceability matrix |
 | `elspais analyze hierarchy` | Show requirement hierarchy |
@@ -24,7 +24,7 @@ elspais provides hash-based verification of requirement content, but lacks the h
 
 **Current workaround**: External script `detect-changes.py` that:
 - Reads hashes from INDEX.md
-- Computes current hashes using `elspais hash verify`
+- Computes current hashes using `elspais validate`
 - Compares and reports differences
 
 **Proposed elspais command**:
@@ -103,9 +103,9 @@ elspais verify coverage             # Report implementation coverage
 
 ```bash
 # Manual process - no tracking
-elspais hash verify   # See which hashes changed
+elspais validate      # See which hashes changed
 # ... manually remember what needs verification ...
-elspais hash update   # Update hashes when done
+elspais fix           # Fix hashes when done
 ```
 
 ### With external scripts (current workaround)

@@ -30,7 +30,7 @@ The executive summary for auditors presents elspais as a compliance-oriented req
 - SHA-256 hashing implemented in `src/elspais/core/hasher.py`
 - Hash verification in validation pipeline (`validate_hashes` in `commands/validate.py`)
 - Hash mismatch detection triggers validation errors
-- `elspais hash update` command for recomputing hashes after legitimate edits
+- `elspais fix` command for recomputing hashes after legitimate edits
 
 **Implementation**: Robust. The 8-character SHA-256 hash is calculated from requirement body content (lines between header and footer), and validation fails when hashes don't match. This provides tamper detection, though "tamper-evident" might overstate the security guarantee (8 chars = 32 bits, not cryptographically secure against determined attackers).
 

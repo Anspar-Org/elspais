@@ -291,7 +291,7 @@ spec = "requirements"
         captured = capsys.readouterr()
         assert "Next steps:" in captured.out
         assert "elspais validate" in captured.out
-        assert "elspais hash update" in captured.out
+        assert "elspais fix" in captured.out
 
 
 class TestInitCLIIntegration:

@@ -10,7 +10,7 @@ __all__ = [
     "config_cmd",
     "edit",
     "example_cmd",
-    "hash_cmd",
+    "fix_cmd",
     "index",
     "init",
     "install_cmd",
