@@ -88,19 +88,28 @@ class HealthReport:
 
 
 # =============================================================================
-# Config Checks (delegated to doctor module)
+# Config Checks (delegated to doctor module, lazy import to avoid circular dep)
 # =============================================================================
 
-from elspais.commands.doctor import (  # noqa: E402, I001
-    check_config_exists,  # noqa: F401
-    check_config_hierarchy_rules,  # noqa: F401
-    check_config_paths_exist,  # noqa: F401
-    check_config_pattern_tokens,  # noqa: F401
-    check_config_project_type,  # noqa: F401
-    check_config_required_fields,  # noqa: F401
-    check_config_syntax,  # noqa: F401
-    run_config_checks,
-)
+_DOCTOR_NAMES = {
+    "check_config_exists",
+    "check_config_hierarchy_rules",
+    "check_config_paths_exist",
+    "check_config_pattern_tokens",
+    "check_config_project_type",
+    "check_config_required_fields",
+    "check_config_syntax",
+    "run_config_checks",
+}
+
+
+def __getattr__(name: str):  # noqa: N807
+    """Lazy import of config check functions from doctor module."""
+    if name in _DOCTOR_NAMES:
+        from elspais.commands import doctor  # noqa: E402
+
+        return getattr(doctor, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # =============================================================================
@@ -774,9 +783,11 @@ def run(args: argparse.Namespace) -> int:
     config = None
     if run_config:
         try:
+            from elspais.commands.doctor import run_config_checks as _run_config_checks
+
             config_dict = get_config(config_path, start_path=start_path)
             config = ConfigLoader.from_dict(config_dict)
-            for check in run_config_checks(config_path, config, start_path):
+            for check in _run_config_checks(config_path, config, start_path):
                 report.add(check)
         except Exception as e:
             report.add(

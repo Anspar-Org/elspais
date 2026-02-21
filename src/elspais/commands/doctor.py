@@ -322,3 +322,213 @@ def run_config_checks(
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
     ]
+
+
+# =============================================================================
+# Environment Checks
+# =============================================================================
+
+
+def check_worktree_status(git_root: Path | None, canonical_root: Path | None) -> HealthCheck:
+    """Detect if running in a git worktree."""
+    if git_root is None:
+        return HealthCheck(
+            name="worktree.status",
+            passed=True,
+            message="Not in a git repository",
+            category="environment",
+            severity="info",
+        )
+
+    if canonical_root and canonical_root != git_root:
+        return HealthCheck(
+            name="worktree.status",
+            passed=True,
+            message=f"Running in a git worktree. Main repository: {canonical_root}",
+            category="environment",
+            severity="info",
+            details={"git_root": str(git_root), "canonical_root": str(canonical_root)},
+        )
+
+    return HealthCheck(
+        name="worktree.status",
+        passed=True,
+        message="Running in the main repository (not a worktree)",
+        category="environment",
+        severity="info",
+    )
+
+
+def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCheck:
+    """Check that each configured associate path exists on disk."""
+    associate_paths = config.get("associates", {}).get("paths", [])
+
+    if not associate_paths:
+        return HealthCheck(
+            name="associate.paths_resolvable",
+            passed=True,
+            message="No associated projects configured",
+            category="environment",
+            severity="info",
+        )
+
+    missing = []
+    found = []
+    for path_str in associate_paths:
+        p = Path(path_str)
+        if not p.is_absolute() and canonical_root:
+            p = canonical_root / p
+        if p.exists():
+            found.append(str(path_str))
+        else:
+            missing.append(f"{path_str} (expected at {p})")
+
+    if missing:
+        return HealthCheck(
+            name="associate.paths_resolvable",
+            passed=False,
+            message=f"Associated project paths not found: {'; '.join(missing)}",
+            category="environment",
+            severity="warning",
+            details={"missing": missing, "found": found},
+        )
+
+    return HealthCheck(
+        name="associate.paths_resolvable",
+        passed=True,
+        message=f"All {len(found)} associated project paths exist",
+        category="environment",
+        details={"found": found},
+    )
+
+
+def check_associate_configs(config: dict, canonical_root: Path | None) -> HealthCheck:
+    """Check that each discovered associate has valid configuration."""
+    from elspais.associates import discover_associate_from_path
+
+    associate_paths = config.get("associates", {}).get("paths", [])
+
+    if not associate_paths:
+        return HealthCheck(
+            name="associate.configs_valid",
+            passed=True,
+            message="No associated projects to check",
+            category="environment",
+            severity="info",
+        )
+
+    invalid = []
+    valid = []
+    for path_str in associate_paths:
+        p = Path(path_str)
+        if not p.is_absolute() and canonical_root:
+            p = canonical_root / p
+        if not p.exists():
+            continue  # Already reported by check_associate_paths
+        result = discover_associate_from_path(p)
+        if isinstance(result, str):
+            invalid.append(f"{path_str}: {result}")
+        else:
+            valid.append(f"{path_str} ({result.prefix})")
+
+    if invalid:
+        return HealthCheck(
+            name="associate.configs_valid",
+            passed=False,
+            message=f"Associated project configuration issues: {'; '.join(invalid)}",
+            category="environment",
+            severity="warning",
+            details={"invalid": invalid, "valid": valid},
+        )
+
+    return HealthCheck(
+        name="associate.configs_valid",
+        passed=True,
+        message=f"All {len(valid)} associated projects have valid configuration",
+        category="environment",
+        details={"valid": valid},
+    )
+
+
+def check_local_toml_exists(start_path: Path) -> HealthCheck:
+    """Check if local config override file exists."""
+    local_path = start_path / ".elspais.local.toml"
+
+    if local_path.exists():
+        return HealthCheck(
+            name="local_toml.exists",
+            passed=True,
+            message="Local configuration file found",
+            category="environment",
+            details={"path": str(local_path)},
+        )
+
+    return HealthCheck(
+        name="local_toml.exists",
+        passed=True,
+        message=(
+            "No .elspais.local.toml found. "
+            "Create one for developer-specific settings (like associate paths)."
+        ),
+        category="environment",
+        severity="info",
+    )
+
+
+def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthCheck:
+    """Warn if cross-repo paths are in the committed config file."""
+    if not config_path or not config_path.exists():
+        return HealthCheck(
+            name="cross_repo.in_committed",
+            passed=True,
+            message="No committed configuration file to check",
+            category="environment",
+            severity="info",
+        )
+
+    try:
+        content = config_path.read_text(encoding="utf-8")
+        from elspais.config import parse_toml
+
+        data = parse_toml(content)
+    except Exception:
+        return HealthCheck(
+            name="cross_repo.in_committed",
+            passed=True,
+            message="Could not parse configuration file (reported by config.syntax check)",
+            category="environment",
+            severity="info",
+        )
+
+    cross_repo_paths = []
+    spec_dirs = data.get("spec", {}).get("directories", [])
+    if isinstance(spec_dirs, list):
+        for d in spec_dirs:
+            if ".." in str(d):
+                cross_repo_paths.append(f"spec.directories: {d}")
+
+    assoc_paths = data.get("associates", {}).get("paths", [])
+    if isinstance(assoc_paths, list):
+        for p in assoc_paths:
+            if ".." in str(p):
+                cross_repo_paths.append(f"associates.paths: {p}")
+
+    if cross_repo_paths:
+        return HealthCheck(
+            name="cross_repo.in_committed",
+            passed=False,
+            message=(
+                f"Cross-project paths found in shared config ({', '.join(cross_repo_paths)}). "
+                "Move these to .elspais.local.toml so they don't affect other developers."
+            ),
+            category="environment",
+            severity="warning",
+            details={"paths": cross_repo_paths},
+        )
+
+    return HealthCheck(
+        name="cross_repo.in_committed",
+        passed=True,
+        message="No cross-project paths in shared configuration",
+        category="environment",
+    )
