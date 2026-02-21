@@ -66,7 +66,7 @@ class TestValidateCommand:
         assert result.returncode == 0
 
     def test_REQ_o00066_C_index_validate(self):
-        result = _run_elspais("index", "--mode", "core", "validate")
+        result = _run_elspais("index", "validate", "--mode", "core")
         assert result.returncode == 0
 
 

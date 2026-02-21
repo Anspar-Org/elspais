@@ -295,26 +295,27 @@ Examples:
     )
 
     # index command
+    _index_mode_kwargs = {
+        "choices": ["core", "combined"],
+        "default": "combined",
+        "help": "core: only local specs, combined: include associated repos (default)",
+    }
     index_parser = subparsers.add_parser(
         "index",
         help="Manage INDEX.md file (validate, regenerate)",
     )
-    index_parser.add_argument(
-        "--mode",
-        choices=["core", "combined"],
-        default="combined",
-        help="core: only local specs, combined: include associated repos (default)",
-    )
     index_subparsers = index_parser.add_subparsers(dest="index_action")
 
-    index_subparsers.add_parser(
+    index_validate_parser = index_subparsers.add_parser(
         "validate",
         help="Validate INDEX.md accuracy",
     )
-    index_subparsers.add_parser(
+    index_validate_parser.add_argument("--mode", **_index_mode_kwargs)
+    index_regenerate_parser = index_subparsers.add_parser(
         "regenerate",
         help="Regenerate INDEX.md from scratch",
     )
+    index_regenerate_parser.add_argument("--mode", **_index_mode_kwargs)
 
     # analyze command
     analyze_parser = subparsers.add_parser(

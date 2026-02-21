@@ -161,7 +161,7 @@ jobs:
         run: elspais validate --mode core
 
       - name: Validate INDEX.md accuracy
-        run: elspais index --mode core validate
+        run: elspais index validate --mode core
 
       - name: Generate traceability matrix
         run: |
