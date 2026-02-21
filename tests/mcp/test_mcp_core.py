@@ -501,6 +501,509 @@ prefix = "TST"
         assert result["config_summary"]["prefix"] == "TST"
         assert result["config_summary"]["project_type"] == "core"
 
+    # ── Detail profile tests ────────────────────────────────────────────────
+
+    def test_REQ_o00061_A_default_includes_version(self, tmp_path):
+        """REQ-o00061-A: Default response includes elspais_version."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "elspais_version" in result
+        assert isinstance(result["elspais_version"], str)
+        assert result["elspais_version"] != ""
+
+    def test_REQ_o00061_A_default_includes_available_details(self, tmp_path):
+        """REQ-o00061-A: Default response has available_details with all 8 profiles."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "available_details" in result
+        details = result["available_details"]
+        expected_profiles = {
+            "default",
+            "testing",
+            "code-refs",
+            "coverage",
+            "retrofit",
+            "manager",
+            "worktree",
+            "all",
+        }
+        assert set(details.keys()) == expected_profiles
+        # Each profile should have a non-empty description string
+        for name, desc in details.items():
+            assert isinstance(desc, str), f"Profile '{name}' description should be a string"
+            assert len(desc) > 0, f"Profile '{name}' description should not be empty"
+
+    def test_REQ_o00061_A_default_includes_local_config(self, tmp_path):
+        """REQ-o00061-A: config_summary has local_config key (False when no local file)."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        assert "config_summary" in result
+        assert "local_config" in result["config_summary"]
+        assert result["config_summary"]["local_config"] is False
+
+    def test_REQ_o00061_A_detail_echoed_in_response(self, tmp_path):
+        """REQ-o00061-A: Calling with detail='testing' echoes detail in response."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="testing")
+
+        assert result["detail"] == "testing"
+
+    def test_REQ_o00061_A_unknown_detail_returns_warning(self, tmp_path):
+        """REQ-o00061-A: Unknown detail returns base response plus warning key."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path, detail="nonexistent-profile")
+
+        assert "warning" in result
+        assert "nonexistent-profile" in result["warning"]
+        # Should still have base keys
+        assert "repo_path" in result
+        assert "project_name" in result
+        assert "config_summary" in result
+        assert "available_details" in result
+
+    def test_REQ_o00061_A_testing_profile_includes_sections(self, tmp_path):
+        """REQ-o00061-A: Testing profile includes id_patterns, assertion_format, testing."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="testing")
+
+        assert "id_patterns" in result
+        assert "assertion_format" in result
+        assert "testing" in result
+
+    def test_REQ_o00061_A_testing_profile_id_patterns_content(self, tmp_path):
+        """REQ-o00061-A: id_patterns has prefix, template, types, examples."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="testing")
+
+        id_patterns = result["id_patterns"]
+        assert id_patterns["prefix"] == "TST"
+        assert id_patterns["template"] == "{prefix}-{type}{id}"
+        assert "product" in id_patterns["types"]
+        assert "development" in id_patterns["types"]
+        assert "product" in id_patterns["examples"]
+        assert id_patterns["examples"]["product"] == "TST-p00001"
+
+    def test_REQ_o00061_A_code_refs_profile_includes_sections(self, tmp_path):
+        """REQ-o00061-A: code-refs profile has id_patterns, code_references."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="code-refs")
+
+        assert "id_patterns" in result
+        assert "code_references" in result
+        assert "assertion_format" in result
+
+    def test_REQ_o00061_A_code_refs_profile_content(self, tmp_path):
+        """REQ-o00061-A: code_references has expected keys."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="code-refs")
+
+        code_refs = result["code_references"]
+        assert "code_directories" in code_refs
+        assert "comment_styles" in code_refs
+        assert "implements_keywords" in code_refs
+        assert "refines_keywords" in code_refs
+        assert "separators" in code_refs
+        assert code_refs["code_directories"] == ["src"]
+
+    def test_REQ_o00061_A_coverage_profile_includes_sections(self, sample_graph, tmp_path):
+        """REQ-o00061-A: Coverage profile has coverage_stats and associates."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, graph=sample_graph, detail="coverage")
+
+        assert "coverage_stats" in result
+        assert "associates" in result
+        assert result["detail"] == "coverage"
+
+    def test_REQ_o00061_A_manager_profile_includes_sections(self, sample_graph, tmp_path):
+        """REQ-o00061-A: Manager profile has coverage_stats, health, change_metrics."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, graph=sample_graph, detail="manager")
+
+        assert "coverage_stats" in result
+        assert "health" in result
+        assert "change_metrics" in result
+        assert result["detail"] == "manager"
+        # Health should have expected keys
+        health = result["health"]
+        assert "has_orphans" in health
+        assert "has_broken_references" in health
+        assert "orphan_count" in health
+        assert "broken_reference_count" in health
+
+    def test_REQ_o00061_A_retrofit_profile_includes_all_config(self, tmp_path):
+        """REQ-o00061-A: Retrofit profile has all config sections."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="retrofit")
+
+        assert "id_patterns" in result
+        assert "assertion_format" in result
+        assert "hierarchy_rules" in result
+        assert "code_references" in result
+        assert "testing" in result
+        assert "associates" in result
+        assert result["detail"] == "retrofit"
+
+    def test_REQ_o00061_A_worktree_profile_includes_associates_paths(self, tmp_path):
+        """REQ-o00061-A: Worktree profile has associates section."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, detail="worktree")
+
+        assert "id_patterns" in result
+        assert "hierarchy_rules" in result
+        assert "associates" in result
+        assert result["detail"] == "worktree"
+
+    def test_REQ_o00061_A_all_profile_includes_everything(self, sample_graph, tmp_path):
+        """REQ-o00061-A: All profile has every section from every profile."""
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        config_content = """
+[project]
+name = "TestProject"
+
+[patterns]
+prefix = "TST"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types]
+product = { id = "p", level = 1 }
+development = { id = "d", level = 3 }
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[directories]
+code = ["src"]
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+reference_keyword = "Validates"
+"""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(config_content)
+        config = get_config(start_path=tmp_path, quiet=True)
+
+        result = _get_workspace_info(tmp_path, config=config, graph=sample_graph, detail="all")
+
+        # Should include sections from every profile
+        assert "id_patterns" in result
+        assert "assertion_format" in result
+        assert "hierarchy_rules" in result
+        assert "code_references" in result
+        assert "testing" in result
+        assert "coverage_stats" in result
+        assert "health" in result
+        assert "change_metrics" in result
+        assert "associates" in result
+        assert result["detail"] == "all"
+
+    def test_REQ_o00061_A_backward_compat_no_args(self, tmp_path):
+        """REQ-o00061-A: Calling _get_workspace_info(tmp_path) with no other args works."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        result = _get_workspace_info(tmp_path)
+
+        # Should return base info without errors
+        assert "repo_path" in result
+        assert "project_name" in result
+        assert "elspais_version" in result
+        assert "config_file" in result
+        assert "detail" in result
+        assert result["detail"] == "default"
+        assert "available_details" in result
+        assert "config_summary" in result
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: get_project_summary() - REQ-o00061-B

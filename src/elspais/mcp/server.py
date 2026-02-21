@@ -59,6 +59,7 @@ from elspais.graph.annotators import (
     count_by_coverage,
     count_by_git_status,
     count_by_level,
+    count_with_code_refs,
 )
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
@@ -995,43 +996,436 @@ def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
 # Workspace Context Tools (REQ-o00061)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Detail profile descriptions for discoverability
+_WORKSPACE_DETAIL_PROFILES: dict[str, str] = {
+    "default": "Basic project info and version",
+    "testing": "ID patterns, assertion format, test configuration",
+    "code-refs": "Code directories, comment styles, reference keywords",
+    "coverage": "Coverage stats, level counts, associate list",
+    "retrofit": "Full patterns, hierarchy rules, code + test config",
+    "manager": "Health flags, coverage stats, change metrics",
+    "worktree": "Associate paths, ID patterns, hierarchy rules",
+    "all": "Everything from all profiles combined",
+}
 
-def _get_workspace_info(working_dir: Path) -> dict[str, Any]:
-    """Get workspace information.
+
+def _get_elspais_version() -> str:
+    """Return the installed elspais version string."""
+    try:
+        from elspais import __version__
+
+        return __version__
+    except Exception:
+        return "unknown"
+
+
+def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
+    """Build the base workspace info dict (always returned).
+
+    REQ-o00061-A: Returns repository path, project name, and configuration summary.
+    REQ-o00061-D: Reads configuration from unified config system.
+    """
+    project_name = config.get("project", {}).get("name")
+    if not project_name:
+        project_name = working_dir.name
+
+    config_file = find_config_file(working_dir)
+
+    # Check for local override file
+    local_config_exists = False
+    if config_file:
+        local_path = config_file.parent / ".elspais.local.toml"
+        local_config_exists = local_path.is_file()
+
+    config_summary = {
+        "prefix": config.get("patterns", {}).get("prefix", "REQ"),
+        "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
+        "testing_enabled": config.get("testing", {}).get("enabled", False),
+        "project_type": config.get("project", {}).get("type"),
+        "local_config": local_config_exists,
+    }
+
+    return {
+        "repo_path": str(working_dir),
+        "project_name": project_name,
+        "elspais_version": _get_elspais_version(),
+        "config_file": str(config_file) if config_file else None,
+        "detail": "default",
+        "available_details": dict(_WORKSPACE_DETAIL_PROFILES),
+        "config_summary": config_summary,
+    }
+
+
+# ── Shared profile helpers ──────────────────────────────────────────────────
+
+
+def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
+    """Build ID pattern info from config."""
+    patterns = config.get("patterns", {})
+    prefix = patterns.get("prefix", "REQ")
+    template = patterns.get("id_template", "{prefix}-{type}{id}")
+    id_format = patterns.get("id_format", {})
+    types = patterns.get("types", {})
+
+    # Synthesize example IDs for each type
+    digits = id_format.get("digits", 5)
+    leading_zeros = id_format.get("leading_zeros", True)
+    example_num = "0" * (digits - 1) + "1" if leading_zeros else "1"
+    examples = {}
+    for type_key, type_def in types.items():
+        type_id = type_def.get("id", type_key[0])
+        examples[type_key] = f"{prefix}-{type_id}{example_num}"
+
+    return {
+        "prefix": prefix,
+        "template": template,
+        "id_format": dict(id_format) if id_format else {},
+        "types": {k: dict(v) for k, v in types.items()},
+        "examples": examples,
+    }
+
+
+def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
+    """Build assertion format info from config."""
+    patterns = config.get("patterns", {})
+    assertions = patterns.get("assertions", {})
+    prefix = patterns.get("prefix", "REQ")
+    types = patterns.get("types", {})
+
+    # Pick first type for the example
+    first_type_id = "p"
+    for _key, type_def in types.items():
+        first_type_id = type_def.get("id", "p")
+        break
+
+    digits = patterns.get("id_format", {}).get("digits", 5)
+    example_num = "0" * (digits - 1) + "1"
+
+    return {
+        "label_style": assertions.get("label_style", "uppercase"),
+        "max_count": assertions.get("max_count", 26),
+        "example": f"{prefix}-{first_type_id}{example_num}-A",
+        "multi_assertion_syntax": (
+            f"{prefix}-{first_type_id}{example_num}-A-B-C expands to "
+            f"{prefix}-{first_type_id}{example_num}-A, "
+            f"{prefix}-{first_type_id}{example_num}-B, "
+            f"{prefix}-{first_type_id}{example_num}-C"
+        ),
+    }
+
+
+def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
+    """Build hierarchy rules info from config."""
+    hierarchy = config.get("rules", {}).get("hierarchy", {})
+
+    # Extract allowed_implements if present, otherwise build from type keys
+    allowed = hierarchy.get("allowed_implements", [])
+    if not allowed:
+        # Build from individual type keys (dev, ops, prd)
+        rules = {}
+        for key in ("dev", "ops", "prd"):
+            targets = hierarchy.get(key, [])
+            if targets:
+                rules[key] = targets
+        return {"rules": rules}
+
+    return {"allowed_implements": list(allowed)}
+
+
+def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> dict[str, Any]:
+    """Build coverage statistics from graph."""
+    if graph is None:
+        return {"error": "graph not available"}
+
+    return {
+        "by_coverage": count_by_coverage(graph),
+        "by_level": count_by_level(graph, config=config),
+        "code_reference_coverage": count_with_code_refs(graph),
+    }
+
+
+def _build_associates_info(
+    config: dict[str, Any], working_dir: Path, include_paths: bool = False
+) -> dict[str, Any]:
+    """Build associates info from config. Lazily imports associates module."""
+    try:
+        from elspais.associates import load_associates_config
+
+        associates_cfg = load_associates_config(config, working_dir)
+    except Exception:
+        return {"count": 0, "associates": [], "config_file": None}
+
+    result = []
+    for a in associates_cfg.associates:
+        entry: dict[str, Any] = {
+            "name": a.name,
+            "code": a.code,
+            "enabled": a.enabled,
+        }
+        if include_paths:
+            entry["path"] = a.path
+            entry["local_path"] = a.local_path
+            entry["spec_path"] = a.spec_path
+        result.append(entry)
+
+    return {
+        "count": len(result),
+        "associates": result,
+        "config_file": associates_cfg.config_file or None,
+    }
+
+
+def _build_change_metrics(graph: TraceGraph | None) -> dict[str, Any]:
+    """Build change metrics from graph."""
+    if graph is None:
+        return {"error": "graph not available"}
+
+    annotate_graph_git_state(graph)
+    return count_by_git_status(graph)
+
+
+# ── Profile functions ───────────────────────────────────────────────────────
+
+
+def _workspace_profile_testing(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for writing/updating tests with REQ references."""
+    result = dict(base)
+    result["detail"] = "testing"
+
+    testing_cfg = config.get("testing", {})
+    result["id_patterns"] = _build_id_patterns(config)
+    result["assertion_format"] = _build_assertion_format(config)
+    result["testing"] = {
+        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
+        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
+        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
+        "result_files": testing_cfg.get("result_files", []),
+    }
+
+    return result
+
+
+def _workspace_profile_code_refs(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for adding code references (# Implements: comments)."""
+    result = dict(base)
+    result["detail"] = "code-refs"
+
+    refs_defaults = config.get("references", {}).get("defaults", {})
+    keywords = refs_defaults.get("keywords", {})
+    result["id_patterns"] = _build_id_patterns(config)
+    result["code_references"] = {
+        "code_directories": config.get("directories", {}).get("code", []),
+        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
+        "implements_keywords": keywords.get("implements", ["Implements"]),
+        "refines_keywords": keywords.get("refines", ["Refines"]),
+        "separators": refs_defaults.get("separators", ["-", "_"]),
+    }
+    result["assertion_format"] = _build_assertion_format(config)
+
+    return result
+
+
+def _workspace_profile_coverage(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for sign-off/coverage reporting."""
+    result = dict(base)
+    result["detail"] = "coverage"
+
+    result["coverage_stats"] = _build_coverage_stats(graph, config)
+    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+
+    return result
+
+
+def _workspace_profile_retrofit(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for systematically adding traceability to existing code."""
+    result = dict(base)
+    result["detail"] = "retrofit"
+
+    result["id_patterns"] = _build_id_patterns(config)
+    result["assertion_format"] = _build_assertion_format(config)
+    result["hierarchy_rules"] = _build_hierarchy_rules(config)
+
+    refs_defaults = config.get("references", {}).get("defaults", {})
+    keywords = refs_defaults.get("keywords", {})
+    result["code_references"] = {
+        "code_directories": config.get("directories", {}).get("code", []),
+        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
+        "implements_keywords": keywords.get("implements", ["Implements"]),
+        "refines_keywords": keywords.get("refines", ["Refines"]),
+        "separators": refs_defaults.get("separators", ["-", "_"]),
+    }
+
+    testing_cfg = config.get("testing", {})
+    result["testing"] = {
+        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
+        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
+        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
+        "result_files": testing_cfg.get("result_files", []),
+    }
+
+    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+
+    return result
+
+
+def _workspace_profile_manager(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for manager quick status/health check."""
+    result = dict(base)
+    result["detail"] = "manager"
+
+    result["coverage_stats"] = _build_coverage_stats(graph, config)
+    result["health"] = {
+        "has_orphans": graph.has_orphans() if graph else None,
+        "has_broken_references": graph.has_broken_references() if graph else None,
+        "orphan_count": graph.orphan_count() if graph else None,
+        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+    }
+    result["change_metrics"] = _build_change_metrics(graph)
+
+    return result
+
+
+def _workspace_profile_worktree(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile for bulk changes across repos (renumbering, worktree ops)."""
+    result = dict(base)
+    result["detail"] = "worktree"
+
+    result["id_patterns"] = _build_id_patterns(config)
+    result["hierarchy_rules"] = _build_hierarchy_rules(config)
+    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+    result["config_summary"]["spec_directories"] = config.get("spec", {}).get(
+        "directories", ["spec"]
+    )
+
+    return result
+
+
+def _workspace_profile_all(
+    base: dict[str, Any],
+    working_dir: Path,
+    config: dict[str, Any],
+    graph: TraceGraph | None,
+) -> dict[str, Any]:
+    """Profile returning all available information."""
+    result = dict(base)
+    result["detail"] = "all"
+
+    # ID patterns and assertion format
+    result["id_patterns"] = _build_id_patterns(config)
+    result["assertion_format"] = _build_assertion_format(config)
+    result["hierarchy_rules"] = _build_hierarchy_rules(config)
+
+    # Code references
+    refs_defaults = config.get("references", {}).get("defaults", {})
+    keywords = refs_defaults.get("keywords", {})
+    result["code_references"] = {
+        "code_directories": config.get("directories", {}).get("code", []),
+        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
+        "implements_keywords": keywords.get("implements", ["Implements"]),
+        "refines_keywords": keywords.get("refines", ["Refines"]),
+        "separators": refs_defaults.get("separators", ["-", "_"]),
+    }
+
+    # Testing
+    testing_cfg = config.get("testing", {})
+    result["testing"] = {
+        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
+        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
+        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
+        "result_files": testing_cfg.get("result_files", []),
+    }
+
+    # Coverage and health (graph-dependent)
+    result["coverage_stats"] = _build_coverage_stats(graph, config)
+    result["health"] = {
+        "has_orphans": graph.has_orphans() if graph else None,
+        "has_broken_references": graph.has_broken_references() if graph else None,
+        "orphan_count": graph.orphan_count() if graph else None,
+        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+    }
+    result["change_metrics"] = _build_change_metrics(graph)
+
+    # Associates with full paths
+    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+
+    return result
+
+
+_WORKSPACE_PROFILE_DISPATCH: dict[str, Any] = {
+    "testing": _workspace_profile_testing,
+    "code-refs": _workspace_profile_code_refs,
+    "coverage": _workspace_profile_coverage,
+    "retrofit": _workspace_profile_retrofit,
+    "manager": _workspace_profile_manager,
+    "worktree": _workspace_profile_worktree,
+    "all": _workspace_profile_all,
+}
+
+
+def _get_workspace_info(
+    working_dir: Path,
+    config: dict[str, Any] | None = None,
+    graph: TraceGraph | None = None,
+    detail: str = "default",
+) -> dict[str, Any]:
+    """Get workspace information with use-case-driven detail levels.
 
     REQ-o00061-A: Returns repository path, project name, and configuration summary.
     REQ-o00061-D: Reads configuration from unified config system.
 
     Args:
         working_dir: The repository root directory.
+        config: Optional pre-loaded config dict.
+        graph: Optional TraceGraph for coverage/health profiles.
+        detail: Detail profile to use. See _WORKSPACE_DETAIL_PROFILES.
 
     Returns:
-        Workspace information dict.
+        Workspace information dict with profile-specific sections.
     """
-    config = get_config(start_path=working_dir, quiet=True)
+    if config is None:
+        config = get_config(start_path=working_dir, quiet=True)
 
-    # Get project name from config, fallback to directory name
-    project_name = config.get("project", {}).get("name")
-    if not project_name:
-        project_name = working_dir.name
+    base = _build_base_workspace_info(working_dir, config)
 
-    # Build configuration summary
-    config_summary = {
-        "prefix": config.get("patterns", {}).get("prefix", "REQ"),
-        "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
-        "testing_enabled": config.get("testing", {}).get("enabled", False),
-        "project_type": config.get("project", {}).get("type"),
-    }
+    if detail == "default":
+        return base
 
-    # Check if config file exists
-    config_file = find_config_file(working_dir)
+    profile_fn = _WORKSPACE_PROFILE_DISPATCH.get(detail)
+    if profile_fn is None:
+        base["warning"] = f"Unknown detail '{detail}'. Returning default info."
+        return base
 
-    return {
-        "repo_path": str(working_dir),
-        "project_name": project_name,
-        "config_file": str(config_file) if config_file else None,
-        "config_summary": config_summary,
-    }
+    return profile_fn(base, working_dir, config, graph)
 
 
 def _get_project_summary(
@@ -2888,7 +3282,7 @@ The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
 
-1. `get_workspace_info()` - Understand what project you're working with
+1. `get_workspace_info(detail=...)` - Understand what project you're working with
 2. `get_project_summary()` - Get overview statistics and health metrics
 3. `search(query)` - Find requirements by keyword
 4. `get_requirement(req_id)` - Get full details including assertions
@@ -2920,7 +3314,16 @@ The graph is the single source of truth - all tools read directly from it.
   - Pruned ancestors include superseded_by metadata
 
 ### Workspace Context
-- `get_workspace_info()` - Repo path, project name, configuration
+- `get_workspace_info(detail="default")` - Repo path, project name, version, configuration
+  - detail: use-case profile selecting what information to return
+  - "default": basic info, version, available_details (self-documenting)
+  - "testing": ID patterns, assertion format, test dirs/patterns/keyword
+  - "code-refs": code directories, comment styles, implements/refines keywords
+  - "coverage": coverage stats by level, code ref coverage, associate list
+  - "retrofit": full patterns + hierarchy rules + code refs + test config
+  - "manager": health flags, coverage stats, change metrics
+  - "worktree": associate paths (with local overrides), ID patterns, hierarchy rules
+  - "all": everything from all profiles combined
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
 - `get_changed_requirements()` - Requirements with uncommitted or branch changes
 
@@ -3381,16 +3784,35 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    def get_workspace_info() -> dict[str, Any]:
+    def get_workspace_info(detail: str = "default") -> dict[str, Any]:
         """Get information about the current workspace.
 
-        Returns repository path, project name, and configuration summary.
-        Use this to understand what project you're working with.
+        Returns repository path, project name, configuration summary, and
+        use-case-specific details based on the detail parameter.
+
+        The response always includes 'available_details' listing valid
+        detail values with descriptions, making the API self-documenting.
+
+        Args:
+            detail: Detail profile to return. Values:
+                'default' - basic project info and version
+                'testing' - ID patterns, assertion format, test configuration
+                'code-refs' - code directories, comment styles, reference keywords
+                'coverage' - coverage stats, level counts, associate list
+                'retrofit' - full patterns, hierarchy rules, code + test config
+                'manager' - health flags, coverage stats, change metrics
+                'worktree' - associate paths, ID patterns, hierarchy rules
+                'all' - everything from all profiles combined
 
         Returns:
-            Workspace information including repo path, project name, and config.
+            Workspace information with profile-specific sections.
         """
-        return _get_workspace_info(_state["working_dir"])
+        return _get_workspace_info(
+            _state["working_dir"],
+            config=_state["config"],
+            graph=_state["graph"],
+            detail=detail,
+        )
 
     @mcp.tool()
     def get_project_summary() -> dict[str, Any]:

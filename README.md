@@ -307,11 +307,16 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `validate` | Run validation rules |
-| `parse_requirement` | Parse requirement text |
-| `search` | Search requirements |
-| `get_requirement` | Get requirement details |
-| `analyze` | Analyze hierarchy/orphans/coverage |
+| `get_workspace_info(detail=...)` | Project info with use-case profiles |
+| `get_project_summary()` | Coverage stats, level counts, change metrics |
+| `search()` | Search requirements by keyword |
+| `get_requirement()` | Get requirement details with assertions |
+| `get_hierarchy()` | Navigate parent/child relationships |
+| `discover_requirements()` | Find most-specific matches in a subgraph |
+
+The `get_workspace_info` tool accepts a `detail` parameter for task-specific
+context: `"testing"`, `"code-refs"`, `"coverage"`, `"retrofit"`, `"manager"`,
+`"worktree"`, or `"all"`.
 
 ## CLI Reference
 

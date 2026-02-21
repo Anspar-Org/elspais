@@ -65,6 +65,19 @@ elspais mcp serve --cwd /path/to/project
 
 ## Tool Categories
 
+### Workspace Context
+
+| Tool | Description |
+|------|-------------|
+| `get_workspace_info(detail=...)` | Project info with use-case profiles (see below) |
+| `get_project_summary()` | Coverage stats, level counts, change metrics |
+| `get_changed_requirements()` | Requirements with uncommitted or branch changes |
+
+The `detail` parameter on `get_workspace_info` selects a use-case profile:
+`"default"`, `"testing"`, `"code-refs"`, `"coverage"`, `"retrofit"`,
+`"manager"`, `"worktree"`, or `"all"`. The default response includes an
+`available_details` field describing each profile.
+
 ### Read-Only Tools
 
 These tools query data without modifying files:
