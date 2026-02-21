@@ -287,10 +287,44 @@ def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, 
     return result
 
 
+def _try_parse_env_value(value: str) -> Any:
+    """Parse an environment variable value with type inference.
+
+    Attempts to interpret the string as a richer Python type:
+    - JSON arrays/objects (starts with ``[`` or ``{``)
+    - Booleans (``true``/``false``, case-insensitive)
+    - Falls back to plain string
+
+    Args:
+        value: Raw environment variable string.
+
+    Returns:
+        Parsed Python value (list, dict, bool, or str).
+    """
+    import json
+
+    # JSON array or object
+    if value.startswith("[") or value.startswith("{"):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    # Boolean
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+
+    return value
+
+
 def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     """Apply environment variable overrides.
 
-    Looks for ELSPAIS_* environment variables.
+    Looks for ELSPAIS_* environment variables.  Values are parsed via
+    ``_try_parse_env_value`` so that JSON lists, booleans, and plain
+    strings are all handled correctly.
 
     Args:
         config: Configuration dictionary.
@@ -299,11 +333,12 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
         Configuration with environment overrides applied.
     """
     # Example: ELSPAIS_PATTERNS_PREFIX=MYREQ
+    # Example: ELSPAIS_ASSOCIATES_PATHS='["/path/to/repo"]'
     for key, value in os.environ.items():
         if key.startswith("ELSPAIS_"):
             # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
             config_key = key[8:].lower().replace("_", ".")
-            _set_nested(config, config_key, value)
+            _set_nested(config, config_key, _try_parse_env_value(value))
 
     return config
 
@@ -816,4 +851,5 @@ __all__ = [
     "parse_toml",
     "parse_toml_document",
     "_try_parse_numeric",
+    "_try_parse_env_value",
 ]
