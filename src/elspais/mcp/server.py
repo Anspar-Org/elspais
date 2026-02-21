@@ -485,7 +485,6 @@ def _matches_query(
     field: str,
     regex: bool,
     compiled_pattern: re.Pattern[str] | None,
-    query_lower: str | None,
     parsed: Any = None,
 ) -> bool:
     """Check if a node matches a query against specified fields.
@@ -502,51 +501,33 @@ def _matches_query(
         field: Which field(s) to match: "id", "title", "body", "keywords", or "all".
         regex: Whether to use regex matching.
         compiled_pattern: Pre-compiled regex pattern (required when regex=True).
-        query_lower: Lowercased query string (required when regex=False).
-        parsed: Pre-parsed ParsedQuery (used when regex=False for multi-term).
+        parsed: Pre-parsed ParsedQuery (used when regex=False).
     """
     # Implements: REQ-d00061-B, REQ-d00061-C, REQ-d00061-F, REQ-p00050-D
 
-    # REQ-d00061-F: Delegate to multi-term matcher when not using regex
-    if not regex and parsed is not None:
-        return matches_node(node, parsed, field)
+    if not regex:
+        return matches_node(node, parsed, field) if parsed else False
 
+    # Regex path
     if field in ("id", "all"):
-        if regex:
-            if compiled_pattern.search(node.id):  # type: ignore[union-attr]
-                return True
-        else:
-            if query_lower in node.id.lower():  # type: ignore[operator]
-                return True
+        if compiled_pattern.search(node.id):  # type: ignore[union-attr]
+            return True
 
     if field in ("title", "all"):
         title = node.get_label() or ""
-        if regex:
-            if compiled_pattern.search(title):  # type: ignore[union-attr]
-                return True
-        else:
-            if query_lower in title.lower():  # type: ignore[operator]
-                return True
+        if compiled_pattern.search(title):  # type: ignore[union-attr]
+            return True
 
     if field in ("body", "all"):
         body = node.get_field("body_text", "")
-        if body:
-            if regex:
-                if compiled_pattern.search(body):  # type: ignore[union-attr]
-                    return True
-            else:
-                if query_lower in body.lower():  # type: ignore[operator]
-                    return True
+        if body and compiled_pattern.search(body):  # type: ignore[union-attr]
+            return True
 
     if field in ("keywords", "all"):
         keywords = node.get_field("keywords", [])
         for keyword in keywords:
-            if regex:
-                if compiled_pattern.search(keyword):  # type: ignore[union-attr]
-                    return True
-            else:
-                if query_lower in keyword.lower():  # type: ignore[operator]
-                    return True
+            if compiled_pattern.search(keyword):  # type: ignore[union-attr]
+                return True
 
     return False
 
@@ -569,41 +550,33 @@ def _search(
     REQ-d00061-L: Score and sort by relevance descending.
     REQ-d00061-M: Include score in results.
     """
-    # Compile pattern if regex mode
-    compiled_pattern = None
-    query_lower = None
-    parsed = None
     if regex:
         try:
             compiled_pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             return []
-    else:
-        query_lower = query.lower()
-        parsed = parse_query(query)
-
-    # REQ-d00061-L/M: When using parsed queries, collect with scores
-    if not regex and parsed is not None and not parsed.is_empty:
-        scored: list[tuple[float, dict[str, Any]]] = []
+        results: list[dict[str, Any]] = []
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            s = score_node(node, parsed, field)
-            if s > 0:
-                entry = _serialize_requirement_summary(node)
-                entry["score"] = s
-                scored.append((s, entry))
-        # Sort by score descending, then limit
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [entry for _, entry in scored[:limit]]
+            if _matches_query(node, field, True, compiled_pattern):
+                results.append(_serialize_requirement_summary(node))
+                if len(results) >= limit:
+                    break
+        return results
 
-    # Regex path or empty parsed query: original behavior
-    results: list[dict[str, Any]] = []
+    # Multi-term scored path
+    parsed = parse_query(query)
+    if parsed.is_empty:
+        return []
+
+    scored: list[tuple[float, dict[str, Any]]] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if _matches_query(node, field, regex, compiled_pattern, query_lower, parsed):
-            results.append(_serialize_requirement_summary(node))
-            if len(results) >= limit:
-                break
-
-    return results
+        s = score_node(node, parsed, field)
+        if s > 0:
+            entry = _serialize_requirement_summary(node)
+            entry["score"] = s
+            scored.append((s, entry))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [entry for _, entry in scored[:limit]]
 
 
 def _minimize_requirement_set(
@@ -730,6 +703,62 @@ def _collect_scope_ids(
     return visited
 
 
+def _match_assertions(
+    node: GraphNode,
+    include_assertions: bool,
+    *,
+    parsed: Any = None,
+    compiled_pattern: re.Pattern[str] | None = None,
+    field: str = "all",
+) -> list[dict[str, Any]]:
+    """Check assertion children for matches. Returns matched assertion dicts."""
+    if not include_assertions:
+        return []
+    matched: list[dict[str, Any]] = []
+    for child in node.iter_children():
+        if child.kind != NodeKind.ASSERTION:
+            continue
+        if parsed is not None:
+            if matches_node(child, parsed, field):
+                matched.append(_serialize_assertion(child))
+        elif compiled_pattern is not None:
+            assertion_text = child.get_label() or ""
+            if compiled_pattern.search(assertion_text):
+                matched.append(_serialize_assertion(child))
+    return matched
+
+
+def _scoped_search_regex(
+    graph: TraceGraph,
+    compiled_pattern: re.Pattern[str],
+    scope_ids: set[str],
+    scope_id: str,
+    direction: str,
+    field: str,
+    include_assertions: bool,
+    limit: int,
+) -> dict[str, Any]:
+    """Regex path for scoped search. Kept separate for clarity."""
+    results: list[dict[str, Any]] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.id not in scope_ids:
+            continue
+        matched = _matches_query(node, field, True, compiled_pattern)
+        matched_assertions = _match_assertions(
+            node,
+            include_assertions,
+            compiled_pattern=compiled_pattern,
+        )
+        if matched or matched_assertions:
+            entry = _serialize_requirement_summary(node)
+            if matched_assertions:
+                entry["matched_assertions"] = matched_assertions
+            results.append(entry)
+            if len(results) >= limit:
+                break
+    return {"results": results, "scope_id": scope_id, "direction": direction}
+
+
 def _scoped_search(
     graph: TraceGraph,
     query: str,
@@ -758,73 +787,54 @@ def _scoped_search(
     if scope_ids is None:
         return {"error": f"Scope node '{scope_id}' not found"}
 
-    # Compile pattern for matching
-    compiled_pattern = None
-    query_lower = None
-    parsed = None
     if regex:
         try:
             compiled_pattern = re.compile(query, re.IGNORECASE)
         except re.error:
             return {"results": [], "scope_id": scope_id, "direction": direction}
-    else:
-        query_lower = query.lower()
-        parsed = parse_query(query)
+        return _scoped_search_regex(
+            graph,
+            compiled_pattern,
+            scope_ids,
+            scope_id,
+            direction,
+            field,
+            include_assertions,
+            limit,
+        )
 
-    use_scoring = not regex and parsed is not None and not parsed.is_empty
+    # Multi-term scored path
+    parsed = parse_query(query)
+    if parsed.is_empty:
+        return {"results": [], "scope_id": scope_id, "direction": direction}
+
     scored: list[tuple[float, dict[str, Any]]] = []
-    results: list[dict[str, Any]] = []
 
-    # REQ-d00078-C: Iterate only REQUIREMENT nodes in scope
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node.id not in scope_ids:
             continue
 
-        if use_scoring:
-            node_score = score_node(node, parsed, field)
-            matched = node_score > 0
-        else:
-            matched = _matches_query(node, field, regex, compiled_pattern, query_lower, parsed)
-            node_score = 0.0
+        node_score = score_node(node, parsed, field)
+        matched_assertions = _match_assertions(
+            node,
+            include_assertions,
+            parsed=parsed,
+            field=field,
+        )
 
-        matched_assertions: list[dict[str, Any]] = []
-
-        # REQ-d00078-D / REQ-o00070-C: Check assertion text
-        if include_assertions:
-            for child in node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    assertion_text = child.get_label() or ""
-                    if use_scoring:
-                        if parsed and matches_node(child, parsed, field):
-                            matched_assertions.append(_serialize_assertion(child))
-                    elif regex:
-                        if compiled_pattern and compiled_pattern.search(assertion_text):
-                            matched_assertions.append(_serialize_assertion(child))
-                    else:
-                        if query_lower and query_lower in assertion_text.lower():
-                            matched_assertions.append(_serialize_assertion(child))
-
-        if matched or matched_assertions:
+        if node_score > 0 or matched_assertions:
             entry = _serialize_requirement_summary(node)
+            entry["score"] = node_score
             if matched_assertions:
                 entry["matched_assertions"] = matched_assertions
-            if use_scoring:
-                entry["score"] = node_score
-                scored.append((node_score, entry))
-            else:
-                results.append(entry)
-                if len(results) >= limit:
-                    break
+            scored.append((node_score, entry))
 
-    if use_scoring:
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return {
-            "results": [entry for _, entry in scored[:limit]],
-            "scope_id": scope_id,
-            "direction": direction,
-        }
-
-    return {"results": results, "scope_id": scope_id, "direction": direction}
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return {
+        "results": [entry for _, entry in scored[:limit]],
+        "scope_id": scope_id,
+        "direction": direction,
+    }
 
 
 def _discover_requirements(
