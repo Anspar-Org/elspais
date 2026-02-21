@@ -9,6 +9,21 @@ or parent directories up to the git repository root.
   $ elspais config path   # Show config location
   $ elspais config show   # View all settings
 
+## Git Worktree Support
+
+elspais automatically detects git worktrees and resolves cross-repo
+paths from the **canonical** (main) repository root. This means
+`[associates].paths` like `"../sibling-repo"` resolve correctly even
+when working from a worktree in a different directory.
+
+Use `-v` to see which roots were detected:
+
+  $ elspais validate -v
+  Working from repository root: /home/dev/worktrees/feature-x
+  Canonical root (main repo): /home/dev/my-project
+
+No configuration is needed — worktree detection is automatic.
+
 ## Local Overrides (.elspais.local.toml)
 
 Place a `.elspais.local.toml` file alongside `.elspais.toml` for
@@ -19,7 +34,7 @@ as `docker-compose.override.yml` or `.env.local`.
 ```toml
 # .elspais.local.toml (gitignored)
 [associates]
-paths = ["/home/dev/other-repo"]
+paths = ["../sibling-repo"]
 ```
 
 **Load order:** defaults → `.elspais.toml` → `.elspais.local.toml` → env vars
@@ -194,15 +209,27 @@ test_results = [
 ]
 ```
 
+### [associates] Section
+
+Configure paths to associated repositories for combined validation.
+
+```toml
+[associates]
+paths = ["../callisto", "../phoenix"]   # Relative to repo root
+```
+
+Relative paths resolve from the **canonical** repository root,
+so they work correctly from git worktrees. Each path must contain
+a `.elspais.toml` with `project.type = "associated"`.
+
 ### [associated] Section
 
-For associated (satellite) repositories.
+For associated (satellite) repositories to declare their identity.
 
 ```toml
 [associated]
 prefix = "TTN"              # Associated repo prefix
 id_range = [1, 99999]       # ID range for this repo
-path = "../titan-spec"      # Path to associated repo
 ```
 
 ### [core] Section

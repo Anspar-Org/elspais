@@ -13,9 +13,11 @@ from pathlib import Path
 from elspais import __version__
 from elspais.commands import (
     analyze,
+    associate_cmd,
     changed,
     completion,
     config_cmd,
+    doctor,
     edit,
     example_cmd,
     hash_cmd,
@@ -33,7 +35,14 @@ from elspais.commands import (
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create the argument parser."""
+    """Create the argument parser.
+
+    NOTE: When adding or modifying CLI commands, also update:
+    - docs/cli/*.md          (user-facing documentation)
+    - docs/configuration.md  (config reference if new config keys)
+    - commands/init.py       (generated .elspais.toml templates)
+    - Shell completion        (if new subcommands/args)
+    """
     parser = argparse.ArgumentParser(
         prog="elspais",
         description="Requirements validation and traceability tools (L-Space)",
@@ -198,6 +207,29 @@ Checks performed:
         help="Run test mapping checks only",
     )
     health_parser.add_argument(
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # doctor command
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Diagnose environment and installation health",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais doctor              # Check your elspais setup
+  elspais doctor -j           # Output as JSON
+  elspais doctor -v           # Verbose with details
+
+Checks performed:
+  CONFIG:      Configuration file exists, syntax valid, settings complete
+  ENVIRONMENT: Worktree detection, associate paths, local overrides
+""",
+    )
+    doctor_parser.add_argument(
         "-j",
         "--json",
         action="store_true",
@@ -487,6 +519,10 @@ Local Overrides:
   Place a .elspais.local.toml alongside .elspais.toml for developer-local
   settings (gitignored). It is deep-merged on top of the base config.
 
+Worktree Support:
+  Git worktrees are auto-detected. Relative [associates].paths resolve
+  from the canonical (main) repo root. Use -v to see detected roots.
+
 Quick Start (.elspais.toml):
   [project]
   name = "my-project"
@@ -726,6 +762,47 @@ First, install the completion extra:
         "--uninstall",
         action="store_true",
         help="Remove completion from your shell rc file",
+    )
+
+    # associate command
+    associate_parser = subparsers.add_parser(
+        "associate",
+        help="Manage associate repository links (link, list, unlink)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais associate /path/to/repo        # Link to specific associate
+  elspais associate callisto             # Find by name in sibling dirs
+  elspais associate --all                # Auto-discover and link all
+  elspais associate --list               # Show current links and status
+  elspais associate --unlink callisto    # Remove a link
+
+Associate configuration is written to .elspais.local.toml (gitignored).
+""",
+    )
+    associate_group = associate_parser.add_mutually_exclusive_group()
+    associate_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Path to associate repo or name to search for",
+    )
+    associate_group.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Auto-discover and link all associates in sibling directories",
+    )
+    associate_group.add_argument(
+        "--list",
+        action="store_true",
+        default=False,
+        help="Show current associate links and status",
+    )
+    associate_group.add_argument(
+        "--unlink",
+        metavar="NAME",
+        help="Remove a linked associate (matches name, path, or prefix code)",
     )
 
     # pdf command
@@ -1010,17 +1087,23 @@ def main(argv: list[str] | None = None) -> int:
     # This ensures elspais works the same from any subdirectory
     import os
 
-    from elspais.config import find_git_root
+    from elspais.config import find_canonical_root, find_git_root
 
     original_cwd = Path.cwd()
     git_root = find_git_root(original_cwd)
+    canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)
         if args.verbose:
             print(f"Working from repository root: {git_root}", file=sys.stderr)
+            if canonical_root and canonical_root != git_root:
+                print(f"Canonical root (main repo): {canonical_root}", file=sys.stderr)
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
+
+    # Store canonical_root on args for commands to use
+    args.canonical_root = canonical_root
 
     try:
         # Dispatch to command handlers
@@ -1028,6 +1111,8 @@ def main(argv: list[str] | None = None) -> int:
             return validate.run(args)
         elif args.command == "health":
             return health.run(args)
+        elif args.command == "doctor":
+            return doctor.run(args)
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "hash":
@@ -1058,6 +1143,8 @@ def main(argv: list[str] | None = None) -> int:
             return completion.run(args)
         elif args.command == "mcp":
             return mcp_command(args)
+        elif args.command == "associate":
+            return associate_cmd.run(args)
         elif args.command == "link":
             if getattr(args, "link_action", None) == "suggest":
                 return link_suggest.run(args)

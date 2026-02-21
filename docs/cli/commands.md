@@ -318,6 +318,69 @@ Show version information.
   $ elspais version               # Show current version
   $ elspais --version             # Alternative
 
+## doctor
+
+Diagnose your elspais environment and installation.
+
+  $ elspais doctor              # Quick setup check
+  $ elspais doctor -v           # Detailed output
+  $ elspais doctor -j           # JSON output for CI
+
+**What it checks:**
+
+  Configuration file exists, syntax, required fields
+  ID pattern placeholders and spec directory paths
+  Git worktree detection and canonical root
+  Associate paths and configurations
+  Local configuration (.elspais.local.toml)
+
+**Options:**
+
+  `-j, --json`     Output results as JSON
+  `-v, --verbose`  Show detailed information for each check
+
+## health
+
+Run health checks across configuration, spec files, code, and tests.
+
+  $ elspais health              # Run all checks
+  $ elspais health --config     # Configuration only
+  $ elspais health --spec       # Spec file checks
+  $ elspais health --code       # Code reference checks
+  $ elspais health --tests      # Test mapping checks
+  $ elspais health -j           # JSON output
+
+**Options:**
+
+  `--config`       Run configuration checks only
+  `--spec`         Run spec file checks only
+  `--code`         Run code reference checks only
+  `--tests`        Run test mapping checks only
+  `-j, --json`     Output as JSON
+  `-v, --verbose`  Show additional details
+
+## associate
+
+Manage links to associated repositories.
+
+  $ elspais associate /path/to/repo    # Link a specific associate
+  $ elspais associate --all            # Auto-discover and link all
+  $ elspais associate --list           # Show linked associates
+  $ elspais associate --unlink NAME    # Remove a link
+
+**Options:**
+
+  `--all`            Auto-discover and link all associates
+  `--list`           Show status of linked associates
+  `--unlink NAME`    Remove a linked associate (matches name, path, or prefix code)
+
+**Notes:**
+
+  Links are stored in `.elspais.local.toml` (gitignored, not shared)
+  Validates target has `project.type = "associated"` in its config
+  Accepts a path or a name (searches sibling directories)
+  Worktree-safe: resolves relative paths from canonical repo root
+
 ## mcp
 
 MCP (Model Context Protocol) server commands.

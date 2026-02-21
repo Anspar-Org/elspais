@@ -1,5 +1,20 @@
 # GIT INTEGRATION
 
+## Git Root Auto-Detection
+
+elspais automatically detects the git repository root and operates
+from there, so it works identically from any subdirectory.
+
+For **git worktrees**, elspais also detects the canonical (main)
+repository root. This ensures cross-repo paths (e.g. `../sibling`)
+resolve from the main repo, not the worktree location.
+
+Use `-v` to see detected roots:
+
+  $ elspais validate -v
+  Working from repository root: /home/dev/worktrees/feature-x
+  Canonical root (main repo): /home/dev/my-project
+
 ## Detecting Changes
 
   $ elspais changed              # Show all spec changes

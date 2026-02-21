@@ -50,7 +50,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_config_file, get_config
+from elspais.config import find_canonical_root, find_config_file, get_config
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
     annotate_graph_git_state,
@@ -453,6 +453,7 @@ def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
 def _refresh_graph(
     repo_root: Path,
     full: bool = False,
+    canonical_root: Path | None = None,
 ) -> tuple[dict[str, Any], TraceGraph]:
     """Rebuild the graph from spec files.
 
@@ -461,12 +462,13 @@ def _refresh_graph(
     Args:
         repo_root: Repository root path.
         full: If True, clear all caches before rebuild.
+        canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
 
     Returns:
         Tuple of (result dict, new TraceGraph).
     """
     # Build fresh graph
-    new_graph = build_graph(repo_root=repo_root)
+    new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
 
     return {
         "success": True,
@@ -2175,7 +2177,7 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    _, new_graph = _refresh_graph(working_dir)
+    _, new_graph = _refresh_graph(working_dir, canonical_root=state.get("canonical_root"))
     state["graph"] = new_graph
 
     return {
@@ -3022,15 +3024,23 @@ def create_server(
     # Load config for the working directory
     config = get_config(start_path=working_dir, quiet=True)
 
+    # Compute canonical root for worktree-aware path resolution
+    canonical_root = find_canonical_root(working_dir)
+
     # Build initial graph if not provided
     if graph is None:
-        graph = build_graph(config=config, repo_root=working_dir)
+        graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools
-    _state: dict[str, Any] = {"graph": graph, "working_dir": working_dir, "config": config}
+    _state: dict[str, Any] = {
+        "graph": graph,
+        "working_dir": working_dir,
+        "config": config,
+        "canonical_root": canonical_root,
+    }
 
     # ─────────────────────────────────────────────────────────────────────
     # Register Tools
@@ -3055,7 +3065,11 @@ def create_server(
         Returns:
             Success status and new node count.
         """
-        result, new_graph = _refresh_graph(_state["working_dir"], full=full)
+        result, new_graph = _refresh_graph(
+            _state["working_dir"],
+            full=full,
+            canonical_root=_state.get("canonical_root"),
+        )
         _state["graph"] = new_graph
         return result
 
@@ -3721,7 +3735,10 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            new_result, new_graph = _refresh_graph(
+                _state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
+            )
             _state["graph"] = new_graph
         return result
 
@@ -3747,7 +3764,10 @@ def create_server(
         result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            new_result, new_graph = _refresh_graph(
+                _state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
+            )
             _state["graph"] = new_graph
         return result
 
@@ -3766,7 +3786,10 @@ def create_server(
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(_state["working_dir"])
+            new_result, new_graph = _refresh_graph(
+                _state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
+            )
             _state["graph"] = new_graph
         return result
 

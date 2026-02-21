@@ -19,6 +19,8 @@ elspais health --tests     # Test mapping checks
 
 ### Configuration Checks (`--config`)
 
+> **Note:** Configuration checks are shared with the `doctor` command. The `doctor` command runs these same checks plus additional environment diagnostics (worktree detection, associate path validation). Use `elspais doctor` for a focused setup check.
+
 | Check | Description |
 |-------|-------------|
 | `config.exists` | Verifies config file exists or using defaults |

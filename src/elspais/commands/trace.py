@@ -482,10 +482,12 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     repo_root = Path.cwd().resolve()
 
     config = get_config(start_path=repo_root, quiet=True)
+    canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
+        canonical_root=canonical_root,
     )
 
     app = create_app(repo_root=repo_root, graph=graph, config=config)
@@ -576,10 +578,12 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        canonical_root=canonical_root,
     )
 
     # Handle --view mode (interactive HTML)

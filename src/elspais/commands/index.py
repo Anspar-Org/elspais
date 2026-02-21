@@ -37,11 +37,13 @@ def run(args: argparse.Namespace) -> int:
 
     scan_sponsors = mode != "core"
 
+    canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         config=config,
         spec_dirs=spec_dirs if spec_dir else None,
         config_path=config_path,
         scan_sponsors=scan_sponsors,
+        canonical_root=canonical_root,
     )
 
     action = getattr(args, "index_action", None)

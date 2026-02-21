@@ -149,7 +149,9 @@ D. The tool SHALL discover an associated repository's identity — including its
 
 E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
 
-*End* *Multi-Repository Requirements* | **Hash**: 4b4e2765
+F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
+
+*End* *Multi-Repository Requirements* | **Hash**: 7964180f
 ---
 
 # REQ-p00006: Interactive Traceability Viewer

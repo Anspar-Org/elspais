@@ -12,6 +12,11 @@ elspais looks for configuration in this order:
 4. `~/.config/elspais/config.toml` (user defaults)
 5. Built-in defaults
 
+For **git worktrees**, elspais detects the canonical (main) repository
+root and uses it when resolving relative associate paths. This means
+paths like `"../sibling-repo"` in `[associates].paths` resolve from the
+main repo, not the worktree location.
+
 ## Complete Configuration Reference
 
 ```toml
@@ -150,6 +155,16 @@ length = 3
 
 # Separator between associated and rest
 separator = "-"
+
+#──────────────────────────────────────────────────────────────────────────────
+# ASSOCIATES - Cross-Repository Links (for core repos)
+#──────────────────────────────────────────────────────────────────────────────
+
+[associates]
+# Paths to associated repositories (relative or absolute).
+# Relative paths resolve from the canonical repo root (worktree-safe).
+# Each path must contain .elspais.toml with project.type = "associated".
+paths = ["../callisto", "../phoenix"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # CORE REPOSITORY (for associated repos)
@@ -412,10 +427,18 @@ Configuration values can be overridden with environment variables:
 
 ```bash
 # Pattern: ELSPAIS_<SECTION>_<KEY>
+# Single underscore (_) separates sections: SECTION_KEY -> section.key
+# Double underscore (__) is a literal underscore: KEY__NAME -> key_name
 ELSPAIS_DIRECTORIES_SPEC=requirements
 ELSPAIS_PATTERNS_PREFIX=PRD
 ELSPAIS_ASSOCIATED_PREFIX=CAL
-ELSPAIS_VALIDATION_STRICT_HIERARCHY=false
+
+# Booleans are parsed automatically
+ELSPAIS_VALIDATION_STRICT__HIERARCHY=false
+
+# JSON list values
+ELSPAIS_ASSOCIATES_PATHS='["../callisto", "../phoenix"]'
+ELSPAIS_DIRECTORIES_CODE='["src", "lib"]'
 ```
 
 ## Minimal Configuration Examples

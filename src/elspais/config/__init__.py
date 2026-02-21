@@ -196,6 +196,46 @@ def find_git_root(start_path: Path | None = None) -> Path | None:
     return None
 
 
+def find_canonical_root(start_path: Path | None = None) -> Path | None:
+    """Find the canonical (non-worktree) git repository root.
+
+    For normal repos: returns same as find_git_root().
+    For worktrees: returns the MAIN repo root via git-common-dir.
+    Use this for resolving cross-repo sibling paths.
+
+    Args:
+        start_path: Directory to start searching from (defaults to cwd).
+
+    Returns:
+        Path to canonical git repository root, or None if not in a git repo.
+    """
+    # Implements: REQ-p00005-F
+    import subprocess
+
+    git_root = find_git_root(start_path)
+    if git_root is None:
+        return None
+
+    git_marker = git_root / ".git"
+    if git_marker.is_file():
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--git-common-dir"],
+                capture_output=True,
+                text=True,
+                cwd=git_root,
+            )
+            if result.returncode == 0:
+                common_dir = Path(result.stdout.strip())
+                if not common_dir.is_absolute():
+                    common_dir = (git_root / common_dir).resolve()
+                return common_dir.parent
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    return git_root
+
+
 def find_config_file(start_path: Path) -> Path | None:
     """Find .elspais.toml configuration file.
 
@@ -247,10 +287,44 @@ def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, 
     return result
 
 
+def _try_parse_env_value(value: str) -> Any:
+    """Parse an environment variable value with type inference.
+
+    Attempts to interpret the string as a richer Python type:
+    - JSON arrays/objects (starts with ``[`` or ``{``)
+    - Booleans (``true``/``false``, case-insensitive)
+    - Falls back to plain string
+
+    Args:
+        value: Raw environment variable string.
+
+    Returns:
+        Parsed Python value (list, dict, bool, or str).
+    """
+    import json
+
+    # JSON array or object
+    if value.startswith("[") or value.startswith("{"):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    # Boolean
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+
+    return value
+
+
 def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     """Apply environment variable overrides.
 
-    Looks for ELSPAIS_* environment variables.
+    Looks for ELSPAIS_* environment variables.  Values are parsed via
+    ``_try_parse_env_value`` so that JSON lists, booleans, and plain
+    strings are all handled correctly.
 
     Args:
         config: Configuration dictionary.
@@ -259,11 +333,16 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
         Configuration with environment overrides applied.
     """
     # Example: ELSPAIS_PATTERNS_PREFIX=MYREQ
+    # Example: ELSPAIS_ASSOCIATES_PATHS='["/path/to/repo"]'
     for key, value in os.environ.items():
         if key.startswith("ELSPAIS_"):
             # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
-            config_key = key[8:].lower().replace("_", ".")
-            _set_nested(config, config_key, value)
+            # Single _ = section separator, __ = literal underscore in key
+            # e.g., ELSPAIS_VALIDATION_STRICT__HIERARCHY -> validation.strict_hierarchy
+            config_key = (
+                key[8:].lower().replace("__", "\x00").replace("_", ".").replace("\x00", "_")
+            )
+            _set_nested(config, config_key, _try_parse_env_value(value))
 
     return config
 
@@ -762,6 +841,7 @@ __all__ = [
     "IgnoreConfig",
     "load_config",
     "find_config_file",
+    "find_canonical_root",
     "find_git_root",
     "get_config",
     "get_spec_directories",
@@ -775,4 +855,5 @@ __all__ = [
     "parse_toml",
     "parse_toml_document",
     "_try_parse_numeric",
+    "_try_parse_env_value",
 ]

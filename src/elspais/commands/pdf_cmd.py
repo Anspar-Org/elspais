@@ -45,12 +45,14 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
+    canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
+        canonical_root=canonical_root,
     )
 
     # Assemble Markdown from graph

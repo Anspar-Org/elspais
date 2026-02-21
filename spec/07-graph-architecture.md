@@ -23,6 +23,7 @@ D. The system SHALL NOT have multiple code paths that independently compute hier
 ## Rationale
 
 Multiple data structures lead to synchronization bugs, duplicated logic, and maintenance burden. A single graph provides:
+
 - Single source of truth
 - Consistent hierarchy traversal
 - Centralized metrics computation
@@ -79,6 +80,7 @@ F. The system SHALL support phased annotation (e.g., base graph -> git state -> 
 ## Rationale
 
 Separating iteration from annotation enables:
+
 - Reusable annotator functions across different contexts
 - Clear separation of concerns
 - Easy testing of individual annotators

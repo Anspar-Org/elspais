@@ -128,6 +128,7 @@ def build_graph(
     scan_code: bool = True,
     scan_tests: bool = True,
     scan_sponsors: bool = True,
+    canonical_root: Path | None = None,
 ) -> TraceGraph:
     """Build a TraceGraph from spec directories.
 
@@ -148,6 +149,7 @@ def build_graph(
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
         scan_sponsors: Whether to scan sponsor/associate spec directories.
+        canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
 
     Returns:
         Complete TraceGraph with all requirements linked.
@@ -169,7 +171,9 @@ def build_graph(
 
     # 2b. Add sponsor/associate spec directories if enabled
     if scan_sponsors:
-        sponsor_dirs, associate_errors = get_associate_spec_directories(config, repo_root)
+        sponsor_dirs, associate_errors = get_associate_spec_directories(
+            config, repo_root, canonical_root=canonical_root
+        )
         spec_dirs = list(spec_dirs) + sponsor_dirs
         if associate_errors:
             import sys

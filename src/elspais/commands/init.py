@@ -243,6 +243,11 @@ require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
+# Associate repositories for combined validation (uncomment to enable)
+# Relative paths resolve from canonical repo root (worktree-safe).
+# [associates]
+# paths = ["../sibling-repo"]
+
 [testing]
 enabled = false
 test_dirs = ["tests"]
