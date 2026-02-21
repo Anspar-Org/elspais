@@ -54,7 +54,7 @@ F. All query tools SHALL read directly from TraceGraph nodes using the iterator-
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
-*End* *MCP Core Query Tools* | **Hash**: 3ca6f6e6
+*End* *MCP Core Query Tools* | **Hash**: 73c31134
 
 ---
 
@@ -204,7 +204,7 @@ M. SHALL include a `score` field in search results when multi-term scoring is ap
 
 Search enables AI agents to discover requirements by content without knowing exact IDs. Multi-term queries with AND/OR/NOT support, relevance scoring, and exact keyword matching allow both human users and AI agents to efficiently find requirements using natural search patterns like synonym lists or multi-concept queries.
 
-*End* *Requirement Search Tool Implementation* | **Hash**: f84bf4b1
+*End* *Requirement Search Tool Implementation* | **Hash**: 0183195b
 
 ---
 
