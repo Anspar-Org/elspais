@@ -5,8 +5,8 @@ This document provides comprehensive documentation for all elspais CLI commands.
 ## Table of Contents
 
 - [validate](#validate)
+- [fix](#fix)
 - [trace](#trace)
-- [hash](#hash)
 - [changed](#changed)
 - [analyze](#analyze)
 - [edit](#edit)
@@ -32,7 +32,7 @@ elspais validate [OPTIONS]
 | Option | Description |
 |--------|-------------|
 | `-v, --verbose` | Show detailed validation output |
-| `--fix` | Automatically fix fixable issues |
+| `--export` | Export requirements as JSON dict keyed by ID |
 | `--mode {core,combined}` | Validation mode: `core` scans only local specs, `combined` includes sponsor/associated repo specs (default: `combined`) |
 | `--core-repo PATH` | Path to core repository for associated repo validation |
 
@@ -44,9 +44,6 @@ elspais validate
 
 # Verbose output
 elspais validate -v
-
-# Auto-fix fixable issues
-elspais validate --fix
 
 # Validate only core/local requirements (exclude sponsors)
 elspais validate --mode core
@@ -106,46 +103,40 @@ elspais trace --server --port 8080
 
 See [docs/trace-view.md](trace-view.md) for enhanced traceability features.
 
-## hash
+## fix
 
-Manage requirement hashes for change detection.
+Auto-fix spec file issues (hashes, formatting).
 
 ### Usage
 
 ```bash
-elspais hash {verify,update} [ID]
+elspais fix [REQ_ID] [OPTIONS]
 ```
 
-### Subcommands
+### Options
 
-#### verify
+| Option | Description |
+|--------|-------------|
+| `REQ_ID` | Specific requirement ID to fix (hash only) |
+| `--dry-run` | Show what would be fixed without making changes |
 
-Verify that requirement hashes match their content.
-
-```bash
-# Verify all requirements
-elspais hash verify
-
-# Verify specific requirement
-elspais hash verify REQ-d00027
-```
-
-#### update
-
-Update requirement hashes to match current content.
+### Examples
 
 ```bash
-# Update all requirements
-elspais hash update
+# Fix all issues
+elspais fix
 
-# Update specific requirement
-elspais hash update REQ-d00027
+# Preview fixes without applying
+elspais fix --dry-run
+
+# Fix hash for a specific requirement
+elspais fix REQ-p00001
 ```
 
 ### Exit Codes
 
-- `0`: All hashes valid (verify) or successfully updated (update)
-- `1`: Hash mismatches found (verify) or update failures (update)
+- `0`: All fixes applied successfully
+- `1`: Fix failures encountered
 
 ## changed
 

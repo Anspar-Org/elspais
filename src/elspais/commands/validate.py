@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 from elspais.graph import NodeKind
 
 
-def _compute_hash_for_node(node, hash_mode: str) -> str | None:
+def compute_hash_for_node(node, hash_mode: str) -> str | None:
     """Compute the content hash for a requirement node.
 
     Supports two modes (per spec/requirements-spec.md Hash Definition):
@@ -128,7 +128,7 @@ def run(args: argparse.Namespace) -> int:
         # Implements: REQ-p00002-C
         # Check for hash presence and correctness
         hash_mode = getattr(graph, "hash_mode", "full-text")
-        computed_hash = _compute_hash_for_node(node, hash_mode)
+        computed_hash = compute_hash_for_node(node, hash_mode)
         stored_hash = node.hash
 
         if computed_hash:
@@ -279,6 +279,13 @@ def run(args: argparse.Namespace) -> int:
             )
         elif unfixed_warnings:
             print(f"\n{len(unfixed_warnings)} warnings", file=sys.stderr)
+
+        # Hint about fix command when fixable issues exist and not in fix mode
+        if fixable and not fix_mode:
+            print(
+                f"\nRun 'elspais fix' to auto-fix {len(fixable)} issue(s).",
+                file=sys.stderr,
+            )
 
     return 1 if errors else 0
 

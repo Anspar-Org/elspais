@@ -112,7 +112,7 @@ class TestDocsContent:
         content = load_topic("commands")
         assert content is not None
         # Check for key commands
-        for cmd in ["validate", "trace", "hash", "edit", "config", "init"]:
+        for cmd in ["validate", "fix", "trace", "edit", "config", "init"]:
             assert f"## {cmd}" in content, f"commands should document {cmd}"
         # Check for global options
         assert "Global Options" in content, "commands should have global options"

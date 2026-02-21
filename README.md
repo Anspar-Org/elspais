@@ -84,8 +84,8 @@ elspais validate
 # Verbose output
 elspais validate -v
 
-# Validate with auto-fix for fixable issues
-elspais validate --fix
+# Auto-fix fixable issues (hashes, formatting)
+elspais fix
 ```
 
 ### Generate Traceability Matrix
@@ -102,17 +102,17 @@ elspais trace --format csv
 elspais trace --output docs/traceability.html
 ```
 
-### Manage Requirement Hashes
+### Fix Issues
 
 ```bash
-# Verify all hashes match content
-elspais hash verify
+# Auto-fix all fixable issues (hashes, formatting)
+elspais fix
 
-# Update all hashes
-elspais hash update
+# Preview fixes without applying
+elspais fix --dry-run
 
-# Update specific requirement
-elspais hash update REQ-d00027
+# Fix specific requirement hash
+elspais fix REQ-d00027
 ```
 
 ### Analyze Requirements
@@ -336,7 +336,7 @@ Commands:
   health                Check graph and spec health (orphans, broken links)
   doctor                Diagnose environment and installation setup
   trace                 Generate traceability matrix
-  hash                  Manage requirement hashes (verify, update)
+  fix                   Auto-fix spec file issues (hashes, formatting)
   index                 Manage INDEX.md file (validate, regenerate)
   analyze               Analyze requirement hierarchy (hierarchy, orphans, coverage)
   changed               Detect git changes to spec files

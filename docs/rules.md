@@ -241,7 +241,7 @@ When a requirement has a hash footer, the hash is verified against the content. 
    Hash mismatch: expected a1b2c3d4, found x9y8z7w6
 ```text
 
-Fix with: `elspais hash update REQ-d00001`
+Fix with: `elspais fix REQ-d00001`
 
 ## Link Rules
 
@@ -424,11 +424,7 @@ traceability = false  # Disable traceability checks
 naming = false        # Disable naming checks
 ```text
 
-Or use the CLI:
-
-```bash
-elspais validate --skip-rule hierarchy.circular
-elspais validate --skip-rule format.require_rationale
+Or suppress expected issues with inline comments in spec files.
 ```text
 
 ## Best Practices

@@ -92,11 +92,11 @@ Addresses: REQ-p00001, REQ-p00002, REQ-p00004
 
 1. Alex installs Elspais in the CI container image with `pip install elspais`.
 2. He adds a validation step to the CI pipeline: `elspais validate -v`.
-3. He adds a hash verification step: `elspais hash verify`.
+3. He adds a hash verification step: `elspais validate`.
 4. He configures the pipeline to fail the pull request if either step returns a non-zero exit code.
 5. A developer submits a PR with a new requirement missing its content hash.
 6. The CI pipeline runs, the hash verification step fails, and the PR is blocked.
-7. The developer sees the error message, adds the hash with `elspais hash update`, and pushes an update.
+7. The developer sees the error message, fixes the hash with `elspais fix`, and pushes an update.
 8. The pipeline re-runs, all checks pass, and the PR is unblocked for review.
 
 ## Expected Outcome

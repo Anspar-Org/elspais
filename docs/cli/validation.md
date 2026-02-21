@@ -3,20 +3,26 @@
 ## Running Validation
 
   $ elspais validate                   # Check all rules
-  $ elspais validate --fix             # Auto-fix what's fixable
-  $ elspais validate --fix --dry-run   # Preview fixes without applying
+  $ elspais validate -j                # Output JSON for tooling
   $ elspais validate -v                # Verbose output
 
 ## Command Options
 
-  `--fix`               Auto-fix hashes and formatting issues
-  `--dry-run`           Preview fixes without modifying files (use with --fix)
-  `--skip-rule RULE`    Skip validation rules (repeatable)
   `-j, --json`          Output requirements as JSON
+  `--export`            Export requirements as JSON dict keyed by ID
+  `--mode {core,combined}`  core: only local specs, combined: include associated repos
+
+## Auto-Fixing Issues
+
+Use the `fix` command to auto-fix issues:
+
+  $ elspais fix                   # Fix all issues
+  $ elspais fix --dry-run         # Preview fixes without applying
+  $ elspais fix REQ-p00001        # Fix hash for a specific requirement
 
 ## What Can Be Auto-Fixed
 
-The `--fix` flag automatically corrects:
+The `fix` command automatically corrects:
 
 **Fixable:**
 
@@ -40,31 +46,13 @@ The `--fix` flag automatically corrects:
   **Hashes**      - Content matches stored hash
   **IDs**         - No duplicate requirement IDs
 
-## Skip Rule Patterns
-
-Skip specific validation rules:
-
-  $ elspais validate --skip-rule hash.missing
-  $ elspais validate --skip-rule 'hash.*'     # All hash rules
-  $ elspais validate --skip-rule hierarchy.*  # All hierarchy rules
-
-**Available Patterns:**
-
-  `hash.missing`                Hash footer is missing
-  `hash.mismatch`              Hash doesn't match content
-  `hash.*`                     All hash rules
-  `hierarchy.*`                All hierarchy rules
-  `format.*`                   All format rules
-  `format.assertion_spacing`   Consecutive assertions need blank line separation
-  `format.list_spacing`        List items need blank line before first item
-
 ## Common Validation Errors
 
   **Missing hash**
-    Fix: $ elspais hash update
+    Fix: $ elspais fix
 
   **Stale hash** (content changed)
-    Fix: $ elspais hash update after reviewing changes
+    Fix: $ elspais fix (after reviewing changes)
 
   **Broken link** (implements non-existent requirement)
     Fix: Correct the ID or create the missing requirement

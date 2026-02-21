@@ -1,8 +1,8 @@
-"""Tests for elspais validate --fix command.
+"""Tests for elspais fix command.
 
 Tests REQ-p00002: Requirements Validation with auto-fix capability.
 
-The validate --fix command auto-fixes:
+The fix command auto-fixes:
 - Missing hash: Compute and insert
 - Outdated hash: Recompute from body
 - Missing Status: Add default "Active"
@@ -120,27 +120,28 @@ A. The system SHALL process output.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: validate --fix --dry-run
+# Test: fix --dry-run
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestValidateFixDryRun:
-    """Tests for validate --fix --dry-run mode."""
+    """Tests for fix --dry-run mode."""
 
     def test_dry_run_shows_fixable_issues(self, git_repo_with_issues, capsys):
         """--dry-run shows what would be fixed without modifying files."""
         import argparse
 
-        from elspais.commands.validate import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
+            req_id=None,
+            dry_run=True,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            fix=True,
-            dry_run=True,
-            skip_rule=None,
-            json=False,
+            canonical_root=None,
             quiet=False,
+            verbose=False,
+            mode="combined",
         )
 
         result = run(args)
@@ -159,27 +160,28 @@ class TestValidateFixDryRun:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: validate --fix (actual fixes)
+# Test: fix (actual fixes)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestValidateFix:
-    """Tests for validate --fix mode."""
+    """Tests for fix mode."""
 
     def test_REQ_p00002_C_fix_updates_stale_hashes(self, git_repo_with_issues, capsys):
-        """Validates REQ-p00002-C: --fix updates stale hashes in spec files."""
+        """Validates REQ-p00002-C: fix updates stale hashes in spec files."""
         import argparse
 
-        from elspais.commands.validate import run
+        from elspais.commands.fix_cmd import run
 
         args = argparse.Namespace(
+            req_id=None,
+            dry_run=False,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            fix=True,
-            dry_run=False,
-            skip_rule=None,
-            json=False,
+            canonical_root=None,
             quiet=False,
+            verbose=False,
+            mode="combined",
         )
 
         result = run(args)
@@ -192,22 +194,24 @@ class TestValidateFix:
         assert "deadbeef" not in content  # Stale hash should be replaced
 
     def test_REQ_p00002_C_after_fix_validation_passes(self, git_repo_with_issues, capsys):
-        """Validates REQ-p00002-C: After --fix, regular validation should pass."""
+        """Validates REQ-p00002-C: After fix, regular validation should pass."""
         import argparse
 
-        from elspais.commands.validate import run
+        from elspais.commands.fix_cmd import run as fix_run
+        from elspais.commands.validate import run as validate_run
 
         # First fix
         fix_args = argparse.Namespace(
+            req_id=None,
+            dry_run=False,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            fix=True,
-            dry_run=False,
-            skip_rule=None,
-            json=False,
+            canonical_root=None,
             quiet=False,
+            verbose=False,
+            mode="combined",
         )
-        run(fix_args)
+        fix_run(fix_args)
 
         # Clear captured output
         capsys.readouterr()
@@ -221,8 +225,11 @@ class TestValidateFix:
             skip_rule=None,
             json=False,
             quiet=False,
+            export=False,
+            mode="combined",
+            canonical_root=None,
         )
-        run(validate_args)
+        validate_run(validate_args)
 
         # Should pass (no hash-related errors)
         captured = capsys.readouterr()

@@ -32,7 +32,7 @@ Delete this file after reviewing the structure.
 - **Metadata line**: Level, Status, and Implements (use `-` for top-level reqs)
 - **Assertions**: Labeled A-Z, each using SHALL for required behavior
 - **Rationale**: Optional explanation section (non-normative)
-- **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais hash update`
+- **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais fix`
 
 Run `elspais format` for more templates and `elspais validate` to check this file.
 
@@ -112,7 +112,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     print("  1. Review the example to understand the format")
     print("  2. Delete or rename it when creating real requirements")
     print("  3. Run `elspais validate` to check format compliance")
-    print("  4. Run `elspais hash update` to compute content hashes")
+    print("  4. Run `elspais fix` to compute content hashes")
 
     return 0
 

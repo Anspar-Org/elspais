@@ -2,7 +2,7 @@
 """Spec file I/O — unified module for reading/writing spec files.
 
 Consolidates all spec-file mutation helpers used by both the CLI
-(``commands/edit.py``, ``commands/hash_cmd.py``) and the MCP server
+(``commands/edit.py``, ``commands/fix_cmd.py``) and the MCP server
 (``mcp/server.py``).
 
 Every file write uses ``encoding="utf-8"`` explicitly.

@@ -54,7 +54,7 @@ A. The system SHALL use bcrypt with cost factor 12.
 
 ```bash
 elspais validate          # Check format, hierarchy, broken links
-elspais hash update       # Recompute hashes after edits
+elspais fix               # Fix hashes and formatting
 elspais changed           # Show uncommitted spec changes
 ```
 

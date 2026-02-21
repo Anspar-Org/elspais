@@ -19,7 +19,7 @@ Addresses: REQ-p00001, REQ-p00002, REQ-p00004
 4. She writes the Assertions section with specific, testable obligations using prescriptive language.
 5. She runs `elspais validate` to check the requirement format.
 6. The validator reports errors: missing hash and a malformed status field.
-7. She fixes the status field and runs `elspais hash update REQ-d00042` to generate the content hash.
+7. She fixes the status field and runs `elspais fix REQ-d00042` to generate the content hash.
 8. She re-runs `elspais validate` and confirms all checks pass.
 9. She commits the new requirement file to her feature branch.
 

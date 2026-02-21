@@ -20,7 +20,7 @@ from elspais.commands import (
     doctor,
     edit,
     example_cmd,
-    hash_cmd,
+    fix_cmd,
     health,
     index,
     init,
@@ -50,10 +50,10 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   elspais validate              # Validate all requirements
-  elspais validate --fix        # Auto-fix fixable issues
+  elspais fix                   # Auto-fix hashes and formatting
+  elspais fix --dry-run         # Preview fixes without applying
   elspais trace --format html   # Generate HTML traceability matrix
   elspais trace --view          # Interactive HTML view
-  elspais hash update           # Update all requirement hashes
   elspais changed               # Show uncommitted spec changes
   elspais analyze hierarchy     # Show requirement hierarchy tree
 
@@ -114,33 +114,11 @@ For detailed command help: elspais <command> --help
         epilog="""
 Examples:
   elspais validate                      # Validate all requirements
-  elspais validate --fix                # Auto-fix hashes and formatting
-  elspais validate --skip-rule hash.*   # Skip all hash rules
   elspais validate -j                   # Output JSON for tooling
   elspais validate --mode core          # Exclude associated repo specs
 
-Common rules to skip:
-  hash.missing     Hash footer is missing
-  hash.mismatch    Hash doesn't match content
-  hierarchy.*      All hierarchy rules
-  format.*         All format rules
+To auto-fix issues, use: elspais fix
 """,
-    )
-    validate_parser.add_argument(
-        "--fix",
-        action="store_true",
-        help="Auto-fix issues (hashes, status, assertion spacing)",
-    )
-    validate_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be fixed without making changes (use with --fix)",
-    )
-    validate_parser.add_argument(
-        "--skip-rule",
-        action="append",
-        help="Skip validation rules (can be repeated, e.g., hash.*, format.*)",
-        metavar="RULE",
     )
     validate_parser.add_argument(
         "-j",
@@ -293,31 +271,27 @@ Checks performed:
     )
     # NOTE: --depth removed (dead code - never implemented)
 
-    # hash command
-    hash_parser = subparsers.add_parser(
-        "hash",
-        help="Manage requirement hashes (verify, update)",
+    # fix command
+    fix_parser = subparsers.add_parser(
+        "fix",
+        help="Auto-fix spec file issues (hashes, formatting)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais fix                   # Fix all issues
+  elspais fix --dry-run         # Preview fixes without applying
+  elspais fix REQ-p00001        # Fix hash for a specific requirement
+""",
     )
-    hash_subparsers = hash_parser.add_subparsers(dest="hash_action")
-
-    hash_subparsers.add_parser(
-        "verify",
-        help="Verify hashes without changes",
-    )
-
-    hash_update = hash_subparsers.add_parser(
-        "update",
-        help="Update hashes",
-    )
-    hash_update.add_argument(
+    fix_parser.add_argument(
         "req_id",
         nargs="?",
-        help="Specific requirement ID to update",
+        help="Specific requirement ID to fix (hash only)",
     )
-    hash_update.add_argument(
+    fix_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show changes without applying",
+        help="Show what would be fixed without making changes",
     )
 
     # index command
@@ -1115,8 +1089,8 @@ def main(argv: list[str] | None = None) -> int:
             return doctor.run(args)
         elif args.command == "trace":
             return trace.run(args)
-        elif args.command == "hash":
-            return hash_cmd.run(args)
+        elif args.command == "fix":
+            return fix_cmd.run(args)
         elif args.command == "index":
             return index.run(args)
         elif args.command == "analyze":
