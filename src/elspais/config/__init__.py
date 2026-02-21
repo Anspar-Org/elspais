@@ -337,7 +337,11 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     for key, value in os.environ.items():
         if key.startswith("ELSPAIS_"):
             # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
-            config_key = key[8:].lower().replace("_", ".")
+            # Single _ = section separator, __ = literal underscore in key
+            # e.g., ELSPAIS_VALIDATION_STRICT__HIERARCHY -> validation.strict_hierarchy
+            config_key = (
+                key[8:].lower().replace("__", "\x00").replace("_", ".").replace("\x00", "_")
+            )
             _set_nested(config, config_key, _try_parse_env_value(value))
 
     return config

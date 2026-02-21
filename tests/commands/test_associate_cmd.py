@@ -351,6 +351,49 @@ class TestAssociateAll:
         output = capsys.readouterr().out
         assert "0" in output or "no" in output.lower() or "none" in output.lower()
 
+    def test_REQ_p00005_F_all_deduplicates_relative_and_absolute(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """--all does not add absolute duplicate when relative path exists in worktree."""
+        from elspais.commands.associate_cmd import run
+
+        # Simulate worktree layout: canonical_root != cwd
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        core = _make_core_repo(workspace / "core")
+        _make_associate_repo(workspace, "callisto", "CAL")
+
+        # Simulate a worktree cwd that differs from canonical_root
+        worktree_cwd = tmp_path / "worktrees" / "my-branch"
+        worktree_cwd.mkdir(parents=True)
+
+        # Pre-create local config with relative path (relative to canonical_root)
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text('[associates]\npaths = ["../callisto"]\n')
+
+        # cwd is the worktree, NOT the canonical root
+        monkeypatch.chdir(worktree_cwd)
+        args = argparse.Namespace(
+            path=None,
+            all=True,
+            list=False,
+            unlink=None,
+            config=core / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+            canonical_root=core,
+        )
+        rc = run(args)
+        assert rc == 0
+
+        # Should not have duplicated — ../callisto resolves from canonical_root
+        doc = tomlkit.parse(local_config.read_text())
+        paths = list(doc["associates"]["paths"])
+        assert len(paths) == 1
+
+        output = capsys.readouterr().out
+        assert "already linked" in output.lower()
+
 
 class TestAssociateList:
     """Validates REQ-p00005-C: listing associate links and status."""
@@ -502,3 +545,108 @@ class TestAssociateUnlink:
         paths = list(doc["associates"]["paths"])
         assert str(assoc1) not in paths
         assert str(assoc2) in paths
+
+    def test_REQ_p00005_F_unlink_by_path_component_substring(self, tmp_path, monkeypatch, capsys):
+        """Unlink matches when name is a substring of a path component."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+
+        # Simulate worktree path: callisto-worktrees/linking-code
+        wt = tmp_path / "callisto-worktrees" / "linking-code"
+        wt.mkdir(parents=True)
+        (wt / ".elspais.toml").write_text(
+            '[project]\nname = "callisto"\ntype = "associated"\n\n'
+            '[associated]\nprefix = "CAL"\n\n'
+            '[directories]\nspec = "spec"\n'
+        )
+        (wt / "spec").mkdir()
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates]\npaths = ["{wt}"]\n')
+
+        monkeypatch.chdir(core)
+        args = argparse.Namespace(
+            path=None,
+            all=False,
+            list=False,
+            unlink="callisto",
+            config=core / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+            canonical_root=None,
+        )
+        rc = run(args)
+        assert rc == 0
+
+        doc = tomlkit.parse(local_config.read_text())
+        paths = list(doc["associates"]["paths"])
+        assert len(paths) == 0
+
+    def test_REQ_p00005_C_unlink_by_prefix_code(self, tmp_path, monkeypatch, capsys):
+        """Unlink an associate by its prefix code (e.g., CAL)."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+        assoc = _make_associate_repo(tmp_path, "callisto", "CAL")
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates]\npaths = ["{assoc}"]\n')
+
+        monkeypatch.chdir(core)
+        args = argparse.Namespace(
+            path=None,
+            all=False,
+            list=False,
+            unlink="CAL",
+            config=core / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+            canonical_root=None,
+        )
+        rc = run(args)
+        assert rc == 0
+
+        doc = tomlkit.parse(local_config.read_text())
+        paths = list(doc["associates"]["paths"])
+        assert len(paths) == 0
+
+    def test_REQ_p00005_F_unlink_by_project_name_worktree_path(self, tmp_path, monkeypatch, capsys):
+        """Unlink works when stored path is a worktree (basename != project name)."""
+        from elspais.commands.associate_cmd import run
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        core = _make_core_repo(workspace / "core")
+
+        # Simulate worktree path: workspace/callisto-worktrees/some-feature
+        worktree_dir = workspace / "callisto-worktrees" / "some-feature"
+        worktree_dir.mkdir(parents=True)
+        # But it has callisto's config
+        (worktree_dir / ".elspais.toml").write_text(
+            '[project]\nname = "callisto"\ntype = "associated"\n\n'
+            '[associated]\nprefix = "CAL"\n\n'
+            '[directories]\nspec = "spec"\n'
+        )
+        (worktree_dir / "spec").mkdir()
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates]\npaths = ["{worktree_dir}"]\n')
+
+        monkeypatch.chdir(core)
+        args = argparse.Namespace(
+            path=None,
+            all=False,
+            list=False,
+            unlink="callisto",
+            config=core / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+            canonical_root=core,
+        )
+        rc = run(args)
+        assert rc == 0
+
+        doc = tomlkit.parse(local_config.read_text())
+        paths = list(doc["associates"]["paths"])
+        assert len(paths) == 0

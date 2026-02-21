@@ -84,7 +84,9 @@ def cmd_link(args: argparse.Namespace) -> int:
         print("Error: No configuration directory found.", file=sys.stderr)
         return 1
 
-    already_linked = _add_path_to_local_config(config_dir, str(repo_path))
+    canonical_root = getattr(args, "canonical_root", None)
+    cr = Path(canonical_root) if canonical_root else None
+    already_linked = _add_path_to_local_config(config_dir, str(repo_path), cr)
     if already_linked:
         print(f"Already linked: {result.name} ({result.code}) at {repo_path}")
         return 0
@@ -131,9 +133,11 @@ def cmd_all(args: argparse.Namespace) -> int:
         print("No associate repositories found in sibling directories.")
         return 0
 
+    canonical_root = getattr(args, "canonical_root", None)
+    cr = Path(canonical_root) if canonical_root else None
     linked_count = 0
     for repo_path, assoc in found:
-        already_linked = _add_path_to_local_config(config_dir, str(repo_path))
+        already_linked = _add_path_to_local_config(config_dir, str(repo_path), cr)
         status = "already linked" if already_linked else "linked"
         print(f"  Found: {repo_path} ({assoc.code}) [{status}]")
         if not already_linked:
@@ -223,22 +227,49 @@ def cmd_unlink(args: argparse.Namespace) -> int:
         print(f"Error: No associate '{name}' found.", file=sys.stderr)
         return 1
 
-    # Find the path matching the name
+    # Find the path matching the name using multiple strategies:
+    # 1. Exact path match, 2. Directory basename, 3. Project name, 4. Prefix code
+    canonical_root = getattr(args, "canonical_root", None)
     found_idx = None
     found_path = None
+
+    # Strategy 1: exact path match
     for idx, path_str in enumerate(paths):
-        repo_path = Path(path_str)
-        # Match by directory name or by associate name from config
-        if repo_path.name == name:
+        if path_str == name:
             found_idx = idx
             found_path = path_str
             break
-        # Also try reading the config to match by project.name
-        result = discover_associate_from_path(repo_path)
-        if isinstance(result, Associate) and result.name == name:
-            found_idx = idx
-            found_path = path_str
-            break
+
+    # Strategy 2: directory basename match
+    if found_idx is None:
+        for idx, path_str in enumerate(paths):
+            if Path(path_str).name == name:
+                found_idx = idx
+                found_path = path_str
+                break
+
+    # Strategy 3: path component substring (e.g., "callisto" in "callisto-worktrees/branch")
+    if found_idx is None:
+        for idx, path_str in enumerate(paths):
+            if any(name in part for part in Path(path_str).parts):
+                found_idx = idx
+                found_path = path_str
+                break
+
+    # Strategy 4 & 5: project name or prefix code (requires reading config)
+    if found_idx is None:
+        name_lower = name.lower()
+        for idx, path_str in enumerate(paths):
+            repo_path = Path(path_str)
+            if not repo_path.is_absolute() and canonical_root:
+                repo_path = Path(canonical_root) / repo_path
+            result = discover_associate_from_path(repo_path)
+            if isinstance(result, Associate) and (
+                result.name == name or result.code.lower() == name_lower
+            ):
+                found_idx = idx
+                found_path = path_str
+                break
 
     if found_idx is None:
         print(f"Error: No associate '{name}' found in linked paths.", file=sys.stderr)
@@ -319,7 +350,9 @@ def _find_by_name(name: str, args: argparse.Namespace) -> Path | None:
     return None
 
 
-def _add_path_to_local_config(config_dir: Path, repo_path: str) -> bool:
+def _add_path_to_local_config(
+    config_dir: Path, repo_path: str, canonical_root: Path | None = None
+) -> bool:
     """Add a path to [associates].paths in .elspais.local.toml.
 
     Creates the file and section if they don't exist.
@@ -328,6 +361,7 @@ def _add_path_to_local_config(config_dir: Path, repo_path: str) -> bool:
     Args:
         config_dir: Directory containing the config files.
         repo_path: Absolute path string to add.
+        canonical_root: Canonical repo root for resolving existing relative paths.
 
     Returns:
         True if already linked, False if newly added.
@@ -351,9 +385,16 @@ def _add_path_to_local_config(config_dir: Path, repo_path: str) -> bool:
 
     paths = associates["paths"]
 
-    # Check for duplicates
-    if repo_path in paths:
-        return True
+    # Check for duplicates (resolve existing paths to catch relative/absolute matches)
+    resolved_new = Path(repo_path).resolve()
+    for existing in paths:
+        existing_path = Path(existing)
+        if not existing_path.is_absolute() and canonical_root:
+            existing_resolved = (canonical_root / existing_path).resolve()
+        else:
+            existing_resolved = existing_path.resolve()
+        if existing_resolved == resolved_new:
+            return True
 
     # Append new path
     paths.append(repo_path)

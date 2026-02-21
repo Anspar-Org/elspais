@@ -229,10 +229,10 @@ prefix = "CAL"
 path = "../core-repo"
 ```
 
-Validate with core linking:
+Validate without associated specs:
 
 ```bash
-elspais validate --core-repo ../core-repo
+elspais validate --mode core
 ```
 
 ## Content Rules
@@ -328,6 +328,8 @@ Options:
 
 Commands:
   validate              Validate requirements format, links, and hashes
+  health                Check graph and spec health (orphans, broken links)
+  doctor                Diagnose environment and installation setup
   trace                 Generate traceability matrix
   hash                  Manage requirement hashes (verify, update)
   index                 Manage INDEX.md file (validate, regenerate)
@@ -335,11 +337,19 @@ Commands:
   changed               Detect git changes to spec files
   version               Show version and check for updates
   init                  Create .elspais.toml configuration
+  example               Generate example spec files for getting started
   edit                  Edit requirements in-place (implements, status, move)
   config                View and modify configuration (show, get, set, ...)
   rules                 View and manage content rules (list, show)
+  docs                  View built-in documentation by topic
+  associate             Manage associate repository links
+  link                  Suggest and apply requirement links for test files
+  pdf                   Compile spec files to PDF (requires elspais[pdf])
+  completion            Generate shell completion scripts
   reformat-with-claude  Reformat requirements using AI (Acceptance Criteria -> Assertions)
   mcp                   MCP server commands (requires elspais[mcp])
+  install               Install MCP server for Claude Code / Cursor
+  uninstall             Uninstall MCP server registration
 ```
 
 See [docs/commands.md](docs/commands.md) for comprehensive command documentation.

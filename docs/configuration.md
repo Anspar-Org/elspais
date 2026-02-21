@@ -427,10 +427,18 @@ Configuration values can be overridden with environment variables:
 
 ```bash
 # Pattern: ELSPAIS_<SECTION>_<KEY>
+# Single underscore (_) separates sections: SECTION_KEY -> section.key
+# Double underscore (__) is a literal underscore: KEY__NAME -> key_name
 ELSPAIS_DIRECTORIES_SPEC=requirements
 ELSPAIS_PATTERNS_PREFIX=PRD
 ELSPAIS_ASSOCIATED_PREFIX=CAL
-ELSPAIS_VALIDATION_STRICT_HIERARCHY=false
+
+# Booleans are parsed automatically
+ELSPAIS_VALIDATION_STRICT__HIERARCHY=false
+
+# JSON list values
+ELSPAIS_ASSOCIATES_PATHS='["../callisto", "../phoenix"]'
+ELSPAIS_DIRECTORIES_CODE='["src", "lib"]'
 ```
 
 ## Minimal Configuration Examples

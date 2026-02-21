@@ -99,3 +99,25 @@ class TestApplyEnvOverridesWithParsing:
         config = {}
         result = _apply_env_overrides(config)
         assert result["associates"]["paths"] == ["/repo"]
+
+    def test_REQ_p00005_C_double_underscore_is_literal_underscore(self, monkeypatch):
+        """Double underscore (__) maps to literal underscore in key name."""
+        from elspais.config import _apply_env_overrides
+
+        monkeypatch.setenv("ELSPAIS_VALIDATION_STRICT__HIERARCHY", "false")
+        config = {"validation": {}}
+        result = _apply_env_overrides(config)
+        assert result["validation"]["strict_hierarchy"] is False
+
+    def test_REQ_p00005_C_double_underscore_does_not_create_empty_key(self, monkeypatch):
+        """ELSPAIS_ASSOCIATES__PATHS uses __ as literal underscore, not empty segment."""
+        from elspais.config import _apply_env_overrides
+
+        monkeypatch.setenv("ELSPAIS_ASSOCIATES__PATHS", '["/repo"]')
+        config = {}
+        result = _apply_env_overrides(config)
+        # __ is a literal underscore, so the key is "associates_paths" (flat)
+        assert "associates_paths" in result
+        assert result["associates_paths"] == ["/repo"]
+        # Must NOT create an empty-string section key (the old bug)
+        assert "" not in result
