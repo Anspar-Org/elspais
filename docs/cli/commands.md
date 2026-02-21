@@ -318,6 +318,47 @@ Show version information.
   $ elspais version               # Show current version
   $ elspais --version             # Alternative
 
+## doctor
+
+Diagnose your elspais environment and installation.
+
+  $ elspais doctor              # Quick setup check
+  $ elspais doctor -v           # Detailed output
+  $ elspais doctor -j           # JSON output for CI
+
+**What it checks:**
+
+  Configuration file exists, syntax, required fields
+  ID pattern placeholders and spec directory paths
+  Git worktree detection and canonical root
+  Associate paths and configurations
+  Local configuration (.elspais.local.toml)
+
+**Options:**
+
+  `-j, --json`     Output results as JSON
+  `-v, --verbose`  Show detailed information for each check
+
+## health
+
+Run health checks across configuration, spec files, code, and tests.
+
+  $ elspais health              # Run all checks
+  $ elspais health --config     # Configuration only
+  $ elspais health --spec       # Spec file checks
+  $ elspais health --code       # Code reference checks
+  $ elspais health --tests      # Test mapping checks
+  $ elspais health -j           # JSON output
+
+**Options:**
+
+  `--config`       Run configuration checks only
+  `--spec`         Run spec file checks only
+  `--code`         Run code reference checks only
+  `--tests`        Run test mapping checks only
+  `-j, --json`     Output as JSON
+  `-v, --verbose`  Show additional details
+
 ## mcp
 
 MCP (Model Context Protocol) server commands.
