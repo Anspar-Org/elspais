@@ -562,3 +562,109 @@ class TestSingleCodePath:
             compiled_pattern=None,
             query_lower="req-d00099",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: multi-term AND delegation via parsed parameter - REQ-d00061-F,
+#       REQ-p00050-D
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestMultiTermDelegation:
+    """Tests for multi-term query delegation via the ``parsed`` parameter.
+
+    Validates REQ-d00061-F, REQ-p00050-D:
+    - REQ-d00061-F: When regex=False and parsed is not None, _matches_query
+      delegates to matches_node() for multi-term AND/OR/exclusion logic.
+    - REQ-p00050-D: regex=True ignores parsed; parsed=None preserves old path.
+    """
+
+    @staticmethod
+    def _parse(raw: str):
+        """Helper to lazily import and call parse_query."""
+        from elspais.mcp.search import parse_query
+
+        return parse_query(raw)
+
+    # -- REQ-d00061-F: delegation to parsed query --------------------------
+
+    def test_REQ_d00061_F_delegates_to_parsed_query(self, _matches_query, match_node):
+        """REQ-d00061-F: parsed query with two AND terms both present matches."""
+        parsed = self._parse("Platform security")
+        result = _matches_query(
+            match_node,
+            field="all",
+            regex=False,
+            compiled_pattern=None,
+            query_lower=None,
+            parsed=parsed,
+        )
+        assert result is True
+
+    def test_REQ_d00061_F_parsed_query_or_group(self, _matches_query, match_node):
+        """REQ-d00061-F: OR group matches when one alternative matches."""
+        parsed = self._parse("database OR security")
+        result = _matches_query(
+            match_node,
+            field="all",
+            regex=False,
+            compiled_pattern=None,
+            query_lower=None,
+            parsed=parsed,
+        )
+        assert result is True
+
+    def test_REQ_d00061_F_parsed_query_exclusion(self, _matches_query, match_node):
+        """REQ-d00061-F: exclusion term causes node to be excluded."""
+        parsed = self._parse("-security")
+        result = _matches_query(
+            match_node,
+            field="all",
+            regex=False,
+            compiled_pattern=None,
+            query_lower=None,
+            parsed=parsed,
+        )
+        assert result is False
+
+    def test_REQ_d00061_F_parsed_query_no_match(self, _matches_query, match_node):
+        """REQ-d00061-F: multi-term AND query fails when one term is absent."""
+        parsed = self._parse("security database")
+        result = _matches_query(
+            match_node,
+            field="all",
+            regex=False,
+            compiled_pattern=None,
+            query_lower=None,
+            parsed=parsed,
+        )
+        assert result is False
+
+    # -- REQ-p00050-D: single code path preserved --------------------------
+
+    def test_REQ_p00050_D_regex_ignores_parsed(self, _matches_query, match_node):
+        """REQ-p00050-D: regex=True ignores parsed parameter entirely."""
+        parsed = self._parse("-security")  # would exclude if used
+        pattern = re.compile(r"REQ-d000\d+")
+        result = _matches_query(
+            match_node,
+            field="id",
+            regex=True,
+            compiled_pattern=pattern,
+            query_lower=None,
+            parsed=parsed,
+        )
+        # Regex path should match the id, parsed exclusion is ignored
+        assert result is True
+
+    def test_REQ_p00050_D_no_parsed_falls_through(self, _matches_query, match_node):
+        """REQ-p00050-D: parsed=None preserves legacy single-term behaviour."""
+        result = _matches_query(
+            match_node,
+            field="all",
+            regex=False,
+            compiled_pattern=None,
+            query_lower="security",
+            parsed=None,
+        )
+        assert result is True
