@@ -1,4 +1,4 @@
-# Implements: REQ-int-d00003 (CLI Extension)
+# Implements: REQ-p00004-A
 """
 elspais.commands.fix_cmd - Auto-fix spec file issues.
 

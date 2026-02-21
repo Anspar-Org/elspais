@@ -125,9 +125,12 @@ A. The system SHALL process output.
 
 
 class TestValidateFixDryRun:
-    """Tests for fix --dry-run mode."""
+    """Tests for fix --dry-run mode.
 
-    def test_dry_run_shows_fixable_issues(self, git_repo_with_issues, capsys):
+    Validates REQ-p00002-C: verify content hashes match requirement body text.
+    """
+
+    def test_REQ_p00002_C_dry_run_shows_fixable_issues(self, git_repo_with_issues, capsys):
         """--dry-run shows what would be fixed without modifying files."""
         import argparse
 
@@ -165,7 +168,10 @@ class TestValidateFixDryRun:
 
 
 class TestValidateFix:
-    """Tests for fix mode."""
+    """Tests for fix mode.
+
+    Validates REQ-p00002-C: verify content hashes match requirement body text.
+    """
 
     def test_REQ_p00002_C_fix_updates_stale_hashes(self, git_repo_with_issues, capsys):
         """Validates REQ-p00002-C: fix updates stale hashes in spec files."""
@@ -373,9 +379,12 @@ class TestAssertionSpacing:
 
 
 class TestListSpacing:
-    """Tests for format.list_spacing check and fix."""
+    """Tests for format.list_spacing check and fix.
 
-    def test_detects_list_after_text(self, tmp_path):
+    Validates REQ-p00002-A: validate requirement format against configurable patterns.
+    """
+
+    def test_REQ_p00002_A_detects_list_after_text(self, tmp_path):
         """List item immediately after text is detected."""
         from elspais.commands.validate import _check_list_spacing
 
@@ -384,7 +393,7 @@ class TestListSpacing:
         issues = _check_list_spacing(spec_file)
         assert len(issues) == 1  # Only the first - after text
 
-    def test_no_issue_when_blank_line_before_list(self, tmp_path):
+    def test_REQ_p00002_A_no_issue_when_blank_line_before_list(self, tmp_path):
         """Properly spaced list produces no issues."""
         from elspais.commands.validate import _check_list_spacing
 
@@ -393,7 +402,7 @@ class TestListSpacing:
         issues = _check_list_spacing(spec_file)
         assert issues == []
 
-    def test_fix_inserts_blank_line(self, tmp_path):
+    def test_REQ_p00002_A_fix_inserts_blank_line(self, tmp_path):
         """Fix inserts blank line before first list item."""
         from elspais.commands.validate import _fix_list_spacing
 
@@ -404,7 +413,7 @@ class TestListSpacing:
         content = spec_file.read_text()
         assert "SHALL support:\n\n- Item one\n- Item two" in content
 
-    def test_fix_is_idempotent(self, tmp_path):
+    def test_REQ_p00002_A_fix_is_idempotent(self, tmp_path):
         """Running fix twice doesn't add extra blank lines."""
         from elspais.commands.validate import _fix_list_spacing
 
@@ -414,7 +423,7 @@ class TestListSpacing:
         inserted = _fix_list_spacing(spec_file)
         assert inserted == 0
 
-    def test_consecutive_list_items_not_flagged(self, tmp_path):
+    def test_REQ_p00002_A_consecutive_list_items_not_flagged(self, tmp_path):
         """Consecutive list items without blank lines are fine."""
         from elspais.commands.validate import _check_list_spacing
 

@@ -46,7 +46,7 @@
  │   ├── validate.py             # elspais validate                                                          
  │   ├── trace.py                # elspais trace                                                             
  │   ├── analyze.py              # elspais analyze                                                           
- │   ├── hash_cmd.py             # elspais hash                                                              
+ │   ├── fix_cmd.py              # elspais fix                                                              
  │   ├── changed.py              # elspais changed                                                           
  │   ├── index.py                # elspais index                                                             
  │   ├── edit.py                 # elspais edit                                                              
