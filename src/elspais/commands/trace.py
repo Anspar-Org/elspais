@@ -528,14 +528,30 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
                 port = _find_free_port(port)
 
     url = f"http://127.0.0.1:{port}"
+    verbose = getattr(args, "verbose", False)
 
     if not quiet:
         print(f"Starting trace-edit server at {url}", file=sys.stderr)
 
     if open_browser:
+        import subprocess
         import webbrowser
 
-        webbrowser.open(url)
+        # Suppress GTK/Chrome stderr noise from browser launch
+        try:
+            subprocess.Popen(
+                ["xdg-open", url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            webbrowser.open(url)
+
+    # Suppress Flask/Werkzeug noise unless verbose
+    if not verbose:
+        import logging
+
+        logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
     try:
         app.run(host="127.0.0.1", port=port, debug=False)
