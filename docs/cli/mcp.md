@@ -110,19 +110,36 @@ Get requirement hierarchy (ancestors and children).
 
 ### Workspace Context
 
-**get_workspace_info()**
+**get_workspace_info(detail="default")**
 
-Get information about the current workspace/repository.
+Get information about the current workspace/repository. The `detail`
+parameter selects a use-case-specific profile that returns additional
+context relevant to the task at hand.
 
-  Returns:
-    repo_path       Absolute path to repository root
-    project_name    Project name from config or directory name
-    config_file     Path to .elspais.toml (if exists)
-    config_summary  Key configuration values:
-      - prefix          Requirement ID prefix
-      - spec_directories  Where spec files live
-      - testing_enabled   Whether test scanning is on
-      - project_type      'core' or 'associated'
+  Args:
+    detail          Profile to return (default: "default"):
+      - "default"     Basic project info, version, available_details
+      - "testing"     ID patterns, assertion format, test configuration
+      - "code-refs"   Code directories, comment styles, reference keywords
+      - "coverage"    Coverage stats, level counts, associate list
+      - "retrofit"    Full patterns, hierarchy rules, code + test config
+      - "manager"     Health flags, coverage stats, change metrics
+      - "worktree"    Associate paths, ID patterns, hierarchy rules
+      - "all"         Everything from all profiles combined
+
+  Returns (always present):
+    repo_path          Absolute path to repository root
+    project_name       Project name from config or directory name
+    elspais_version    Installed elspais version
+    config_file        Path to .elspais.toml (if exists)
+    detail             Which profile was used
+    available_details  Map of valid detail values to descriptions
+    config_summary     Key configuration values:
+      - prefix           Requirement ID prefix
+      - spec_directories Where spec files live
+      - testing_enabled  Whether test scanning is on
+      - project_type     'core' or 'associated'
+      - local_config     Whether .elspais.local.toml exists
 
   The MCP server automatically detects git worktrees and resolves
   associate paths from the canonical repository root.
@@ -232,7 +249,9 @@ The exact requirement ID syntax (prefixes, patterns) and hierarchy rules are
 - Different level types (PRD/OPS/DEV or custom)
 - Different hierarchy rules for "implements" relationships
 
-Use `get_workspace_info()` to see the current project's configuration.
+Use `get_workspace_info()` to see the current project's configuration, or
+`get_workspace_info(detail="all")` to see everything including ID patterns,
+hierarchy rules, and associate repositories.
 
 ## Architecture Notes
 
