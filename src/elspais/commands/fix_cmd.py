@@ -26,7 +26,17 @@ def run(args: argparse.Namespace) -> int:
 
     from elspais.commands import validate
 
-    return validate.run(_make_validate_args(args))
+    dry_run = getattr(args, "dry_run", False)
+    validate.run(_make_validate_args(args))
+
+    if dry_run:
+        return 0
+
+    # Re-validate to get the true exit code after fixes are applied
+    recheck = _make_validate_args(args)
+    recheck.fix = False
+    recheck.quiet = True
+    return validate.run(recheck)
 
 
 def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:

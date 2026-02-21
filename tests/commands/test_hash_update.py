@@ -715,8 +715,8 @@ class TestHashCommandOutput:
 
         result = run(args)
 
-        # Should succeed (hash mismatches are warnings, not errors)
-        assert result == 0
+        # Hash mismatches are integrity errors
+        assert result == 1
 
         captured = capsys.readouterr()
         assert "elspais fix" in captured.err.lower() or "elspais fix" in captured.out.lower()

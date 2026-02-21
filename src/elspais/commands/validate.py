@@ -133,7 +133,7 @@ def run(args: argparse.Namespace) -> int:
 
         if computed_hash:
             if not stored_hash:
-                # Missing hash - fixable
+                # Missing hash - integrity failure, fixable
                 issue = {
                     "rule": "hash.missing",
                     "id": node.id,
@@ -143,11 +143,11 @@ def run(args: argparse.Namespace) -> int:
                     "computed_hash": computed_hash,
                     "file": str(repo_root / node.source.path) if node.source else None,
                 }
-                warnings.append(issue)
+                errors.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
             elif stored_hash != computed_hash:
-                # Hash mismatch - fixable
+                # Hash mismatch - integrity failure, fixable
                 issue = {
                     "rule": "hash.mismatch",
                     "id": node.id,
@@ -158,7 +158,7 @@ def run(args: argparse.Namespace) -> int:
                     "computed_hash": computed_hash,
                     "file": str(repo_root / node.source.path) if node.source else None,
                 }
-                warnings.append(issue)
+                errors.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
         elif not stored_hash:

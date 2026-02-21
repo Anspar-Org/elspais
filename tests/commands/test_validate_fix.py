@@ -71,7 +71,7 @@ prefix = "REQ"
 
     # Create requirements with various issues:
     # 1. REQ-p00001: Stale hash (needs update)
-    # 2. REQ-p00002: Missing hash (needs insert)
+    # 2. REQ-p00002: Stale hash (different value, also needs update)
     req_file = spec_dir / "requirements.md"
     req_file.write_text(
         """# Requirements
@@ -90,7 +90,7 @@ A. The system SHALL validate input.
 
 ---
 
-## REQ-p00002: Requirement Missing Hash
+## REQ-p00002: Another Stale Hash
 
 **Level**: PRD | **Status**: Active | **Implements**: -
 
@@ -100,7 +100,7 @@ Some intro text.
 
 A. The system SHALL process output.
 
-*End* *Requirement Missing Hash*
+*End* *Another Stale Hash* | **Hash**: cafebabe
 
 ---
 """
@@ -149,7 +149,7 @@ class TestValidateFixDryRun:
 
         result = run(args)
 
-        # Should report success (no errors, just warnings/fixable issues)
+        # Dry-run always returns 0 (issues shown but not an error)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -235,12 +235,13 @@ class TestValidateFix:
             mode="combined",
             canonical_root=None,
         )
-        validate_run(validate_args)
+        result = validate_run(validate_args)
 
-        # Should pass (no hash-related errors)
+        # After fix, no hash errors should remain
         captured = capsys.readouterr()
-        # After fix, hash.mismatch issues should be gone
         assert "hash.mismatch" not in captured.err
+        assert "hash.missing" not in captured.err
+        assert result == 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
