@@ -33,7 +33,14 @@ from elspais.commands import (
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create the argument parser."""
+    """Create the argument parser.
+
+    NOTE: When adding or modifying CLI commands, also update:
+    - docs/cli/*.md          (user-facing documentation)
+    - docs/configuration.md  (config reference if new config keys)
+    - commands/init.py       (generated .elspais.toml templates)
+    - Shell completion        (if new subcommands/args)
+    """
     parser = argparse.ArgumentParser(
         prog="elspais",
         description="Requirements validation and traceability tools (L-Space)",
@@ -486,6 +493,10 @@ Configuration File:
 Local Overrides:
   Place a .elspais.local.toml alongside .elspais.toml for developer-local
   settings (gitignored). It is deep-merged on top of the base config.
+
+Worktree Support:
+  Git worktrees are auto-detected. Relative [associates].paths resolve
+  from the canonical (main) repo root. Use -v to see detected roots.
 
 Quick Start (.elspais.toml):
   [project]

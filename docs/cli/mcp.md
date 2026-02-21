@@ -124,6 +124,9 @@ Get information about the current workspace/repository.
       - testing_enabled   Whether test scanning is on
       - project_type      'core' or 'associated'
 
+  The MCP server automatically detects git worktrees and resolves
+  associate paths from the canonical repository root.
+
 **get_project_summary()**
 
 Get summary statistics for the project.

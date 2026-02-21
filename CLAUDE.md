@@ -22,6 +22,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Format Validation** (`validation/format.py`)
 **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files.
 **Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.
+**Canonical Root (Worktree Support)**: `find_canonical_root()` detects git worktrees and resolves to the main repo root via `git rev-parse --git-common-dir`. Cross-repo associate paths resolve from the canonical root, not the worktree root. Threaded through CLI, all commands, MCP server, and review server.
 **Coverage Source Tracking**: `RollupMetrics` tracks where coverage originates via `direct_covered`, `explicit_covered`, `inferred_covered`:
 **Multi-Assertion Syntax**: `Implements: REQ-p00001-A-B-C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`.
 **Associated Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
@@ -62,6 +63,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 - **ALWAYS** use a sub-agent to write tests
 - **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
+- **ALWAYS** update user-facing surfaces when adding/modifying CLI features: `docs/cli/*.md`, `docs/configuration.md`, `src/elspais/commands/init.py` templates, CLI help/epilog text, and shell completion
 
 ## Master Plan Workflow
 

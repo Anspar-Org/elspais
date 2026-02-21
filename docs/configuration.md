@@ -12,6 +12,11 @@ elspais looks for configuration in this order:
 4. `~/.config/elspais/config.toml` (user defaults)
 5. Built-in defaults
 
+For **git worktrees**, elspais detects the canonical (main) repository
+root and uses it when resolving relative associate paths. This means
+paths like `"../sibling-repo"` in `[associates].paths` resolve from the
+main repo, not the worktree location.
+
 ## Complete Configuration Reference
 
 ```toml
@@ -150,6 +155,16 @@ length = 3
 
 # Separator between associated and rest
 separator = "-"
+
+#──────────────────────────────────────────────────────────────────────────────
+# ASSOCIATES - Cross-Repository Links (for core repos)
+#──────────────────────────────────────────────────────────────────────────────
+
+[associates]
+# Paths to associated repositories (relative or absolute).
+# Relative paths resolve from the canonical repo root (worktree-safe).
+# Each path must contain .elspais.toml with project.type = "associated".
+paths = ["../callisto", "../phoenix"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # CORE REPOSITORY (for associated repos)
