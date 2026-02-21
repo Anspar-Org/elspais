@@ -72,7 +72,7 @@ def run(args: argparse.Namespace) -> int:
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    scan_sponsors = mode != "core"
+    scan_sponsors = mode == "combined"
 
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
@@ -113,17 +113,28 @@ def run(args: argparse.Namespace) -> int:
     warnings = []
     fixable = []  # Issues that can be auto-fixed
 
+    # Implements: REQ-p00005-A
+    # In associate mode, suppress orphan warnings for requirements whose
+    # parent is in the (deliberately unloaded) core repo.
+    if mode == "associate":
+        has_external_parent = {br.source_id for br in graph.broken_references()}
+    else:
+        has_external_parent = set()
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         # Implements: REQ-p00002-B
         # Check for orphan requirements (no parents except roots)
         if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
-            warnings.append(
-                {
-                    "rule": "hierarchy.orphan",
-                    "id": node.id,
-                    "message": f"Requirement {node.id} has no parent (orphan)",
-                }
-            )
+            if node.id in has_external_parent:
+                pass  # Cross-repo parent — expected in associate mode
+            else:
+                warnings.append(
+                    {
+                        "rule": "hierarchy.orphan",
+                        "id": node.id,
+                        "message": f"Requirement {node.id} has no parent (orphan)",
+                    }
+                )
 
         # Implements: REQ-p00002-C
         # Check for hash presence and correctness

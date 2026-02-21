@@ -116,6 +116,7 @@ Examples:
   elspais validate                      # Validate all requirements
   elspais validate -j                   # Output JSON for tooling
   elspais validate --mode core          # Exclude associated repo specs
+  elspais validate --mode associate     # Local specs only, suppress cross-repo warnings
 
 To auto-fix issues, use: elspais fix
 """,
@@ -133,9 +134,13 @@ To auto-fix issues, use: elspais fix
     )
     validate_parser.add_argument(
         "--mode",
-        choices=["core", "combined"],
+        choices=["core", "combined", "associate"],
         default="combined",
-        help="core: only local specs, combined: include associated repos (default)",
+        help=(
+            "core: only local specs, associate: local only"
+            " (cross-repo warnings suppressed),"
+            " combined: include associated repos (default)"
+        ),
     )
 
     # health command
@@ -293,12 +298,26 @@ Examples:
         action="store_true",
         help="Show what would be fixed without making changes",
     )
+    fix_parser.add_argument(
+        "--mode",
+        choices=["core", "combined", "associate"],
+        default="combined",
+        help=(
+            "core: only local specs, associate: local only"
+            " (cross-repo warnings suppressed),"
+            " combined: include associated repos (default)"
+        ),
+    )
 
     # index command
     _index_mode_kwargs = {
-        "choices": ["core", "combined"],
+        "choices": ["core", "combined", "associate"],
         "default": "combined",
-        "help": "core: only local specs, combined: include associated repos (default)",
+        "help": (
+            "core: only local specs, associate: local only"
+            " (cross-repo warnings suppressed),"
+            " combined: include associated repos (default)"
+        ),
     }
     index_parser = subparsers.add_parser(
         "index",

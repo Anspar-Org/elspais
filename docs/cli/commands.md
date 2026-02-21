@@ -17,7 +17,8 @@ Validate requirements format, links, hashes, and hierarchy.
 
   $ elspais validate                   # Check all rules
   $ elspais validate -j                # Output JSON for tooling
-  $ elspais validate --mode core       # Exclude associated repo specs
+  $ elspais validate --mode core        # Exclude associated repo specs
+  $ elspais validate --mode associate   # Local specs only, suppress cross-repo warnings
 
 To auto-fix issues, use: `elspais fix`
 
@@ -25,7 +26,7 @@ To auto-fix issues, use: `elspais fix`
 
   `-j, --json`          Output requirements as JSON
   `--export`            Export requirements as JSON dict keyed by ID
-  `--mode {core,combined}`  core: only local specs, combined: include associated repos
+  `--mode {core,combined,associate}`  core: only local specs, associate: local specs with cross-repo warnings suppressed, combined: include associated repos
 
 ## fix
 

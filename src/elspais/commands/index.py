@@ -35,7 +35,7 @@ def run(args: argparse.Namespace) -> int:
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
-    scan_sponsors = mode != "core"
+    scan_sponsors = mode == "combined"
 
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
