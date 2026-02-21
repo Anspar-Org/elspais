@@ -2,6 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.80.0] - 2026-02-20
+
+### Added
+
+- **Multi-term search engine**: Query parser with AND/OR operators, parenthesized grouping, exclusion (`-term`), exact keyword matching (`=term`), and quoted phrases (`"phrase"`) (REQ-d00061-F through REQ-d00061-M)
+- **Relevance scoring**: Search results scored by field match quality (ID=100, title=50, keyword-exact=40, keyword-substring=25, body=10)
+
 ## 0.79.0
 
 - Add `elspais associate` command for managing associated repo links

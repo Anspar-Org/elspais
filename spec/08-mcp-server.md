@@ -42,7 +42,7 @@ A. `get_graph_status()` SHALL return graph staleness state, node counts by kind,
 
 B. `refresh_graph(full)` SHALL force graph rebuild, with `full=True` clearing all caches.
 
-C. `search(query, field, regex)` SHALL search requirements by ID, title, or body content.
+C. `search(query, field, regex, limit)` SHALL search requirements by ID, title, body, or keyword content, supporting multi-term AND/OR queries with relevance scoring.
 
 D. `get_requirement(req_id)` SHALL return full requirement details including assertions and relationships.
 
@@ -176,7 +176,7 @@ The `search()` tool SHALL find requirements using graph iteration with filtering
 
 A. SHALL iterate `graph.nodes_by_kind(NodeKind.REQUIREMENT)` for requirement search.
 
-B. SHALL support `field` parameter: "id", "title", "body", or "all" (default).
+B. SHALL support `field` parameter: "id", "title", "body", "keywords", or "all" (default).
 
 C. SHALL support `regex=True` for regular expression matching.
 
@@ -184,9 +184,25 @@ D. SHALL return serialized requirement summaries, not full node objects.
 
 E. SHALL limit results to prevent unbounded response sizes.
 
+F. SHALL support multi-term AND queries where space-separated terms must all match in any searched field.
+
+G. SHALL support `OR` operator for disjunctive matching between terms (e.g., `auth OR password`).
+
+H. SHALL support parenthesized grouping `(...)` for explicit query precedence.
+
+I. SHALL support quoted phrases `"..."` for exact contiguous substring matching.
+
+J. SHALL support `-term` prefix for exclusion (nodes matching the term are filtered out).
+
+K. SHALL support `=term` prefix for exact keyword set matching (vs default substring matching).
+
+L. SHALL score results by field match quality (ID > title > keyword > body) and sort by relevance score descending.
+
+M. SHALL include a `score` field in search results when multi-term scoring is applied.
+
 ## Rationale
 
-Search enables AI agents to discover requirements by content without knowing exact IDs.
+Search enables AI agents to discover requirements by content without knowing exact IDs. Multi-term queries with AND/OR/NOT support, relevance scoring, and exact keyword matching allow both human users and AI agents to efficiently find requirements using natural search patterns like synonym lists or multi-concept queries.
 
 *End* *Requirement Search Tool Implementation* | **Hash**: f84bf4b1
 
