@@ -57,16 +57,27 @@ elspais associate --unlink callisto
 # Unlinked callisto
 ```
 
+The `--unlink` argument matches by (in order): exact path, directory name, path component substring, project name, or prefix code. This means all of these work:
+
+```bash
+elspais associate --unlink ../callisto                    # exact path
+elspais associate --unlink callisto                       # directory name or project name
+elspais associate --unlink CAL                            # prefix code
+```
+
+Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`), `--unlink callisto` still matches via path component substring.
+
 ## Options
 
 | Flag | Description |
 |------|-------------|
 | `--all` | Auto-discover and link all associates |
 | `--list` | Show status of linked associates |
-| `--unlink NAME` | Remove a linked associate |
+| `--unlink NAME` | Remove a linked associate by name, path, or prefix code |
 
 ## Notes
 
 - Links are stored in `.elspais.local.toml` (gitignored)
 - Use `elspais doctor` to check if your associate paths are valid
-- Uses `tomlkit` to preserve formatting when editing config files
+- Duplicate detection resolves relative paths from the canonical repo root, so `--all` won't create duplicates when run from a worktree
+- `--list` resolves relative paths from the canonical root for worktree compatibility

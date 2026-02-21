@@ -802,7 +802,7 @@ Associate configuration is written to .elspais.local.toml (gitignored).
     associate_group.add_argument(
         "--unlink",
         metavar="NAME",
-        help="Remove a linked associate by name",
+        help="Remove a linked associate (matches name, path, or prefix code)",
     )
 
     # pdf command

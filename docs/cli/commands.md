@@ -372,13 +372,14 @@ Manage links to associated repositories.
 
   `--all`            Auto-discover and link all associates
   `--list`           Show status of linked associates
-  `--unlink NAME`    Remove a linked associate
+  `--unlink NAME`    Remove a linked associate (matches name, path, or prefix code)
 
 **Notes:**
 
   Links are stored in `.elspais.local.toml` (gitignored, not shared)
   Validates target has `project.type = "associated"` in its config
   Accepts a path or a name (searches sibling directories)
+  Worktree-safe: resolves relative paths from canonical repo root
 
 ## mcp
 
