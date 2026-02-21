@@ -39,18 +39,6 @@
   // generic fenced blocks without specifying a language.
   "MD040": false,
 
-  // Trailing spaces: Disabled because architecture diagrams (spec/arch.md)
-  // use trailing spaces for column alignment in ASCII art layouts.
-  "MD009": false,
-
-  // Inline HTML: Disabled because format docs use <type> and <number>
-  // as placeholder syntax in requirement ID patterns.
-  "MD033": false,
-
-  // First line heading: Disabled because some spec files start with
-  // non-heading content (ASCII art, metadata).
-  "MD041": false,
-
   // Trailing newline: Disabled because file ending style varies
   // across editors and does not affect content.
   "MD047": false,

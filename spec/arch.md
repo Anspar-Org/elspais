@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 MD041 -->
  Elspais Architecture 3.0
 
  elspais/                                                                                                    
