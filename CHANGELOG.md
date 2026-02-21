@@ -15,16 +15,20 @@ All notable changes to elspais will be documented in this file.
 
 - **MCP tool docstrings**: Updated `search()`, `scoped_search()`, and `discover_requirements()` to document multi-term query syntax and scoring
 
-## 0.79.0
+## [0.79.0] - 2026-02-20
 
-- Add `elspais associate` command for managing associated repo links
-- Environment variable overrides now support JSON lists and booleans
+### Added
 
-## 0.78.0
+- **`elspais associate` command**: Manage associated repo links
+- **Environment variable overrides**: Now support JSON lists and booleans
 
-- Add `elspais doctor` command for environment and installation diagnostics
-- Configuration checks moved from `health` to `doctor` (shared between both commands)
-- Lay-person friendly diagnostic messages
+## [0.78.0] - 2026-02-20
+
+### Added
+
+- **`elspais doctor` command**: Environment and installation diagnostics
+- **Configuration refactor**: Checks moved from `health` to `doctor` (shared between both commands)
+- **Diagnostic messages**: Lay-person friendly output
 
 ## [0.73.2] - 2026-02-17
 
