@@ -8,17 +8,16 @@ Use this as a reference when implementing new features to ensure functional pari
 ## CLI Commands
 
 ### `elspais validate`
-Validates requirements format, links, and hashes. Checks consistency and can auto-fix fixable issues.
-- Options: `--fix`, `--core-repo`, `--skip-rule`, `-j/--json`, `--tests`, `--no-tests`, `--mode (core|combined)`
+Validates requirements format, links, and hashes. Checks consistency and reports fixable issues.
+- Options: `--core-repo`, `-j/--json`, `--tests`, `--no-tests`, `--mode (core|combined)`
 
 ### `elspais trace`
 Generates traceability matrix and reports from requirements. Supports multiple output formats.
 - Options: `--format (markdown|html|csv|both)`, `--output`, `--view`, `--embed-content`, `--edit-mode`, `--review-mode`, `--server`, `--port`, `--mode (core|sponsor|combined)`, `--sponsor`, `--graph`, `--graph-json`, `--report`, `--depth`
 
-### `elspais hash`
-Manages requirement hashes for change tracking.
-- Subcommands: `verify`, `update`
-- Options: `req_id`, `--dry-run`
+### `elspais fix`
+Auto-fixes spec file issues (hashes, formatting).
+- Options: `req_id` (optional), `--dry-run`
 
 ### `elspais index`
 Manages INDEX.md file validation and regeneration.

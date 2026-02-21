@@ -48,8 +48,8 @@ B. The system SHALL NOT do something prohibited.
 The 8-character hash is computed from the requirement body content.
 When content changes, the hash changes, triggering review.
 
-  $ elspais hash update   # Recompute all hashes
-  $ elspais hash verify   # Check for stale hashes
+  $ elspais fix            # Recompute all hashes
+  $ elspais validate       # Check for stale hashes
 
 ## Multiple Requirements Per File
 
