@@ -491,6 +491,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     )
 
     app = create_app(repo_root=repo_root, graph=graph, config=config)
+    app.config["ELSPAIS_DEBUG"] = getattr(args, "verbose", False)
 
     port = 5000
     quiet = getattr(args, "quiet", False)

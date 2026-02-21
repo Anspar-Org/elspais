@@ -457,6 +457,21 @@ def get_associate_spec_directories(
     spec_dirs = []
     errors: list[str] = []
 
+    # 0. Core repo spec directory (for associated projects)
+    project_type = config.get("project", {}).get("type")
+    if project_type == "associated":
+        core_path_str = config.get("core", {}).get("path")
+        if core_path_str:
+            core_path = Path(core_path_str)
+            if not core_path.is_absolute() and canonical_root:
+                core_path = canonical_root / core_path
+            core_spec_dir_name = config.get("core", {}).get("spec", "spec")
+            core_spec_dir = core_path / core_spec_dir_name
+            if core_spec_dir.exists() and core_spec_dir.is_dir():
+                spec_dirs.append(core_spec_dir)
+            else:
+                errors.append(f"Core repo spec directory not found: {core_spec_dir}")
+
     # 1. Legacy sponsors YAML loading (existing behavior)
     associates_config = load_associates_config(config, base_path)
     for associate in associates_config.associates:
