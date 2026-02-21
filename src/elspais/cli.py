@@ -13,6 +13,7 @@ from pathlib import Path
 from elspais import __version__
 from elspais.commands import (
     analyze,
+    associate_cmd,
     changed,
     completion,
     config_cmd,
@@ -763,6 +764,47 @@ First, install the completion extra:
         help="Remove completion from your shell rc file",
     )
 
+    # associate command
+    associate_parser = subparsers.add_parser(
+        "associate",
+        help="Manage associate repository links (link, list, unlink)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais associate /path/to/repo        # Link to specific associate
+  elspais associate callisto             # Find by name in sibling dirs
+  elspais associate --all                # Auto-discover and link all
+  elspais associate --list               # Show current links and status
+  elspais associate --unlink callisto    # Remove a link
+
+Associate configuration is written to .elspais.local.toml (gitignored).
+""",
+    )
+    associate_group = associate_parser.add_mutually_exclusive_group()
+    associate_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Path to associate repo or name to search for",
+    )
+    associate_group.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Auto-discover and link all associates in sibling directories",
+    )
+    associate_group.add_argument(
+        "--list",
+        action="store_true",
+        default=False,
+        help="Show current associate links and status",
+    )
+    associate_group.add_argument(
+        "--unlink",
+        metavar="NAME",
+        help="Remove a linked associate by name",
+    )
+
     # pdf command
     pdf_parser = subparsers.add_parser(
         "pdf",
@@ -1101,6 +1143,8 @@ def main(argv: list[str] | None = None) -> int:
             return completion.run(args)
         elif args.command == "mcp":
             return mcp_command(args)
+        elif args.command == "associate":
+            return associate_cmd.run(args)
         elif args.command == "link":
             if getattr(args, "link_action", None) == "suggest":
                 return link_suggest.run(args)
