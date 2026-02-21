@@ -430,7 +430,7 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
         if isinstance(result, str):
             invalid.append(f"{path_str}: {result}")
         else:
-            valid.append(f"{path_str} ({result.prefix})")
+            valid.append(f"{path_str} ({result.code})")
 
     if invalid:
         return HealthCheck(

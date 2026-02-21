@@ -166,11 +166,16 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("Use 'elspais associate <path>' or 'elspais associate --all' to link.")
         return 0
 
+    # Resolve relative paths from canonical_root (worktree support)
+    canonical_root = getattr(args, "canonical_root", None)
+
     print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} Path")
     print("-" * 72)
 
     for path_str in paths:
         repo_path = Path(path_str)
+        if not repo_path.is_absolute() and canonical_root:
+            repo_path = Path(canonical_root) / repo_path
         if not repo_path.exists():
             name = repo_path.name
             print(f"{name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
