@@ -16,6 +16,7 @@ from elspais.commands import (
     changed,
     completion,
     config_cmd,
+    doctor,
     edit,
     example_cmd,
     hash_cmd,
@@ -205,6 +206,29 @@ Checks performed:
         help="Run test mapping checks only",
     )
     health_parser.add_argument(
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # doctor command
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Diagnose environment and installation health",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  elspais doctor              # Check your elspais setup
+  elspais doctor -j           # Output as JSON
+  elspais doctor -v           # Verbose with details
+
+Checks performed:
+  CONFIG:      Configuration file exists, syntax valid, settings complete
+  ENVIRONMENT: Worktree detection, associate paths, local overrides
+""",
+    )
+    doctor_parser.add_argument(
         "-j",
         "--json",
         action="store_true",
@@ -1045,6 +1069,8 @@ def main(argv: list[str] | None = None) -> int:
             return validate.run(args)
         elif args.command == "health":
             return health.run(args)
+        elif args.command == "doctor":
+            return doctor.run(args)
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "hash":

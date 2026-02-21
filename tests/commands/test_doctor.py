@@ -6,6 +6,8 @@ Validates REQ-p00001-A: CLI validation of requirement documents.
 """
 from __future__ import annotations
 
+import argparse
+
 
 class TestDoctorConfigChecks:
     """Validates REQ-p00001-A: config checks produce lay-person messages."""
@@ -171,3 +173,62 @@ class TestDoctorCrossRepoCheck:
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
         assert ".elspais.local.toml" in result.message
+
+
+class TestDoctorRun:
+    """Validates REQ-p00001-A: doctor command end-to-end."""
+
+    def test_REQ_p00001_A_run_returns_zero_healthy(self, tmp_path, monkeypatch):
+        from elspais.commands.doctor import run
+
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
+        )
+        (tmp_path / "spec").mkdir()
+
+        args = argparse.Namespace(
+            config=str(config_path),
+            json=False,
+            verbose=False,
+            canonical_root=None,
+        )
+        result = run(args)
+        assert result == 0
+
+    def test_REQ_p00001_A_run_json_output(self, tmp_path, monkeypatch, capsys):
+        import json as json_mod
+
+        from elspais.commands.doctor import run
+
+        monkeypatch.chdir(tmp_path)
+        args = argparse.Namespace(
+            config=None,
+            json=True,
+            verbose=False,
+            canonical_root=None,
+        )
+        run(args)
+        output = capsys.readouterr().out
+        data = json_mod.loads(output)
+        assert "checks" in data
+
+    def test_REQ_p00001_A_run_nonzero_on_errors(self, tmp_path, monkeypatch):
+        from elspais.commands.doctor import run
+
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text("invalid [[ toml")
+
+        args = argparse.Namespace(
+            config=str(config_path),
+            json=False,
+            verbose=False,
+            canonical_root=None,
+        )
+        result = run(args)
+        assert result == 1

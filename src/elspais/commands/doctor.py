@@ -12,10 +12,11 @@ Checks the elspais setup on this machine:
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from elspais.commands.health import HealthCheck
+from elspais.commands.health import HealthCheck, HealthReport
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
@@ -532,3 +533,120 @@ def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthChec
         message="No cross-project paths in shared configuration",
         category="environment",
     )
+
+
+def run_environment_checks(
+    config: dict,
+    git_root: Path | None,
+    canonical_root: Path | None,
+    config_path: Path | None,
+    start_path: Path,
+) -> list[HealthCheck]:
+    """Run all environment checks."""
+    return [
+        check_worktree_status(git_root, canonical_root),
+        check_associate_paths(config, canonical_root),
+        check_associate_configs(config, canonical_root),
+        check_local_toml_exists(start_path),
+        check_cross_repo_in_committed_config(config_path),
+    ]
+
+
+def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
+    """Print human-readable doctor report."""
+    categories = ["config", "environment"]
+
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        passed = sum(1 for c in checks if c.passed)
+        total = len(checks)
+        status = "OK" if passed == total else "ISSUES FOUND"
+        label = category.upper()
+        print(f"\n{label} ({passed}/{total} checks passed) - {status}")
+        print("-" * 50)
+
+        for check in checks:
+            if check.passed:
+                icon = "ok"
+            elif check.severity == "warning":
+                icon = "!!"
+            elif check.severity == "info":
+                icon = "--"
+            else:
+                icon = "XX"
+
+            print(f"  [{icon}] {check.message}")
+
+            if verbose and check.details:
+                for key, value in check.details.items():
+                    if isinstance(value, list) and len(value) > 3:
+                        print(f"        {key}: {value[:3]} ... ({len(value)} total)")
+                    else:
+                        print(f"        {key}: {value}")
+
+    print()
+    total = len(report.checks)
+    failed = report.failed
+    warnings = report.warnings
+    if failed == 0 and warnings == 0:
+        print(f"All {total} checks passed. Your elspais installation looks good.")
+    elif failed == 0:
+        print(f"{total - warnings} checks passed, {warnings} warnings. No critical issues.")
+    else:
+        print(f"{failed} issues found out of {total} checks. See above for details.")
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run the doctor command."""
+    from elspais.config import ConfigLoader, find_config_file, find_git_root, get_config
+
+    config_path = getattr(args, "config", None)
+    if config_path:
+        config_path = Path(config_path)
+    canonical_root = getattr(args, "canonical_root", None)
+    start_path = Path.cwd()
+    git_root = find_git_root(start_path)
+
+    report = HealthReport()
+
+    # Load config for checks
+    config = None
+    config_dict = {}
+    try:
+        config_dict = get_config(config_path, start_path=start_path)
+        config = ConfigLoader.from_dict(config_dict)
+        for check in run_config_checks(config_path, config, start_path):
+            report.add(check)
+    except Exception as e:
+        report.add(
+            HealthCheck(
+                name="config.load",
+                passed=False,
+                message=f"Could not load configuration: {e}",
+                category="config",
+            )
+        )
+
+    # Find the actual config file path for cross-repo check
+    actual_config_path = config_path
+    if not actual_config_path:
+        actual_config_path = find_config_file(start_path)
+
+    # Environment checks
+    for check in run_environment_checks(
+        config_dict, git_root, canonical_root, actual_config_path, start_path
+    ):
+        report.add(check)
+
+    # Output
+    if getattr(args, "json", False):
+        import json
+
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        _print_text_report(report, verbose=getattr(args, "verbose", False))
+
+    return 0 if report.is_healthy else 1
