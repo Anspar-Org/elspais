@@ -74,11 +74,13 @@ def run(args: argparse.Namespace) -> int:
 
     scan_sponsors = mode != "core"
 
+    canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
         scan_sponsors=scan_sponsors,
+        canonical_root=canonical_root,
     )
 
     # Handle --export mode (early return, not validation)

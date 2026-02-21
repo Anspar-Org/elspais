@@ -1101,9 +1101,11 @@ def run(args: argparse.Namespace) -> int:
     graph = None
     if run_spec or run_code or run_tests:
         try:
+            canonical_root = getattr(args, "canonical_root", None)
             graph = build_graph(
                 spec_dirs=[spec_dir] if spec_dir else None,
                 config_path=config_path,
+                canonical_root=canonical_root,
             )
             if config is None:
                 config_dict = get_config(config_path, start_path=start_path)

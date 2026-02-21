@@ -680,6 +680,7 @@ def create_app(
             new_graph = build_graph(
                 config=_state["config"],
                 repo_root=_state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
             _state["build_time"] = time.time()
@@ -696,6 +697,7 @@ def create_app(
             new_graph = build_graph(
                 config=_state["config"],
                 repo_root=_state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
             _state["build_time"] = time.time()

@@ -1010,17 +1010,23 @@ def main(argv: list[str] | None = None) -> int:
     # This ensures elspais works the same from any subdirectory
     import os
 
-    from elspais.config import find_git_root
+    from elspais.config import find_canonical_root, find_git_root
 
     original_cwd = Path.cwd()
     git_root = find_git_root(original_cwd)
+    canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)
         if args.verbose:
             print(f"Working from repository root: {git_root}", file=sys.stderr)
+            if canonical_root and canonical_root != git_root:
+                print(f"Canonical root (main repo): {canonical_root}", file=sys.stderr)
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
+
+    # Store canonical_root on args for commands to use
+    args.canonical_root = canonical_root
 
     try:
         # Dispatch to command handlers

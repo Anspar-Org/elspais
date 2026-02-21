@@ -45,10 +45,12 @@ def run(args: argparse.Namespace) -> int:
     limit = getattr(args, "limit", 50)
 
     # Build graph
+    canonical_root = getattr(args, "canonical_root", None)
     try:
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
+            canonical_root=canonical_root,
         )
     except Exception as e:
         print(f"Error building graph: {e}", file=sys.stderr)

@@ -26,10 +26,12 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        canonical_root=canonical_root,
     )
 
     action = getattr(args, "analyze_action", None)
