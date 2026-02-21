@@ -2,16 +2,33 @@
 
 All notable changes to elspais will be documented in this file.
 
-## 0.79.0
+## [0.80.0] - 2026-02-20
 
-- Add `elspais associate` command for managing associated repo links
-- Environment variable overrides now support JSON lists and booleans
+### Added
 
-## 0.78.0
+- **Multi-term search engine** (`mcp/search.py`): Query parser with AND/OR operators, parenthesized grouping, exclusion (`-term`), exact keyword matching (`=term`), and quoted phrases (`"phrase"`) (REQ-d00061-F through REQ-d00061-M)
+- **Relevance scoring**: Search results scored by field match quality (ID=100, title=50, keyword-exact=40, keyword-substring=25, body=10) and sorted by score descending (REQ-d00061-L)
+- **Flask search passthrough**: `/api/search` now accepts `limit` and `regex` query parameters (REQ-d00061-E, REQ-d00061-C)
+- **GUI tree text filter**: Toolbar text input filters the nav tree via server-side search with debounced API calls, intersecting with existing button/dropdown filters (REQ-o00060-C)
 
-- Add `elspais doctor` command for environment and installation diagnostics
-- Configuration checks moved from `health` to `doctor` (shared between both commands)
-- Lay-person friendly diagnostic messages
+### Changed
+
+- **MCP tool docstrings**: Updated `search()`, `scoped_search()`, and `discover_requirements()` to document multi-term query syntax and scoring
+
+## [0.79.0] - 2026-02-20
+
+### Added
+
+- **`elspais associate` command**: Manage associated repo links
+- **Environment variable overrides**: Now support JSON lists and booleans
+
+## [0.78.0] - 2026-02-20
+
+### Added
+
+- **`elspais doctor` command**: Environment and installation diagnostics
+- **Configuration refactor**: Checks moved from `health` to `doctor` (shared between both commands)
+- **Diagnostic messages**: Lay-person friendly output
 
 ## [0.73.2] - 2026-02-17
 

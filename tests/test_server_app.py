@@ -266,7 +266,7 @@ class TestGetHierarchy:
 
 
 class TestGetSearch:
-    """Validates REQ-d00010-A: GET /api/search."""
+    """Validates REQ-d00010-A, REQ-d00061-E, REQ-d00061-C: GET /api/search."""
 
     def test_REQ_d00010_A_search_by_query(self, client):
         """GET /api/search?q=Security returns matching results."""
@@ -296,6 +296,40 @@ class TestGetSearch:
         resp = client.get("/api/search?q=REQ-p00001&field=id")
         data = resp.get_json()
         assert len(data) >= 1
+
+    def test_REQ_d00061_E_search_with_limit(self, client):
+        """Limit parameter restricts result count."""
+        # With limit=1, should get at most 1 result
+        resp = client.get("/api/search?q=REQ&limit=1")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data) <= 1
+
+    def test_REQ_d00061_E_search_default_limit(self, client):
+        """Default limit is 50 when not specified."""
+        # Just verify the endpoint works without limit param (uses default 50)
+        resp = client.get("/api/search?q=Security")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, list)
+        # Our test graph has few nodes, so all should be returned
+        assert len(data) >= 1
+
+    def test_REQ_d00061_C_search_with_regex(self, client):
+        """Regex parameter enables regex matching."""
+        resp = client.get("/api/search?q=REQ-p0000[0-9]&regex=true")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data) >= 1
+        assert data[0]["id"] == "REQ-p00001"
+
+    def test_REQ_d00061_C_search_regex_defaults_false(self, client):
+        """Regex defaults to false - literal bracket chars don't match."""
+        resp = client.get("/api/search?q=REQ-p0000[0-9]")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Without regex, "[0-9]" is literal text that won't match any node
+        assert len(data) == 0
 
 
 class TestGetTestCoverage:

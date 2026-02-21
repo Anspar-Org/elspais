@@ -235,12 +235,14 @@ def create_app(
 
     @app.route("/api/search")
     def api_search():
-        """GET /api/search?q=<query>&field=<field> - Search requirements."""
+        """GET /api/search?q=<query>&field=<field>&limit=<n>&regex=<bool> - Search requirements."""
         query = request.args.get("q", "")
         field = request.args.get("field", "all")
+        regex = request.args.get("regex", "false").lower() == "true"
+        limit = int(request.args.get("limit", "50"))
         if not query:
             return jsonify([])
-        return jsonify(_search(_state["graph"], query, field))
+        return jsonify(_search(_state["graph"], query, field, regex=regex, limit=limit))
 
     @app.route("/api/test-coverage/<req_id>")
     def api_test_coverage(req_id: str):

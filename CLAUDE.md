@@ -44,7 +44,8 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Node Mutation API**: TraceGraph provides mutation methods with full undo support
 **Assertion Mutation API**: TraceGraph provides assertion-specific mutations
 **Edge Mutation API**: TraceGraph provides edge (relationship) mutations
-**MCP Tools** (`elspais[mcp]`): The MCP server provides tools to explore and manipulate the graph for a system. Includes `get_subtree()` for scoped subgraph extraction (markdown/flat/nested formats) and a cursor protocol (`open_cursor`/`cursor_next`/`cursor_info`) for incremental iteration over any read query.
+**MCP Tools** (`elspais[mcp]`): The MCP server provides tools to explore and manipulate the graph for a system. Includes `get_subtree()` for scoped subgraph extraction (markdown/flat/nested formats), a cursor protocol (`open_cursor`/`cursor_next`/`cursor_info`) for incremental iteration over any read query, and multi-term search with relevance scoring (`search()`, `scoped_search()`, `discover_requirements()`).
+**Multi-Term Search** (`mcp/search.py`): Query parser and scorer engine supporting AND/OR operators, parenthesized grouping, quoted phrases, `-exclusion`, `=exact` keyword matching, and field-weighted relevance scoring (ID=100, title=50, keyword-exact=40, keyword-substring=25, body=10). Used by MCP search tools, Flask `/api/search`, and the GUI tree filter.
 **Unified References Configuration** (`[references]`): Configurable reference parsing for all parser types
 
 **Multi-Language Comment Support:**

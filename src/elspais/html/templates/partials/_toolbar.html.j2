@@ -38,6 +38,12 @@
         </label>
     </div>
 
+    <!-- Text Filter -->
+    <input type="text" class="filter-text-input" id="edit-filter-text"
+           placeholder="Filter tree... (e.g. auth OR password)"
+           oninput="onTreeTextFilter()"
+           title="Multi-term search: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
+
     <!-- Actions -->
     <div class="toolbar-actions">
         <button class="btn" onclick="clearEditFilters()" title="Clear all filters">Clear</button>

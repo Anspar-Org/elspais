@@ -178,6 +178,8 @@ const editState = {
     knownRepos: [],
     filterStatus: '',
     filterCoverage: '',
+    filterText: '',
+    textMatchIds: null,
     fontSize: 14,
     theme: 'system',
     toolbarHidden: false
@@ -397,6 +399,13 @@ document.addEventListener('DOMContentLoaded', function() {
             editState.filterCoverage = saved.filterCoverage;
             var filterCovSel = document.getElementById('edit-filter-coverage');
             if (filterCovSel) filterCovSel.value = saved.filterCoverage;
+        }
+        if (saved.filterText) {
+            editState.filterText = saved.filterText;
+            var filterTextInput = document.getElementById('edit-filter-text');
+            if (filterTextInput) filterTextInput.value = saved.filterText;
+            // Trigger search to populate textMatchIds
+            onTreeTextFilter();
         }
         // Restore font size
         if (saved.fontSize) {
