@@ -171,7 +171,7 @@ jobs:
           token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
           errors: true
           payload: |
-            channel: "${{ secrets.SLACK_FALLBACK_CHANNEL }}"
+            channel: "${{ secrets.SLACK_CHANNEL_DEV }}"
             text: "${{ steps.message.outputs.text }}"
 
   notify-failure:
@@ -271,7 +271,7 @@ jobs:
         env:
           SLACK_USER_FOUND: ${{ steps.slack_user.outputs.found }}
           SLACK_USER_ID: ${{ steps.slack_user.outputs.user_id }}
-          FALLBACK_CHANNEL: ${{ secrets.SLACK_FALLBACK_CHANNEL }}
+          FALLBACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_DEV }}
         run: |
           if [ "$SLACK_USER_FOUND" = "true" ]; then
             echo "id=${SLACK_USER_ID}" >> "$GITHUB_OUTPUT"
