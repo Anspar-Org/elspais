@@ -209,9 +209,6 @@ class HTMLGenerator:
         # Apply git annotations to all nodes
         self._annotate_git_state()
 
-        # Compute coverage metrics for all requirements
-        self._annotate_coverage()
-
         # Build data structures
         stats = self._compute_stats()
         rows = self._build_tree_rows()
@@ -269,17 +266,6 @@ class HTMLGenerator:
         # Apply display info annotations (HTML-specific concern)
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             annotate_display_info(node)
-
-    def _annotate_coverage(self) -> None:
-        """Compute coverage metrics for all requirement nodes.
-
-        Uses the centralized annotate_coverage() function to compute
-        RollupMetrics for each requirement, which are then stored in
-        node._metrics for use by stats computation and row building.
-        """
-        from elspais.graph.annotators import annotate_coverage
-
-        annotate_coverage(self.graph)
 
     def _is_associated(self, node: GraphNode) -> bool:
         """Check if a node is from an associated/sponsor repository.

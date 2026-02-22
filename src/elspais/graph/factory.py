@@ -350,9 +350,11 @@ def build_graph(
         link_tests_to_code(graph, repo_root, source_roots)
 
     # Annotate keywords on all nodes so keyword search tools work
-    from elspais.graph.annotators import annotate_keywords
+    # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
+    from elspais.graph.annotators import annotate_coverage, annotate_keywords
 
     annotate_keywords(graph)
+    annotate_coverage(graph)
 
     return graph
 

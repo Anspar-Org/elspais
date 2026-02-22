@@ -2,6 +2,17 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.83.0] - 2026-02-21
+
+### Fixed
+
+- **MCP coverage always 0%**: Moved `annotate_coverage()` into `build_graph()` so all consumers (MCP, HTML, Flask) get coverage metrics automatically (REQ-d00055-D, REQ-o00061-B)
+- **Graph JSON serialization**: Filter non-JSON-serializable metric values (like `RollupMetrics`) from `serialize_node()` output
+
+### Removed
+
+- Redundant `_annotate_coverage()` calls from `HTMLGenerator.generate()` and Flask server `_build_review_context()`
+
 ## [0.80.0] - 2026-02-20
 
 ### Added

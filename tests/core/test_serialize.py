@@ -1,3 +1,4 @@
+# Validates REQ-d00055-D
 """Tests for Graph Serialization module."""
 
 from pathlib import Path
@@ -275,3 +276,87 @@ class TestSerializeAdditionalCoverage:
         assert result["roots"] == []
         assert result["metadata"]["node_count"] == 0
         assert result["metadata"]["root_count"] == 0
+
+
+class TestSerializeMetricsFiltering:
+    """Validates REQ-d00055-D: Serializer filters non-JSON-serializable metrics.
+
+    The serialize_node function must include scalar metrics like coverage_pct
+    but exclude complex objects like RollupMetrics that are not JSON-serializable.
+    """
+
+    def test_REQ_d00055_D_rollup_metrics_excluded_from_serialization(self):
+        """RollupMetrics (non-serializable) should NOT appear in serialized output."""
+        from elspais.graph.metrics import RollupMetrics
+
+        node = GraphNode(
+            id="REQ-test",
+            kind=NodeKind.REQUIREMENT,
+            label="Test",
+        )
+        # Set both scalar and complex metrics
+        rollup = RollupMetrics(total_assertions=2)
+        rollup.finalize()
+        node.set_metric("rollup_metrics", rollup)
+        node.set_metric("coverage_pct", 50.0)
+
+        result = serialize_node(node)
+
+        assert "metrics" in result
+        assert (
+            "rollup_metrics" not in result["metrics"]
+        ), "RollupMetrics object should be filtered out of serialized metrics"
+
+    def test_REQ_d00055_D_coverage_pct_included_in_serialization(self):
+        """coverage_pct (float scalar) SHOULD appear in serialized output."""
+        from elspais.graph.metrics import RollupMetrics
+
+        node = GraphNode(
+            id="REQ-test",
+            kind=NodeKind.REQUIREMENT,
+            label="Test",
+        )
+        rollup = RollupMetrics(total_assertions=1)
+        rollup.finalize()
+        node.set_metric("rollup_metrics", rollup)
+        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("is_uncommitted", True)
+        node.set_metric("total_tests", 3)
+
+        result = serialize_node(node)
+
+        assert "metrics" in result
+        assert (
+            result["metrics"]["coverage_pct"] == 75.0
+        ), "coverage_pct should be preserved in serialized output"
+        assert (
+            result["metrics"]["is_uncommitted"] is True
+        ), "Boolean metrics should be preserved in serialized output"
+        assert (
+            result["metrics"]["total_tests"] == 3
+        ), "Integer metrics should be preserved in serialized output"
+
+    def test_REQ_d00055_D_serialized_metrics_are_json_safe(self):
+        """All metrics in serialized output must be JSON-serializable scalar types."""
+        import json
+
+        from elspais.graph.metrics import RollupMetrics
+
+        node = GraphNode(
+            id="REQ-test",
+            kind=NodeKind.REQUIREMENT,
+            label="Test",
+        )
+        rollup = RollupMetrics(total_assertions=3)
+        rollup.finalize()
+        node.set_metric("rollup_metrics", rollup)
+        node.set_metric("coverage_pct", 66.7)
+        node.set_metric("some_label", "text_value")
+
+        result = serialize_node(node)
+
+        # The serialized result should be fully JSON-serializable
+        try:
+            json.dumps(result)
+        except (TypeError, ValueError) as e:
+            pytest.fail(f"Serialized node should be JSON-safe, but got: {e}")

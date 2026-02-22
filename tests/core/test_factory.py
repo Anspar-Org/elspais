@@ -1,8 +1,10 @@
 # Implements: REQ-d00054-A
-"""Tests for graph factory build_graph() — code directory scanning.
+# Validates REQ-d00055-D, REQ-o00061-B
+"""Tests for graph factory build_graph() — code directory scanning and coverage annotation.
 
 Verifies that build_graph() correctly scans [directories].code in addition
 to [traceability].scan_patterns, with de-duplication and ignore filtering.
+Also verifies that build_graph() annotates coverage metrics on requirement nodes.
 """
 
 from pathlib import Path
@@ -261,3 +263,224 @@ code = ["does_not_exist"]
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
         assert len(code_nodes) == 0, "Non-existent code directory should produce zero CODE nodes"
+
+
+class TestBuildGraphCoverageAnnotation:
+    """Validates REQ-d00055-D: build_graph() annotates coverage_pct on requirement nodes.
+
+    Validates REQ-o00061-B: get_project_summary() returns non-zero coverage when
+    requirements have implementing code, because build_graph() now runs annotate_coverage().
+    """
+
+    def test_REQ_d00055_D_build_graph_sets_coverage_pct_metric(self, tmp_path: Path) -> None:
+        """After build_graph(), requirement nodes have coverage_pct metric set.
+
+        When a code file implements a requirement's assertion, the coverage_pct
+        metric should reflect that coverage (not remain at 0).
+        """
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-coverage"
+
+[directories]
+spec = "spec"
+code = ["src"]
+""",
+            encoding="utf-8",
+        )
+
+        # Write a spec with one requirement and one assertion
+        # Uses ## heading level and ## Assertions section (matching parser expectations)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir(parents=True, exist_ok=True)
+        (spec_dir / "reqs.md").write_text(
+            """\
+# Test Requirements
+
+## REQ-p00001: Test Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+The system SHALL do something testable.
+
+## Assertions
+
+A. The system SHALL perform action X.
+
+*End* *Test Requirement* | **Hash**: abcd1234
+
+---
+""",
+            encoding="utf-8",
+        )
+
+        # Write a code file that implements the assertion
+        code_dir = tmp_path / "src"
+        code_dir.mkdir(parents=True, exist_ok=True)
+        (code_dir / "impl.py").write_text(
+            "# Implements: REQ-p00001-A\ndef do_action_x(): pass\n",
+            encoding="utf-8",
+        )
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+            scan_sponsors=False,
+        )
+
+        req_node = graph.find_by_id("REQ-p00001")
+        assert req_node is not None, "REQ-p00001 should exist in the graph"
+
+        coverage_pct = req_node.get_metric("coverage_pct")
+        assert coverage_pct is not None, "coverage_pct metric should be set after build_graph()"
+        assert (
+            coverage_pct == 100.0
+        ), f"Expected 100% coverage (1/1 assertion covered), got {coverage_pct}"
+
+    def test_REQ_d00055_D_build_graph_sets_rollup_metrics(self, tmp_path: Path) -> None:
+        """After build_graph(), requirement nodes have rollup_metrics metric set.
+
+        The rollup_metrics object tracks detailed coverage breakdown (direct,
+        explicit, inferred sources).
+        """
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-rollup"
+
+[directories]
+spec = "spec"
+code = ["src"]
+""",
+            encoding="utf-8",
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir(parents=True, exist_ok=True)
+        (spec_dir / "reqs.md").write_text(
+            """\
+# Test Requirements
+
+## REQ-p00001: Rollup Test
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+The system SHALL do something.
+
+## Assertions
+
+A. The system SHALL do A.
+B. The system SHALL do B.
+
+*End* *Rollup Test* | **Hash**: abcd1234
+
+---
+""",
+            encoding="utf-8",
+        )
+
+        # Code covers only assertion A
+        code_dir = tmp_path / "src"
+        code_dir.mkdir(parents=True, exist_ok=True)
+        (code_dir / "impl.py").write_text(
+            "# Implements: REQ-p00001-A\ndef do_a(): pass\n",
+            encoding="utf-8",
+        )
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+            scan_sponsors=False,
+        )
+
+        req_node = graph.find_by_id("REQ-p00001")
+        assert req_node is not None
+
+        from elspais.graph.metrics import RollupMetrics
+
+        rollup = req_node.get_metric("rollup_metrics")
+        assert rollup is not None, "rollup_metrics should be set after build_graph()"
+        assert isinstance(rollup, RollupMetrics), f"Expected RollupMetrics, got {type(rollup)}"
+        assert rollup.total_assertions == 2
+        assert rollup.covered_assertions == 1
+        assert rollup.coverage_pct == 50.0
+
+    def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
+        self, tmp_path: Path
+    ) -> None:
+        """get_project_summary() reports non-zero coverage when build_graph()
+        has annotated coverage metrics.
+
+        This is the integration test for the bug fix: previously build_graph()
+        did not call annotate_coverage(), so MCP's get_project_summary() always
+        reported 0% coverage.
+        """
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-summary"
+
+[directories]
+spec = "spec"
+code = ["src"]
+""",
+            encoding="utf-8",
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir(parents=True, exist_ok=True)
+        (spec_dir / "reqs.md").write_text(
+            """\
+# Test Requirements
+
+## REQ-p00001: Summary Test
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+The system SHALL do something.
+
+## Assertions
+
+A. The system SHALL do A.
+
+*End* *Summary Test* | **Hash**: abcd1234
+
+---
+""",
+            encoding="utf-8",
+        )
+
+        # Code covers the assertion
+        code_dir = tmp_path / "src"
+        code_dir.mkdir(parents=True, exist_ok=True)
+        (code_dir / "impl.py").write_text(
+            "# Implements: REQ-p00001-A\ndef do_a(): pass\n",
+            encoding="utf-8",
+        )
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+            scan_sponsors=False,
+        )
+
+        # Simulate what the MCP server does: call count_by_coverage on the graph
+        from elspais.graph.annotators import count_by_coverage
+
+        coverage_stats = count_by_coverage(graph)
+
+        assert coverage_stats["total"] == 1
+        assert coverage_stats["full_coverage"] == 1, (
+            "After build_graph() with annotate_coverage(), the requirement with "
+            "100% coverage should appear in full_coverage count"
+        )
+        assert (
+            coverage_stats["no_coverage"] == 0
+        ), "The requirement should NOT be in no_coverage since it has code implementing it"
