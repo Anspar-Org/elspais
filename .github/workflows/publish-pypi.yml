@@ -74,13 +74,22 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Find triggering PR author
+        id: author
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          AUTHOR=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq '.[0].user.login // empty' 2>/dev/null || echo "")
+          echo "login=${AUTHOR:-${{ github.actor }}}" >> "$GITHUB_OUTPUT"
+
       - name: Trigger Homebrew tap update
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           repository: Anspar-Org/homebrew-anspar
           event-type: update-formula
-          client-payload: '{"package": "elspais", "version": "${{ steps.version.outputs.version }}"}'
+          client-payload: '{"package": "elspais", "version": "${{ steps.version.outputs.version }}", "author": "${{ steps.author.outputs.login }}"}'
 
   notify-success:
     name: Notify on Success
