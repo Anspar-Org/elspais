@@ -271,25 +271,11 @@ applies_to: [requirements, assertions]
 elspais includes an MCP (Model Context Protocol) server for AI assistant integration:
 
 ```bash
-# Install with MCP support
-pip install elspais[mcp]
+# One-time setup: register with Claude Code and Claude Desktop
+elspais mcp install --global --desktop
 
-# Start MCP server
-elspais mcp serve
-```
-
-Configure in Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"],
-      "cwd": "/path/to/your/project"
-    }
-  }
-}
+# Enable tab-completion (optional)
+elspais completion --install
 ```
 
 ### MCP Resources
@@ -353,8 +339,8 @@ Commands:
   completion            Generate shell completion scripts
   reformat-with-claude  Reformat requirements using AI (Acceptance Criteria -> Assertions)
   mcp                   MCP server commands (requires elspais[mcp])
-  install               Install MCP server for Claude Code / Cursor
-  uninstall             Uninstall MCP server registration
+  install               Install local dev version (from source)
+  uninstall             Revert to PyPI release version
 ```
 
 See [docs/commands.md](docs/commands.md) for comprehensive command documentation.

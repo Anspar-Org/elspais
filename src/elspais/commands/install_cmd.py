@@ -336,19 +336,13 @@ def _print_shell_hint() -> None:
 
     print("\n  To activate in this shell, run:")
 
-    if shell == "zsh":
+    if shell in ("zsh", "tcsh"):
         print("    rehash")
-        print('    eval "$(register-python-argcomplete elspais)"')
-    elif shell == "bash":
-        print("    hash -r")
-        print('    eval "$(register-python-argcomplete elspais)"')
-    elif shell == "fish":
-        print("    register-python-argcomplete --shell fish elspais | source")
-    elif shell == "tcsh":
-        print("    rehash")
-        print("    eval `register-python-argcomplete --shell tcsh elspais`")
-    else:
+    elif shell in ("bash", ""):
         print("    hash -r  # or rehash, depending on your shell")
+
+    print("\n  To set up tab-completion:")
+    print("    elspais completion --install")
 
 
 # --- CLI dispatchers ---

@@ -16,41 +16,17 @@ This document provides comprehensive documentation for the elspais MCP (Model Co
 ### Installation
 
 ```bash
-pip install elspais[mcp]
+# Register with Claude Code (all projects) and Claude Desktop
+elspais mcp install --global --desktop
+
+# Or Claude Code only (current project)
+elspais mcp install
+
+# Enable tab-completion (optional)
+elspais completion --install
 ```
 
-### Claude Desktop Configuration
-
-Add to `~/.config/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"],
-      "cwd": "/path/to/your/project"
-    }
-  }
-}
-```
-
-### Claude Code Configuration
-
-Add to your project's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-### Running the Server
+### Running the Server Manually
 
 ```bash
 # Default stdio transport
@@ -58,9 +34,6 @@ elspais mcp serve
 
 # SSE transport (for web clients)
 elspais mcp serve --transport sse
-
-# Custom working directory
-elspais mcp serve --cwd /path/to/project
 ```
 
 ## Tool Categories
