@@ -51,6 +51,7 @@ Generate traceability matrix and reports.
 
 **Options:**
 
+  `--path DIR`             Path to repository root (default: auto-detect)
   `--format {markdown,html,csv,both}`  Output format (default: both)
   `--output PATH`          Output file path
   `--view`                 Interactive HTML traceability tree
@@ -294,9 +295,7 @@ Generate shell tab-completion scripts.
 
 **Setup:**
 
-Bash: `source <(elspais completion --shell bash)`
-Zsh:  Add to ~/.zshrc: `eval "$(elspais completion --shell zsh)"`
-Fish: `elspais completion --shell fish | source`
+  $ elspais completion --install    # Auto-detect shell and install
 
 ## version
 
@@ -372,15 +371,21 @@ Manage links to associated repositories.
 
 MCP (Model Context Protocol) server commands.
 
-  $ elspais mcp serve             # Start MCP server
+  $ elspais mcp install --global --desktop   # One-time setup
+  $ elspais mcp serve                        # Start MCP server
 
-**Note:** Requires `elspais[mcp]` extra:
-
-  $ pip install 'elspais[mcp]'
+**Note:** Requires `elspais[mcp]` extra.
 
 **Subcommands:**
 
-  `serve`   Start MCP server
+  `serve`      Start MCP server
+  `install`    Register with Claude Code and/or Claude Desktop
+  `uninstall`  Remove registration
+
+**Options for install/uninstall:**
+
+  `--global`   Claude Code: user scope (all projects) instead of current project
+  `--desktop`  Also write to Claude Desktop config
 
 **Options for serve:**
 

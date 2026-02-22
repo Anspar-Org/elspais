@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from elspais.cli import _claude_env, _mcp_install, _mcp_uninstall
+from elspais.cli import (
+    _claude_desktop_config_path,
+    _claude_env,
+    _mcp_install,
+    _mcp_install_desktop,
+    _mcp_uninstall,
+    _mcp_uninstall_desktop,
+)
 
 _has_claude = shutil.which("claude") is not None
 _has_elspais = shutil.which("elspais") is not None
@@ -181,6 +189,109 @@ class TestMcpInstallErrors:
         assert result == 1
         captured = capsys.readouterr()
         assert "'claude' not found" in captured.err
+
+
+class TestDesktopConfigPath:
+    """test_desktop_config_path — verifies platform detection."""
+
+    @patch("platform.system", return_value="Linux")
+    def test_linux_path(self, _mock):
+        path = _claude_desktop_config_path()
+        assert path is not None
+        assert ".config/Claude/claude_desktop_config.json" in str(path)
+
+    @patch("platform.system", return_value="Darwin")
+    def test_macos_path(self, _mock):
+        path = _claude_desktop_config_path()
+        assert path is not None
+        assert "Application Support/Claude/claude_desktop_config.json" in str(path)
+
+    @patch("platform.system", return_value="FreeBSD")
+    def test_unsupported_returns_none(self, _mock):
+        assert _claude_desktop_config_path() is None
+
+
+class TestMcpInstallDesktop:
+    """test_mcp_install_desktop — verifies config file creation/update."""
+
+    def test_creates_config_from_scratch(self, tmp_path, capsys):
+        config_file = tmp_path / "claude_desktop_config.json"
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_install_desktop()
+
+        assert result == 0
+        data = json.loads(config_file.read_text())
+        assert data["mcpServers"]["elspais"]["command"] == "elspais"
+        assert data["mcpServers"]["elspais"]["args"] == ["mcp", "serve"]
+        captured = capsys.readouterr()
+        assert "registered" in captured.out
+
+    def test_updates_existing_config(self, tmp_path):
+        config_file = tmp_path / "claude_desktop_config.json"
+        existing = {"mcpServers": {"other-server": {"command": "other"}}, "extra": True}
+        config_file.write_text(json.dumps(existing))
+
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_install_desktop()
+
+        assert result == 0
+        data = json.loads(config_file.read_text())
+        # Preserves existing servers and extra keys
+        assert "other-server" in data["mcpServers"]
+        assert data["extra"] is True
+        # Adds elspais
+        assert data["mcpServers"]["elspais"]["command"] == "elspais"
+
+    def test_creates_parent_dirs(self, tmp_path):
+        config_file = tmp_path / "deep" / "nested" / "claude_desktop_config.json"
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_install_desktop()
+
+        assert result == 0
+        assert config_file.exists()
+
+    def test_unsupported_platform(self, capsys):
+        with patch("elspais.cli._claude_desktop_config_path", return_value=None):
+            result = _mcp_install_desktop()
+
+        assert result == 1
+        assert "Unsupported platform" in capsys.readouterr().err
+
+
+class TestMcpUninstallDesktop:
+    """test_mcp_uninstall_desktop — verifies config entry removal."""
+
+    def test_removes_entry(self, tmp_path, capsys):
+        config_file = tmp_path / "claude_desktop_config.json"
+        data = {"mcpServers": {"elspais": {"command": "elspais"}, "other": {"command": "x"}}}
+        config_file.write_text(json.dumps(data))
+
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_uninstall_desktop()
+
+        assert result == 0
+        updated = json.loads(config_file.read_text())
+        assert "elspais" not in updated["mcpServers"]
+        assert "other" in updated["mcpServers"]
+        assert "removed" in capsys.readouterr().out
+
+    def test_missing_config_file(self, tmp_path, capsys):
+        config_file = tmp_path / "nonexistent.json"
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_uninstall_desktop()
+
+        assert result == 0
+        assert "not found" in capsys.readouterr().out
+
+    def test_not_registered(self, tmp_path, capsys):
+        config_file = tmp_path / "claude_desktop_config.json"
+        config_file.write_text(json.dumps({"mcpServers": {}}))
+
+        with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
+            result = _mcp_uninstall_desktop()
+
+        assert result == 0
+        assert "not registered" in capsys.readouterr().out
 
 
 @pytest.mark.e2e

@@ -1503,6 +1503,36 @@ def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
+def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[str, Any]:
+    """Load all content rules configured for this project.
+
+    Args:
+        config: Project configuration dict.
+        working_dir: Repository root directory.
+
+    Returns:
+        Dict with 'instructions' list and 'count'.
+    """
+    from elspais.content_rules import load_content_rules
+
+    rules = load_content_rules(config, working_dir)
+    if not rules:
+        return {"instructions": [], "count": 0}
+
+    return {
+        "instructions": [
+            {
+                "title": rule.title,
+                "type": rule.type,
+                "applies_to": rule.applies_to,
+                "content": rule.content,
+            }
+            for rule in rules
+        ],
+        "count": len(rules),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Mutation Tool Functions (REQ-o00062)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3282,18 +3312,20 @@ The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
 
-1. `get_workspace_info(detail=...)` - Understand what project you're working with
-2. `get_project_summary()` - Get overview statistics and health metrics
-3. `search(query)` - Find requirements by keyword
-4. `get_requirement(req_id)` - Get full details including assertions
-5. `get_hierarchy(req_id)` - Navigate parent/child relationships
-6. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+1. `agent_instructions()` - Get project-specific authoring guidance
+2. `get_workspace_info(detail=...)` - Understand what project you're working with
+3. `get_project_summary()` - Get overview statistics and health metrics
+4. `search(query)` - Find requirements by keyword
+5. `get_requirement(req_id)` - Get full details including assertions
+6. `get_hierarchy(req_id)` - Navigate parent/child relationships
+7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
 
 ## Tools Overview
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
-- `refresh_graph(full=False)` - Rebuild after spec file changes
+- `refresh_graph(full=False, path="")` - Rebuild after spec file changes
+  - path: switch to a different project directory before rebuilding
 
 ### Search & Navigation
 - `search(query, field="all", regex=False, limit=50)` - Find requirements
@@ -3326,6 +3358,7 @@ The graph is the single source of truth - all tools read directly from it.
   - "all": everything from all profiles combined
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
 - `get_changed_requirements()` - Requirements with uncommitted or branch changes
+- `agent_instructions()` - Content rules providing authoring guidance for AI agents
 
 ### Node Mutations (in-memory)
 - `mutate_rename_node(old_id, new_id)` - Rename requirement
@@ -3462,6 +3495,9 @@ Use `save_branch=True` to create a safety branch before modifications, allowing 
 **After editing spec files:**
 1. refresh_graph() to rebuild
 2. get_graph_status() to verify health
+
+**Switching to a different project:**
+1. refresh_graph(path="/path/to/other/repo") to switch and rebuild
 """
 
 
@@ -3517,29 +3553,32 @@ def create_server(
 
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
-        """Get current graph status.
-
-        Returns node counts by kind, root count, and detection flags.
-        Use this to check graph health and staleness.
-        """
+        """Node counts by kind, orphan/broken-ref flags."""
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
-    def refresh_graph(full: bool = False) -> dict[str, Any]:
-        """Force graph rebuild from spec files.
+    def refresh_graph(full: bool = False, path: str = "") -> dict[str, Any]:
+        """Rebuild graph from spec files.
 
         Args:
             full: If True, clear all caches before rebuild.
-
-        Returns:
-            Success status and new node count.
+            path: Switch to a different project directory before rebuilding.
         """
+        if path:
+            new_dir = Path(path).resolve()
+            if not new_dir.is_dir():
+                return {"success": False, "message": f"Directory not found: {path}"}
+            _state["working_dir"] = new_dir
+            _state["config"] = get_config(start_path=new_dir, quiet=True)
+            _state["canonical_root"] = find_canonical_root(new_dir)
+
         result, new_graph = _refresh_graph(
             _state["working_dir"],
             full=full,
             canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
+        result["working_dir"] = str(_state["working_dir"])
         return result
 
     @mcp.tool()
@@ -3551,26 +3590,13 @@ def create_server(
     ) -> list[dict[str, Any]]:
         """Search requirements by ID, title, or content.
 
-        Supports multi-term queries when regex=False:
-        - Space-separated terms: implicit AND (all must match)
-        - ``OR`` between terms: disjunctive matching (``auth OR password``)
-        - ``(...)`` grouping: explicit precedence (``(auth OR pin) security``)
+        Multi-term query syntax (when regex=False):
+        - Space-separated terms: implicit AND
+        - ``OR`` between terms: disjunctive matching
+        - ``(...)`` grouping: explicit precedence
         - ``"..."`` phrases: exact contiguous substring
-        - ``-term``: exclude nodes matching the term
-        - ``=term``: exact keyword set match (vs substring)
-
-        Results are scored by field match quality (ID > title > keyword > body)
-        and sorted by relevance score descending. Each result includes a
-        ``score`` field.
-
-        Args:
-            query: Search string, multi-term expression, or regex pattern.
-            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
-            regex: If True, treat query as regex pattern (disables multi-term).
-            limit: Maximum results to return (default 50).
-
-        Returns:
-            List of matching requirement summaries, sorted by relevance.
+        - ``-term``: exclude matching nodes
+        - ``=term``: exact keyword match (vs substring)
         """
         return _search(_state["graph"], query, field, regex, limit)
 
@@ -3579,23 +3605,7 @@ def create_server(
         req_ids: list[str],
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Prune a requirement set to its most-specific members.
-
-        Removes ancestors already covered by more-specific descendants in the
-        input set. Useful when agents list both leaf requirements and their
-        broad ancestors for a ticket.
-
-        REQ-d00077-F: Delegates to helper, performing only parameter parsing.
-
-        Args:
-            req_ids: List of requirement IDs to minimize.
-            edge_kinds: Comma-separated edge kinds to follow when determining
-                ancestry. Default: "implements,refines".
-
-        Returns:
-            Dict with minimal_set, pruned (with superseded_by metadata),
-            not_found, and stats.
-        """
+        """Prune to most-specific requirements, removing ancestors covered by descendants."""
         # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -3618,29 +3628,7 @@ def create_server(
         include_assertions: bool = False,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Search requirements within a subgraph rooted at scope_id.
-
-        Restricts search to descendants or ancestors of the scope node,
-        preventing over-matching across unrelated parts of the graph.
-
-        Supports the same multi-term query syntax as ``search()`` when
-        regex=False (AND/OR, grouping, phrases, exclusion, exact keywords).
-        Results include relevance scores and are sorted by score descending.
-
-        REQ-d00078-F: Delegates to helper, performing only parameter validation.
-
-        Args:
-            query: Search string, multi-term expression, or regex pattern.
-            scope_id: Root node ID defining the search scope.
-            direction: "descendants" (default) or "ancestors".
-            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
-            regex: If True, treat query as regex pattern (disables multi-term).
-            include_assertions: If True, also match assertion text.
-            limit: Maximum results to return (default 50).
-
-        Returns:
-            Dict with results list (scored and sorted), scope_id, and direction.
-        """
+        """Search within a subgraph rooted at scope_id."""
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
@@ -3656,31 +3644,7 @@ def create_server(
         limit: int = 50,
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Search within a subgraph and return only the most-specific matches.
-
-        Chains scoped_search with minimize_requirement_set to prune ancestors
-        from results, returning only the most-specific requirements that match.
-
-        Supports the same multi-term query syntax as ``search()`` when
-        regex=False (AND/OR, grouping, phrases, exclusion, exact keywords).
-
-        REQ-d00079-D: Delegates to helper, performing only edge_kinds parsing.
-
-        Args:
-            query: Search string, multi-term expression, or regex pattern.
-            scope_id: Root node ID defining the search scope.
-            direction: "descendants" (default) or "ancestors".
-            field: Field to search: 'id', 'title', 'body', 'keywords', or 'all'.
-            regex: If True, treat query as regex pattern (disables multi-term).
-            include_assertions: If True, also match assertion text.
-            limit: Maximum results to return (default 50).
-            edge_kinds: Comma-separated edge kinds for ancestor pruning.
-                Default: "implements,refines".
-
-        Returns:
-            Dict with results (minimal set, scored), pruned (with superseded_by),
-            scope_id, direction, and stats.
-        """
+        """Search within a subgraph and return only the most-specific matches."""
         # REQ-d00079-D: Parse edge_kinds and delegate
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -3705,30 +3669,12 @@ def create_server(
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
-        """Get full details for a single requirement.
-
-        Args:
-            req_id: The requirement ID (e.g., 'REQ-p00001').
-
-        Returns:
-            Requirement details including assertions and relationships.
-        """
+        """Get full details for a single requirement."""
         return _get_requirement(_state["graph"], req_id)
 
     @mcp.tool()
     def get_node(node_id: str) -> dict[str, Any]:
-        """Get full details for any graph node by ID.
-
-        Works for any node kind: requirement, journey, test, result, code,
-        assertion, remainder. Returns a common envelope plus kind-specific
-        properties.
-
-        Args:
-            node_id: The node ID (e.g., 'REQ-p00001', 'JNY-Login-01').
-
-        Returns:
-            Node details with kind-specific properties.
-        """
+        """Get full details for any graph node by ID."""
         return _get_node(_state["graph"], node_id)
 
     @mcp.tool()
@@ -3741,19 +3687,16 @@ def create_server(
         actor: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Combined property + keyword filter query for any node kind.
+        """Filter nodes by kind, keywords, level, status, or actor.
 
         Args:
-            kind: Filter by NodeKind value: requirement, journey, test, result, code.
+            kind: NodeKind value: requirement, journey, test, result, code.
             keywords: Comma-separated keywords to search for.
             match_all: True (default) = AND, False = OR for keywords.
-            level: Property filter: PRD, OPS, DEV (requirements only).
-            status: Property filter for requirement or test result status.
-            actor: Property filter: journey actor.
+            level: PRD, OPS, DEV (requirements only).
+            status: Requirement or test result status.
+            actor: Journey actor.
             limit: Max results (default 50).
-
-        Returns:
-            Results list with count and truncated flag.
         """
         kw_list = None
         if keywords:
@@ -3769,14 +3712,7 @@ def create_server(
 
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:
-        """Get requirement hierarchy (ancestors and children).
-
-        Args:
-            req_id: The requirement ID.
-
-        Returns:
-            Ancestors (walking up to roots) and direct children.
-        """
+        """Get requirement hierarchy (ancestors and children)."""
         return _get_hierarchy(_state["graph"], req_id)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3785,27 +3721,11 @@ def create_server(
 
     @mcp.tool()
     def get_workspace_info(detail: str = "default") -> dict[str, Any]:
-        """Get information about the current workspace.
-
-        Returns repository path, project name, configuration summary, and
-        use-case-specific details based on the detail parameter.
-
-        The response always includes 'available_details' listing valid
-        detail values with descriptions, making the API self-documenting.
+        """Workspace config, paths, and use-case-specific details.
 
         Args:
-            detail: Detail profile to return. Values:
-                'default' - basic project info and version
-                'testing' - ID patterns, assertion format, test configuration
-                'code-refs' - code directories, comment styles, reference keywords
-                'coverage' - coverage stats, level counts, associate list
-                'retrofit' - full patterns, hierarchy rules, code + test config
-                'manager' - health flags, coverage stats, change metrics
-                'worktree' - associate paths, ID patterns, hierarchy rules
-                'all' - everything from all profiles combined
-
-        Returns:
-            Workspace information with profile-specific sections.
+            detail: Profile to return: 'default', 'testing', 'code-refs',
+                'coverage', 'retrofit', 'manager', 'worktree', or 'all'.
         """
         return _get_workspace_info(
             _state["working_dir"],
@@ -3816,28 +3736,18 @@ def create_server(
 
     @mcp.tool()
     def get_project_summary() -> dict[str, Any]:
-        """Get summary statistics for the project.
-
-        Returns requirement counts by level (PRD/OPS/DEV), coverage statistics,
-        and change metrics (uncommitted, branch changed).
-
-        Returns:
-            Project summary with counts, coverage, and change metrics.
-        """
+        """Requirement counts by level, coverage stats, change metrics."""
         return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     @mcp.tool()
     def get_changed_requirements() -> dict[str, Any]:
-        """Get requirements with git changes.
-
-        Returns requirements that have uncommitted changes, differ from the main
-        branch, or have been moved between files. Each result includes the
-        requirement summary, git state flags, and source file path.
-
-        Returns:
-            Changed requirements with git state and summary counts.
-        """
+        """Requirements with uncommitted, branch-changed, or moved status."""
         return _get_changed_requirements(_state["graph"])
+
+    @mcp.tool()
+    def agent_instructions() -> dict[str, Any]:
+        """Project-specific authoring guidance for AI agents."""
+        return _get_agent_instructions(_state["config"], _state["working_dir"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)
@@ -3845,32 +3755,12 @@ def create_server(
 
     @mcp.tool()
     def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
-        """Rename a requirement node.
-
-        Updates the node's ID and all references to it.
-
-        Args:
-            old_id: Current node ID.
-            new_id: New node ID.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Rename a requirement node."""
         return _mutate_rename_node(_state["graph"], old_id, new_id)
 
     @mcp.tool()
     def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
-        """Update a requirement's title.
-
-        Does not affect the content hash.
-
-        Args:
-            node_id: The requirement ID.
-            new_title: New title text.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Update a requirement's title."""
         return _mutate_update_title(_state["graph"], node_id, new_title)
 
     @mcp.tool()
@@ -3878,11 +3768,7 @@ def create_server(
         """Change a requirement's status.
 
         Args:
-            node_id: The requirement ID.
-            new_status: New status (e.g., 'Active', 'Draft', 'Deprecated').
-
-        Returns:
-            Success status and mutation entry for undo.
+            new_status: e.g., 'Active', 'Draft', 'Deprecated'.
         """
         return _mutate_change_status(_state["graph"], node_id, new_status)
 
@@ -3898,15 +3784,9 @@ def create_server(
         """Create a new requirement.
 
         Args:
-            req_id: ID for the new requirement.
-            title: Requirement title.
-            level: Level (PRD, OPS, DEV).
-            status: Initial status (default 'Draft').
+            level: PRD, OPS, or DEV.
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
-
-        Returns:
-            Success status and mutation entry for undo.
         """
         return _mutate_add_requirement(
             _state["graph"], req_id, title, level, status, parent_id, edge_kind
@@ -3914,17 +3794,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a requirement.
-
-        DESTRUCTIVE: Requires confirm=True to execute.
-
-        Args:
-            node_id: The requirement ID to delete.
-            confirm: Must be True to confirm deletion.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Delete a requirement."""
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3933,62 +3803,24 @@ def create_server(
 
     @mcp.tool()
     def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
-        """Add an assertion to a requirement.
-
-        Args:
-            req_id: Parent requirement ID.
-            label: Assertion label (e.g., 'A', 'B', 'C').
-            text: Assertion text (SHALL statement).
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Add an assertion to a requirement."""
         return _mutate_add_assertion(_state["graph"], req_id, label, text)
 
     @mcp.tool()
     def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
-        """Update an assertion's text.
-
-        Recomputes the parent requirement's hash.
-
-        Args:
-            assertion_id: The assertion ID (e.g., 'REQ-p00001-A').
-            new_text: New assertion text.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Update an assertion's text."""
         return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
 
     @mcp.tool()
     def mutate_delete_assertion(
         assertion_id: str, compact: bool = True, confirm: bool = False
     ) -> dict[str, Any]:
-        """Delete an assertion.
-
-        DESTRUCTIVE: Requires confirm=True to execute.
-
-        Args:
-            assertion_id: The assertion ID to delete.
-            compact: If True, renumber subsequent assertions.
-            confirm: Must be True to confirm deletion.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Delete an assertion."""
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
     def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
-        """Rename an assertion's label.
-
-        Args:
-            old_id: Current assertion ID (e.g., 'REQ-p00001-A').
-            new_label: New label (e.g., 'X').
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Rename an assertion's label."""
         return _mutate_rename_assertion(_state["graph"], old_id, new_label)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4005,13 +3837,8 @@ def create_server(
         """Add an edge between nodes.
 
         Args:
-            source_id: Child node ID.
-            target_id: Parent node ID.
-            edge_kind: Relationship type ('IMPLEMENTS' or 'REFINES').
+            edge_kind: 'IMPLEMENTS' or 'REFINES'.
             assertion_targets: Optional list of assertion IDs to target.
-
-        Returns:
-            Success status and mutation entry for undo.
         """
         return _mutate_add_edge(_state["graph"], source_id, target_id, edge_kind, assertion_targets)
 
@@ -4020,45 +3847,20 @@ def create_server(
         """Change an edge's relationship type.
 
         Args:
-            source_id: Child node ID.
-            target_id: Parent node ID.
-            new_kind: New relationship type ('IMPLEMENTS' or 'REFINES').
-
-        Returns:
-            Success status and mutation entry for undo.
+            new_kind: 'IMPLEMENTS' or 'REFINES'.
         """
         return _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
 
     @mcp.tool()
     def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete an edge between nodes.
-
-        DESTRUCTIVE: Requires confirm=True to execute.
-
-        Args:
-            source_id: Child node ID.
-            target_id: Parent node ID.
-            confirm: Must be True to confirm deletion.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Delete an edge between nodes."""
         return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
 
     @mcp.tool()
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str
     ) -> dict[str, Any]:
-        """Fix a broken reference by redirecting to a valid target.
-
-        Args:
-            source_id: Node with the broken reference.
-            old_target_id: Invalid target ID.
-            new_target_id: Valid target ID to redirect to.
-
-        Returns:
-            Success status and mutation entry for undo.
-        """
+        """Fix a broken reference by redirecting to a valid target."""
         return _mutate_fix_broken_reference(
             _state["graph"], source_id, old_target_id, new_target_id
         )
@@ -4069,57 +3871,27 @@ def create_server(
 
     @mcp.tool()
     def undo_last_mutation() -> dict[str, Any]:
-        """Undo the most recent mutation.
-
-        Returns:
-            Success status and the mutation that was undone.
-        """
+        """Undo the most recent mutation."""
         return _undo_last_mutation(_state["graph"])
 
     @mcp.tool()
     def undo_to_mutation(mutation_id: str) -> dict[str, Any]:
-        """Undo all mutations back to a specific point.
-
-        Args:
-            mutation_id: ID of the mutation to undo back to (inclusive).
-
-        Returns:
-            Success status and list of mutations undone.
-        """
+        """Undo all mutations back to a specific point (inclusive)."""
         return _undo_to_mutation(_state["graph"], mutation_id)
 
     @mcp.tool()
     def get_mutation_log(limit: int = 50) -> dict[str, Any]:
-        """Get mutation history.
-
-        Args:
-            limit: Maximum number of mutations to return.
-
-        Returns:
-            List of recent mutations.
-        """
+        """Get mutation history."""
         return _get_mutation_log(_state["graph"], limit)
 
     @mcp.tool()
     def get_orphaned_nodes() -> dict[str, Any]:
-        """Get all orphaned nodes.
-
-        Returns nodes that have no parent relationships.
-
-        Returns:
-            List of orphaned nodes with summaries.
-        """
+        """Nodes with no parent relationships."""
         return _get_orphaned_nodes(_state["graph"])
 
     @mcp.tool()
     def get_broken_references() -> dict[str, Any]:
-        """Get all broken references.
-
-        Returns edges that point to non-existent nodes.
-
-        Returns:
-            List of broken references.
-        """
+        """Edges pointing to non-existent nodes."""
         return _get_broken_references(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4131,30 +3903,12 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find requirements containing specified keywords.
-
-        Keywords are extracted from requirement titles and assertion text.
-
-        Args:
-            keywords: List of keywords to search for.
-            match_all: If True, requirement must contain ALL keywords (AND).
-                       If False, requirement must contain ANY keyword (OR).
-
-        Returns:
-            List of matching requirements with their summaries.
-        """
+        """Find requirements containing specified keywords."""
         return _find_by_keywords(_state["graph"], keywords, match_all)
 
     @mcp.tool()
     def get_all_keywords() -> dict[str, Any]:
-        """Get all unique keywords from the graph.
-
-        Keywords are extracted from requirement titles and assertion text.
-        Use this to discover available keywords for filtering.
-
-        Returns:
-            Sorted list of all unique keywords and total count.
-        """
+        """Get all unique keywords from the graph."""
         return _get_all_keywords(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4163,31 +3917,15 @@ def create_server(
 
     @mcp.tool()
     def get_test_coverage(req_id: str) -> dict[str, Any]:
-        """Get test coverage for a requirement.
-
-        Returns TEST nodes that reference the requirement and their TEST_RESULT nodes.
-        Identifies assertion coverage gaps (assertions with no tests).
-
-        Args:
-            req_id: The requirement ID to get coverage for.
-
-        Returns:
-            Test nodes, result nodes, covered/uncovered assertions, and coverage percentage.
-        """
+        """Get test coverage for a requirement."""
         return _get_test_coverage(_state["graph"], req_id)
 
     @mcp.tool()
     def get_uncovered_assertions(req_id: str | None = None) -> dict[str, Any]:
-        """Get all assertions lacking test coverage.
-
-        Returns assertions that have no TEST node references.
-        Include parent requirement context in results.
+        """Assertions with no test coverage.
 
         Args:
             req_id: Optional requirement ID. When None, scan all requirements.
-
-        Returns:
-            List of uncovered assertions with their parent requirement context.
         """
         return _get_uncovered_assertions(_state["graph"], req_id)
 
@@ -4196,20 +3934,7 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find assertions containing specified keywords.
-
-        Search assertion text for matching keywords.
-        Return assertion id, text, label, and parent requirement context.
-        Complement to existing find_by_keywords() which finds requirements.
-
-        Args:
-            keywords: List of keywords to search for.
-            match_all: If True, assertion must contain ALL keywords (AND).
-                       If False, assertion must contain ANY keyword (OR).
-
-        Returns:
-            List of matching assertions with their summaries.
-        """
+        """Find assertions containing specified keywords."""
         return _find_assertions_by_keywords(_state["graph"], keywords, match_all)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4225,17 +3950,9 @@ def create_server(
     ) -> dict[str, Any]:
         """Change a reference type in a spec file.
 
-        Modifies Implements/Refines relationships in spec files on disk.
-        Optionally creates a safety branch for rollback.
-
         Args:
-            req_id: ID of the requirement to modify.
-            target_id: ID of the target requirement being referenced.
-            new_type: New reference type ('IMPLEMENTS' or 'REFINES').
+            new_type: 'IMPLEMENTS' or 'REFINES'.
             save_branch: If True, create a safety branch before modifying.
-
-        Returns:
-            Success status and optional safety_branch name.
         """
         result = _change_reference_type(
             _state["working_dir"], req_id, target_id, new_type, save_branch
@@ -4257,16 +3974,9 @@ def create_server(
     ) -> dict[str, Any]:
         """Move a requirement to a different spec file.
 
-        Relocates a requirement from its current file to the target file.
-        Optionally creates a safety branch for rollback.
-
         Args:
-            req_id: ID of the requirement to move.
             target_file: Relative path to the target file (e.g., 'spec/other.md').
             save_branch: If True, create a safety branch before modifying.
-
-        Returns:
-            Success status and optional safety_branch name.
         """
         result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
         # REQ-o00063-F: Refresh graph after file mutations
@@ -4280,16 +3990,7 @@ def create_server(
 
     @mcp.tool()
     def restore_from_safety_branch(branch_name: str) -> dict[str, Any]:
-        """Restore spec files from a safety branch.
-
-        Reverts file changes by restoring from a previously created safety branch.
-
-        Args:
-            branch_name: Name of the safety branch to restore from.
-
-        Returns:
-            Success status and list of files restored.
-        """
+        """Restore spec files from a safety branch."""
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
@@ -4302,13 +4003,7 @@ def create_server(
 
     @mcp.tool()
     def list_safety_branches() -> dict[str, Any]:
-        """List all safety branches.
-
-        Returns available safety branches that can be used with restore_from_safety_branch.
-
-        Returns:
-            List of branch names and count.
-        """
+        """List all safety branches."""
         return _list_safety_branches_impl(_state["working_dir"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4320,19 +4015,7 @@ def create_server(
         file_path: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Suggest requirement links for unlinked test nodes.
-
-        Analyzes unlinked TEST nodes and proposes requirement associations
-        using heuristics: import chain, function name matching, file path
-        proximity, and keyword overlap.
-
-        Args:
-            file_path: Optional file path to restrict analysis to.
-            limit: Maximum suggestions to return (default 50).
-
-        Returns:
-            List of suggestions with test_id, requirement_id, confidence, and reasons.
-        """
+        """Suggest requirement links for unlinked test nodes."""
         return _suggest_links_impl(
             _state["graph"],
             _state["working_dir"],
@@ -4346,18 +4029,11 @@ def create_server(
         line: int,
         requirement_id: str,
     ) -> dict[str, Any]:
-        """Apply a link suggestion by inserting a # Implements: comment.
-
-        Inserts a ``# Implements: <requirement_id>`` comment into the specified
-        file at the given line number. Refreshes the graph afterward.
+        """Insert a ``# Implements:`` comment linking a test to a requirement.
 
         Args:
             file_path: Path to the file to modify (relative to repo root).
             line: Line number to insert at (1-based). 0 means top of file.
-            requirement_id: Requirement ID to reference (e.g., 'REQ-p00001').
-
-        Returns:
-            Success status and the comment that was inserted.
         """
         return _apply_link_impl(
             _state,
@@ -4379,18 +4055,11 @@ def create_server(
     ) -> dict[str, Any]:
         """Extract a subgraph rooted at a given node.
 
-        Returns a scoped subtree for focused analysis. Supports three output
-        formats and configurable depth/kind filtering.
-
         Args:
-            root_id: Required node ID to root the subtree at.
-            depth: Max depth from root (0 = unlimited, N = N levels).
+            depth: Max depth from root (0 = unlimited).
             include_kinds: Comma-separated NodeKind values to include.
                 Empty string uses conservative defaults per root kind.
-            format: Output format: 'markdown', 'flat', or 'nested'.
-
-        Returns:
-            Subtree data in the requested format.
+            format: 'markdown', 'flat', or 'nested'.
         """
         return _get_subtree(
             _state["graph"],
@@ -4412,18 +4081,12 @@ def create_server(
     ) -> dict[str, Any]:
         """Open a cursor for incremental iteration over query results.
 
-        Materializes query results and returns the first item. Opening a new
-        cursor auto-closes any previous cursor.
-
         Args:
-            query: Query type: 'subtree', 'search', 'hierarchy',
-                'query_nodes', 'test_coverage', 'uncovered_assertions'.
+            query: 'subtree', 'search', 'hierarchy', 'query_nodes',
+                'test_coverage', or 'uncovered_assertions'.
             params: Query-specific parameters as a dict.
-            batch_size: Item granularity (-1=assertions first-class,
-                0=nodes with inline assertions, 1=nodes with children).
-
-        Returns:
-            First item, total count, and cursor metadata.
+            batch_size: -1=assertions first-class, 0=nodes with inline
+                assertions, 1=nodes with children summaries.
         """
         return _open_cursor(
             _state,
@@ -4436,23 +4099,12 @@ def create_server(
     def cursor_next(
         count: int = 1,
     ) -> dict[str, Any]:
-        """Advance cursor and return next items.
-
-        Args:
-            count: Number of items to return (default 1).
-
-        Returns:
-            Next items, position, and remaining count.
-        """
+        """Advance cursor and return next items."""
         return _cursor_next(_state, count=count)
 
     @mcp.tool()
     def cursor_info() -> dict[str, Any]:
-        """Get cursor position info without advancing.
-
-        Returns:
-            Current position, total, remaining, query type, and batch_size.
-        """
+        """Cursor position, total, and remaining count."""
         return _cursor_info(_state)
 
     return mcp

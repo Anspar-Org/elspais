@@ -71,6 +71,7 @@ elspais trace [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
+| `--path DIR` | Path to repository root (default: auto-detect from cwd) |
 | `--format {markdown,html,csv}` | Output format (default: markdown and html) |
 | `-o, --output FILE` | Output file path |
 | `--mode {core,combined}` | Include sponsor specs (default: combined) |
@@ -435,42 +436,19 @@ elspais mcp serve [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `--transport {stdio,sse}` | Transport type (default: stdio) |
-| `--cwd PATH` | Working directory for finding .elspais.toml |
+| `--transport {stdio,sse,streamable-http}` | Transport type (default: stdio) |
 
-### Requirements
+### Setup
 
 ```bash
-pip install elspais[mcp]
-```
+# Register with Claude Code (all projects) and Claude Desktop
+elspais mcp install --global --desktop
 
-### Configuration
+# Or Claude Code only (current project)
+elspais mcp install
 
-Add to Claude Desktop config (`~/.config/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"],
-      "cwd": "/path/to/your/project"
-    }
-  }
-}
-```
-
-For Claude Code, add to your project's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
+# Remove registration
+elspais mcp uninstall --desktop
 ```
 
 ### Tool Categories

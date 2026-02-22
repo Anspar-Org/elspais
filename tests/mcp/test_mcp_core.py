@@ -1411,3 +1411,58 @@ class TestGetChangedRequirements:
         assert result["requirements"] == []
         assert result["summary"]["uncommitted"] == 0
         assert result["summary"]["branch_changed"] == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: agent_instructions() - Content Rules
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAgentInstructions:
+    """Tests for agent_instructions() tool."""
+
+    def test_agent_instructions_empty_when_no_rules(self, tmp_path):
+        """agent_instructions returns empty list when no rules configured."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_agent_instructions
+
+        config: dict = {}
+        result = _get_agent_instructions(config, tmp_path)
+
+        assert result["instructions"] == []
+        assert result["count"] == 0
+
+    def test_agent_instructions_returns_configured_rules(self, tmp_path):
+        """agent_instructions returns rules with correct metadata and content."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_agent_instructions
+
+        # Create a content rule markdown file with frontmatter
+        rule_file = tmp_path / "test-rule.md"
+        rule_file.write_text(
+            "---\n"
+            "title: Test Rule\n"
+            "type: style\n"
+            "applies_to:\n"
+            "  - PRD\n"
+            "  - OPS\n"
+            "---\n"
+            "Always use active voice in requirement titles.\n"
+        )
+
+        config = {
+            "rules": {
+                "content_rules": ["test-rule.md"],
+            },
+        }
+
+        result = _get_agent_instructions(config, tmp_path)
+
+        assert result["count"] == 1
+        assert len(result["instructions"]) == 1
+
+        rule = result["instructions"][0]
+        assert rule["title"] == "Test Rule"
+        assert rule["type"] == "style"
+        assert rule["applies_to"] == ["PRD", "OPS"]
+        assert rule["content"] == "Always use active voice in requirement titles.\n"

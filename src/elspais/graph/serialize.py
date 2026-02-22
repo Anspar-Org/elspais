@@ -54,9 +54,16 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
     if parents:
         result["parents"] = [parent.id for parent in parents]
 
-    # Include metrics
+    # Include metrics (filter to JSON-serializable scalar types only;
+    # complex objects like RollupMetrics are internal-use)
     if node._metrics:
-        result["metrics"] = dict(node._metrics)
+        serializable = {
+            k: v
+            for k, v in node._metrics.items()
+            if isinstance(v, (str, int, float, bool, type(None)))
+        }
+        if serializable:
+            result["metrics"] = serializable
 
     # Include outgoing edges
     edges = list(node.iter_outgoing_edges())

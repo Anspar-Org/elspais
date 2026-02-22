@@ -8,14 +8,17 @@ The elspais MCP server exposes the requirements graph to AI assistants,
 enabling intelligent requirement navigation, search, and analysis without
 manual CLI usage.
 
-**Installation:**
+**Quick setup (Claude Code + Claude Desktop):**
 
-  $ pip install 'elspais[mcp]'
+  $ elspais mcp install --global --desktop
 
-**Starting the server:**
+**Or Claude Code only:**
+
+  $ elspais mcp install --global
+
+**Starting the server manually:**
 
   $ elspais mcp serve
-  $ python -m elspais.mcp
 
 ## Available Tools
 
@@ -163,34 +166,17 @@ Get summary statistics for the project.
 
 ## Client Configuration
 
-### Claude Code
+### Automatic (recommended)
 
-Add to your project's `.mcp.json`:
+```bash
+# Claude Code (all projects) + Claude Desktop
+elspais mcp install --global --desktop
 
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "type": "stdio",
-      "command": "elspais",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
+# Claude Code only (current project)
+elspais mcp install
 
-Or with explicit Python path:
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["-m", "elspais.mcp"]
-    }
-  }
-}
+# Remove registration
+elspais mcp uninstall --desktop
 ```
 
 ### Cursor

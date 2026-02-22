@@ -48,7 +48,7 @@ FROM python:3.11-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install elspais (10-100x faster than pip)
-RUN uv pip install --system --no-cache elspais==0.24.3
+RUN uv pip install --system --no-cache elspais
 ```
 
 ```yaml
@@ -57,10 +57,8 @@ RUN uv pip install --system --no-cache elspais==0.24.3
   uses: astral-sh/setup-uv@v2
 
 - name: Install elspais
-  run: uv pip install --system elspais==0.24.3
+  run: uv pip install --system elspais
 ```
-
-**Note:** For regulated/medical software projects, always pin the exact version for reproducibility.
 
 ## Quick Start
 
@@ -271,42 +269,18 @@ applies_to: [requirements, assertions]
 elspais includes an MCP (Model Context Protocol) server for AI assistant integration:
 
 ```bash
-# Install with MCP support
-pip install elspais[mcp]
+# One-time setup: register with Claude Code and Claude Desktop
+elspais mcp install --global --desktop
 
-# Start MCP server
-elspais mcp serve
+# Enable tab-completion (optional)
+elspais completion --install
 ```
-
-Configure in Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"],
-      "cwd": "/path/to/your/project"
-    }
-  }
-}
-```
-
-### MCP Resources
-
-| Resource | Description |
-|----------|-------------|
-| `requirements://all` | List all requirements |
-| `requirements://{id}` | Get requirement details |
-| `requirements://level/{level}` | Filter by PRD/OPS/DEV |
-| `content-rules://list` | List content rules |
-| `content-rules://{file}` | Get content rule content |
-| `config://current` | Current configuration |
 
 ### MCP Tools
 
 | Tool | Description |
 |------|-------------|
+| `agent_instructions()` | Project-specific authoring guidance for AI agents |
 | `get_workspace_info(detail=...)` | Project info with use-case profiles |
 | `get_project_summary()` | Coverage stats, level counts, change metrics |
 | `search()` | Search requirements by keyword |
@@ -333,8 +307,8 @@ Options:
 
 Commands:
   validate              Validate requirements format, links, and hashes
-  health                Check graph and spec health (orphans, broken links)
-  doctor                Diagnose environment and installation setup
+  health                Check repository and configuration health
+  doctor                Diagnose environment and installation health
   trace                 Generate traceability matrix
   fix                   Auto-fix spec file issues (hashes, formatting)
   index                 Manage INDEX.md file (validate, regenerate)
@@ -342,19 +316,18 @@ Commands:
   changed               Detect git changes to spec files
   version               Show version and check for updates
   init                  Create .elspais.toml configuration
-  example               Generate example spec files for getting started
+  example               Display requirement format examples and templates
   edit                  Edit requirements in-place (implements, status, move)
   config                View and modify configuration (show, get, set, ...)
   rules                 View and manage content rules (list, show)
-  docs                  View built-in documentation by topic
-  associate             Manage associate repository links
-  link                  Suggest and apply requirement links for test files
-  pdf                   Compile spec files to PDF (requires elspais[pdf])
-  completion            Generate shell completion scripts
-  reformat-with-claude  Reformat requirements using AI (Acceptance Criteria -> Assertions)
+  docs                  Read the user guide (topics: quickstart, format, hierarchy, ...)
+  completion            Generate shell tab-completion scripts
+  associate             Manage associate repository links (link, list, unlink)
+  link                  Link suggestion tools (suggest links between tests and requirements)
+  pdf                   Compile spec files into a PDF document (requires pandoc + xelatex)
   mcp                   MCP server commands (requires elspais[mcp])
-  install               Install MCP server for Claude Code / Cursor
-  uninstall             Uninstall MCP server registration
+  install               Install elspais variants (local dev version)
+  uninstall             Revert elspais installation (back to PyPI)
 ```
 
 See [docs/commands.md](docs/commands.md) for comprehensive command documentation.
@@ -384,28 +357,9 @@ ruff check src/elspais
 black --check src/elspais
 ```
 
-## Version Pinning
-
-For reproducible builds, pin the version in your project:
-
-```bash
-# .github/versions.env
-ELSPAIS_VERSION=0.24.3
-```
-
-```yaml
-# GitHub Actions
-- name: Install elspais
-  run: pip install elspais==${{ env.ELSPAIS_VERSION }}
-```
-
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions welcome! Please read the contributing guidelines before submitting PRs.
+GNU Affero General Public License v3 (AGPL-3.0) - see [LICENSE](LICENSE) for details.
 
 ## Links
 

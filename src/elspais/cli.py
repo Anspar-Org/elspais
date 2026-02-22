@@ -262,6 +262,12 @@ Checks performed:
         action="store_true",
         help="Start review server (requires trace-review extra)",
     )
+    trace_parser.add_argument(
+        "--path",
+        type=Path,
+        help="Path to repository root (default: auto-detect from cwd)",
+        metavar="DIR",
+    )
     # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
     # Graph-based trace options
     trace_parser.add_argument(
@@ -738,8 +744,7 @@ Manual Setup:
   elspais completion                 # Show manual instructions
   elspais completion --shell bash    # Generate script for specific shell
 
-First, install the completion extra:
-  pip install elspais[completion]
+Note: Requires the completion extra (pip install elspais[completion]).
 """,
     )
     completion_parser.add_argument(
@@ -939,16 +944,18 @@ Examples:
         help="MCP server commands (requires elspais[mcp])",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-elspais MCP Server - Model Context Protocol integration for Claude Code.
+elspais MCP Server - Model Context Protocol integration.
 
 Commands:
-  elspais mcp serve              Start MCP server (stdio transport)
-  elspais mcp install            Register with Claude Code (current project)
-  elspais mcp install --global   Register with Claude Code (all projects)
-  elspais mcp uninstall          Remove from Claude Code
+  elspais mcp serve                       Start MCP server (stdio transport)
+  elspais mcp install                     Register with Claude Code (current project)
+  elspais mcp install --global            Register with Claude Code (all projects)
+  elspais mcp install --global --desktop  Register with Claude Code + Claude Desktop
+  elspais mcp uninstall                   Remove from Claude Code
+  elspais mcp uninstall --desktop         Also remove from Claude Desktop
 
 Quick start:
-  elspais mcp install --global   # One-time setup
+  elspais mcp install --global --desktop  # One-time setup for both clients
 """,
     )
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
@@ -968,7 +975,7 @@ Quick start:
     # mcp install
     mcp_install = mcp_subparsers.add_parser(
         "install",
-        help="Register elspais MCP server with Claude Code",
+        help="Register elspais MCP server with Claude Code and/or Claude Desktop",
     )
     mcp_install.add_argument(
         "--global",
@@ -976,17 +983,27 @@ Quick start:
         action="store_true",
         help="Install for all projects (user scope) instead of current project only",
     )
+    mcp_install.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Also install into Claude Desktop (claude_desktop_config.json)",
+    )
 
     # mcp uninstall
     mcp_uninstall = mcp_subparsers.add_parser(
         "uninstall",
-        help="Remove elspais MCP server from Claude Code",
+        help="Remove elspais MCP server from Claude Code and/or Claude Desktop",
     )
     mcp_uninstall.add_argument(
         "--global",
         dest="global_scope",
         action="store_true",
         help="Remove from user scope",
+    )
+    mcp_uninstall.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Also remove from Claude Desktop (claude_desktop_config.json)",
     )
 
     # link command
@@ -1060,8 +1077,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = create_parser()
 
     # Enable shell tab-completion if argcomplete is installed
-    # Install with: pip install elspais[completion]
-    # Then activate: eval "$(register-python-argcomplete elspais)"
+    # Setup: elspais completion --install
     try:
         import argcomplete
 
@@ -1084,8 +1100,16 @@ def main(argv: list[str] | None = None) -> int:
     from elspais.config import find_canonical_root, find_git_root
 
     original_cwd = Path.cwd()
-    git_root = find_git_root(original_cwd)
-    canonical_root = find_canonical_root(original_cwd)
+
+    # If --path is set on a command that supports it, use that as the root
+    explicit_path = getattr(args, "path", None)
+    if explicit_path:
+        explicit_path = Path(explicit_path).resolve()
+        git_root = explicit_path
+        canonical_root = find_canonical_root(explicit_path)
+    else:
+        git_root = find_git_root(original_cwd)
+        canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)
@@ -1212,9 +1236,21 @@ def version_command(args: argparse.Namespace) -> int:
 def mcp_command(args: argparse.Namespace) -> int:
     """Handle MCP server commands."""
     if args.mcp_action == "install":
-        return _mcp_install(global_scope=args.global_scope)
+        desktop = getattr(args, "desktop", False)
+        rc = _mcp_install(global_scope=args.global_scope)
+        if desktop:
+            rc_desktop = _mcp_install_desktop()
+            if rc == 0:
+                rc = rc_desktop
+        return rc
     elif args.mcp_action == "uninstall":
-        return _mcp_uninstall(global_scope=args.global_scope)
+        desktop = getattr(args, "desktop", False)
+        rc = _mcp_uninstall(global_scope=args.global_scope)
+        if desktop:
+            rc_desktop = _mcp_uninstall_desktop()
+            if rc == 0:
+                rc = rc_desktop
+        return rc
 
     try:
         from elspais.mcp.server import run_server
@@ -1290,6 +1326,92 @@ def _mcp_install(global_scope: bool = False) -> int:
     print(f"elspais MCP server registered for {scope_label}.")
     if not global_scope:
         print("Tip: Use --global to make elspais MCP available in all projects.")
+    return 0
+
+
+def _claude_desktop_config_path() -> Path | None:
+    """Return the Claude Desktop config file path for the current platform.
+
+    Returns:
+        Path to claude_desktop_config.json, or None if platform unsupported.
+    """
+    import platform
+
+    system = platform.system()
+    home = Path.home()
+
+    if system == "Darwin":
+        return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif system == "Linux":
+        return home / ".config" / "Claude" / "claude_desktop_config.json"
+    elif system == "Windows":
+        import os
+
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            return Path(appdata) / "Claude" / "claude_desktop_config.json"
+    return None
+
+
+def _mcp_install_desktop() -> int:
+    """Register elspais MCP server in Claude Desktop config."""
+    import json
+
+    config_path = _claude_desktop_config_path()
+    if config_path is None:
+        print("Error: Unsupported platform for Claude Desktop.", file=sys.stderr)
+        return 1
+
+    entry = {
+        "command": "elspais",
+        "args": ["mcp", "serve"],
+    }
+
+    try:
+        if config_path.exists():
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        else:
+            data = {}
+
+        servers = data.setdefault("mcpServers", {})
+        servers["elspais"] = entry
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"Error writing Claude Desktop config: {e}", file=sys.stderr)
+        return 1
+
+    print(f"Claude Desktop: registered elspais in {config_path}")
+    return 0
+
+
+def _mcp_uninstall_desktop() -> int:
+    """Remove elspais MCP server from Claude Desktop config."""
+    import json
+
+    config_path = _claude_desktop_config_path()
+    if config_path is None:
+        print("Error: Unsupported platform for Claude Desktop.", file=sys.stderr)
+        return 1
+
+    if not config_path.exists():
+        print("Claude Desktop: config not found, nothing to remove.")
+        return 0
+
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        servers = data.get("mcpServers", {})
+        if "elspais" not in servers:
+            print("Claude Desktop: elspais not registered, nothing to remove.")
+            return 0
+
+        del servers["elspais"]
+        config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"Error updating Claude Desktop config: {e}", file=sys.stderr)
+        return 1
+
+    print("Claude Desktop: elspais removed.")
     return 0
 
 

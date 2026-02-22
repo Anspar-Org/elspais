@@ -31,7 +31,6 @@ def generator(graph):
 
     gen = HTMLGenerator(graph, base_path=str(FIXTURE_DIR))
     gen._annotate_git_state()
-    gen._annotate_coverage()
     return gen
 
 

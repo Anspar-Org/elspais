@@ -479,7 +479,8 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    repo_root = Path.cwd().resolve()
+    explicit_path = getattr(args, "path", None)
+    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
     config = get_config(start_path=repo_root, quiet=True)
     canonical_root = getattr(args, "canonical_root", None)
@@ -596,10 +597,13 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
+    explicit_path = getattr(args, "path", None)
+    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        repo_root=repo_root,
         canonical_root=canonical_root,
     )
 
@@ -607,7 +611,7 @@ def run(args: argparse.Namespace) -> int:
     if getattr(args, "view", False):
         try:
             # Get absolute base path for VS Code links
-            base_path = str(Path.cwd().resolve())
+            base_path = str(repo_root)
             content = format_view(graph, getattr(args, "embed_content", False), base_path=base_path)
         except ImportError as e:
             print(f"Error: {e}", file=sys.stderr)

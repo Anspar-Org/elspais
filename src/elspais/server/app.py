@@ -130,7 +130,6 @@ def create_app(
 
             gen = HTMLGenerator(_state["graph"], base_path=str(_state["working_dir"]))
             gen._annotate_git_state()
-            gen._annotate_coverage()
             stats = gen._compute_stats()
             journeys = gen._collect_journeys()
             stats.journey_count = len(journeys)
