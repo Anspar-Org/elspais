@@ -142,9 +142,9 @@ jobs:
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
 
           if [ "$PYPI_SKIPPED" = "true" ]; then
-            PUBLISHED="Homebrew update dispatched"
+            PUBLISHED="Homebrew update triggered"
           else
-            PUBLISHED="Published to PyPI, Homebrew update dispatched"
+            PUBLISHED="Published to <https://pypi.org/project/elspais/${VERSION}/|PyPI>"
           fi
 
           if [ "$PR_FOUND" = "true" ]; then
