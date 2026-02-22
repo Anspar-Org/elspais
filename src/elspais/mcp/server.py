@@ -3293,7 +3293,8 @@ The graph is the single source of truth - all tools read directly from it.
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
-- `refresh_graph(full=False)` - Rebuild after spec file changes
+- `refresh_graph(full=False, path="")` - Rebuild after spec file changes
+  - path: switch to a different project directory before rebuilding
 
 ### Search & Navigation
 - `search(query, field="all", regex=False, limit=50)` - Find requirements
@@ -3462,6 +3463,9 @@ Use `save_branch=True` to create a safety branch before modifications, allowing 
 **After editing spec files:**
 1. refresh_graph() to rebuild
 2. get_graph_status() to verify health
+
+**Switching to a different project:**
+1. refresh_graph(path="/path/to/other/repo") to switch and rebuild
 """
 
 
@@ -3525,21 +3529,33 @@ def create_server(
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
-    def refresh_graph(full: bool = False) -> dict[str, Any]:
+    def refresh_graph(full: bool = False, path: str = "") -> dict[str, Any]:
         """Force graph rebuild from spec files.
 
         Args:
             full: If True, clear all caches before rebuild.
+            path: Switch to a different project directory before rebuilding.
+                  Reloads config, resets canonical root, and rebuilds the graph
+                  from the new location. Useful for multi-repo setups.
 
         Returns:
-            Success status and new node count.
+            Success status, new node count, and current working directory.
         """
+        if path:
+            new_dir = Path(path).resolve()
+            if not new_dir.is_dir():
+                return {"success": False, "message": f"Directory not found: {path}"}
+            _state["working_dir"] = new_dir
+            _state["config"] = get_config(start_path=new_dir, quiet=True)
+            _state["canonical_root"] = find_canonical_root(new_dir)
+
         result, new_graph = _refresh_graph(
             _state["working_dir"],
             full=full,
             canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
+        result["working_dir"] = str(_state["working_dir"])
         return result
 
     @mcp.tool()
