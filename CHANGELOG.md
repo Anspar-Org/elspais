@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.84.0] - 2026-02-21
+
+### Added
+
+- **`trace --path DIR`**: Specify repository root for trace output without `cd`-ing into it; works with all trace modes (`--format`, `--view`, `--server`, `--graph-json`) (REQ-p00003-A)
+
 ## [0.83.0] - 2026-02-21
 
 ### Fixed

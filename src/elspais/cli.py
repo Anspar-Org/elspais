@@ -262,6 +262,12 @@ Checks performed:
         action="store_true",
         help="Start review server (requires trace-review extra)",
     )
+    trace_parser.add_argument(
+        "--path",
+        type=Path,
+        help="Path to repository root (default: auto-detect from cwd)",
+        metavar="DIR",
+    )
     # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
     # Graph-based trace options
     trace_parser.add_argument(
@@ -1094,8 +1100,16 @@ def main(argv: list[str] | None = None) -> int:
     from elspais.config import find_canonical_root, find_git_root
 
     original_cwd = Path.cwd()
-    git_root = find_git_root(original_cwd)
-    canonical_root = find_canonical_root(original_cwd)
+
+    # If --path is set on a command that supports it, use that as the root
+    explicit_path = getattr(args, "path", None)
+    if explicit_path:
+        explicit_path = Path(explicit_path).resolve()
+        git_root = explicit_path
+        canonical_root = find_canonical_root(explicit_path)
+    else:
+        git_root = find_git_root(original_cwd)
+        canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)

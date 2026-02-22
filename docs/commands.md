@@ -71,6 +71,7 @@ elspais trace [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
+| `--path DIR` | Path to repository root (default: auto-detect from cwd) |
 | `--format {markdown,html,csv}` | Output format (default: markdown and html) |
 | `-o, --output FILE` | Output file path |
 | `--mode {core,combined}` | Include sponsor specs (default: combined) |

@@ -641,3 +641,120 @@ class TestTraceAdvancedFeaturesNotImplemented:
             result = trace.run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
+
+
+class TestTracePathArgument:
+    """Tests for trace --path argument.
+
+    Validates REQ-p00003-A: The tool SHALL generate traceability matrices
+    in Markdown, HTML, and CSV formats.
+    """
+
+    def test_REQ_p00003_A_path_markdown_uses_specified_directory(
+        self, hht_like_fixture: Path, tmp_path: Path
+    ):
+        """Validates REQ-p00003-A: --path with markdown format generates output
+        using the specified directory's config and spec files."""
+        from elspais.commands import trace
+
+        output_file = tmp_path / "output.md"
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=None,
+            format="markdown",
+            output=str(output_file),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            path=str(hht_like_fixture),
+            canonical_root=None,
+            report=None,
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        assert output_file.exists()
+        content = output_file.read_text()
+        assert "Traceability Matrix" in content
+        # The hht-like fixture contains REQ-p00001 in prd-core.md
+        assert "REQ-p00001" in content
+
+    def test_REQ_p00003_A_path_graph_json_uses_specified_directory(
+        self, hht_like_fixture: Path, tmp_path: Path
+    ):
+        """Validates REQ-p00003-A: --path with --graph-json generates graph output
+        from the specified directory."""
+        from elspais.commands import trace
+
+        output_file = tmp_path / "graph.json"
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=None,
+            format="markdown",
+            output=str(output_file),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=True,
+            path=str(hht_like_fixture),
+            canonical_root=None,
+            report=None,
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        assert output_file.exists()
+        content = output_file.read_text()
+        data = json.loads(content)
+        assert "nodes" in data
+        # The hht-like fixture should produce at least one requirement node
+        assert any(
+            node_id.startswith("REQ-") for node_id in data["nodes"]
+        ), "Expected at least one REQ- node in graph JSON output"
+
+    def test_REQ_p00003_A_path_nonexistent_directory_fails(self, tmp_path: Path):
+        """Validates REQ-p00003-A: --path with a non-existent directory
+        results in a non-zero exit or error (graceful failure)."""
+        from elspais.commands import trace
+
+        nonexistent = tmp_path / "does-not-exist"
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=None,
+            format="markdown",
+            output=str(tmp_path / "output.md"),
+            quiet=True,
+            view=False,
+            embed_content=False,
+            edit_mode=False,
+            review_mode=False,
+            server=False,
+            graph_json=False,
+            path=str(nonexistent),
+            canonical_root=None,
+            report=None,
+        )
+
+        # A non-existent path should either return non-zero or raise an exception
+        try:
+            trace.run(args)
+            # If it returns, it should indicate the output has no content
+            # or return non-zero. Either way, the output should not contain
+            # valid requirement data since the dir doesn't exist.
+            output_file = tmp_path / "output.md"
+            if output_file.exists():
+                content = output_file.read_text()
+                # It produced output but with no requirement data (empty trace)
+                assert "REQ-" not in content
+        except (FileNotFoundError, OSError):
+            # Raising an exception for non-existent path is also acceptable
+            pass

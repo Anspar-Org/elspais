@@ -51,6 +51,7 @@ Generate traceability matrix and reports.
 
 **Options:**
 
+  `--path DIR`             Path to repository root (default: auto-detect)
   `--format {markdown,html,csv,both}`  Output format (default: both)
   `--output PATH`          Output file path
   `--view`                 Interactive HTML traceability tree
