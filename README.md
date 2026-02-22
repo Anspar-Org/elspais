@@ -276,17 +276,6 @@ elspais mcp install --global --desktop
 elspais completion --install
 ```
 
-### MCP Resources
-
-| Resource | Description |
-|----------|-------------|
-| `requirements://all` | List all requirements |
-| `requirements://{id}` | Get requirement details |
-| `requirements://level/{level}` | Filter by PRD/OPS/DEV |
-| `content-rules://list` | List content rules |
-| `content-rules://{file}` | Get content rule content |
-| `config://current` | Current configuration |
-
 ### MCP Tools
 
 | Tool | Description |
@@ -337,8 +326,8 @@ Commands:
   link                  Link suggestion tools (suggest links between tests and requirements)
   pdf                   Compile spec files into a PDF document (requires pandoc + xelatex)
   mcp                   MCP server commands (requires elspais[mcp])
-  install               Install local dev version (from source)
-  uninstall             Revert to PyPI release version
+  install               Install elspais variants (local dev version)
+  uninstall             Revert elspais installation (back to PyPI)
 ```
 
 See [docs/commands.md](docs/commands.md) for comprehensive command documentation.
