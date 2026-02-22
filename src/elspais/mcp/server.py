@@ -1503,6 +1503,36 @@ def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
+def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[str, Any]:
+    """Load all content rules configured for this project.
+
+    Args:
+        config: Project configuration dict.
+        working_dir: Repository root directory.
+
+    Returns:
+        Dict with 'instructions' list and 'count'.
+    """
+    from elspais.content_rules import load_content_rules
+
+    rules = load_content_rules(config, working_dir)
+    if not rules:
+        return {"instructions": [], "count": 0}
+
+    return {
+        "instructions": [
+            {
+                "title": rule.title,
+                "type": rule.type,
+                "applies_to": rule.applies_to,
+                "content": rule.content,
+            }
+            for rule in rules
+        ],
+        "count": len(rules),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Mutation Tool Functions (REQ-o00062)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3282,12 +3312,13 @@ The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
 
-1. `get_workspace_info(detail=...)` - Understand what project you're working with
-2. `get_project_summary()` - Get overview statistics and health metrics
-3. `search(query)` - Find requirements by keyword
-4. `get_requirement(req_id)` - Get full details including assertions
-5. `get_hierarchy(req_id)` - Navigate parent/child relationships
-6. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+1. `agent_instructions()` - Get project-specific authoring guidance
+2. `get_workspace_info(detail=...)` - Understand what project you're working with
+3. `get_project_summary()` - Get overview statistics and health metrics
+4. `search(query)` - Find requirements by keyword
+5. `get_requirement(req_id)` - Get full details including assertions
+6. `get_hierarchy(req_id)` - Navigate parent/child relationships
+7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
 
 ## Tools Overview
 
@@ -3327,6 +3358,7 @@ The graph is the single source of truth - all tools read directly from it.
   - "all": everything from all profiles combined
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
 - `get_changed_requirements()` - Requirements with uncommitted or branch changes
+- `agent_instructions()` - Content rules providing authoring guidance for AI agents
 
 ### Node Mutations (in-memory)
 - `mutate_rename_node(old_id, new_id)` - Rename requirement
@@ -3854,6 +3886,20 @@ def create_server(
             Changed requirements with git state and summary counts.
         """
         return _get_changed_requirements(_state["graph"])
+
+    @mcp.tool()
+    def agent_instructions() -> dict[str, Any]:
+        """Get agent instructions configured for this project.
+
+        Returns content rules that provide semantic guidance for AI agents
+        authoring or reviewing requirements. These are markdown documents
+        configured in .elspais.toml under [rules].content_rules.
+
+        Returns:
+            All configured instructions with title, type, applies_to scope,
+            and full content.
+        """
+        return _get_agent_instructions(_state["config"], _state["working_dir"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)
