@@ -216,7 +216,7 @@ jobs:
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
-          token: ${{ secrets.SLACK_4_GH }}
+          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
           errors: true
           payload: |
             channel: "${{ steps.channel.outputs.id }}"
