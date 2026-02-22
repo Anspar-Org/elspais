@@ -31,6 +31,14 @@ jobs:
             incidents) echo "id=${{ secrets.SLACK_CHANNEL_INCIDENTS }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      - name: Get user display name
+        id: user
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME=$(gh api "users/${{ github.actor }}" --jq '.name // empty' 2>/dev/null || echo "")
+          echo "name=${NAME:-${{ github.actor }}}" >> "$GITHUB_OUTPUT"
+
       - name: Send test message
         uses: slackapi/slack-github-action@v2.1.1
         with:
@@ -39,13 +47,21 @@ jobs:
           errors: true
           payload: |
             channel: "${{ steps.channel.outputs.id }}"
-            text: ":test_tube: *Slack integration test*\n\n*Channel:* #${{ inputs.channel }}\n*Triggered by:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+            text: ":test_tube: *Slack integration test*\n\n*Channel:* #${{ inputs.channel }}\n*Triggered by:* ${{ steps.user.outputs.name }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
 
   test-dm:
     name: Test Direct Message
     runs-on: ubuntu-latest
     if: inputs.test_dm
     steps:
+      - name: Get user display name
+        id: user
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME=$(gh api "users/${{ github.actor }}" --jq '.name // empty' 2>/dev/null || echo "")
+          echo "name=${NAME:-${{ github.actor }}}" >> "$GITHUB_OUTPUT"
+
       - name: Lookup Slack user by email
         id: slack_user
         env:
@@ -82,4 +98,4 @@ jobs:
           errors: true
           payload: |
             channel: "${{ steps.slack_user.outputs.user_id }}"
-            text: ":test_tube: *Slack DM integration test*\n\n*Triggered by:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+            text: ":test_tube: *Slack DM integration test*\n\n*Triggered by:* ${{ steps.user.outputs.name }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
