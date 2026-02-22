@@ -1,3 +1,4 @@
+# Temporary - delete after verifying Slack integration
 name: Test Slack Notification
 
 on:
