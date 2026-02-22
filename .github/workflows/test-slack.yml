@@ -1,0 +1,84 @@
+name: Test Slack Notifications
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Channel to send test message to'
+        type: choice
+        options:
+          - dev
+          - devops
+          - incidents
+        default: dev
+      test_dm:
+        description: 'Also send a test DM to yourself'
+        type: boolean
+        default: false
+
+jobs:
+  test-channel:
+    name: Test Channel Message
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select channel secret
+        id: channel
+        run: |
+          case "${{ inputs.channel }}" in
+            dev)       echo "id=${{ secrets.SLACK_CHANNEL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            devops)    echo "id=${{ secrets.SLACK_CHANNEL_DEVOPS }}" >> "$GITHUB_OUTPUT" ;;
+            incidents) echo "id=${{ secrets.SLACK_CHANNEL_INCIDENTS }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Send test message
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ steps.channel.outputs.id }}"
+            text: ":test_tube: *Slack integration test*\n\n*Channel:* #${{ inputs.channel }}\n*Triggered by:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+
+  test-dm:
+    name: Test Direct Message
+    runs-on: ubuntu-latest
+    if: inputs.test_dm
+    steps:
+      - name: Lookup Slack user by email
+        id: slack_user
+        env:
+          SLACK_TOKEN: ${{ secrets.SLACK_APP_OATH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EMAIL=$(gh api "users/${{ github.actor }}" --jq '.email // empty' 2>/dev/null || echo "")
+
+          if [ -z "$EMAIL" ] || echo "$EMAIL" | grep -q 'noreply'; then
+            EMAIL=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}" \
+              --jq '.commit.author.email // empty' 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$EMAIL" ] || echo "$EMAIL" | grep -q 'noreply'; then
+            echo "::error::Could not find a usable email for ${{ github.actor }}"
+            exit 1
+          fi
+
+          SLACK_RESPONSE=$(curl -s -H "Authorization: Bearer ${SLACK_TOKEN}" \
+            "https://slack.com/api/users.lookupByEmail?email=${EMAIL}")
+
+          if [ "$(echo "$SLACK_RESPONSE" | jq -r '.ok')" = "true" ]; then
+            echo "user_id=$(echo "$SLACK_RESPONSE" | jq -r '.user.id')" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Slack user lookup failed: $(echo "$SLACK_RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
+
+      - name: Send test DM
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ steps.slack_user.outputs.user_id }}"
+            text: ":test_tube: *Slack DM integration test*\n\n*Triggered by:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
