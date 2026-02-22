@@ -171,7 +171,7 @@ jobs:
           token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
           errors: true
           payload: |
-            channel: "${{ secrets.SLACK_FALLBACK_CHANNEL }}"
+            channel: "${{ secrets.SLACK_CHANNEL_DEV }}"
             text: "${{ steps.message.outputs.text }}"
 
   notify-failure:
@@ -220,11 +220,16 @@ jobs:
             --jq '.[0] // empty' 2>/dev/null || echo "")
 
           if [ -n "$PR_JSON" ]; then
+            LOGIN=$(echo "$PR_JSON" | jq -r '.user.login')
             echo "number=$(echo "$PR_JSON" | jq -r '.number')" >> "$GITHUB_OUTPUT"
             echo "title=$(echo "$PR_JSON" | jq -r '.title')" >> "$GITHUB_OUTPUT"
-            echo "author=$(echo "$PR_JSON" | jq -r '.user.login')" >> "$GITHUB_OUTPUT"
+            echo "author=${LOGIN}" >> "$GITHUB_OUTPUT"
             echo "url=$(echo "$PR_JSON" | jq -r '.html_url')" >> "$GITHUB_OUTPUT"
             echo "found=true" >> "$GITHUB_OUTPUT"
+
+            # Resolve display name from GitHub profile
+            DISPLAY_NAME=$(gh api "users/${LOGIN}" --jq '.name // empty' 2>/dev/null || echo "")
+            echo "author_name=${DISPLAY_NAME:-${LOGIN}}" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -271,7 +276,7 @@ jobs:
         env:
           SLACK_USER_FOUND: ${{ steps.slack_user.outputs.found }}
           SLACK_USER_ID: ${{ steps.slack_user.outputs.user_id }}
-          FALLBACK_CHANNEL: ${{ secrets.SLACK_FALLBACK_CHANNEL }}
+          FALLBACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_DEV }}
         run: |
           if [ "$SLACK_USER_FOUND" = "true" ]; then
             echo "id=${SLACK_USER_ID}" >> "$GITHUB_OUTPUT"
@@ -282,11 +287,12 @@ jobs:
       - name: Build notification message
         id: message
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_FOUND: ${{ steps.pr.outputs.found }}
           PR_NUM: ${{ steps.pr.outputs.number }}
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_URL: ${{ steps.pr.outputs.url }}
-          PR_AUTHOR: ${{ steps.pr.outputs.author }}
+          PR_AUTHOR_NAME: ${{ steps.pr.outputs.author_name }}
           VERSION: ${{ steps.version.outputs.version }}
           FAILED_STEPS: ${{ steps.failures.outputs.failed_steps }}
           SERVER_URL: ${{ github.server_url }}
@@ -296,10 +302,14 @@ jobs:
         run: |
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
 
+          # Resolve display name for actor fallback
+          ACTOR_NAME=$(gh api "users/${ACTOR}" --jq '.name // empty' 2>/dev/null || echo "")
+          ACTOR_NAME="${ACTOR_NAME:-${ACTOR}}"
+
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>\n*Author:* ${PR_AUTHOR}"
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>\n*Author:* ${PR_AUTHOR_NAME}"
           else
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR}"
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR_NAME}"
           fi
 
           echo "text=${MSG}" >> "$GITHUB_OUTPUT"
