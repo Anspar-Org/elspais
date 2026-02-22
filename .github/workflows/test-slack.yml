@@ -1,7 +1,6 @@
 name: Test Slack Notifications
 
 on:
-  pull_request:  # temporary: makes workflow visible in Actions UI for branch testing
   workflow_dispatch:
     inputs:
       channel:
