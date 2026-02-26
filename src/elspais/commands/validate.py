@@ -148,6 +148,31 @@ def run(args: argparse.Namespace) -> int:
                                 "message": f"Associate path is misconfigured: {disc_result}",
                             }
                         )
+                    else:
+                        # Check associate spec directory has requirement files
+                        assoc_spec_dir = p / disc_result.spec_path
+                        if not assoc_spec_dir.exists():
+                            errors.append(
+                                {
+                                    "rule": "config.associate_no_specs",
+                                    "id": path_str,
+                                    "message": (
+                                        f"Associate at {path_str} has no spec"
+                                        f" directory: {disc_result.spec_path}"
+                                    ),
+                                }
+                            )
+                        elif not any(assoc_spec_dir.glob("*.md")):
+                            errors.append(
+                                {
+                                    "rule": "config.associate_no_specs",
+                                    "id": path_str,
+                                    "message": (
+                                        f"Associate at {path_str} has empty spec"
+                                        f" directory: {disc_result.spec_path}"
+                                    ),
+                                }
+                            )
 
     # Implements: REQ-p00005-A
     # In associate mode, suppress orphan warnings for requirements whose

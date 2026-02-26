@@ -310,3 +310,59 @@ class TestValidateAssociateCount:
         )
         result = run(args)
         assert result == 1
+
+    def test_REQ_d00080_E_empty_associate_spec_dir_exits_nonzero(self, tmp_path, monkeypatch):
+        """validate exits 1 when associate has empty spec directory (zero requirements)."""
+        from elspais.commands.validate import run
+
+        monkeypatch.chdir(tmp_path)
+        # Set up core project config
+        config = tmp_path / ".elspais.toml"
+        config.write_text(
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
+        )
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            "# REQ-p00001: Test Requirement\n\n"
+            "**Level**: PRD | **Status**: Active\n\n"
+            "A. Some assertion.\n\n"
+            "*End* *Test Requirement* | **Hash**: 00000000\n"
+        )
+
+        # Set up associate with valid config but empty spec directory
+        assoc_dir = tmp_path / "associate"
+        assoc_dir.mkdir()
+        assoc_config = assoc_dir / ".elspais.toml"
+        assoc_config.write_text(
+            '[project]\nname = "test-assoc"\ntype = "associated"\n'
+            '[associated]\nprefix = "ASC"\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
+        )
+        assoc_spec = assoc_dir / "spec"
+        assoc_spec.mkdir()
+        # Empty spec dir — no .md files
+
+        local_config = tmp_path / ".elspais.local.toml"
+        local_config.write_text(f'[associates]\npaths = ["{assoc_dir}"]\n')
+
+        args = argparse.Namespace(
+            spec_dir=None,
+            config=str(config),
+            fix=False,
+            dry_run=False,
+            skip_rule=None,
+            json=False,
+            quiet=False,
+            export=False,
+            mode="combined",
+            canonical_root=tmp_path,
+        )
+        result = run(args)
+        assert result == 1

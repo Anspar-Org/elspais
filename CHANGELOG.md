@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.84.2] - 2026-02-26
+
+### Fixed
+
+- **CI-unsafe exit codes**: `doctor`, `health`, and `validate` now exit non-zero on misconfigured projects (CUR-1036, REQ-d00080)
+  - Reclassified 7 doctor checks from `severity="warning"` to `severity="error"` so `HealthReport.is_healthy` reflects failures
+  - `validate` exits 1 when spec directories contain zero requirements
+  - `doctor` validates `[associated]` section for associated project types
+  - `validate --mode combined` exits 1 for missing, misconfigured, or empty associate paths
+
 ## [0.84.0] - 2026-02-21
 
 ### Added
