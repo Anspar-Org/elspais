@@ -49,5 +49,5 @@ elspais doctor -v
 
 ## Exit codes
 
-- `0` - All checks passed (warnings are OK)
-- `1` - One or more checks failed
+- `0` - All checks passed
+- `1` - One or more checks failed (configuration errors, missing paths, etc.)
