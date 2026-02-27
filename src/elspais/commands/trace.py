@@ -563,6 +563,15 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     return 0
 
 
+def run_viewer(args: argparse.Namespace) -> int:
+    """Run the viewer command (shorthand for trace --edit-mode).
+
+    Starts the Flask server, opening the browser unless --server is passed.
+    """
+    open_browser = not getattr(args, "server", False)
+    return _run_server(args, open_browser=open_browser)
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 

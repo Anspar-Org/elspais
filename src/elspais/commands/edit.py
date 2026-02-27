@@ -56,7 +56,7 @@ def run(args: argparse.Namespace) -> int:
     if hasattr(args, "req_id") and args.req_id:
         return run_single_edit(args, base_spec_dir, dry_run, validate_refs)
 
-    print("Error: Must specify --req-id or --from-json", file=sys.stderr)
+    print("Error: Must specify REQ_ID or --from-json", file=sys.stderr)
     return 1
 
 

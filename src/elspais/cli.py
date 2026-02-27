@@ -54,6 +54,7 @@ Examples:
   elspais fix --dry-run         # Preview fixes without applying
   elspais trace --format html   # Generate HTML traceability matrix
   elspais trace --view          # Interactive HTML view
+  elspais viewer                # Start interactive viewer server
   elspais changed               # Show uncommitted spec changes
   elspais analyze hierarchy     # Show requirement hierarchy tree
 
@@ -282,6 +283,34 @@ Checks performed:
     )
     # NOTE: --depth removed (dead code - never implemented)
 
+    # viewer command — shorthand for trace --edit-mode
+    viewer_parser = subparsers.add_parser(
+        "viewer",
+        help="Start interactive viewer server (requires trace-review extra)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Start the interactive traceability viewer in your browser.
+
+Examples:
+  elspais viewer                  # Start server and open browser
+  elspais viewer --server         # Start server without opening browser
+  elspais viewer --path /my/repo  # Specify repository root
+
+This is equivalent to: elspais trace --edit-mode
+""",
+    )
+    viewer_parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Start server without opening browser",
+    )
+    viewer_parser.add_argument(
+        "--path",
+        type=Path,
+        help="Path to repository root (default: auto-detect from cwd)",
+        metavar="DIR",
+    )
+
     # fix command
     fix_parser = subparsers.add_parser(
         "fix",
@@ -457,9 +486,9 @@ Subcommands:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  elspais edit --req-id REQ-d00001 --status Draft
-  elspais edit --req-id REQ-d00001 --implements REQ-p00001,REQ-p00002
-  elspais edit --req-id REQ-d00001 --move-to roadmap/future.md
+  elspais edit REQ-d00001 --status Draft
+  elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002
+  elspais edit REQ-d00001 --move-to roadmap/future.md
   elspais edit --from-json edits.json
 
 JSON batch format:
@@ -467,9 +496,10 @@ JSON batch format:
 """,
     )
     edit_parser.add_argument(
-        "--req-id",
+        "req_id",
+        nargs="?",
         help="Requirement ID to edit",
-        metavar="ID",
+        metavar="REQ_ID",
     )
     edit_parser.add_argument(
         "--implements",
@@ -1133,6 +1163,8 @@ def main(argv: list[str] | None = None) -> int:
             return doctor.run(args)
         elif args.command == "trace":
             return trace.run(args)
+        elif args.command == "viewer":
+            return trace.run_viewer(args)
         elif args.command == "fix":
             return fix_cmd.run(args)
         elif args.command == "index":
