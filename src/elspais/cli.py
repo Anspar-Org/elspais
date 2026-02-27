@@ -238,30 +238,32 @@ Checks performed:
         metavar="PATH",
     )
     # trace-view enhanced options (requires elspais[trace-view])
-    trace_parser.add_argument(
+    # --view (static HTML) and --edit-mode/--server (live server) are mutually exclusive
+    trace_mode_group = trace_parser.add_mutually_exclusive_group()
+    trace_mode_group.add_argument(
         "--view",
         action="store_true",
         help="Generate interactive HTML traceability view (requires trace-view extra)",
+    )
+    trace_mode_group.add_argument(
+        "--edit-mode",
+        action="store_true",
+        help="Start live server with in-browser editing (requires trace-review extra)",
+    )
+    trace_mode_group.add_argument(
+        "--review-mode",
+        action="store_true",
+        help="Enable collaborative review with comments and flags",
+    )
+    trace_mode_group.add_argument(
+        "--server",
+        action="store_true",
+        help="Start live server without opening browser (requires trace-review extra)",
     )
     trace_parser.add_argument(
         "--embed-content",
         action="store_true",
         help="Embed full requirement markdown in HTML for offline viewing",
-    )
-    trace_parser.add_argument(
-        "--edit-mode",
-        action="store_true",
-        help="Enable in-browser editing of implements and status fields",
-    )
-    trace_parser.add_argument(
-        "--review-mode",
-        action="store_true",
-        help="Enable collaborative review with comments and flags",
-    )
-    trace_parser.add_argument(
-        "--server",
-        action="store_true",
-        help="Start review server (requires trace-review extra)",
     )
     trace_parser.add_argument(
         "--path",
