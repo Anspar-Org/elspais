@@ -45,7 +45,8 @@ Auto-fix spec file issues (hashes, formatting).
 
 Generate traceability matrix and reports.
 
-  $ elspais trace --view          # Interactive HTML view
+  $ elspais trace --view          # Interactive HTML view (static file)
+  $ elspais trace --edit-mode     # Start interactive viewer server
   $ elspais trace --format html   # Basic HTML matrix
   $ elspais trace --graph-json    # Export graph as JSON
 
@@ -54,28 +55,25 @@ Generate traceability matrix and reports.
   `--path DIR`             Path to repository root (default: auto-detect)
   `--format {markdown,html,csv,both}`  Output format (default: both)
   `--output PATH`          Output file path
-  `--view`                 Interactive HTML traceability tree
+  `--view`                 Generate static interactive HTML view
   `--embed-content`        Embed full markdown in HTML for offline
-  `--graph`                Use unified traceability graph
+  `--edit-mode`            Start live server with in-browser editing
+  `--server`               Start live server without opening browser
   `--graph-json`           Output graph structure as JSON
   `--report NAME`          Report preset (minimal, standard, full)
-  `--depth LEVEL`          Max graph depth (0=roots, 1=children, ...)
-  `--mode {core,sponsor,combined}`  Report scope
-  `--sponsor NAME`         Sponsor name for filtered reports
 
-**Depth Levels:**
+## viewer
 
-  `0` or `requirements`    Show only requirements
-  `1` or `assertions`      Include assertions
-  `2` or `implementation`  Include code references
-  `full`                   Unlimited depth
+Start the interactive viewer server (shorthand for `trace --edit-mode`).
 
-**Planned Options (not yet implemented):**
+  $ elspais viewer                  # Start server and open browser
+  $ elspais viewer --server         # Start server without opening browser
+  $ elspais viewer --path /my/repo  # Specify repository root
 
-  `--edit-mode`    In-browser editing of implements/status
-  `--review-mode`  Collaborative review with comments
-  `--server`       Start review server
-  `--port PORT`    Port for review server
+**Options:**
+
+  `--server`       Start server without opening browser
+  `--path DIR`     Path to repository root (default: auto-detect)
 
 ## pdf
 
@@ -160,14 +158,14 @@ Manage INDEX.md file.
 
 Edit requirements in-place.
 
-  $ elspais edit --req-id REQ-d00001 --status Draft
-  $ elspais edit --req-id REQ-d00001 --implements REQ-p00001,REQ-p00002
-  $ elspais edit --req-id REQ-d00001 --move-to roadmap/future.md
+  $ elspais edit REQ-d00001 --status Draft
+  $ elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002
+  $ elspais edit REQ-d00001 --move-to roadmap/future.md
   $ elspais edit --from-json edits.json
 
 **Options:**
 
-  `--req-id ID`         Requirement ID to edit
+  `REQ_ID`              Requirement ID to edit (positional)
   `--implements REFS`   New Implements (comma-separated, "" to clear)
   `--status STATUS`     New Status value
   `--move-to FILE`      Move to file (relative to spec dir)

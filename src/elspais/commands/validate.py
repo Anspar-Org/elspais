@@ -65,6 +65,8 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    if config_path and isinstance(config_path, str):
+        config_path = Path(config_path)
     fix_mode = getattr(args, "fix", False)
     dry_run = getattr(args, "dry_run", False)
     mode = getattr(args, "mode", "combined")
@@ -112,6 +114,65 @@ def run(args: argparse.Namespace) -> int:
     errors = []
     warnings = []
     fixable = []  # Issues that can be auto-fixed
+
+    # REQ-d00080-E: For core projects with associates, check paths are valid
+    if scan_sponsors:
+        from elspais.config import get_config
+
+        config_dict = get_config(config_path, start_path=repo_root)
+        associate_paths = config_dict.get("associates", {}).get("paths", [])
+        if associate_paths:
+            from elspais.associates import discover_associate_from_path
+
+            for path_str in associate_paths:
+                p = Path(path_str)
+                if not p.is_absolute() and canonical_root:
+                    p = canonical_root / p
+                if not p.exists():
+                    errors.append(
+                        {
+                            "rule": "config.associate_path_missing",
+                            "id": path_str,
+                            "message": (
+                                f"Associate path does not exist: {path_str} " f"(resolved to {p})"
+                            ),
+                        }
+                    )
+                else:
+                    disc_result = discover_associate_from_path(p)
+                    if isinstance(disc_result, str):
+                        errors.append(
+                            {
+                                "rule": "config.associate_invalid",
+                                "id": path_str,
+                                "message": f"Associate path is misconfigured: {disc_result}",
+                            }
+                        )
+                    else:
+                        # Check associate spec directory has requirement files
+                        assoc_spec_dir = p / disc_result.spec_path
+                        if not assoc_spec_dir.exists():
+                            errors.append(
+                                {
+                                    "rule": "config.associate_no_specs",
+                                    "id": path_str,
+                                    "message": (
+                                        f"Associate at {path_str} has no spec"
+                                        f" directory: {disc_result.spec_path}"
+                                    ),
+                                }
+                            )
+                        elif not any(assoc_spec_dir.glob("*.md")):
+                            errors.append(
+                                {
+                                    "rule": "config.associate_no_specs",
+                                    "id": path_str,
+                                    "message": (
+                                        f"Associate at {path_str} has empty spec"
+                                        f" directory: {disc_result.spec_path}"
+                                    ),
+                                }
+                            )
 
     # Implements: REQ-p00005-A
     # In associate mode, suppress orphan warnings for requirements whose
@@ -244,6 +305,19 @@ def run(args: argparse.Namespace) -> int:
 
     # Count requirements
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+
+    # REQ-d00080-B: Zero requirements with configured spec dir is an error
+    if req_count == 0:
+        errors.append(
+            {
+                "rule": "config.no_requirements",
+                "id": "spec",
+                "message": (
+                    "No requirements found. Check that spec directories"
+                    " contain valid requirement files."
+                ),
+            }
+        )
 
     # Output results
     if getattr(args, "json", False):

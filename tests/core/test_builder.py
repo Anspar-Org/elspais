@@ -242,8 +242,8 @@ class TestBuilderContentTypes:
     def test_REQ_d00071_B_build_ignores_missing_targets(self):
         """REQ-d00071-B: Builder handles references to non-existent targets gracefully.
 
-        Node with broken implements reference has no parent and no meaningful
-        children, so it becomes an orphan under root vs orphan classification.
+        Node with broken implements reference has no parent (broken link).
+        As a parentless REQUIREMENT, it becomes a root.
         """
         # This should not raise an error
         graph = build_graph(
@@ -252,10 +252,10 @@ class TestBuilderContentTypes:
 
         req = graph.find_by_id("REQ-o00001")
         assert req is not None
-        # Node has no meaningful children → orphan, not root
-        assert not graph.has_root("REQ-o00001")
+        # Parentless REQUIREMENT → root
+        assert graph.has_root("REQ-o00001")
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
-        assert "REQ-o00001" in orphan_ids
+        assert "REQ-o00001" not in orphan_ids
 
     def test_node_content_fields_accessible(self):
         """Node content fields are accessible via get_field()."""
@@ -602,21 +602,25 @@ class TestGeneralizedOrphanDetection:
         assert any(n.kind == NodeKind.CODE for n in orphans)
         assert "code:src/module.py:1" in orphan_ids
 
-    def test_REQ_d00071_B_requirement_without_children_is_orphan(self):
-        """REQ-d00071-B: Parentless REQUIREMENT nodes without meaningful children are orphans.
+    def test_REQ_d00071_B_requirement_without_children_is_root(self):
+        """REQ-d00071-B: Parentless REQUIREMENT nodes are always roots.
 
-        Under root vs orphan classification, a parentless node must have at
-        least one non-satellite child (not ASSERTION or TEST_RESULT) to qualify
-        as a root. Nodes with no children at all are classified as orphans.
+        All parentless REQUIREMENT nodes become roots regardless of whether
+        they have meaningful children. This ensures all requirements appear
+        in the tree view (e.g. associated repo requirements without children).
         """
         graph = build_graph(
             make_requirement("REQ-p00001", level="PRD"),
             make_requirement("REQ-o00001", level="OPS"),  # No implements, no children
         )
 
+        root_ids = {n.id for n in graph.iter_roots()}
+        assert "REQ-p00001" in root_ids  # No children → still a root
+        assert "REQ-o00001" in root_ids  # No children → still a root
+
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
-        assert "REQ-p00001" in orphan_ids  # No children → orphan
-        assert "REQ-o00001" in orphan_ids  # No children → orphan
+        assert "REQ-p00001" not in orphan_ids
+        assert "REQ-o00001" not in orphan_ids
 
     def test_result_linked_to_existing_test_not_orphan(self):
         """TEST_RESULT with resolved CONTAINS edge is not an orphan."""
@@ -638,12 +642,13 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "result-linked" not in orphan_ids
 
-    def test_REQ_d00071_C_req_with_only_assertions_is_orphan(self):
-        """REQ-d00071-C: Requirement with only ASSERTION children is an orphan.
+    def test_REQ_d00071_C_req_with_only_assertions_is_root(self):
+        """REQ-d00071-C: Requirement with only ASSERTION children is a root.
 
-        Assertions are satellite kinds and don't count as meaningful children.
-        A parentless requirement whose only children are assertions should be
-        classified as an orphan, not a root.
+        Even though assertions are satellite kinds and don't count as
+        meaningful children for other node types, REQUIREMENT nodes are
+        always promoted to roots when parentless. This ensures all
+        requirements appear in the tree view.
         """
         graph = build_graph(
             make_requirement(
@@ -663,13 +668,13 @@ class TestGeneralizedOrphanDetection:
         child_kinds = {c.kind for c in req.iter_children()}
         assert NodeKind.ASSERTION in child_kinds
 
-        # But requirement is still an orphan (assertions don't count)
-        orphan_ids = {n.id for n in graph.orphaned_nodes()}
-        assert "REQ-p00001" in orphan_ids
-
-        # And NOT a root
+        # Requirement is a root (all parentless REQs are roots)
         root_ids = {n.id for n in graph.iter_roots()}
-        assert "REQ-p00001" not in root_ids
+        assert "REQ-p00001" in root_ids
+
+        # And NOT an orphan
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" not in orphan_ids
 
     def test_REQ_d00071_A_req_with_child_req_is_root(self):
         """REQ-d00071-A: Requirement with a child requirement is a root.
@@ -790,8 +795,9 @@ class TestGeneralizedOrphanDetection:
     def test_REQ_d00071_C_custom_satellite_kinds_override(self):
         """REQ-d00071-C: Custom satellite_kinds adds CODE as satellite.
 
-        When satellite_kinds includes 'code', a PRD with only a CODE child
-        should be classified as an orphan (CODE is satellite), not a root.
+        When satellite_kinds includes 'code', CODE children count as satellite.
+        But parentless REQUIREMENT nodes are always roots regardless of
+        satellite configuration.
         """
         builder = GraphBuilder(satellite_kinds=["assertion", "result", "code"])
         builder.add_parsed_content(
@@ -811,20 +817,19 @@ class TestGeneralizedOrphanDetection:
         child_kinds = {c.kind for c in req.iter_children()}
         assert NodeKind.CODE in child_kinds
 
-        # But with CODE as satellite, PRD is an orphan
-        orphan_ids = {n.id for n in graph.orphaned_nodes()}
-        assert "REQ-p00001" in orphan_ids
-
-        # And NOT a root
+        # Parentless REQUIREMENT → always a root
         root_ids = {n.id for n in graph.iter_roots()}
-        assert "REQ-p00001" not in root_ids
+        assert "REQ-p00001" in root_ids
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" not in orphan_ids
 
     def test_REQ_d00071_C_default_satellite_kinds_unchanged(self):
-        """REQ-d00071-C: Default satellite_kinds matches original behavior.
+        """REQ-d00071-C: Default satellite_kinds still classifies assertions as satellite.
 
         When no satellite_kinds parameter is passed, the builder defaults
-        to ASSERTION and TEST_RESULT as satellite kinds. A PRD with only
-        assertion children should be classified as an orphan.
+        to ASSERTION and TEST_RESULT as satellite kinds. Assertions are still
+        satellite children, but parentless REQUIREMENT nodes are always roots.
         """
         builder = GraphBuilder()
         builder.add_parsed_content(
@@ -845,13 +850,12 @@ class TestGeneralizedOrphanDetection:
         child_kinds = {c.kind for c in req.iter_children()}
         assert NodeKind.ASSERTION in child_kinds
 
-        # Assertions are satellite by default, so PRD is orphan
-        orphan_ids = {n.id for n in graph.orphaned_nodes()}
-        assert "REQ-p00001" in orphan_ids
-
-        # And NOT a root
+        # Parentless REQUIREMENT → always a root
         root_ids = {n.id for n in graph.iter_roots()}
-        assert "REQ-p00001" not in root_ids
+        assert "REQ-p00001" in root_ids
+
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
+        assert "REQ-p00001" not in orphan_ids
 
     def test_REQ_d00071_C_invalid_satellite_kind_raises_error(self):
         """REQ-d00071-C: Invalid satellite kind string raises ValueError.

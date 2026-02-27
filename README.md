@@ -3,177 +3,69 @@
 > "L-Space is the ultimate library, connecting all libraries everywhere through the sheer weight of accumulated knowledge."
 > — Terry Pratchett
 
-**elspais** is a requirements validation and traceability tool that helps teams manage formal requirements across single or multiple repositories. It supports configurable ID patterns, validation rules, and generates traceability matrices.
-
-## Features
-
-- **Minimal Dependencies**: Core CLI requires only `tomlkit` (pure Python, no transitive deps)
-- **Configurable ID Patterns**: Support for `REQ-p00001`, `PRD-00001`, `PROJ-123`, named requirements, and custom formats
-- **Validation Rules**: Enforce requirement hierarchies (PRD → OPS → DEV) with configurable constraints
-- **Multi-Repository**: Link requirements across core and associated repositories
-- **Traceability Matrices**: Generate Markdown, HTML, or CSV output
-- **Hash-Based Change Detection**: Track requirement changes with SHA-256 hashes
-- **Content Rules**: Define semantic validation guidelines for AI agents
-- **MCP Server**: Integrate with AI assistants via Model Context Protocol
+**elspais** is a requirements validation and traceability tool for teams managing formal requirements across one or more repositories. It validates requirement formats, enforces hierarchy rules, tracks changes with content hashes, and generates traceability matrices linking requirements to code and tests.
 
 ## Installation
 
-### For End Users
-
 ```bash
-# Recommended: Isolated installation with pipx
+# Homebrew (macOS/Linux)
+brew install anspar-org/anspar/elspais
+
+# pipx (isolated install)
 pipx install elspais
 
-# Or standard pip installation
+# pip
 pip install elspais
 ```
 
-### For Development
+### Optional extras
 
 ```bash
-git clone https://github.com/anspar/elspais.git
-cd elspais
-pip install -e ".[dev]"
-```
-
-### For Docker and CI/CD
-
-For faster installation in containerized environments, consider [uv](https://github.com/astral-sh/uv):
-
-```dockerfile
-# Example Dockerfile
-FROM python:3.11-slim
-
-# Copy uv binary
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Install elspais (10-100x faster than pip)
-RUN uv pip install --system --no-cache elspais
-```
-
-```yaml
-# Example GitHub Actions
-- name: Install uv
-  uses: astral-sh/setup-uv@v2
-
-- name: Install elspais
-  run: uv pip install --system elspais
+pip install elspais[trace-view]    # Static HTML traceability view
+pip install elspais[trace-review]  # Interactive viewer server
+pip install elspais[mcp]           # MCP server for AI integration
+pip install elspais[all]           # Everything
 ```
 
 ## Quick Start
 
-### Initialize a Repository
-
 ```bash
-# Create .elspais.toml with default configuration
+# Initialize configuration
 elspais init
 
-# Or specify repository type
-elspais init --type core              # Core repository
-elspais init --type associated --associated-prefix CAL  # Associated repo
-```
-
-### Validate Requirements
-
-```bash
-# Validate all requirements in spec/ directory
+# Validate requirements
 elspais validate
 
-# Verbose output
-elspais validate -v
-
-# Auto-fix fixable issues (hashes, formatting)
+# Auto-fix hashes and formatting
 elspais fix
-```
 
-### Generate Traceability Matrix
-
-```bash
-# Generate both Markdown and HTML
-elspais trace
-
-# Generate specific format
+# Generate traceability matrix
 elspais trace --format html
-elspais trace --format csv
 
-# Custom output location
-elspais trace --output docs/traceability.html
+# Interactive viewer (live server)
+elspais viewer
+
+# Built-in documentation
+elspais docs
 ```
 
-### Fix Issues
+## MCP Server (AI Integration)
+
+elspais includes an MCP server for use with Claude Code, Claude Desktop, and other MCP-compatible clients.
 
 ```bash
-# Auto-fix all fixable issues (hashes, formatting)
-elspais fix
+# Install the MCP extra
+pip install elspais[mcp]
 
-# Preview fixes without applying
-elspais fix --dry-run
-
-# Fix specific requirement hash
-elspais fix REQ-d00027
+# Register with Claude Code (all projects) and Claude Desktop
+elspais mcp install --global --desktop
 ```
 
-### Analyze Requirements
-
-```bash
-# Show requirement hierarchy tree
-elspais analyze hierarchy
-
-# Find orphaned requirements
-elspais analyze orphans
-
-# Implementation coverage report
-elspais analyze coverage
-```
-
-## Configuration
-
-Create `.elspais.toml` in your repository root:
-
-```toml
-[project]
-name = "my-project"
-type = "core"  # "core" | "associated"
-
-[directories]
-spec = "spec"
-docs = "docs"
-code = ["src", "apps", "packages"]
-
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
-
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
-
-[patterns.id_format]
-style = "numeric"
-digits = 5
-leading_zeros = true
-
-[rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
-]
-allow_circular = false
-allow_orphans = false
-
-[rules.format]
-require_hash = true
-require_assertions = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
-```
-
-See [docs/configuration.md](docs/configuration.md) for full reference.
+The MCP server provides tools for searching requirements, navigating hierarchies, checking coverage, and drafting mutations — all operating on the live traceability graph.
 
 ## Requirement Format
 
-elspais expects requirements in Markdown format:
+Requirements are written in Markdown:
 
 ```markdown
 # REQ-d00001: Requirement Title
@@ -185,184 +77,88 @@ elspais expects requirements in Markdown format:
 A. The system SHALL provide user authentication via email/password.
 B. Sessions SHALL expire after 30 minutes of inactivity.
 
-## Rationale
-
-Security requires identity verification.
-
 *End* *Requirement Title* | **Hash**: a1b2c3d4
 ---
 ```
 
-Key format elements:
-- **Assertions section**: Labeled A-Z, each using SHALL for normative statements
-- **One-way traceability**: Children reference parents via `Implements:`
-- **Hash footer**: SHA-256 hash for change detection
+- **Hierarchy**: PRD (product) → OPS (operations) → DEV (development)
+- **Traceability**: Children reference parents via `Implements:`
+- **Assertions**: Labeled A-Z, using SHALL for normative statements
+- **Hash footer**: SHA-256 content hash for change detection
 
-## ID Pattern Examples
+## Configuration
 
-elspais supports multiple ID formats:
-
-| Pattern | Example | Configuration |
-|---------|---------|---------------|
-| HHT Default | `REQ-p00001` | `id_template = "{prefix}-{type}{id}"` |
-| Type-Prefix | `PRD-00001` | `id_template = "{type}-{id}"` |
-| Jira-Like | `PROJ-123` | `id_template = "{prefix}-{id}"` |
-| Named | `REQ-UserAuth` | `style = "named"` |
-| Associated | `REQ-CAL-d00001` | `associated.enabled = true` |
-
-See [docs/patterns.md](docs/patterns.md) for details.
-
-## Multi-Repository Support
-
-For associated repositories that reference a core repository:
+Create `.elspais.toml` in your repository root (or run `elspais init`):
 
 ```toml
 [project]
-type = "associated"
+name = "my-project"
+type = "core"
 
-[associated]
-prefix = "CAL"
+[directories]
+spec = "spec"
+code = ["src"]
 
-[core]
-path = "../core-repo"
+[patterns]
+prefix = "REQ"
+id_template = "{prefix}-{type}{id}"
+
+[rules.hierarchy]
+allowed_implements = ["dev -> ops, prd", "ops -> prd"]
+
+[rules.format]
+require_hash = true
+require_assertions = true
 ```
 
-Validate without associated specs:
+See [docs/configuration.md](docs/configuration.md) for full reference.
+
+## Multi-Repository Support
+
+Link associated repositories that extend a core requirement set:
 
 ```bash
-elspais validate --mode core
+elspais init --type associated --associated-prefix CAL
+elspais associate ../core-repo
+elspais validate --mode combined
 ```
 
-## Content Rules
-
-Content rules are markdown files that provide semantic validation guidance for AI agents authoring requirements:
-
-```bash
-# Configure content rules
-elspais config add rules.content_rules "spec/AI-AGENT.md"
-
-# List configured rules
-elspais rules list
-
-# View a specific rule
-elspais rules show AI-AGENT.md
-```
-
-Content rule files can include YAML frontmatter for metadata:
-
-```markdown
----
-title: AI Agent Guidelines
-type: guidance
-applies_to: [requirements, assertions]
----
-
-# AI Agent Guidelines
-
-- Use SHALL for normative statements
-- One assertion per obligation
-- No duplication across levels
-```
-
-## MCP Server (AI Integration)
-
-elspais includes an MCP (Model Context Protocol) server for AI assistant integration:
-
-```bash
-# One-time setup: register with Claude Code and Claude Desktop
-elspais mcp install --global --desktop
-
-# Enable tab-completion (optional)
-elspais completion --install
-```
-
-### MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `agent_instructions()` | Project-specific authoring guidance for AI agents |
-| `get_workspace_info(detail=...)` | Project info with use-case profiles |
-| `get_project_summary()` | Coverage stats, level counts, change metrics |
-| `search()` | Search requirements by keyword |
-| `get_requirement()` | Get requirement details with assertions |
-| `get_hierarchy()` | Navigate parent/child relationships |
-| `discover_requirements()` | Find most-specific matches in a subgraph |
-
-The `get_workspace_info` tool accepts a `detail` parameter for task-specific
-context: `"testing"`, `"code-refs"`, `"coverage"`, `"retrofit"`, `"manager"`,
-`"worktree"`, or `"all"`.
-
-## CLI Reference
+## CLI Commands
 
 ```
-elspais [OPTIONS] COMMAND [ARGS]
-
-Options:
-  --config PATH    Path to config file
-  --spec-dir PATH  Override spec directory
-  -v, --verbose    Verbose output
-  -q, --quiet      Suppress non-error output
-  --version        Show version
-  --help           Show help
-
-Commands:
-  validate              Validate requirements format, links, and hashes
-  health                Check repository and configuration health
-  doctor                Diagnose environment and installation health
-  trace                 Generate traceability matrix
-  fix                   Auto-fix spec file issues (hashes, formatting)
-  index                 Manage INDEX.md file (validate, regenerate)
-  analyze               Analyze requirement hierarchy (hierarchy, orphans, coverage)
-  changed               Detect git changes to spec files
-  version               Show version and check for updates
-  init                  Create .elspais.toml configuration
-  example               Display requirement format examples and templates
-  edit                  Edit requirements in-place (implements, status, move)
-  config                View and modify configuration (show, get, set, ...)
-  rules                 View and manage content rules (list, show)
-  docs                  Read the user guide (topics: quickstart, format, hierarchy, ...)
-  completion            Generate shell tab-completion scripts
-  associate             Manage associate repository links (link, list, unlink)
-  link                  Link suggestion tools (suggest links between tests and requirements)
-  pdf                   Compile spec files into a PDF document (requires pandoc + xelatex)
-  mcp                   MCP server commands (requires elspais[mcp])
-  install               Install elspais variants (local dev version)
-  uninstall             Revert elspais installation (back to PyPI)
+elspais validate       Validate requirements format, links, and hashes
+elspais fix            Auto-fix spec file issues (hashes, formatting)
+elspais trace          Generate traceability matrix (markdown, html, csv)
+elspais viewer         Start interactive viewer server
+elspais health         Check repository and configuration health
+elspais doctor         Diagnose environment and installation health
+elspais analyze        Analyze hierarchy, orphans, or coverage
+elspais changed        Detect git changes to spec files
+elspais edit           Edit requirements in-place
+elspais config         View and modify configuration
+elspais associate      Manage associate repository links
+elspais link suggest   Suggest requirement links for unlinked tests
+elspais pdf            Compile spec files into PDF
+elspais mcp            MCP server commands
+elspais docs           Built-in user guide
+elspais example        Requirement format examples
 ```
 
-See [docs/commands.md](docs/commands.md) for comprehensive command documentation.
+Run `elspais <command> --help` for detailed usage. See [docs/cli/commands.md](docs/cli/commands.md) for full documentation.
 
 ## Development
 
 ```bash
-# Clone and install in development mode
 git clone https://github.com/anspar/elspais.git
 cd elspais
 pip install -e ".[dev]"
-
-# Enable git hooks (verifies docs stay in sync before push)
-git config core.hooksPath .githooks
-
-# Run tests
 pytest
-
-# Run with coverage
-pytest --cov=elspais
-
-# Type checking
-mypy src/elspais
-
-# Linting
-ruff check src/elspais
-black --check src/elspais
 ```
 
 ## License
 
-GNU Affero General Public License v3 (AGPL-3.0) - see [LICENSE](LICENSE) for details.
+GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE).
 
 ## Links
 
-- [Documentation](https://github.com/anspar/elspais#readme)
-- [Issue Tracker](https://github.com/anspar/elspais/issues)
 - [Changelog](CHANGELOG.md)

@@ -120,7 +120,6 @@ def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=f"Configuration is missing required settings: {', '.join(missing)}",
             category="config",
-            severity="warning",
             details={"missing": missing},
         )
 
@@ -162,7 +161,6 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=f"ID pattern is missing required placeholders: {', '.join(missing)}",
             category="config",
-            severity="warning",
             details={"missing": list(missing)},
         )
 
@@ -185,7 +183,6 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=f"Hierarchy rules should be a table, but found {type(hierarchy).__name__}",
             category="config",
-            severity="warning",
         )
 
     if not isinstance(types, dict):
@@ -194,7 +191,6 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=f"Requirement types should be a table, but found {type(types).__name__}",
             category="config",
-            severity="warning",
         )
 
     issues = []
@@ -221,7 +217,6 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=f"Hierarchy rule issues: {'; '.join(issues)}",
             category="config",
-            severity="warning",
             details={"issues": issues},
         )
 
@@ -243,7 +238,6 @@ def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCh
             passed=False,
             message=f"Spec directories setting should be a list, found {type(spec_dirs).__name__}",
             category="config",
-            severity="warning",
         )
 
     missing = []
@@ -287,7 +281,6 @@ def check_config_project_type(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=errors[0],
             category="config",
-            severity="warning",
             details={"errors": errors},
         )
 
@@ -310,6 +303,50 @@ def check_config_project_type(config: ConfigLoader) -> HealthCheck:
     )
 
 
+def check_config_associated_section(raw: dict) -> HealthCheck:
+    """Check that associated projects have a valid [associated] section."""
+    project_type = raw.get("project", {}).get("type")
+    if project_type != "associated":
+        return HealthCheck(
+            name="config.associated_section",
+            passed=True,
+            message="Not an associated project (check not applicable)",
+            category="config",
+            severity="info",
+        )
+
+    associated = raw.get("associated", {})
+    if not associated:
+        return HealthCheck(
+            name="config.associated_section",
+            passed=False,
+            message=(
+                "Project type is 'associated' but [associated] section is missing. "
+                "Add [associated] with a 'prefix' key (e.g., prefix = \"CAL\")."
+            ),
+            category="config",
+        )
+
+    prefix = associated.get("prefix", "")
+    if not prefix:
+        return HealthCheck(
+            name="config.associated_section",
+            passed=False,
+            message=(
+                "Project type is 'associated' but prefix is empty. "
+                'Set a non-empty prefix (e.g., prefix = "CAL").'
+            ),
+            category="config",
+        )
+
+    return HealthCheck(
+        name="config.associated_section",
+        passed=True,
+        message=f"Associated project configured with prefix '{prefix}'",
+        category="config",
+    )
+
+
 def run_config_checks(
     config_path: Path | None, config: ConfigLoader, start_path: Path
 ) -> list[HealthCheck]:
@@ -319,6 +356,7 @@ def run_config_checks(
         check_config_syntax(config_path, start_path),
         check_config_required_fields(config),
         check_config_project_type(config),
+        check_config_associated_section(config.get_raw()),
         check_config_pattern_tokens(config),
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
@@ -390,7 +428,6 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
             passed=False,
             message=f"Associated project paths not found: {'; '.join(missing)}",
             category="environment",
-            severity="warning",
             details={"missing": missing, "found": found},
         )
 
@@ -438,7 +475,6 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
             passed=False,
             message=f"Associated project configuration issues: {'; '.join(invalid)}",
             category="environment",
-            severity="warning",
             details={"invalid": invalid, "valid": valid},
         )
 

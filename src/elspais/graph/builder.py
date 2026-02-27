@@ -1979,13 +1979,18 @@ class GraphBuilder:
                 )
 
         # Implements: REQ-d00071-A, REQ-d00071-B
-        # Roots: parentless candidates with at least one meaningful child
-        # Orphans: parentless candidates with no meaningful children
+        # Roots: parentless REQUIREMENTs (always), or other parentless nodes
+        #        with at least one meaningful (non-satellite) child.
+        # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
         roots = []
         root_ids = set()
         for node_id in self._orphan_candidates:
             node = self._nodes.get(node_id)
-            if node and any(c.kind not in self.satellite_kinds for c in node.iter_children()):
+            if not node:
+                continue
+            if node.kind == NodeKind.REQUIREMENT or any(
+                c.kind not in self.satellite_kinds for c in node.iter_children()
+            ):
                 roots.append(node)
                 root_ids.add(node_id)
 

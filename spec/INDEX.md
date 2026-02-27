@@ -81,6 +81,7 @@
 | REQ-d00077 | Minimize Requirement Set Implementation      | 08-mcp-server.md         | a4977d0f |
 | REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 51b2219c |
 | REQ-d00079 | Discover Requirements Implementation         | 08-mcp-server.md         | 8498aa7c |
+| REQ-d00080 | Diagnostic Command Exit Code Contract        | dev-exit-codes.md        | c313e2a4 |
 
 ## User Journeys (JNY)
 

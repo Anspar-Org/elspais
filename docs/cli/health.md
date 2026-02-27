@@ -125,12 +125,13 @@ elspais health --tests     # Test mapping checks
 | 0 | All checks passed (healthy) |
 | 1 | One or more errors found |
 
-Warnings do not affect the exit code - only errors cause a non-zero exit.
+Most configuration issues are classified as errors and cause a non-zero exit.
+Only advisory checks (e.g., cross-repo paths in committed config) use warning severity.
 
 ## Severity Levels
 
-- **error**: Critical issue that should be fixed
-- **warning**: Issue that may indicate a problem
+- **error**: Configuration or validation issue that causes non-zero exit
+- **warning**: Advisory issue (does not affect exit code)
 - **info**: Informational (e.g., coverage statistics)
 
 ## Use Cases
