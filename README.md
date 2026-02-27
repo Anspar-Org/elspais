@@ -162,4 +162,3 @@ GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE).
 ## Links
 
 - [Changelog](CHANGELOG.md)
-- [Issue Tracker](https://github.com/anspar/elspais/issues)
