@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 from elspais.utilities.spec_writer import (
+    add_assertion_to_file,
+    add_status_to_file,
     change_reference_type,
+    modify_assertion_text,
     modify_implements,
     modify_status,
     move_requirement,
@@ -427,3 +430,120 @@ class TestEncodingConsistency:
         content = spec.read_text(encoding="utf-8")
         assert "hacer algo" in content
         assert "**Hash**: deadbeef" in content
+
+
+# ---------------------------------------------------------------------------
+# JNY heading regression  (CUR-1003)
+# ---------------------------------------------------------------------------
+
+SPEC_WITH_JNY_HEADING = """\
+# Questionnaire Session Management Specification
+
+---
+
+# JNY-Questionnaire-Session-01: Deferring a Questionnaire
+
+Some journey text here.
+
+*End* *Deferring a Questionnaire* | **Hash**: 00000000
+
+---
+
+# REQ-t00001: Questionnaire Session Management
+
+**Level**: PRD | **Status**: Draft | **Implements**: -
+
+## Assertions
+
+A. The system SHALL manage questionnaire sessions.
+
+*End* *Questionnaire Session Management* | **Hash**: 00000000
+---
+"""
+
+SPEC_WITH_JNY_HEADING_NO_STATUS = """\
+# Questionnaire Session Management Specification
+
+---
+
+# JNY-Questionnaire-Session-01: Deferring a Questionnaire
+
+Some journey text here.
+
+*End* *Deferring a Questionnaire* | **Hash**: 00000000
+
+---
+
+# REQ-t00001: Questionnaire Session Management
+
+**Level**: PRD | **Implements**: -
+
+## Assertions
+
+A. The system SHALL manage questionnaire sessions.
+
+*End* *Questionnaire Session Management* | **Hash**: 00000000
+---
+"""
+
+
+class TestJourneyHeadingRegression:
+    """Regression tests for CUR-1003: JNY headings between REQ and End marker.
+
+    Validates REQ-p00004-A: The tool SHALL compute and verify content hashes for change detection.
+    """
+
+    def test_REQ_p00004_A_update_hash_with_jny_heading_present(self, tmp_path: Path):
+        """update_hash_in_file succeeds when a JNY heading exists before the REQ."""
+        spec = tmp_path / "jny_spec.md"
+        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+
+        err = update_hash_in_file(spec, "REQ-t00001", "deadbeef")
+        assert err is None
+
+        content = spec.read_text(encoding="utf-8")
+        # The REQ's End marker hash should be updated
+        assert "**Hash**: deadbeef" in content
+        # The JNY's End marker hash should remain untouched
+        lines = content.splitlines()
+        jny_end_line = next(
+            ln for ln in lines if "Deferring a Questionnaire" in ln and "Hash" in ln
+        )
+        assert "00000000" in jny_end_line
+
+    def test_REQ_p00004_A_add_status_with_jny_heading_present(self, tmp_path: Path):
+        """add_status_to_file works when JNY heading present."""
+        spec = tmp_path / "jny_spec.md"
+        spec.write_text(SPEC_WITH_JNY_HEADING_NO_STATUS, encoding="utf-8")
+
+        err = add_status_to_file(spec, "REQ-t00001", "Active")
+        assert err is None
+
+        content = spec.read_text(encoding="utf-8")
+        assert "**Status**: Active" in content
+
+    def test_REQ_p00004_A_modify_assertion_with_jny_heading_present(self, tmp_path: Path):
+        """modify_assertion_text works when JNY heading present."""
+        spec = tmp_path / "jny_spec.md"
+        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+
+        result = modify_assertion_text(
+            spec, "REQ-t00001", "A", "The system SHALL handle questionnaire sessions gracefully."
+        )
+        assert result["success"] is True
+
+        content = spec.read_text(encoding="utf-8")
+        assert "handle questionnaire sessions gracefully" in content
+
+    def test_REQ_p00004_A_add_assertion_with_jny_heading_present(self, tmp_path: Path):
+        """add_assertion_to_file works when JNY heading present."""
+        spec = tmp_path / "jny_spec.md"
+        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+
+        result = add_assertion_to_file(
+            spec, "REQ-t00001", "B", "The system SHALL track session state."
+        )
+        assert result["success"] is True
+
+        content = spec.read_text(encoding="utf-8")
+        assert "track session state" in content
