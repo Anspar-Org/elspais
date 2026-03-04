@@ -52,21 +52,16 @@ def _find_end_marker(content: str, start_pos: int) -> re.Match | None:
     return pattern.search(content, pos=start_pos)
 
 
-def _find_next_req_header(content: str, start_pos: int, prefix: str = "") -> re.Match | None:
+def _find_next_req_header(content: str, start_pos: int, prefix: str) -> re.Match | None:
     """Find the next requirement header after the given position.
 
     Args:
         content: File content to search.
         start_pos: Position to start searching from.
-        prefix: Requirement ID prefix (e.g., 'REQ'). When provided, only
-            matches headings starting with this prefix followed by a dash.
-            When empty, falls back to the broad ``^#+ [A-Z]+-`` pattern
-            for backwards compatibility.
+        prefix: Requirement ID prefix (e.g., 'REQ'). Only matches headings
+            starting with this prefix followed by a dash.
     """
-    if prefix:
-        pattern = re.compile(rf"^#+ {re.escape(prefix)}-", re.MULTILINE)
-    else:
-        pattern = re.compile(r"^#+ [A-Z]+-", re.MULTILINE)
+    pattern = re.compile(rf"^#+ {re.escape(prefix)}-", re.MULTILINE)
     return pattern.search(content, pos=start_pos)
 
 
