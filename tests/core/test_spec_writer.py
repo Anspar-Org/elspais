@@ -433,88 +433,90 @@ class TestEncodingConsistency:
 
 
 # ---------------------------------------------------------------------------
-# JNY heading regression  (CUR-1003)
+# Subheading false-positive regression  (CUR-1003)
 # ---------------------------------------------------------------------------
 
-SPEC_WITH_JNY_HEADING = """\
-# Questionnaire Session Management Specification
+# The bug: _find_next_req_header used `^#+ [A-Z]+-` which matched subheadings
+# inside a requirement body (e.g., `### OS-Level Notifications`) because "OS-"
+# matches [A-Z]+-. This caused the ownership check to believe the End marker
+# belonged to a different requirement. The fix narrows the pattern to only
+# match the configured requirement prefix (e.g., `^#+ REQ-`).
 
----
-
-# JNY-Questionnaire-Session-01: Deferring a Questionnaire
-
-Some journey text here.
-
-*End* *Deferring a Questionnaire* | **Hash**: 00000000
-
----
-
+SPEC_WITH_SUBHEADING = """\
 # REQ-t00001: Questionnaire Session Management
 
 **Level**: PRD | **Status**: Draft | **Implements**: -
 
 ## Assertions
 
-A. The system SHALL manage questionnaire sessions.
+### Readiness Gate
+
+A. The system SHALL display a readiness screen.
+
+### OS-Level Notifications
+
+B. The system SHALL deliver an OS-level push notification.
+
+### UI-Driven Alerts
+
+C. The system SHALL show in-app expiry messages.
 
 *End* *Questionnaire Session Management* | **Hash**: 00000000
 ---
 """
 
-SPEC_WITH_JNY_HEADING_NO_STATUS = """\
-# Questionnaire Session Management Specification
-
----
-
-# JNY-Questionnaire-Session-01: Deferring a Questionnaire
-
-Some journey text here.
-
-*End* *Deferring a Questionnaire* | **Hash**: 00000000
-
----
-
+SPEC_WITH_SUBHEADING_NO_STATUS = """\
 # REQ-t00001: Questionnaire Session Management
 
 **Level**: PRD | **Implements**: -
 
 ## Assertions
 
-A. The system SHALL manage questionnaire sessions.
+### Readiness Gate
+
+A. The system SHALL display a readiness screen.
+
+### OS-Level Notifications
+
+B. The system SHALL deliver an OS-level push notification.
 
 *End* *Questionnaire Session Management* | **Hash**: 00000000
 ---
 """
 
 
-class TestJourneyHeadingRegression:
-    """Regression tests for CUR-1003: JNY headings between REQ and End marker.
+class TestSubheadingFalsePositiveRegression:
+    """Regression tests for CUR-1003: subheadings inside REQ body falsely
+    detected as requirement boundaries.
 
-    Validates REQ-p00004-A: The tool SHALL compute and verify content hashes for change detection.
+    The old regex `^#+ [A-Z]+-` matched subheadings like `### OS-Level` or
+    `### UI-Driven` because they start with uppercase letters followed by a
+    hyphen. This caused spec_writer to think the End marker belonged to a
+    different requirement.
+
+    Validates REQ-p00004-A: The tool SHALL compute and verify content hashes
+    for change detection.
     """
 
-    def test_REQ_p00004_A_update_hash_with_jny_heading_present(self, tmp_path: Path):
-        """update_hash_in_file succeeds when a JNY heading exists before the REQ."""
-        spec = tmp_path / "jny_spec.md"
-        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+    def test_REQ_p00004_A_update_hash_with_subheadings(self, tmp_path: Path):
+        """update_hash_in_file succeeds when the REQ body contains
+        subheadings like ### OS-Level Notifications."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITH_SUBHEADING, encoding="utf-8")
 
         err = update_hash_in_file(spec, "REQ-t00001", "deadbeef")
         assert err is None
 
         content = spec.read_text(encoding="utf-8")
-        # The REQ's End marker hash should be updated
         assert "**Hash**: deadbeef" in content
-        # The JNY's End marker hash should remain untouched
-        lines = content.splitlines()
-        jny_end_line = next(
-            ln for ln in lines if "Deferring a Questionnaire" in ln and "Hash" in ln
-        )
-        assert "00000000" in jny_end_line
+        # Subheadings preserved
+        assert "### OS-Level Notifications" in content
+        assert "### UI-Driven Alerts" in content
 
-    def test_REQ_p00004_A_add_status_with_jny_heading_present(self, tmp_path: Path):
-        """add_status_to_file works when JNY heading present."""
-        spec = tmp_path / "jny_spec.md"
-        spec.write_text(SPEC_WITH_JNY_HEADING_NO_STATUS, encoding="utf-8")
+    def test_REQ_p00004_A_add_status_with_subheadings(self, tmp_path: Path):
+        """add_status_to_file works when REQ body has subheadings."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITH_SUBHEADING_NO_STATUS, encoding="utf-8")
 
         err = add_status_to_file(spec, "REQ-t00001", "Active")
         assert err is None
@@ -522,28 +524,31 @@ class TestJourneyHeadingRegression:
         content = spec.read_text(encoding="utf-8")
         assert "**Status**: Active" in content
 
-    def test_REQ_p00004_A_modify_assertion_with_jny_heading_present(self, tmp_path: Path):
-        """modify_assertion_text works when JNY heading present."""
-        spec = tmp_path / "jny_spec.md"
-        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+    def test_REQ_p00004_A_modify_assertion_with_subheadings(self, tmp_path: Path):
+        """modify_assertion_text works when REQ body has subheadings."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITH_SUBHEADING, encoding="utf-8")
 
         result = modify_assertion_text(
-            spec, "REQ-t00001", "A", "The system SHALL handle questionnaire sessions gracefully."
+            spec, "REQ-t00001", "A", "The system SHALL show a readiness check."
         )
         assert result["success"] is True
 
         content = spec.read_text(encoding="utf-8")
-        assert "handle questionnaire sessions gracefully" in content
+        assert "show a readiness check" in content
 
-    def test_REQ_p00004_A_add_assertion_with_jny_heading_present(self, tmp_path: Path):
-        """add_assertion_to_file works when JNY heading present."""
-        spec = tmp_path / "jny_spec.md"
-        spec.write_text(SPEC_WITH_JNY_HEADING, encoding="utf-8")
+    def test_REQ_p00004_A_add_assertion_with_subheadings(self, tmp_path: Path):
+        """add_assertion_to_file works when REQ body has subheadings."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITH_SUBHEADING, encoding="utf-8")
 
         result = add_assertion_to_file(
-            spec, "REQ-t00001", "B", "The system SHALL track session state."
+            spec, "REQ-t00001", "D", "The system SHALL track session state."
         )
         assert result["success"] is True
+
+        content = spec.read_text(encoding="utf-8")
+        assert "track session state" in content
 
         content = spec.read_text(encoding="utf-8")
         assert "track session state" in content

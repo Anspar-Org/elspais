@@ -6,7 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
-- **`fix REQ-xxx` fails with "belongs to a different requirement"**: The End marker ownership check in `spec_writer` matched non-requirement headings (JNY journeys, document titles) because of an overly broad regex. Narrowed `_find_next_req_header` to only match headings with the configured requirement prefix (CUR-1003, REQ-p00004-A)
+- **`fix REQ-xxx` fails with "belongs to a different requirement"**: Subheadings inside a requirement body (e.g., `### OS-Level Notifications`) were falsely detected as requirement boundaries because `_find_next_req_header` used the overly broad regex `^#+ [A-Z]+-`. Narrowed the pattern to only match headings with the configured requirement prefix (CUR-1003, REQ-p00004-A)
 
 ## [0.84.2] - 2026-02-26
 
