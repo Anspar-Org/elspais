@@ -132,11 +132,17 @@ E. `restore_from_safety_branch(branch_name)` SHALL revert file changes from a sa
 
 F. After file mutations, `refresh_graph()` SHALL be called to synchronize the in-memory graph.
 
+G. `modify_title(req_id, new_title)` SHALL modify a requirement's title text in its spec file.
+
+H. `modify_assertion_text(req_id, label, new_text)` SHALL modify the text of an existing assertion in its spec file.
+
+I. `add_assertion(req_id, label, text)` SHALL add a new assertion to a requirement in its spec file.
+
 ## Rationale
 
 File mutations persist changes to the authoritative spec files. Git safety branches provide rollback capability for destructive operations.
 
-*End* *MCP File Mutation Tools* | **Hash**: ea80cc5e
+*End* *MCP File Mutation Tools* | **Hash**: dee88649
 
 ---
 
