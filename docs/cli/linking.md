@@ -115,10 +115,11 @@ Both tests inherit the file-level `REQ-d00001` link.
 
 ## Multi-Assertion Syntax
 
-Reference multiple assertions of the same requirement with a compact syntax:
+Reference multiple assertions of the same requirement with a compact syntax
+using the `+` separator:
 
 ```python
-# Implements: REQ-d00001-A-B-C
+# Implements: REQ-d00001-A+B+C
 ```
 
 This expands to three separate references:
@@ -130,6 +131,10 @@ Works in all contexts: `Implements:`, `Refines:`, `Tests:`, and test function na
 def test_REQ_d00001_A_B_C_full_auth():
     ...
 ```
+
+> **Configuration:** The multi-assertion separator defaults to `+` and can be
+> changed via `references.defaults.multi_assertion_separator` in `.elspais.toml`.
+> Set to `""` to disable compact syntax.
 
 ## Indirect Coverage
 

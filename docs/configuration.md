@@ -395,6 +395,11 @@ case_sensitive = false
 # Whether the prefix (e.g., "REQ") is required (false = p00001 alone won't match)
 prefix_optional = false
 
+# Character for joining multiple assertion labels in compact syntax
+# REQ-p00001-A+B+C expands to REQ-p00001-A, REQ-p00001-B, REQ-p00001-C
+# Must NOT appear in the separators list. Set to "" to disable.
+multi_assertion_separator = "+"
+
 # Comment styles to recognize for reference extraction
 comment_styles = ["#", "//", "--"]
 

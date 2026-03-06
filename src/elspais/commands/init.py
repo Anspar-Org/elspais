@@ -255,6 +255,12 @@ patterns = ["test_*.py", "*_test.py"]
 # result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
 reference_keyword = "Validates"
 
+[references.defaults]
+# Separator characters accepted between ID components
+separators = ["-", "_"]
+# Character joining multiple assertion labels: REQ-p00001-A+B+C
+multi_assertion_separator = "+"
+
 [ignore]
 # Global patterns applied everywhere
 global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]

@@ -1101,12 +1101,16 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     digits = patterns.get("id_format", {}).get("digits", 5)
     example_num = "0" * (digits - 1) + "1"
 
+    # Read multi-assertion separator from references config (default: "+")
+    refs = config.get("references", {}).get("defaults", {})
+    ma_sep = refs.get("multi_assertion_separator", "+")
+
     return {
         "label_style": assertions.get("label_style", "uppercase"),
         "max_count": assertions.get("max_count", 26),
         "example": f"{prefix}-{first_type_id}{example_num}-A",
         "multi_assertion_syntax": (
-            f"{prefix}-{first_type_id}{example_num}-A-B-C expands to "
+            f"{prefix}-{first_type_id}{example_num}-A{ma_sep}B{ma_sep}C expands to "
             f"{prefix}-{first_type_id}{example_num}-A, "
             f"{prefix}-{first_type_id}{example_num}-B, "
             f"{prefix}-{first_type_id}{example_num}-C"
