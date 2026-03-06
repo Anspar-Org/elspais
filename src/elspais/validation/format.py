@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from elspais.graph import GraphNode
 
 
+# Implements: REQ-p00002-A
 @dataclass
 class FormatRulesConfig:
     """Configuration for format validation rules.
@@ -37,6 +38,7 @@ class FormatRulesConfig:
     labels_sequential: bool = False
     labels_unique: bool = True  # Default True - duplicates are usually errors
 
+    # Implements: REQ-p00002-A
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FormatRulesConfig:
         """Create FormatRulesConfig from configuration dictionary.
@@ -78,6 +80,7 @@ class FormatViolation:
     details: dict[str, Any] = field(default_factory=dict)
 
 
+# Implements: REQ-p00002-A
 def validate_requirement_format(
     node: GraphNode,
     rules: FormatRulesConfig,
@@ -251,6 +254,7 @@ def validate_requirement_format(
     return violations
 
 
+# Implements: REQ-p00002-A
 def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     """Get FormatRulesConfig from configuration dictionary.
 

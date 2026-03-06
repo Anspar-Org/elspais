@@ -71,6 +71,7 @@ class TestCoverageMapper:
         self._scanner = TestScanner(config.reference_patterns or None)
         self._parser = ResultParser(config.reference_patterns or None)
 
+    # Implements: REQ-p00003-B
     def map_tests(
         self,
         requirement_ids: set[str],

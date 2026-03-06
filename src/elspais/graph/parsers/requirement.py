@@ -15,6 +15,7 @@ from elspais.utilities.hasher import HASH_VALUE_PATTERN
 from elspais.utilities.patterns import PatternConfig, PatternValidator
 
 
+# Implements: REQ-p00002-A
 class RequirementParser:
     """Parser for requirement blocks.
 
@@ -59,6 +60,7 @@ class RequirementParser:
         self.pattern_config = pattern_config
         self.validator = PatternValidator(pattern_config)
 
+    # Implements: REQ-p00002-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],
@@ -159,6 +161,7 @@ class RequirementParser:
             else:
                 i += 1
 
+    # Implements: REQ-p00002-A
     def _parse_requirement(
         self, req_id: str, title: str, text: str, start_line: int = 0
     ) -> dict[str, Any]:
@@ -230,6 +233,7 @@ class RequirementParser:
 
         return data
 
+    # Implements: REQ-p00002-A
     def _parse_refs(self, refs_str: str) -> list[str]:
         """Parse comma-separated reference list.
 
@@ -257,6 +261,7 @@ class RequirementParser:
 
         return result
 
+    # Implements: REQ-o00050-D
     def _extract_assertions(self, text: str, start_line: int = 0) -> list[dict[str, Any]]:
         """Extract assertions from text.
 
@@ -305,6 +310,7 @@ class RequirementParser:
 
         return assertions
 
+    # Implements: REQ-p00002-C
     def _extract_body_text(self, text: str) -> str:
         """Extract body text for hash computation.
 
@@ -348,6 +354,7 @@ class RequirementParser:
     # Pattern to split on ## headings (captures the heading name)
     _SECTION_HEADER_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 
+    # Implements: REQ-p00002-A
     def _extract_sections(
         self, body_text: str, start_line: int = 0, raw_text: str = ""
     ) -> list[dict[str, Any]]:

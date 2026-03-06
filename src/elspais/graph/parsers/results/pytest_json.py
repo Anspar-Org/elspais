@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
 
 
+# Implements: REQ-d00082-L
 class PytestJSONParser:
     """Parser for Pytest JSON test result files.
 
@@ -98,6 +99,7 @@ class PytestJSONParser:
 
         return ReferenceConfig()
 
+    # Implements: REQ-d00082-L
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse Pytest JSON content and return test result dicts.
 
@@ -137,6 +139,7 @@ class PytestJSONParser:
 
         return results
 
+    # Implements: REQ-d00082-L
     def _parse_pytest_json_report_test(
         self, test: dict[str, Any], source_path: str
     ) -> dict[str, Any] | None:
@@ -212,6 +215,7 @@ class PytestJSONParser:
             "test_id": test_id,
         }
 
+    # Implements: REQ-d00082-L
     def _parse_simple_test(self, test: dict[str, Any], source_path: str) -> dict[str, Any] | None:
         """Parse a test from simple list format.
 
@@ -263,6 +267,7 @@ class PytestJSONParser:
             "test_id": test_id,
         }
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],
@@ -291,6 +296,7 @@ class PytestJSONParser:
                 parsed_data=result,
             )
 
+    # Implements: REQ-d00082-L
     def _extract_req_ids(self, text: str, source_file: str | None = None) -> list[str]:
         """Extract requirement IDs from text.
 
@@ -316,6 +322,7 @@ class PytestJSONParser:
 
         return normalized
 
+    # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file.
 

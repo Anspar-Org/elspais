@@ -68,6 +68,7 @@ class TestScanResult:
         self.references[req_id].append(ref)
 
 
+# Implements: REQ-d00082-J
 def build_validates_patterns(
     pattern_config: PatternConfig,
     keyword: str = "Validates",
@@ -198,6 +199,7 @@ class TestScanner:
             r"\bREQ[-_]([pod]\d{5})(?:-([A-Z]))?\b",
         ]
 
+    # Implements: REQ-d00054-A
     def scan_directories(
         self,
         base_path: Path,
@@ -292,6 +294,7 @@ class TestScanner:
         refs, _ = self._scan_file_with_marker(file_path)
         return refs
 
+    # Implements: REQ-d00082-H
     def _scan_file_with_marker(self, file_path: Path) -> tuple[list[TestReference], int]:
         """
         Scan a single test file for requirement references with marker support.
@@ -361,6 +364,7 @@ class TestScanner:
 
         return references, suppressed_count
 
+    # Implements: REQ-d00082-H
     def _detect_expected_broken_links_marker(self, file_path: Path) -> int | None:
         """
         Detect expected-broken-links marker in file header.
@@ -401,6 +405,7 @@ class TestScanner:
         return self._scan_file(file_path)
 
 
+# Implements: REQ-d00054-A
 def create_test_nodes(
     scan_result: TestScanResult,
     repo_root: Path,

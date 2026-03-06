@@ -88,6 +88,7 @@ def _print_tree(node: GraphNode, indent: int) -> None:
         _print_tree(child, indent + 1)
 
 
+# Implements: REQ-d00071-B
 def _analyze_orphans(graph: TraceGraph, args: argparse.Namespace) -> int:
     """Find orphaned nodes across all kinds.
 
@@ -120,6 +121,7 @@ def _analyze_orphans(graph: TraceGraph, args: argparse.Namespace) -> int:
     return 1 if total else 0
 
 
+# Implements: REQ-d00051-A
 def _analyze_coverage(graph: TraceGraph, args: argparse.Namespace) -> int:
     """Show implementation coverage report."""
     from elspais.graph.annotators import group_by_level

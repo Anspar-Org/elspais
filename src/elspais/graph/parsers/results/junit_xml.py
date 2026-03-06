@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
 
 
+# Implements: REQ-d00082-K
 class JUnitXMLParser:
     """Parser for JUnit XML test result files.
 
@@ -98,6 +99,7 @@ class JUnitXMLParser:
 
         return ReferenceConfig()
 
+    # Implements: REQ-d00082-K
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse JUnit XML content and return test result dicts.
 
@@ -178,6 +180,7 @@ class JUnitXMLParser:
 
         return results
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],
@@ -206,6 +209,7 @@ class JUnitXMLParser:
                 parsed_data=result,
             )
 
+    # Implements: REQ-d00082-K
     def _extract_req_ids(self, text: str, source_file: str | None = None) -> list[str]:
         """Extract requirement IDs from text.
 
@@ -231,6 +235,7 @@ class JUnitXMLParser:
 
         return normalized
 
+    # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file.
 

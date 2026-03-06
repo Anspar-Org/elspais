@@ -47,6 +47,7 @@ _WEIGHT_KEYWORD_SUBSTRING = 25
 _WEIGHT_BODY = 10
 
 
+# Implements: REQ-d00061-F, REQ-d00061-G, REQ-d00061-H, REQ-d00061-I, REQ-d00061-J, REQ-d00061-K
 def parse_query(raw: str) -> ParsedQuery:
     """Parse a raw query string into a structured ParsedQuery.
 
@@ -66,6 +67,7 @@ def parse_query(raw: str) -> ParsedQuery:
     return _build_groups(tokens)
 
 
+# Implements: REQ-d00061-L, REQ-d00061-M
 def score_node(
     node: GraphNode,
     parsed: ParsedQuery,
@@ -121,6 +123,7 @@ def matches_node(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-d00061-B
 def _get_field_text(node: GraphNode, field_name: str) -> str:
     """Extract text for a single field from a node."""
     if field_name == "id":
@@ -158,6 +161,7 @@ class _Token:
     value: str = ""
 
 
+# Implements: REQ-d00061-F
 def _tokenize(raw: str) -> list[_Token]:
     """Stage 1: Walk character-by-character to produce tokens."""
     tokens: list[_Token] = []
@@ -218,6 +222,7 @@ def _tokenize(raw: str) -> list[_Token]:
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-d00061-F, REQ-d00061-G, REQ-d00061-I
 def _build_groups(tokens: list[_Token]) -> ParsedQuery:
     """Stage 2: Build ParsedQuery from token list.
 
@@ -285,6 +290,7 @@ def _build_groups(tokens: list[_Token]) -> ParsedQuery:
     )
 
 
+# Implements: REQ-d00061-H
 def _resolve_parens(tokens: list[_Token]) -> list:
     """Resolve parenthesized groups into sub-lists of SearchTerms.
 
@@ -336,6 +342,7 @@ def _resolve_parens(tokens: list[_Token]) -> list:
     return result
 
 
+# Implements: REQ-d00061-H
 def _parse_paren_group(tokens: list[_Token]) -> list[SearchTerm]:
     """Parse tokens inside parentheses into an OR-group of SearchTerms.
 
@@ -352,6 +359,7 @@ def _parse_paren_group(tokens: list[_Token]) -> list[SearchTerm]:
     return terms
 
 
+# Implements: REQ-d00061-J, REQ-d00061-K
 def _make_search_term(word: str) -> SearchTerm:
     """Create a SearchTerm from a raw word, handling - and = prefixes."""
     if word.startswith("-") and len(word) > 1:
@@ -366,6 +374,7 @@ def _make_search_term(word: str) -> SearchTerm:
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-d00061-J
 def _term_matches_any_field(
     node: GraphNode,
     term: SearchTerm,
@@ -384,6 +393,7 @@ def _term_matches_any_field(
     return False
 
 
+# Implements: REQ-d00061-K
 def _term_matches_keywords(node: GraphNode, term: SearchTerm) -> bool:
     """Check if a term matches any keyword."""
     keywords = _get_keywords_list(node)
@@ -398,6 +408,7 @@ def _term_matches_keywords(node: GraphNode, term: SearchTerm) -> bool:
     return False
 
 
+# Implements: REQ-d00061-I
 def _phrase_matches(node: GraphNode, phrase: str, field: str) -> bool:
     """Check if an exact phrase matches in any specified field."""
     fields = _fields_for(field)
@@ -415,6 +426,7 @@ def _phrase_matches(node: GraphNode, phrase: str, field: str) -> bool:
     return False
 
 
+# Implements: REQ-d00061-G
 def _best_or_group_score(
     node: GraphNode,
     or_group: tuple[SearchTerm, ...],
@@ -429,6 +441,7 @@ def _best_or_group_score(
     return best
 
 
+# Implements: REQ-d00061-L
 def _score_term(node: GraphNode, term: SearchTerm, field: str) -> float:
     """Score a single term against a node's fields."""
     best = 0.0
@@ -461,6 +474,7 @@ def _score_term(node: GraphNode, term: SearchTerm, field: str) -> float:
     return best
 
 
+# Implements: REQ-d00061-B
 def _fields_for(field: str) -> tuple[str, ...]:
     """Return the list of field names to search."""
     if field == "all":

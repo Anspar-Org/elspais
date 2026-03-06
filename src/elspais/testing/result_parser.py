@@ -87,6 +87,7 @@ class ResultParser:
         patterns = reference_patterns or self.DEFAULT_REF_PATTERNS
         self._patterns = [re.compile(p) for p in patterns]
 
+    # Implements: REQ-d00082-K, REQ-d00082-L
     def parse_result_files(
         self,
         base_path: Path,
@@ -128,6 +129,7 @@ class ResultParser:
 
         return result
 
+    # Implements: REQ-d00082-K
     def _parse_junit_xml(self, file_path: Path) -> list[TestResult]:
         """
         Parse a JUnit XML result file.
@@ -196,6 +198,7 @@ class ResultParser:
 
         return results
 
+    # Implements: REQ-d00082-L
     def _parse_pytest_json(self, file_path: Path) -> list[TestResult]:
         """
         Parse a pytest JSON result file.
@@ -258,6 +261,7 @@ class ResultParser:
 
         return results
 
+    # Implements: REQ-d00082-G
     def _extract_requirement_ids(self, test_name: str, classname: str) -> list[str]:
         """
         Extract requirement IDs from test name and classname.

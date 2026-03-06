@@ -32,6 +32,7 @@ def _clean_git_env() -> dict[str, str]:
     return env
 
 
+# Implements: REQ-p00004-B
 @contextmanager
 def temporary_worktree(repo_root: Path, ref: str = "HEAD") -> Iterator[Path]:
     """Create a temporary git worktree for a ref.
@@ -118,6 +119,7 @@ class MovedRequirement:
     new_path: str
 
 
+# Implements: REQ-p00004-B
 def get_repo_root(start_path: Path | None = None) -> Path | None:
     """Find the git repository root.
 
@@ -141,6 +143,7 @@ def get_repo_root(start_path: Path | None = None) -> Path | None:
         return None
 
 
+# Implements: REQ-p00004-B
 def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
     """Get sets of modified and untracked files according to git status.
 
@@ -186,6 +189,7 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
         return set(), set()
 
 
+# Implements: REQ-p00004-B
 def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str]:
     """Get set of files changed between current branch and base branch.
 
@@ -220,6 +224,7 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str
     return set()
 
 
+# Implements: REQ-p00004-B
 def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None) -> dict[str, str]:
     """Extract REQ ID -> file path mapping from a TraceGraph.
 
@@ -272,6 +277,7 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
     return req_locations
 
 
+# Implements: REQ-p00004-B
 def get_req_locations_from_graph(
     repo_root: Path,
     scan_sponsors: bool = False,
@@ -301,6 +307,7 @@ def get_req_locations_from_graph(
     return _extract_req_locations_from_graph(graph, repo_root)
 
 
+# Implements: REQ-p00004-B
 def detect_moved_requirements(
     committed_locations: dict[str, str],
     current_locations: dict[str, str],
@@ -329,6 +336,7 @@ def detect_moved_requirements(
     return moved
 
 
+# Implements: REQ-p00004-B
 def get_git_changes(
     repo_root: Path | None = None,
     spec_dir: str = "spec",
@@ -380,6 +388,7 @@ def get_git_changes(
     )
 
 
+# Implements: REQ-p00004-B
 def filter_spec_files(files: set[str], spec_dir: str = "spec") -> set[str]:
     """Filter a set of files to only include spec directory files.
 
@@ -399,6 +408,7 @@ def filter_spec_files(files: set[str], spec_dir: str = "spec") -> set[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00063-D
 def get_current_branch(repo_root: Path) -> str | None:
     """Get the name of the current git branch.
 
@@ -423,6 +433,7 @@ def get_current_branch(repo_root: Path) -> str | None:
         return None
 
 
+# Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
     req_id: str,
@@ -461,6 +472,7 @@ def create_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# Implements: REQ-o00063-D
 def list_safety_branches(repo_root: Path) -> list[str]:
     """List all safety branches in the repository.
 
@@ -491,6 +503,7 @@ def list_safety_branches(repo_root: Path) -> list[str]:
         return []
 
 
+# Implements: REQ-o00063-E
 def restore_from_safety_branch(
     repo_root: Path,
     branch_name: str,
@@ -554,6 +567,7 @@ def restore_from_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# Implements: REQ-o00063-D
 def delete_safety_branch(
     repo_root: Path,
     branch_name: str,

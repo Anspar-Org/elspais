@@ -15,6 +15,7 @@ _FROM_IMPORT = re.compile(r"^\s*from\s+([\w.]+)\s+import\s+")
 _PLAIN_IMPORT = re.compile(r"^\s*import\s+([\w.]+(?:\s*,\s*[\w.]+)*)")
 
 
+# Implements: REQ-d00072-B
 def extract_python_imports(content: str) -> list[str]:
     """Extract module paths from Python import statements.
 
@@ -91,6 +92,7 @@ def extract_python_imports(content: str) -> list[str]:
     return modules
 
 
+# Implements: REQ-d00072-B
 def module_to_source_path(
     module: str,
     repo_root: Path,

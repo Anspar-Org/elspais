@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+# Implements: REQ-p00002-A
 @dataclass
 class TestingConfig:
     """
@@ -30,6 +31,7 @@ class TestingConfig:
     reference_patterns: list[str] = field(default_factory=list)
     reference_keyword: str = "Validates"
 
+    # Implements: REQ-p00002-A
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TestingConfig":
         """

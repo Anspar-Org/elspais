@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
 
 
+# Implements: REQ-d00082-J
 class TestParser:
     """Parser for test references.
 
@@ -113,6 +114,7 @@ class TestParser:
 
         return ReferenceConfig()
 
+    # Implements: REQ-d00082-J
     def _build_test_name_pattern(
         self, pattern_config: PatternConfig, ref_config: ReferenceConfig
     ) -> re.Pattern[str]:
@@ -160,6 +162,7 @@ class TestParser:
         flags = 0 if ref_config.case_sensitive else re.IGNORECASE
         return re.compile(full_pattern, flags)
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],

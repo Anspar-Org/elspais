@@ -44,6 +44,7 @@ def _get_file_type(file_path: str) -> str:
         return "other"
 
 
+# Implements: REQ-d00054-A
 class HeredocsParser:
     """Parser for heredoc/multiline string blocks containing requirement patterns.
 
@@ -72,6 +73,7 @@ class HeredocsParser:
         re.MULTILINE,
     )
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],
@@ -94,6 +96,7 @@ class HeredocsParser:
             yield from self._parse_shell_heredocs(lines, context)
         # Skip markdown, spec files, etc.
 
+    # Implements: REQ-d00054-A
     def _parse_python_heredocs(
         self,
         lines: list[tuple[int, str]],
@@ -163,6 +166,7 @@ class HeredocsParser:
 
             i += 1
 
+    # Implements: REQ-d00054-A
     def _parse_shell_heredocs(
         self,
         lines: list[tuple[int, str]],
