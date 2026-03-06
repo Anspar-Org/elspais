@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 # Implements: REQ-p00001-B, REQ-p00003-A, REQ-p00003-B
 # Implements: REQ-d00052-B, REQ-d00052-C, REQ-d00052-G
 """

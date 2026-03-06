@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 # Implements: REQ-d00052-G
 """
 elspais.commands.index - INDEX.md management command.

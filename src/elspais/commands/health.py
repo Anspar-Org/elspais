@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 """
 elspais.commands.health - Diagnose configuration and repository health.
 

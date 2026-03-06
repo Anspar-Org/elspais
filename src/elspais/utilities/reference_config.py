@@ -1,10 +1,7 @@
 """Unified reference configuration for all parsers.
 
-This module provides configurable reference pattern matching used by:
-- CodeParser: # Implements: REQ-xxx
-- TestParser: def test_REQ_xxx() and # Tests: REQ-xxx
-- JUnitXMLParser: test names containing REQ-xxx
-- PytestJSONParser: test names containing REQ-xxx
+This module provides configurable reference pattern matching used by
+CodeParser, TestParser, JUnitXMLParser, and PytestJSONParser.
 
 The configuration supports:
 - Default patterns applied to all files

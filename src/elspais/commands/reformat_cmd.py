@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00008 (Reformat Command)
 """
 elspais.commands.reformat_cmd - Reformat requirements using AI.
 

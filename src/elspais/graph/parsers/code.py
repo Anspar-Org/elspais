@@ -78,12 +78,13 @@ class CodeParser:
 
     Priority: 70 (after requirements and journeys)
 
-    Recognizes comments like:
-    - # Implements: REQ-xxx
-    - # Validates: REQ-xxx
-    - // Implements: REQ-xxx (for JS/TS)
-    - // IMPLEMENTS REQUIREMENTS: (multiline block header)
-    - //   REQ-xxx: Description (multiline block item)
+    Recognizes comments like::
+
+        # Implements: REQ-p00001
+        # Validates: REQ-p00001
+        // Implements: REQ-p00001 (for JS/TS)
+        // IMPLEMENTS REQUIREMENTS: (multiline block header)
+        //   REQ-p00001: Description (multiline block item)
 
     Uses configurable patterns from ReferenceConfig for:
     - Comment styles (# // -- etc.)

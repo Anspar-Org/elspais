@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 """
 elspais.commands.validate - Validate requirements format and relationships.
 
