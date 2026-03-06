@@ -65,8 +65,16 @@ class ReferenceConfig:
         mas = data.get("multi_assertion_separator", "+")
         if mas is False or mas is None:
             mas = ""
+        mas = str(mas)
+        separators = data.get("separators", ["-", "_"])
+        if mas and mas in separators:
+            raise ValueError(
+                f"multi_assertion_separator {mas!r} conflicts with configured "
+                f"separators {separators}. The multi-assertion separator must be "
+                f"distinct from ID separators."
+            )
         return cls(
-            separators=data.get("separators", ["-", "_"]),
+            separators=separators,
             case_sensitive=data.get("case_sensitive", False),
             prefix_optional=data.get("prefix_optional", False),
             comment_styles=data.get("comment_styles", ["#", "//", "--"]),
@@ -78,7 +86,7 @@ class ReferenceConfig:
                     "refines": ["Refines", "REFINES"],
                 },
             ),
-            multi_assertion_separator=str(mas),
+            multi_assertion_separator=mas,
         )
 
     def merge_with(self, override: ReferenceOverride) -> ReferenceConfig:

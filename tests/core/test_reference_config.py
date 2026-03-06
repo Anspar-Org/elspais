@@ -608,3 +608,76 @@ class TestMultiAssertionSeparator:
         config = ReferenceConfig.from_dict({"multi_assertion_separator": ""})
 
         assert config.multi_assertion_separator == ""
+
+
+# =============================================================================
+# Multi-Assertion Separator Conflict Validation Tests
+# =============================================================================
+
+
+class TestMultiAssertionValidation:
+    """Tests for multi_assertion_separator conflict validation in from_dict.
+
+    Validates REQ-d00081-C: Config validation SHALL reject configurations where
+    the multi-assertion separator character appears in the separators list.
+    """
+
+    def test_REQ_d00081_C_rejects_separator_conflict_dash(self) -> None:
+        """Test from_dict raises ValueError when separator is '-' and in separators list."""
+        with pytest.raises(ValueError, match="conflicts with"):
+            ReferenceConfig.from_dict({"multi_assertion_separator": "-", "separators": ["-", "_"]})
+
+    def test_REQ_d00081_C_rejects_separator_conflict_underscore(self) -> None:
+        """Test from_dict raises ValueError when separator is '_' and in separators list."""
+        with pytest.raises(ValueError, match="conflicts with"):
+            ReferenceConfig.from_dict({"multi_assertion_separator": "_", "separators": ["-", "_"]})
+
+    def test_REQ_d00081_C_rejects_default_separators_conflict(self) -> None:
+        """Test from_dict raises ValueError against default separators when they overlap."""
+        with pytest.raises(ValueError, match="conflicts with"):
+            ReferenceConfig.from_dict({"multi_assertion_separator": "-"})
+
+    def test_REQ_d00081_C_rejects_single_separator_conflict(self) -> None:
+        """Test from_dict raises ValueError with single-element separator list conflict."""
+        with pytest.raises(ValueError, match="conflicts with"):
+            ReferenceConfig.from_dict({"multi_assertion_separator": "|", "separators": ["|"]})
+
+    def test_REQ_d00081_C_accepts_non_overlapping_config(self) -> None:
+        """Test from_dict accepts config where separator does not overlap separators list."""
+        config = ReferenceConfig.from_dict(
+            {"multi_assertion_separator": "+", "separators": ["-", "_"]}
+        )
+
+        assert config.multi_assertion_separator == "+"
+        assert config.separators == ["-", "_"]
+
+    def test_REQ_d00081_C_accepts_custom_non_overlapping(self) -> None:
+        """Test from_dict accepts a custom separator not in a custom separators list."""
+        config = ReferenceConfig.from_dict({"multi_assertion_separator": "~", "separators": ["-"]})
+
+        assert config.multi_assertion_separator == "~"
+        assert config.separators == ["-"]
+
+    def test_REQ_d00081_C_skips_validation_when_disabled_empty(self) -> None:
+        """Test from_dict skips conflict check when separator is empty string (disabled)."""
+        config = ReferenceConfig.from_dict(
+            {"multi_assertion_separator": "", "separators": ["-", "_"]}
+        )
+
+        assert config.multi_assertion_separator == ""
+
+    def test_REQ_d00081_C_skips_validation_when_disabled_false(self) -> None:
+        """Test from_dict skips conflict check when separator is False (disabled)."""
+        config = ReferenceConfig.from_dict(
+            {"multi_assertion_separator": False, "separators": ["-", "_"]}
+        )
+
+        assert config.multi_assertion_separator == ""
+
+    def test_REQ_d00081_C_skips_validation_when_disabled_none(self) -> None:
+        """Test from_dict skips conflict check when separator is None (disabled)."""
+        config = ReferenceConfig.from_dict(
+            {"multi_assertion_separator": None, "separators": ["-", "_"]}
+        )
+
+        assert config.multi_assertion_separator == ""
