@@ -61,7 +61,6 @@
 | REQ-d00050 | Node Annotator Functions                     | 07-graph-architecture.md | 35713bbd |
 | REQ-d00051 | Graph Aggregate Functions                    | 07-graph-architecture.md | bdf07870 |
 | REQ-d00052 | Output Generators Consume Graph Directly     | 07-graph-architecture.md | a3575fcc |
-| REQ-d00053 | No Duplicate Library Functions               | 07-graph-architecture.md | 2e4696ef |
 | REQ-d00054 | Annotation Pipeline Pattern                  | 07-graph-architecture.md | 2fe44acd |
 | REQ-d00055 | Node Metrics as Extension Point              | 07-graph-architecture.md | 86ea9541 |
 | REQ-d00060 | Graph Status Tool Implementation             | 08-mcp-server.md         | 4e2277cc |

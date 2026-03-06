@@ -170,33 +170,6 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 *End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
 ---
 
-## REQ-d00053: No Duplicate Library Functions
-
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00050
-
-The system SHALL NOT have duplicate implementations of core functionality across modules.
-
-## Assertions
-
-A. Hierarchy traversal SHALL only exist in TraceGraph (roots, children, parents, find_by_id).
-
-B. Coverage calculation SHALL only exist in TraceGraphBuilder (computed during build).
-
-C. Requirement loading SHALL only exist in core/loader.py (create_parser, parse_requirements_from_directories).
-
-D. Git state detection SHALL only exist in core/git.py (get_git_changes, GitChangeInfo).
-
-E. Pattern validation SHALL only exist in core/patterns.py (PatternValidator).
-
-F. The system SHALL NOT have hierarchy.py files in multiple locations.
-
-## Rationale
-
-Duplicate implementations lead to inconsistencies, bugs, and maintenance burden. Centralizing functionality ensures single source of truth.
-
-*End* *No Duplicate Library Functions* | **Hash**: 2e4696ef
----
-
 ## REQ-d00054: Annotation Pipeline Pattern
 
 **Level**: DEV | **Status**: Active | **Implements**: REQ-o00051

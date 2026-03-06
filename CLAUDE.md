@@ -14,6 +14,13 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
+**No Duplicate Library Functions**: Do NOT create duplicate implementations of core functionality across modules:
+- Hierarchy traversal: only in TraceGraph (roots, children, parents, find_by_id)
+- Coverage calculation: only in GraphBuilder (computed during build)
+- Requirement loading: only in core/loader.py (create_parser, parse_requirements_from_directories)
+- Git state detection: only in core/git.py (get_git_changes, GitChangeInfo)
+- Pattern validation: only in core/patterns.py (PatternValidator)
+- Do NOT create hierarchy.py files in multiple locations
 
 **Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.10+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
