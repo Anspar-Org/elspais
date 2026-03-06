@@ -3455,12 +3455,14 @@ to spec files automatically. This allows you to:
 To persist changes, use the file mutation tools:
 
 ### File Mutations (persistent)
+- `save_mutations(save_branch)` - Persist ALL pending in-memory mutations to spec files
 - `change_reference_type(req_id, target_id, new_type, save_branch)` - Change Implements/Refines
 - `move_requirement(req_id, target_file, save_branch)` - Move requirement to different file
 - `restore_from_safety_branch(branch_name)` - Revert file changes
 - `list_safety_branches()` - List available safety branches
 
 Use `save_branch=True` to create a safety branch before modifications, allowing rollback.
+Use `save_mutations()` after making in-memory changes with `mutate_*` tools to persist them.
 
 ## Common Patterns
 
@@ -4010,6 +4012,41 @@ def create_server(
     def list_safety_branches() -> dict[str, Any]:
         """List all safety branches."""
         return _list_safety_branches_impl(_state["working_dir"])
+
+    @mcp.tool()
+    def save_mutations(save_branch: bool = False) -> dict[str, Any]:
+        """Persist all pending in-memory mutations (from mutate_* tools) to spec files on disk.
+
+        Walks the mutation log and replays each entry to the authoritative spec
+        files.  Edge mutations are coalesced (multiple add/delete operations
+        collapse to a single write per requirement).  After a successful save
+        the graph is refreshed so the in-memory state matches disk.
+
+        Args:
+            save_branch: If True, create a git safety branch before writing.
+        """
+        from elspais.server.persistence import replay_mutations_to_disk
+
+        graph = _state["graph"]
+        if graph is None:
+            return {"success": False, "error": "graph not available"}
+
+        if save_branch:
+            from elspais.utilities.git import create_safety_branch
+
+            create_safety_branch(_state["working_dir"], "save-mutations")
+
+        result = replay_mutations_to_disk(graph, _state["working_dir"])
+
+        # REQ-o00063-F: Refresh graph after file mutations
+        if result.get("success"):
+            new_result, new_graph = _refresh_graph(
+                _state["working_dir"],
+                canonical_root=_state.get("canonical_root"),
+            )
+            _state["graph"] = new_graph
+
+        return result
 
     # ─────────────────────────────────────────────────────────────────────
     # Link Suggestion Tools (REQ-d00074)

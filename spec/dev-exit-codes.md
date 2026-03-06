@@ -8,7 +8,7 @@ This document defines requirements for reliable exit codes from diagnostic CLI c
 
 ## REQ-d00080: Diagnostic Command Exit Code Contract
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00005-E
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00002, REQ-p00005-E
 
 Diagnostic commands (`doctor`, `health`, `validate`) SHALL exit non-zero when they detect configuration or validation failures, ensuring CI pipelines and callers can rely on exit codes to gate merges.
 

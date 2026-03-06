@@ -458,7 +458,7 @@ MCP exposure enables AI agents to discover and apply link suggestions during cod
 
 ## REQ-o00067: MCP Subtree Extraction Tool
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a subtree extraction tool for scoped subgraph retrieval.
 
@@ -486,7 +486,7 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 
 ## REQ-o00068: MCP Cursor Protocol
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a general-purpose cursor protocol for incremental iteration over read query results.
 
@@ -514,7 +514,7 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 ## REQ-d00075: Subtree Extraction Implementation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00067
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00067
 
 The subtree extraction tool SHALL be implemented as MCP-layer helpers that consume the graph iterator API.
 
@@ -544,7 +544,7 @@ BFS with depth tracking and kind filtering provides the flexible subtree extract
 
 ## REQ-d00076: Cursor Protocol Implementation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00068
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00068
 
 The cursor protocol SHALL be implemented as a `CursorState` dataclass with three MCP tool wrappers.
 
@@ -574,7 +574,7 @@ A single-cursor model with materialized items provides simple, predictable itera
 
 ## REQ-o00069: MCP Minimize Requirement Set Tool
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
 
@@ -600,7 +600,7 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 ## REQ-d00077: Minimize Requirement Set Implementation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00069
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00069
 
 The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
 
@@ -628,7 +628,7 @@ Separating the helper from the tool wrapper enables reuse by `discover_requireme
 
 ## REQ-o00070: MCP Scoped Search Tool
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
 
@@ -654,7 +654,7 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 
 ## REQ-d00078: Scoped Search Implementation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00070
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00070
 
 The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
 
@@ -682,7 +682,7 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 ## REQ-o00071: MCP Discover Requirements Tool
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00060
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
 
@@ -706,7 +706,7 @@ Agents won't compose scoped_search + minimize_requirement_set unprompted. A sing
 
 ## REQ-d00079: Discover Requirements Implementation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00071
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00071
 
 The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
 

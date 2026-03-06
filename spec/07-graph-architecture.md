@@ -214,7 +214,7 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ## REQ-d00069: Indirect Coverage Source
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00051
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
 
 The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
 
@@ -241,7 +241,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion su
 
 ## REQ-d00070: Indirect Coverage Toggle Display
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00006
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00006
 
 The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
 
@@ -266,7 +266,7 @@ Users need both a strict traceability view (only assertion-targeted tests count)
 
 ## REQ-d00071: Unified Root vs Orphan Classification
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00050, REQ-p00002
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00050, REQ-p00002
 
 The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
 
@@ -289,7 +289,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00050
 
 The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
 
@@ -316,7 +316,7 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 ## REQ-d00072: Link Suggestion Core Engine
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00065
 
 The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
 
