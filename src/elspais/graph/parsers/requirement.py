@@ -217,10 +217,6 @@ class RequirementParser:
         if refines_match:
             data["refines"] = self._parse_refs(refines_match.group("refines"))
 
-        # Expand multi-assertion references
-        data["implements"] = self._expand_multi_assertion(data["implements"])
-        data["refines"] = self._expand_multi_assertion(data["refines"])
-
         # Extract assertions
         data["assertions"] = self._extract_assertions(text, start_line)
 
@@ -258,27 +254,6 @@ class RequirementParser:
             if not p.startswith(f"{prefix}-"):
                 p = f"{prefix}-{p}"
             result.append(p)
-
-        return result
-
-    def _expand_multi_assertion(self, refs: list[str]) -> list[str]:
-        """Expand multi-assertion syntax.
-
-        REQ-p00001-A-B-C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
-        """
-        result = []
-        multi_pattern = re.compile(r"^([A-Z]+-[A-Za-z0-9-]+?)(-[A-Z](?:-[A-Z])+|-\d+(?:-\d+)+)$")
-
-        for ref in refs:
-            match = multi_pattern.match(ref)
-            if match:
-                base_id = match.group(1)
-                labels_str = match.group(2)
-                labels = [lbl for lbl in labels_str.split("-") if lbl]
-                for label in labels:
-                    result.append(f"{base_id}-{label}")
-            else:
-                result.append(ref)
 
         return result
 

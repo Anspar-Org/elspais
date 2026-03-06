@@ -196,10 +196,11 @@ class TestRequirementParserEdgeCases:
         assert len(results) == 1
         assert results[0].end_line == 3
 
-    def test_expands_multi_assertion_syntax(self, parser):
+    def test_passes_through_multi_assertion_syntax(self, parser):
+        """Multi-assertion expansion now happens in builder, not parser."""
         lines = [
             (1, "## REQ-o00001: Multi-Assertion"),
-            (2, "**Implements**: REQ-p00001-A-B-C | **Status**: Active"),
+            (2, "**Implements**: REQ-p00001-A+B+C | **Status**: Active"),
             (3, "Body."),
             (4, "*End* *REQ-o00001*"),
         ]
@@ -208,11 +209,9 @@ class TestRequirementParserEdgeCases:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        # Multi-assertion should be expanded
+        # Parser passes through as-is; builder expands later
         implements = results[0].parsed_data["implements"]
-        assert "REQ-p00001-A" in implements
-        assert "REQ-p00001-B" in implements
-        assert "REQ-p00001-C" in implements
+        assert "REQ-p00001-A+B+C" in implements
 
 
 class TestRoundTripLineNumbers:
