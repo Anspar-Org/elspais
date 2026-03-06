@@ -1141,10 +1141,11 @@ def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> d
     if graph is None:
         return {"error": "graph not available"}
 
+    exclude = {"Draft"}
     return {
-        "by_coverage": count_by_coverage(graph),
+        "by_coverage": count_by_coverage(graph, exclude_status=exclude),
         "by_level": count_by_level(graph, config=config),
-        "code_reference_coverage": count_with_code_refs(graph),
+        "code_reference_coverage": count_with_code_refs(graph, exclude_status=exclude),
     }
 
 
@@ -1450,7 +1451,7 @@ def _get_project_summary(
     """
     # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph, config=config)
-    coverage_stats = count_by_coverage(graph)
+    coverage_stats = count_by_coverage(graph, exclude_status={"Draft"})
     # Annotate git state before counting (idempotent, safe to call multiple times)
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)

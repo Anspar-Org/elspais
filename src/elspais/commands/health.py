@@ -547,7 +547,7 @@ def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     from elspais.graph.annotators import count_with_code_refs
 
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph)
+    coverage = count_with_code_refs(graph, exclude_status={"Draft"})
 
     return HealthCheck(
         name="code.coverage",

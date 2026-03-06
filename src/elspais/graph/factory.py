@@ -271,14 +271,22 @@ def build_graph(
                 recursive=True,
                 skip_dirs=ignore_dirs,
             )
+            # Track files already checked for ignore/dedup in this loop
+            checked_files: set[str] = set()
+            skip_files: set[str] = set()
             for parsed_content in domain_file.deserialize(code_registry):
                 source_path = parsed_content.source_context.metadata.get("path")
                 if source_path:
                     resolved = str(Path(source_path).resolve())
+                    # Skip files already processed by scan_patterns (step 5a)
                     if resolved in scanned_code_files:
                         continue
-                    scanned_code_files.add(resolved)
-                    if ignore_config.should_ignore(source_path, scope="code"):
+                    # Check ignore only once per file
+                    if resolved not in checked_files:
+                        checked_files.add(resolved)
+                        if ignore_config.should_ignore(source_path, scope="code"):
+                            skip_files.add(resolved)
+                    if resolved in skip_files:
                         continue
                 builder.add_parsed_content(parsed_content)
 

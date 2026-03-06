@@ -180,19 +180,11 @@ Output generators SHALL follow a standard annotation pipeline pattern.
 
 A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate output.
 
-B. Annotation SHALL occur after graph construction, before output generation.
-
-C. The standard annotation sequence SHALL be: git_state -> display_info -> implementation_files.
-
-D. Generators MAY add additional annotations specific to their output format.
-
-E. The pipeline SHALL be implemented in TraceViewGenerator._annotate_graph_nodes().
-
 ## Rationale
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
 
-*End* *Annotation Pipeline Pattern* | **Hash**: 2fe44acd
+*End* *Annotation Pipeline Pattern* | **Hash**: 0256df47
 ---
 
 ## REQ-d00055: Node Metrics as Extension Point

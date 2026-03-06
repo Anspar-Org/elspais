@@ -206,7 +206,8 @@ class HTMLGenerator:
                 "Install with: pip install elspais[trace-view]"
             ) from err
 
-        # Apply git annotations to all nodes
+        # Annotation must happen AFTER graph construction, BEFORE output generation.
+        # Generators may add additional annotations specific to their output format.
         self._annotate_git_state()
 
         # Build data structures
@@ -260,10 +261,10 @@ class HTMLGenerator:
         from elspais.graph import NodeKind
         from elspais.graph.annotators import annotate_display_info, annotate_graph_git_state
 
-        # Apply git state annotations (shared with MCP and graph-json)
+        # Standard annotation sequence: git_state -> display_info.
+        # This order matters: display_info may depend on git state.
         annotate_graph_git_state(self.graph)
 
-        # Apply display info annotations (HTML-specific concern)
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             annotate_display_info(node)
 

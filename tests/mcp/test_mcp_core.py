@@ -1070,7 +1070,7 @@ class TestGetProjectSummary:
 
         # Verify all aggregate functions are used
         expected_levels = count_by_level(sample_graph)
-        expected_coverage = count_by_coverage(sample_graph)
+        expected_coverage = count_by_coverage(sample_graph, exclude_status={"Draft"})
         expected_git = count_by_git_status(sample_graph)
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
@@ -1108,10 +1108,11 @@ class TestGetProjectSummary:
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
         coverage = result["coverage"]
-        assert coverage["total"] == 3
+        # DEV node has Draft status and is excluded by exclude_status={"Draft"}
+        assert coverage["total"] == 2
         assert coverage["full_coverage"] == 1  # PRD at 100%
         assert coverage["partial_coverage"] == 1  # OPS at 50%
-        assert coverage["no_coverage"] == 1  # DEV at 0%
+        assert coverage["no_coverage"] == 0
 
 
 class TestRoundTripFidelity:

@@ -632,6 +632,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"Generated: {output_path}", file=sys.stderr)
         return 0
 
+    # Implements: REQ-d00084-A
     # Handle --graph-json mode
     if getattr(args, "graph_json", False):
         from elspais.graph.annotators import annotate_graph_git_state
