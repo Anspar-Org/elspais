@@ -552,3 +552,59 @@ class TestNormalizeExtractedId:
         normalized = normalize_extracted_id(match, default_pattern_config, default_ref_config)
 
         assert normalized == "REQ-p00001-A"
+
+
+# =============================================================================
+# Multi-Assertion Separator Tests
+# =============================================================================
+
+
+class TestMultiAssertionSeparator:
+    """Tests for multi_assertion_separator field on ReferenceConfig.
+
+    Validates REQ-d00081-A: multi_assertion_separator available in [references.defaults]
+    Validates REQ-d00081-B: default value is "+"
+    Validates REQ-d00081-F: empty or false disables expansion
+    """
+
+    def test_REQ_d00081_A_from_dict_reads_separator(self) -> None:
+        """Test from_dict reads multi_assertion_separator from config dict."""
+        config = ReferenceConfig.from_dict({"multi_assertion_separator": "|"})
+
+        assert config.multi_assertion_separator == "|"
+
+    def test_REQ_d00081_A_from_config_defaults_section(self) -> None:
+        """Test ReferenceResolver.from_config passes separator through defaults."""
+        resolver = ReferenceResolver.from_config({"defaults": {"multi_assertion_separator": "|"}})
+
+        assert resolver.defaults.multi_assertion_separator == "|"
+
+    def test_REQ_d00081_B_default_value_is_plus(self) -> None:
+        """Test ReferenceConfig defaults multi_assertion_separator to '+'."""
+        config = ReferenceConfig()
+
+        assert config.multi_assertion_separator == "+"
+
+    def test_REQ_d00081_B_from_dict_empty_uses_default(self) -> None:
+        """Test from_dict with empty dict defaults multi_assertion_separator to '+'."""
+        config = ReferenceConfig.from_dict({})
+
+        assert config.multi_assertion_separator == "+"
+
+    def test_REQ_d00081_F_false_disables_expansion(self) -> None:
+        """Test from_dict converts False to empty string to disable expansion."""
+        config = ReferenceConfig.from_dict({"multi_assertion_separator": False})
+
+        assert config.multi_assertion_separator == ""
+
+    def test_REQ_d00081_F_none_disables_expansion(self) -> None:
+        """Test from_dict converts None to empty string to disable expansion."""
+        config = ReferenceConfig.from_dict({"multi_assertion_separator": None})
+
+        assert config.multi_assertion_separator == ""
+
+    def test_REQ_d00081_F_empty_string_disables_expansion(self) -> None:
+        """Test from_dict preserves empty string to disable expansion."""
+        config = ReferenceConfig.from_dict({"multi_assertion_separator": ""})
+
+        assert config.multi_assertion_separator == ""

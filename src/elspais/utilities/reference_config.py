@@ -49,6 +49,7 @@ class ReferenceConfig:
             "refines": ["Refines", "REFINES"],
         }
     )
+    multi_assertion_separator: str = "+"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ReferenceConfig:
@@ -61,6 +62,9 @@ class ReferenceConfig:
         Returns:
             ReferenceConfig instance with values from dict or defaults
         """
+        mas = data.get("multi_assertion_separator", "+")
+        if mas is False or mas is None:
+            mas = ""
         return cls(
             separators=data.get("separators", ["-", "_"]),
             case_sensitive=data.get("case_sensitive", False),
@@ -74,6 +78,7 @@ class ReferenceConfig:
                     "refines": ["Refines", "REFINES"],
                 },
             ),
+            multi_assertion_separator=str(mas),
         )
 
     def merge_with(self, override: ReferenceOverride) -> ReferenceConfig:
@@ -112,6 +117,7 @@ class ReferenceConfig:
                 else self.comment_styles
             ),
             keywords=merged_keywords,
+            multi_assertion_separator=self.multi_assertion_separator,
         )
 
 

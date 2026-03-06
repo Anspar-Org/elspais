@@ -65,6 +65,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "case_sensitive": False,
             "prefix_optional": False,
             "comment_styles": ["#", "//", "--"],
+            "multi_assertion_separator": "+",
             "keywords": {
                 "implements": ["Implements", "IMPLEMENTS"],
                 "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
