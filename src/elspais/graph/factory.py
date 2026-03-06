@@ -197,8 +197,15 @@ def build_graph(
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
     graph_config = config.get("graph", {})
     satellite_kinds = graph_config.get("satellite_kinds", None)
+    ref_defaults = config.get("references", {}).get("defaults", {})
+    mas = ref_defaults.get("multi_assertion_separator", "+")
+    if mas is False or mas is None:
+        mas = ""
     builder = GraphBuilder(
-        repo_root=repo_root, hash_mode=hash_mode, satellite_kinds=satellite_kinds
+        repo_root=repo_root,
+        hash_mode=hash_mode,
+        satellite_kinds=satellite_kinds,
+        multi_assertion_separator=str(mas),
     )
 
     # Get ignore configuration for filtering spec files

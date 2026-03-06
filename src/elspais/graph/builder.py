@@ -1604,6 +1604,7 @@ class GraphBuilder:
         repo_root: Path | None = None,
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
+        multi_assertion_separator: str = "+",
     ) -> None:
         """Initialize the graph builder.
 
@@ -1613,9 +1614,13 @@ class GraphBuilder:
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
                 classification. Defaults to ASSERTION and TEST_RESULT.
+            multi_assertion_separator: Character joining multiple assertion
+                labels in compact references (e.g. "+" for REQ-x-A+B+C).
+                Empty string disables expansion.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        self._multi_assertion_separator = multi_assertion_separator
         if satellite_kinds is not None:
             self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
         else:
@@ -1928,6 +1933,40 @@ class GraphBuilder:
         node._content = {"text": text}
         self._nodes[remainder_id] = node
 
+    # Implements: REQ-d00081-D+E+G
+    def _expand_multi_assertion(self, target_id: str) -> list[str]:
+        """Expand multi-assertion reference using configured separator.
+
+        REQ-p00001-A+B+C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
+
+        The first assertion label is part of the base ID (normal separator).
+        Additional labels follow the multi-assertion separator.
+        """
+        sep = self._multi_assertion_separator
+        if not sep or sep not in target_id:
+            return [target_id]
+
+        parts = target_id.split(sep)
+        base = parts[0]
+        if not parts[1:]:
+            return [target_id]
+
+        # Find the last ID separator (- or _) to split off the first label
+        last_sep_idx = max(base.rfind("-"), base.rfind("_"))
+        if last_sep_idx < 0:
+            return [target_id]
+
+        base_req = base[:last_sep_idx]
+        id_sep = base[last_sep_idx]
+        first_label = base[last_sep_idx + 1 :]
+
+        result = [f"{base_req}{id_sep}{first_label}"]
+        for label in parts[1:]:
+            if label:
+                result.append(f"{base_req}{id_sep}{label}")
+
+        return result
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -1937,8 +1976,14 @@ class GraphBuilder:
         Returns:
             Complete TraceGraph with detection data populated.
         """
-        # Resolve pending links
+        # Expand multi-assertion references before resolving
+        expanded_links: list[tuple[str, str, EdgeKind]] = []
         for source_id, target_id, edge_kind in self._pending_links:
+            for resolved_target in self._expand_multi_assertion(target_id):
+                expanded_links.append((source_id, resolved_target, edge_kind))
+
+        # Resolve pending links
+        for source_id, target_id, edge_kind in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
 
