@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.0] - 2026-03-06
+
+### Changed
+
+- **Spec: Unified Report System** — new requirements for composable CLI report output (REQ-d00085, REQ-d00086)
+  - REQ-d00085: Unified Report Composition — multi-command composition, shared flags, `--lenient`
+  - REQ-d00086: Coverage Report Section — per-level and per-assertion coverage in text/markdown/json/csv
+  - REQ-d00084: Trace Command — added column presets, detail flags, coverage columns
+  - REQ-d00080: Exit codes — warnings cause non-zero by default, `--lenient` to relax
+  - REQ-d00083: Validate Command — deprecated, superseded by health
+- Removed `--depth` dead code from CLI and reformat_cmd
+
 ## [0.84.2] - 2026-02-26
 
 ### Fixed

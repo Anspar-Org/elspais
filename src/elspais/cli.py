@@ -283,7 +283,6 @@ Checks performed:
         choices=["minimal", "standard", "full"],
         help="Report preset to use (default: standard)",
     )
-    # NOTE: --depth removed (dead code - never implemented)
 
     # viewer command — shorthand for trace --edit-mode
     viewer_parser = subparsers.add_parser(

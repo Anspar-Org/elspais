@@ -61,7 +61,7 @@
 | REQ-d00050 | Node Annotator Functions                     | 07-graph-architecture.md | 35713bbd |
 | REQ-d00051 | Graph Aggregate Functions                    | 07-graph-architecture.md | bdf07870 |
 | REQ-d00052 | Output Generators Consume Graph Directly     | 07-graph-architecture.md | a3575fcc |
-| REQ-d00054 | Annotation Pipeline Pattern                  | 07-graph-architecture.md | 2fe44acd |
+| REQ-d00054 | Annotation Pipeline Pattern                  | 07-graph-architecture.md | 0256df47 |
 | REQ-d00055 | Node Metrics as Extension Point              | 07-graph-architecture.md | 86ea9541 |
 | REQ-d00060 | Graph Status Tool Implementation             | 08-mcp-server.md         | 4e2277cc |
 | REQ-d00061 | Requirement Search Tool Implementation       | 08-mcp-server.md         | 0183195b |
@@ -83,11 +83,13 @@
 | REQ-d00077 | Minimize Requirement Set Implementation      | 08-mcp-server.md         | a4977d0f |
 | REQ-d00078 | Scoped Search Implementation                 | 08-mcp-server.md         | 51b2219c |
 | REQ-d00079 | Discover Requirements Implementation         | 08-mcp-server.md         | 8498aa7c |
-| REQ-d00080 | Diagnostic Command Exit Code Contract        | dev-exit-codes.md        | c313e2a4 |
+| REQ-d00080 | Diagnostic Command Exit Code Contract        | dev-exit-codes.md        | ada92a29 |
 | REQ-d00081 | Multi-Assertion Reference Expansion          | dev-multi-assertion.md   | 2474ef93 |
 | REQ-d00082 | Unified Reference Configuration              | dev-reference-config.md  | 89956cd7 |
 | REQ-d00083 | Validate Command                             | dev-cli-validate.md      | eddb3a52 |
-| REQ-d00084 | Trace Command                                | dev-cli-trace.md         | 02377a59 |
+| REQ-d00084 | Trace Command                                | dev-cli-trace.md         | f8d407a5 |
+| REQ-d00085 | Unified Report Composition                   | dev-cli-report.md        | 29a31cac |
+| REQ-d00086 | Coverage Report Section                      | dev-cli-coverage.md      | 12e1ecaf |
 
 ## User Journeys (JNY)
 
