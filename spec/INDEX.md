@@ -86,7 +86,9 @@
 | REQ-d00079 | Discover Requirements Implementation         | 08-mcp-server.md         | 8498aa7c |
 | REQ-d00080 | Diagnostic Command Exit Code Contract        | dev-exit-codes.md        | c313e2a4 |
 | REQ-d00081 | Multi-Assertion Reference Expansion          | dev-multi-assertion.md   | 2474ef93 |
-| REQ-d00082 | Unified Reference Configuration              | dev-reference-config.md  | a8426a70 |
+| REQ-d00082 | Unified Reference Configuration              | dev-reference-config.md  | 89956cd7 |
+| REQ-d00083 | Validate Command                             | dev-cli-validate.md      | eddb3a52 |
+| REQ-d00084 | Trace Command                                | dev-cli-trace.md         | 02377a59 |
 
 ## User Journeys (JNY)
 

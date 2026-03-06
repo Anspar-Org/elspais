@@ -62,10 +62,10 @@ class TestCodeParserBasic:
 class TestCodeParserCustomPatternConfig:
     """Tests for CodeParser with custom PatternConfig.
 
-    REF: REQ-d00100-A - Custom prefix configuration
+    REF: REQ-d00082-I - Custom prefix configuration
     """
 
-    def test_REQ_d00100_A_custom_prefix_spec(self):
+    def test_REQ_d00082_I_custom_prefix_spec(self):
         """Test that parser uses custom prefix (SPEC instead of REQ)."""
         from elspais.utilities.patterns import PatternConfig
 
@@ -96,7 +96,7 @@ class TestCodeParserCustomPatternConfig:
         assert results[0].content_type == "code_ref"
         assert "SPEC-p00001-A" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_A_custom_prefix_ignores_default(self):
+    def test_REQ_d00082_I_custom_prefix_ignores_default(self):
         """Test that parser with custom prefix ignores REQ-style IDs."""
         from elspais.utilities.patterns import PatternConfig
 
@@ -124,10 +124,10 @@ class TestCodeParserCustomPatternConfig:
 class TestCodeParserCustomReferenceResolver:
     """Tests for CodeParser with custom ReferenceResolver.
 
-    REF: REQ-d00100-B - File-specific overrides via ReferenceResolver
+    REF: REQ-d00082-I - File-specific overrides via ReferenceResolver
     """
 
-    def test_REQ_d00100_B_resolver_applies_file_override(self):
+    def test_REQ_d00082_I_resolver_applies_file_override(self):
         """Test that ReferenceResolver applies file-specific overrides."""
 
         from elspais.utilities.reference_config import (
@@ -168,7 +168,7 @@ class TestCodeParserCustomReferenceResolver:
         assert len(results) == 1
         assert results[0].parsed_data["validates"] == ["REQ-p00001"]
 
-    def test_REQ_d00100_B_resolver_uses_defaults_for_non_matching(self):
+    def test_REQ_d00082_I_resolver_uses_defaults_for_non_matching(self):
         """Test that ReferenceResolver falls back to defaults for non-matching files."""
         from elspais.utilities.reference_config import (
             ReferenceConfig,
@@ -211,10 +211,10 @@ class TestCodeParserCustomReferenceResolver:
 class TestCodeParserCustomKeywords:
     """Tests for CodeParser with custom keywords.
 
-    REF: REQ-d00100-C - Alternate keywords support
+    REF: REQ-d00082-I - Alternate keywords support
     """
 
-    def test_REQ_d00100_C_custom_validates_keyword(self):
+    def test_REQ_d00082_I_custom_validates_keyword(self):
         """Test that alternate keywords work (e.g., 'Verifies:' instead of 'Validates:')."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -242,7 +242,7 @@ class TestCodeParserCustomKeywords:
         assert len(results) == 1
         assert results[0].parsed_data["validates"] == ["REQ-p00001"]
 
-    def test_REQ_d00100_C_custom_implements_keyword(self):
+    def test_REQ_d00082_I_custom_implements_keyword(self):
         """Test alternate implements keywords (e.g., 'Satisfies:')."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -274,10 +274,10 @@ class TestCodeParserCustomKeywords:
 class TestCodeParserMultilineBlockCustomStyles:
     """Tests for multi-line block parsing with custom comment styles.
 
-    REF: REQ-d00100-D - Multi-line block with different comment markers
+    REF: REQ-d00082-I - Multi-line block with different comment markers
     """
 
-    def test_REQ_d00100_D_block_with_slash_slash_comments(self):
+    def test_REQ_d00082_I_block_with_slash_slash_comments(self):
         """Test block parsing with // comment style (JavaScript/TypeScript)."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -308,7 +308,7 @@ class TestCodeParserMultilineBlockCustomStyles:
         assert results[0].start_line == 1
         assert results[0].end_line == 3
 
-    def test_REQ_d00100_D_block_with_hash_comments(self):
+    def test_REQ_d00082_I_block_with_hash_comments(self):
         """Test block parsing with # comment style (Python/Ruby)."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -340,7 +340,7 @@ class TestCodeParserMultilineBlockCustomStyles:
         assert "REQ-d00002-A" in results[0].parsed_data["implements"]
         assert "REQ-d00003" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_D_block_with_double_dash_comments(self):
+    def test_REQ_d00082_I_block_with_double_dash_comments(self):
         """Test block parsing with -- comment style (SQL/Lua)."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -372,10 +372,10 @@ class TestCodeParserMultilineBlockCustomStyles:
 class TestCodeParserUnderscoreSeparators:
     """Tests for underscore separators in requirement IDs.
 
-    REF: REQ-d00100-E - Underscore separator support
+    REF: REQ-d00082-I - Underscore separator support
     """
 
-    def test_REQ_d00100_E_underscore_separator_in_id(self):
+    def test_REQ_d00082_I_underscore_separator_in_id(self):
         """Test that REQ_p00001 works when separators include '_'."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -404,7 +404,7 @@ class TestCodeParserUnderscoreSeparators:
         assert len(results) == 1
         assert "REQ_p00001" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_E_mixed_separators(self):
+    def test_REQ_d00082_I_mixed_separators(self):
         """Test mixing hyphen and underscore separators in same comment."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -432,7 +432,7 @@ class TestCodeParserUnderscoreSeparators:
         assert "REQ-p00001" in impl
         assert "REQ_p00002" in impl
 
-    def test_REQ_d00100_E_underscore_only_separator(self):
+    def test_REQ_d00082_I_underscore_only_separator(self):
         """Test with only underscore as separator (no hyphen)."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -462,10 +462,10 @@ class TestCodeParserUnderscoreSeparators:
 class TestCodeParserCaseSensitivity:
     """Tests for case-sensitive vs case-insensitive matching.
 
-    REF: REQ-d00100-F - Case sensitivity configuration
+    REF: REQ-d00082-I - Case sensitivity configuration
     """
 
-    def test_REQ_d00100_F_case_insensitive_default(self):
+    def test_REQ_d00082_I_case_insensitive_default(self):
         """Test that default matching is case-insensitive."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -491,7 +491,7 @@ class TestCodeParserCaseSensitivity:
         assert len(results) == 1
         assert "req-p00001" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_F_case_sensitive_matches_exact(self):
+    def test_REQ_d00082_I_case_sensitive_matches_exact(self):
         """Test that case-sensitive mode matches exact case only."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -517,7 +517,7 @@ class TestCodeParserCaseSensitivity:
         assert len(results) == 1
         assert "REQ-p00001" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_F_case_sensitive_rejects_wrong_case(self):
+    def test_REQ_d00082_I_case_sensitive_rejects_wrong_case(self):
         """Test that case-sensitive mode rejects wrong case."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -547,10 +547,10 @@ class TestCodeParserCaseSensitivity:
 class TestCodeParserContextConfig:
     """Tests for configuration passed via ParseContext.
 
-    REF: REQ-d00100-G - Context-based configuration
+    REF: REQ-d00082-I - Context-based configuration
     """
 
-    def test_REQ_d00100_G_pattern_config_from_context(self):
+    def test_REQ_d00082_I_pattern_config_from_context(self):
         """Test that PatternConfig can be passed via context.config."""
         from elspais.utilities.patterns import PatternConfig
 
@@ -578,7 +578,7 @@ class TestCodeParserContextConfig:
         assert len(results) == 1
         assert "TASK-f001" in results[0].parsed_data["implements"]
 
-    def test_REQ_d00100_G_reference_resolver_from_context(self):
+    def test_REQ_d00082_I_reference_resolver_from_context(self):
         """Test that ReferenceResolver can be passed via context.config."""
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -606,7 +606,7 @@ class TestCodeParserContextConfig:
         assert len(results) == 1
         assert results[0].parsed_data["validates"] == ["REQ-p00001"]
 
-    def test_REQ_d00100_G_instance_config_takes_precedence(self):
+    def test_REQ_d00082_I_instance_config_takes_precedence(self):
         """Test that instance config takes precedence over context config."""
         from elspais.utilities.patterns import PatternConfig
 
@@ -645,10 +645,10 @@ class TestCodeParserContextConfig:
 class TestCodeParserMultipleRefs:
     """Tests for parsing multiple references in single comment.
 
-    REF: REQ-d00100-H - Multiple reference parsing
+    REF: REQ-d00082-I - Multiple reference parsing
     """
 
-    def test_REQ_d00100_H_comma_separated_implements(self):
+    def test_REQ_d00082_I_comma_separated_implements(self):
         """Test parsing comma-separated implements references."""
         parser = CodeParser()
         lines = [
@@ -667,7 +667,7 @@ class TestCodeParserMultipleRefs:
         assert "REQ-p00002" in impl
         assert "REQ-p00003" in impl
 
-    def test_REQ_d00100_H_comma_separated_validates(self):
+    def test_REQ_d00082_I_comma_separated_validates(self):
         """Test parsing comma-separated validates references."""
         parser = CodeParser()
         lines = [

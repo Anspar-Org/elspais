@@ -107,14 +107,14 @@ class TestParseQuery:
 
     # -- 5. Mixed AND and OR --------------------------------------------------
 
-    def test_REQ_d00061_F_G_mixed_and_or(self):
+    def test_REQ_d00061_G_mixed_and_or(self):
         """Mixed AND and OR: 'a OR b c' -> two and_groups: (a, b) and (c,)."""
         result = parse_query("auth OR password security")
         assert len(result.and_groups) == 2
         assert result.and_groups[0] == (_plain("auth"), _plain("password"))
         assert result.and_groups[1] == (_plain("security"),)
 
-    def test_REQ_d00061_F_G_and_before_or(self):
+    def test_REQ_d00061_G_and_before_or(self):
         """'a b OR c' -> two and_groups: (a,) and (b, c)."""
         result = parse_query("security auth OR password")
         assert len(result.and_groups) == 2
@@ -137,14 +137,14 @@ class TestParseQuery:
 
     # -- 7. Parenthesized group AND term --------------------------------------
 
-    def test_REQ_d00061_H_F_paren_group_and_term(self):
+    def test_REQ_d00061_H_paren_group_and_term(self):
         """Parenthesized group AND a plain term -> two and_groups."""
         result = parse_query("(auth OR password) security")
         assert len(result.and_groups) == 2
         assert result.and_groups[0] == (_plain("auth"), _plain("password"))
         assert result.and_groups[1] == (_plain("security"),)
 
-    def test_REQ_d00061_H_F_term_and_paren_group(self):
+    def test_REQ_d00061_H_term_and_paren_group(self):
         """A plain term AND a parenthesized group -> two and_groups."""
         result = parse_query("security (auth OR password)")
         assert len(result.and_groups) == 2
@@ -212,7 +212,7 @@ class TestParseQuery:
 
     # -- 11. Complex combined query --------------------------------------------
 
-    def test_REQ_d00061_F_G_H_J_complex_query(self):
+    def test_REQ_d00061_F_complex_query(self):
         """Complex query: (auth OR password) AND RLS -deprecated.
 
         Expects:
@@ -226,7 +226,7 @@ class TestParseQuery:
         assert result.excluded == (_negated("deprecated"),)
         assert result.phrases == ()
 
-    def test_REQ_d00061_F_G_H_I_J_K_M_kitchen_sink(self):
+    def test_REQ_d00061_M_kitchen_sink(self):
         """All features combined: groups, OR, phrases, exclusions, exact.
 
         Query: (auth OR session) =security "row level" -deprecated

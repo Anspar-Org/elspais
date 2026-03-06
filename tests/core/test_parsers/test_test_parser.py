@@ -1,3 +1,4 @@
+# elspais: expected-broken-links 1
 """Tests for TestParser - Priority 80 test reference parser."""
 
 from elspais.graph.parsers import ParseContext
@@ -90,13 +91,13 @@ class TestTestParserBasic:
 class TestTestParserCustomConfig:
     """Tests for TestParser with custom configuration.
 
-    REQ-d00101-A: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00101-B: Parser accepts custom comment styles via ReferenceResolver.
-    REQ-d00101-C: Parser validates underscore separators in test names.
+    REQ-d00082-J: Parser accepts custom PatternConfig for non-standard prefixes.
+    REQ-d00082-J: Parser accepts custom comment styles via ReferenceResolver.
+    REQ-d00082-J: Parser validates underscore separators in test names.
     """
 
-    def test_REQ_d00101_A_custom_prefix_spec(self):
-        """REQ-d00101-A: Parser with custom prefix 'SPEC' instead of 'REQ'."""
+    def test_REQ_d00082_J_custom_prefix_spec(self):
+        """REQ-d00082-J: Parser with custom prefix 'SPEC' instead of 'REQ'."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(
@@ -122,8 +123,8 @@ class TestTestParserCustomConfig:
         assert len(results) == 1
         assert "SPEC-d00101" in results[0].parsed_data["validates"]
 
-    def test_REQ_d00101_B_custom_comment_styles_with_resolver(self):
-        """REQ-d00101-B: Parser uses custom comment styles from ReferenceResolver."""
+    def test_REQ_d00082_J_custom_comment_styles_with_resolver(self):
+        """REQ-d00082-J: Parser uses custom comment styles from ReferenceResolver."""
         from elspais.utilities.patterns import PatternConfig
         from elspais.utilities.reference_config import (
             ReferenceConfig,
@@ -168,8 +169,8 @@ class TestTestParserCustomConfig:
         assert parser._pattern_config == pattern_config
         assert parser._reference_resolver == resolver
 
-    def test_REQ_d00101_C_validates_underscore_separators(self):
-        """REQ-d00101-C: Parser accepts underscore separators in test names."""
+    def test_REQ_d00082_J_validates_underscore_separators(self):
+        """REQ-d00082-J: Parser accepts underscore separators in test names."""
         from elspais.utilities.patterns import PatternConfig
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -194,7 +195,7 @@ class TestTestParserCustomConfig:
         parser = TestParser(pattern_config=pattern_config, reference_resolver=resolver)
 
         lines = [
-            (1, "def test_REQ_d00101_custom_feature():"),
+            (1, "def test_REQ_d00082_J_custom_feature():"),
             (2, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_underscore.py")
@@ -203,7 +204,7 @@ class TestTestParserCustomConfig:
 
         assert len(results) == 1
         # Should normalize underscores to hyphens in output
-        assert "REQ-d00101" in results[0].parsed_data["validates"]
+        assert "REQ-d00082-J" in results[0].parsed_data["validates"]
 
 
 class TestTestParserFunctionTracking:
