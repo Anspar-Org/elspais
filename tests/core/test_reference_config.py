@@ -105,14 +105,14 @@ class TestReferenceConfig:
         assert config.case_sensitive is False  # default
         assert config.prefix_optional is False  # default
 
-    def test_REQ_p00001_D_from_dict_empty(self) -> None:
+    def test_REQ_d00082_D_from_dict_empty(self) -> None:
         """Test ReferenceConfig.from_dict with empty dict uses all defaults."""
         config = ReferenceConfig.from_dict({})
 
         assert config.separators == ["-", "_"]
         assert config.case_sensitive is False
 
-    def test_REQ_p00001_E_merge_with_full_override(self) -> None:
+    def test_REQ_d00082_E_merge_with_full_override(self) -> None:
         """Test merge_with applies all override values."""
         base = ReferenceConfig()
         override = ReferenceOverride(
@@ -134,7 +134,7 @@ class TestReferenceConfig:
         # Original keywords should be preserved
         assert "validates" in merged.keywords
 
-    def test_REQ_p00001_F_merge_with_partial_override(self) -> None:
+    def test_REQ_d00082_F_merge_with_partial_override(self) -> None:
         """Test merge_with only applies non-None values."""
         base = ReferenceConfig()
         override = ReferenceOverride(
@@ -191,7 +191,7 @@ class TestReferenceOverride:
         with pytest.raises(ValueError, match="requires 'match'"):
             ReferenceOverride.from_dict({"separators": ["_"]})
 
-    def test_REQ_p00001_D_applies_to_simple_glob(self, base_path: Path) -> None:
+    def test_REQ_d00082_D_applies_to_simple_glob(self, base_path: Path) -> None:
         """Test applies_to with simple *.py pattern."""
         override = ReferenceOverride(match="*.py")
         py_file = base_path / "test_example.py"
@@ -200,7 +200,7 @@ class TestReferenceOverride:
         assert override.applies_to(py_file, base_path) is True
         assert override.applies_to(js_file, base_path) is False
 
-    def test_REQ_p00001_E_applies_to_nested_file(self, base_path: Path) -> None:
+    def test_REQ_d00082_E_applies_to_nested_file(self, base_path: Path) -> None:
         """Test applies_to matches files in subdirectories with *.py."""
         override = ReferenceOverride(match="*.py")
         nested_py = base_path / "src" / "module" / "file.py"
@@ -208,7 +208,7 @@ class TestReferenceOverride:
         # *.py should match just the filename
         assert override.applies_to(nested_py, base_path) is True
 
-    def test_REQ_p00001_F_applies_to_directory_pattern(self, base_path: Path) -> None:
+    def test_REQ_d00082_F_applies_to_directory_pattern(self, base_path: Path) -> None:
         """Test applies_to with tests/** pattern."""
         override = ReferenceOverride(match="tests/**")
         test_file = base_path / "tests" / "test_example.py"
@@ -217,7 +217,7 @@ class TestReferenceOverride:
         assert override.applies_to(test_file, base_path) is True
         assert override.applies_to(src_file, base_path) is False
 
-    def test_REQ_p00001_G_applies_to_nested_directory(self, base_path: Path) -> None:
+    def test_REQ_d00082_G_applies_to_nested_directory(self, base_path: Path) -> None:
         """Test applies_to with nested tests/**/fixtures pattern."""
         override = ReferenceOverride(match="tests/**/fixtures/*.json")
         fixture_file = base_path / "tests" / "unit" / "fixtures" / "data.json"
@@ -226,7 +226,7 @@ class TestReferenceOverride:
         assert override.applies_to(fixture_file, base_path) is True
         assert override.applies_to(other_file, base_path) is False
 
-    def test_REQ_p00001_H_applies_to_anywhere_pattern(self, base_path: Path) -> None:
+    def test_REQ_d00082_H_applies_to_anywhere_pattern(self, base_path: Path) -> None:
         """Test applies_to with **/conftest.py pattern."""
         override = ReferenceOverride(match="**/conftest.py")
         root_conftest = base_path / "conftest.py"
@@ -288,7 +288,7 @@ class TestReferenceResolver:
         assert result.separators == ["_"]  # from override1
         assert result.case_sensitive is True  # from override2
 
-    def test_REQ_p00001_D_from_config(self) -> None:
+    def test_REQ_d00082_D_from_config(self) -> None:
         """Test ReferenceResolver.from_config creates resolver correctly."""
         config = {
             "defaults": {
@@ -308,7 +308,7 @@ class TestReferenceResolver:
         assert len(resolver.overrides) == 2
         assert resolver.overrides[0].match == "*.py"
 
-    def test_REQ_p00001_E_from_config_empty(self) -> None:
+    def test_REQ_d00082_E_from_config_empty(self) -> None:
         """Test ReferenceResolver.from_config with empty config."""
         resolver = ReferenceResolver.from_config({})
 
@@ -356,7 +356,7 @@ class TestBuildIdPattern:
         assert pattern.search("req-p00001")
         assert pattern.search("Req-P00001")
 
-    def test_REQ_p00001_D_case_sensitive(self, default_pattern_config: PatternConfig) -> None:
+    def test_REQ_d00082_D_case_sensitive(self, default_pattern_config: PatternConfig) -> None:
         """Test pattern respects case_sensitive setting."""
         ref_config = ReferenceConfig(case_sensitive=True)
         pattern = build_id_pattern(default_pattern_config, ref_config)
@@ -364,7 +364,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ-p00001")
         assert not pattern.search("req-p00001")
 
-    def test_REQ_p00001_E_underscore_separator(self, default_pattern_config: PatternConfig) -> None:
+    def test_REQ_d00082_E_underscore_separator(self, default_pattern_config: PatternConfig) -> None:
         """Test pattern matches underscore separator."""
         ref_config = ReferenceConfig(separators=["_"])
         pattern = build_id_pattern(default_pattern_config, ref_config)
@@ -372,7 +372,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ_p00001")
         assert not pattern.search("REQ-p00001")
 
-    def test_REQ_p00001_F_both_separators(
+    def test_REQ_d00082_F_both_separators(
         self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches both dash and underscore."""
@@ -381,7 +381,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ-p00001")
         assert pattern.search("REQ_p00001")
 
-    def test_REQ_p00001_G_extracts_components(
+    def test_REQ_d00082_G_extracts_components(
         self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern captures ID components."""
@@ -428,7 +428,7 @@ class TestBuildCommentPattern:
         assert "REQ-p00001" in refs
         assert "REQ-p00002" in refs
 
-    def test_REQ_p00001_D_different_comment_styles(
+    def test_REQ_d00082_D_different_comment_styles(
         self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches different comment styles."""
@@ -438,7 +438,7 @@ class TestBuildCommentPattern:
         assert pattern.search("// Implements: REQ-p00001")
         assert pattern.search("-- Implements: REQ-p00001")
 
-    def test_REQ_p00001_E_limited_comment_styles(
+    def test_REQ_d00082_E_limited_comment_styles(
         self, default_pattern_config: PatternConfig
     ) -> None:
         """Test pattern respects configured comment styles."""
