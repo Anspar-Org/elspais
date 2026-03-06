@@ -17,6 +17,7 @@ from elspais.commands import (
     changed,
     completion,
     config_cmd,
+    coverage,
     doctor,
     edit,
     example_cmd,
@@ -371,6 +372,25 @@ Examples:
         help="Regenerate INDEX.md from scratch",
     )
     index_regenerate_parser.add_argument("--mode", **_index_mode_kwargs)
+
+    # coverage command
+    coverage_parser = subparsers.add_parser(
+        "coverage",
+        help="Coverage report (implemented, validated, passing)",
+    )
+    coverage_parser.add_argument(
+        "--format",
+        choices=["text", "markdown", "json", "csv"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    coverage_parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        help="Output file path",
+        metavar="PATH",
+    )
 
     # analyze command
     analyze_parser = subparsers.add_parser(
@@ -1170,6 +1190,8 @@ def main(argv: list[str] | None = None) -> int:
             return fix_cmd.run(args)
         elif args.command == "index":
             return index.run(args)
+        elif args.command == "coverage":
+            return coverage.run(args)
         elif args.command == "analyze":
             return analyze.run(args)
         elif args.command == "changed":

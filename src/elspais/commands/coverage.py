@@ -1,0 +1,293 @@
+"""
+elspais.commands.coverage - Coverage report section.
+
+# Implements: REQ-d00086-A+B+C+D
+
+Produces a coverage report showing implementation, validation, and test-passing
+status at the requirement and assertion level. Supports text, markdown, json,
+and csv output formats.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from elspais.graph.builder import TraceGraph
+
+from elspais.graph import NodeKind
+from elspais.graph.metrics import RollupMetrics
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run the coverage command."""
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        canonical_root=canonical_root,
+    )
+
+    fmt = getattr(args, "format", "text") or "text"
+    output_path = getattr(args, "output", None)
+
+    data = _collect_coverage(graph)
+    content = _render(data, fmt)
+
+    if output_path:
+        with open(output_path, "w") as f:
+            f.write(content)
+    else:
+        sys.stdout.write(content)
+
+    return 0
+
+
+def _collect_coverage(graph: TraceGraph) -> dict:
+    """Collect coverage data from the graph.
+
+    Uses pre-computed RollupMetrics from annotate_coverage().
+    """
+    exclude_status = {"Draft", "Deprecated"}
+
+    # Group requirements by level manually (node.level is lowercase)
+    level_groups: dict[str, list] = {"prd": [], "ops": [], "dev": []}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        lvl = (node.level or "").lower()
+        if lvl in level_groups:
+            level_groups[lvl].append(node)
+
+    levels = []
+    all_rows = []
+
+    for level_key, display_name in (("prd", "PRD"), ("ops", "OPS"), ("dev", "DEV")):
+        nodes = level_groups[level_key]
+        active_nodes = [n for n in nodes if n.status not in exclude_status]
+
+        level_totals = {
+            "level": display_name,
+            "total": len(active_nodes),
+            "with_code_refs": 0,
+            "with_test_refs": 0,
+            "with_passing": 0,
+            "total_assertions": 0,
+            "implemented_assertions": 0,
+            "validated_assertions": 0,
+            "passing_assertions": 0,
+        }
+
+        for node in sorted(active_nodes, key=lambda n: n.id):
+            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+            if rollup is None:
+                row = _empty_row(node)
+            else:
+                row = _row_from_rollup(node, rollup)
+
+            all_rows.append(row)
+
+            if row["implemented"] > 0:
+                level_totals["with_code_refs"] += 1
+            if row["validated"] > 0:
+                level_totals["with_test_refs"] += 1
+            if row["passing"] > 0:
+                level_totals["with_passing"] += 1
+            level_totals["total_assertions"] += row["total_assertions"]
+            level_totals["implemented_assertions"] += row["implemented"]
+            level_totals["validated_assertions"] += row["validated"]
+            level_totals["passing_assertions"] += row["passing"]
+
+        levels.append(level_totals)
+
+    return {"levels": levels, "requirements": all_rows}
+
+
+def _row_from_rollup(node, rollup: RollupMetrics) -> dict:
+    total = rollup.total_assertions
+    implemented = rollup.covered_assertions
+    validated = rollup.direct_tested
+    passing = rollup.validated
+    return {
+        "id": node.id,
+        "title": node.get_label(),
+        "level": node.level or "?",
+        "status": node.status or "?",
+        "total_assertions": total,
+        "implemented": implemented,
+        "implemented_pct": _pct(implemented, total),
+        "validated": validated,
+        "validated_pct": _pct(validated, total),
+        "passing": passing,
+        "passing_pct": _pct(passing, total),
+    }
+
+
+def _empty_row(node) -> dict:
+    return {
+        "id": node.id,
+        "title": node.get_label(),
+        "level": node.level or "?",
+        "status": node.status or "?",
+        "total_assertions": 0,
+        "implemented": 0,
+        "implemented_pct": 0.0,
+        "validated": 0,
+        "validated_pct": 0.0,
+        "passing": 0,
+        "passing_pct": 0.0,
+    }
+
+
+def _pct(num: int, denom: int) -> float:
+    return round(num / denom * 100, 1) if denom > 0 else 0.0
+
+
+def _render(data: dict, fmt: str) -> str:
+    if fmt == "json":
+        return _render_json(data)
+    elif fmt == "csv":
+        return _render_csv(data)
+    elif fmt == "markdown":
+        return _render_markdown(data)
+    else:
+        return _render_text(data)
+
+
+def _render_text(data: dict) -> str:
+    lines = []
+    lines.append("Coverage Report")
+    lines.append("=" * 60)
+
+    # Level summary
+    lines.append("")
+    lines.append("Summary by Level")
+    lines.append("-" * 60)
+    for lv in data["levels"]:
+        if lv["total"] == 0:
+            continue
+        ta = lv["total_assertions"]
+        lines.append(f"  {lv['level']}: {lv['total']} requirements, {ta} assertions")
+        lines.append(
+            f"    Implemented: {lv['implemented_assertions']}/{ta}"
+            f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
+        )
+        lines.append(
+            f"    Validated:   {lv['validated_assertions']}/{ta}"
+            f" ({_pct(lv['validated_assertions'], ta):.1f}%)"
+        )
+        lines.append(
+            f"    Passing:     {lv['passing_assertions']}/{ta}"
+            f" ({_pct(lv['passing_assertions'], ta):.1f}%)"
+        )
+
+    # Per-requirement table
+    lines.append("")
+    lines.append("Per-Requirement Coverage")
+    lines.append("-" * 60)
+    for row in data["requirements"]:
+        ta = row["total_assertions"]
+        if ta == 0:
+            impl_str = "n/a"
+            val_str = "n/a"
+            pass_str = "n/a"
+        else:
+            impl_str = f"{row['implemented']}/{ta} ({row['implemented_pct']:.0f}%)"
+            val_str = f"{row['validated']}/{ta} ({row['validated_pct']:.0f}%)"
+            pass_str = f"{row['passing']}/{ta} ({row['passing_pct']:.0f}%)"
+        lines.append(f"  {row['id']} ({row['level']}): {row['title']}")
+        lines.append(f"    Implemented: {impl_str}  Validated: {val_str}  Passing: {pass_str}")
+
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _render_markdown(data: dict) -> str:
+    lines = []
+    lines.append("# Coverage Report")
+    lines.append("")
+
+    # Level summary
+    lines.append("## Summary by Level")
+    lines.append("")
+    lines.append("| Level | Requirements | Assertions | Implemented | Validated | Passing |")
+    lines.append("|-------|-------------|------------|-------------|-----------|---------|")
+    for lv in data["levels"]:
+        ta = lv["total_assertions"]
+        ia = lv["implemented_assertions"]
+        va = lv["validated_assertions"]
+        pa = lv["passing_assertions"]
+        impl = f"{ia}/{ta} ({_pct(ia, ta):.0f}%)"
+        val = f"{va}/{ta} ({_pct(va, ta):.0f}%)"
+        pas = f"{pa}/{ta} ({_pct(pa, ta):.0f}%)"
+        lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {val} | {pas} |")
+
+    # Per-requirement table
+    lines.append("")
+    lines.append("## Per-Requirement Coverage")
+    lines.append("")
+    lines.append("| ID | Title | Level | Implemented | Validated | Passing |")
+    lines.append("|----|-------|-------|-------------|-----------|---------|")
+    for row in data["requirements"]:
+        ta = row["total_assertions"]
+        if ta == 0:
+            impl = "n/a"
+            val = "n/a"
+            pas = "n/a"
+        else:
+            impl = f"{row['implemented']}/{ta} ({row['implemented_pct']:.0f}%)"
+            val = f"{row['validated']}/{ta} ({row['validated_pct']:.0f}%)"
+            pas = f"{row['passing']}/{ta} ({row['passing_pct']:.0f}%)"
+        lines.append(f"| {row['id']} | {row['title']} | {row['level']} | {impl} | {val} | {pas} |")
+
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _render_json(data: dict) -> str:
+    return json.dumps(data, indent=2) + "\n"
+
+
+def _render_csv(data: dict) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "ID",
+            "Title",
+            "Level",
+            "Status",
+            "Total Assertions",
+            "Implemented",
+            "Implemented %",
+            "Validated",
+            "Validated %",
+            "Passing",
+            "Passing %",
+        ]
+    )
+    for row in data["requirements"]:
+        writer.writerow(
+            [
+                row["id"],
+                row["title"],
+                row["level"],
+                row["status"],
+                row["total_assertions"],
+                row["implemented"],
+                row["implemented_pct"],
+                row["validated"],
+                row["validated_pct"],
+                row["passing"],
+                row["passing_pct"],
+            ]
+        )
+    return buf.getvalue()

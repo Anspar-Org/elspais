@@ -2,6 +2,15 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.1] - 2026-03-06
+
+### Added
+
+- **`elspais coverage`** — new coverage report command with text, markdown, json, csv output (REQ-d00086)
+  - Per-level summary: requirements, assertions, implemented/validated/passing percentages
+  - Per-requirement assertion coverage: implemented (code refs), validated (test refs), passing (test results)
+  - Excludes Draft/Deprecated requirements from counts
+
 ## [0.85.0] - 2026-03-06
 
 ### Changed
