@@ -85,8 +85,8 @@ class TestHealthReport:
         assert report.failed == 1
         assert report.is_healthy is False
 
-    def test_warnings_dont_fail(self):
-        """Test warnings don't make report unhealthy."""
+    def test_REQ_d00080_A_warnings_fail_by_default(self):
+        """Validates REQ-d00080-A: warnings cause non-zero exit by default."""
         report = HealthReport()
         report.add(HealthCheck("a", True, "ok", "config"))
         report.add(HealthCheck("b", False, "warn", "spec", severity="warning"))
@@ -94,7 +94,8 @@ class TestHealthReport:
         assert report.passed == 1
         assert report.warnings == 1
         assert report.failed == 0
-        assert report.is_healthy is True  # Warnings don't fail
+        assert report.is_healthy is False  # Warnings fail by default
+        assert report.is_healthy_lenient is True  # Lenient ignores warnings
 
     def test_iter_by_category(self):
         """Test filtering checks by category."""

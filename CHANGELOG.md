@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.2] - 2026-03-06
+
+### Changed
+
+- **`elspais health` exit codes** — warnings now cause non-zero exit by default (REQ-d00080-A)
+  - `--lenient` flag allows warnings to pass without affecting exit code
+  - `-q`/`--quiet` flag for summary-line-only output
+  - `--format text|markdown|json` replaces `-j`/`--json` (still supported as alias)
+  - Markdown output format for health reports
+
 ## [0.85.1] - 2026-03-06
 
 ### Added

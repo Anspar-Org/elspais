@@ -54,6 +54,10 @@ class HealthReport:
 
     @property
     def is_healthy(self) -> bool:
+        return self.failed == 0 and self.warnings == 0
+
+    @property
+    def is_healthy_lenient(self) -> bool:
         return self.failed == 0
 
     def add(self, check: HealthCheck) -> None:
@@ -64,9 +68,10 @@ class HealthReport:
             if check.category == category:
                 yield check
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, lenient: bool = False) -> dict[str, Any]:
+        healthy = self.is_healthy_lenient if lenient else self.is_healthy
         return {
-            "healthy": self.is_healthy,
+            "healthy": healthy,
             "summary": {
                 "passed": self.passed,
                 "failed": self.failed,
@@ -845,12 +850,26 @@ def run(args: argparse.Namespace) -> int:
 
 def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
     """Output the health report in the requested format."""
-    if getattr(args, "json", False):
-        print(json.dumps(report.to_dict(), indent=2))
-    else:
-        _print_text_report(report, verbose=getattr(args, "verbose", False))
+    fmt = getattr(args, "format", "text") or "text"
+    lenient = getattr(args, "lenient", False)
+    quiet = getattr(args, "quiet", False)
+    verbose = getattr(args, "verbose", False)
 
-    return 0 if report.is_healthy else 1
+    # Legacy -j/--json flag support
+    if getattr(args, "json", False):
+        fmt = "json"
+
+    if fmt == "json":
+        print(json.dumps(report.to_dict(lenient=lenient), indent=2))
+    elif fmt == "markdown":
+        print(_render_markdown(report))
+    elif quiet:
+        _print_quiet_report(report)
+    else:
+        _print_text_report(report, verbose=verbose)
+
+    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    return 0 if healthy else 1
 
 
 def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
@@ -890,8 +909,63 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
     # Summary
     print()
     print("=" * 40)
-    if report.is_healthy:
-        print(f"✓ HEALTHY: {report.passed} checks passed")
-    else:
-        print(f"✗ UNHEALTHY: {report.failed} errors, {report.warnings} warnings")
+    _print_summary_line(report)
     print("=" * 40)
+
+
+def _print_summary_line(report: HealthReport) -> None:
+    """Print a single summary line."""
+    total = report.passed + report.failed + report.warnings
+    if report.failed == 0 and report.warnings == 0:
+        print(f"HEALTHY: {total}/{total} checks passed")
+    elif report.failed == 0:
+        print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
+    else:
+        print(f"UNHEALTHY: {report.failed} errors," f" {report.warnings} warnings")
+
+
+def _print_quiet_report(report: HealthReport) -> None:
+    """Print summary line only (for -q/--quiet)."""
+    _print_summary_line(report)
+
+
+# Implements: REQ-d00085-E
+def _render_markdown(report: HealthReport) -> str:
+    """Render health report as markdown."""
+    lines = []
+    lines.append("# Health Report")
+    lines.append("")
+
+    categories = ["config", "spec", "code", "tests"]
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        passed = sum(1 for c in checks if c.passed)
+        total = len(checks)
+        status = "pass" if passed == total else "FAIL"
+        lines.append(f"## {category.upper()} ({passed}/{total} {status})")
+        lines.append("")
+        lines.append("| Check | Status | Message |")
+        lines.append("|-------|--------|---------|")
+        for check in checks:
+            if check.passed:
+                icon = "PASS"
+            elif check.severity == "warning":
+                icon = "WARN"
+            else:
+                icon = "FAIL"
+            lines.append(f"| {check.name} | {icon} | {check.message} |")
+        lines.append("")
+
+    # Summary
+    total = report.passed + report.failed + report.warnings
+    if report.failed == 0 and report.warnings == 0:
+        lines.append(f"**HEALTHY**: {total}/{total} checks passed")
+    elif report.failed == 0:
+        lines.append(f"**{report.passed}/{total}** checks passed," f" {report.warnings} warnings")
+    else:
+        lines.append(f"**UNHEALTHY**: {report.failed} errors," f" {report.warnings} warnings")
+
+    return "\n".join(lines)

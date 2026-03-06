@@ -192,10 +192,27 @@ Checks performed:
         help="Run test mapping checks only",
     )
     health_parser.add_argument(
+        "--format",
+        choices=["text", "markdown", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    health_parser.add_argument(
         "-j",
         "--json",
         action="store_true",
-        help="Output as JSON",
+        help="Output as JSON (shorthand for --format json)",
+    )
+    health_parser.add_argument(
+        "--lenient",
+        action="store_true",
+        help="Allow warnings without affecting exit code",
+    )
+    health_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Summary line only",
     )
 
     # doctor command
