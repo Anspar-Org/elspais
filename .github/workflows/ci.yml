@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-A-B-C-D-E
+# Implements: REQ-o00066-A+B+C+D+E
 name: CI
 
 on:
