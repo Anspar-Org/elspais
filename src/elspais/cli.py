@@ -26,7 +26,6 @@ from elspais.commands import (
     install_cmd,
     link_suggest,
     pdf_cmd,
-    reformat_cmd,
     rules_cmd,
     summary,
     trace,
@@ -126,7 +125,6 @@ For detailed command help: elspais <command> --help
         epilog="""
 Examples:
   elspais health              # Run all health checks
-  elspais health --config     # Check config only
   elspais health --spec       # Check spec files only
   elspais health --code       # Check code references only
   elspais health --tests      # Check test mappings only
@@ -139,12 +137,6 @@ Checks performed:
   CODE:   Code→REQ reference validation, coverage statistics
   TESTS:  Test→REQ mappings, result status, coverage statistics
 """,
-    )
-    health_parser.add_argument(
-        "--config",
-        dest="config_only",
-        action="store_true",
-        help="Run configuration checks only",
     )
     health_parser.add_argument(
         "--spec",
@@ -174,12 +166,6 @@ Checks performed:
         "--lenient",
         action="store_true",
         help="Allow warnings without affecting exit code",
-    )
-    health_parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Summary line only",
     )
 
     # doctor command
@@ -394,7 +380,7 @@ Examples:
     version_parser.add_argument(
         "check",
         nargs="?",
-        help="Check for updates (not yet implemented)",
+        help="Check for updates from PyPI",
     )
 
     # init command
@@ -527,7 +513,9 @@ Worktree Support:
 Quick Start (.elspais.toml):
   [project]
   name = "my-project"
-  spec_dir = "spec"              # Where requirement files live
+
+  [spec]
+  directories = ["spec"]         # Where requirement files live
 
   [patterns]
   prefix = "REQ"                 # Requirement ID prefix
@@ -666,14 +654,6 @@ Full Documentation:
         "file",
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
-
-    # reformat-with-claude command (NOT YET IMPLEMENTED - placeholder for future feature)
-    subparsers.add_parser(
-        "reformat-with-claude",
-        help="[NOT IMPLEMENTED] Reformat requirements using AI (Acceptance Criteria -> Assertions)",
-    )
-    # NOTE: All arguments removed - command not yet implemented
-    # See src/elspais/commands/reformat_cmd.py for planned features
 
     # docs command - comprehensive user documentation
     docs_parser = subparsers.add_parser(
@@ -1194,8 +1174,6 @@ def main(argv: list[str] | None = None) -> int:
             return config_cmd.run(args)
         elif args.command == "rules":
             return rules_cmd.run(args)
-        elif args.command == "reformat-with-claude":
-            return reformat_cmd.run(args)
         elif args.command == "docs":
             return docs_command(args)
         elif args.command == "completion":

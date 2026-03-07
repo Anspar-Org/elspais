@@ -974,14 +974,13 @@ def run(args: argparse.Namespace) -> int:
     # Determine which checks to run
     run_all = not any(
         [
-            getattr(args, "config_only", False),
             getattr(args, "spec_only", False),
             getattr(args, "code_only", False),
             getattr(args, "tests_only", False),
         ]
     )
 
-    run_config = run_all or getattr(args, "config_only", False)
+    run_config = run_all
     run_spec = run_all or getattr(args, "spec_only", False)
     run_code = run_all or getattr(args, "code_only", False)
     run_tests = run_all or getattr(args, "tests_only", False)

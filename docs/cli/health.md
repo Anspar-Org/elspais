@@ -9,7 +9,6 @@ The `elspais health` command diagnoses configuration and repository issues, help
 elspais health
 
 # Check specific category only
-elspais health --config    # Configuration checks
 elspais health --spec      # Spec file checks
 elspais health --code      # Code reference checks
 elspais health --tests     # Test mapping checks
@@ -17,9 +16,9 @@ elspais health --tests     # Test mapping checks
 
 ## Check Categories
 
-### Configuration Checks (`--config`)
+### Configuration Checks
 
-> **Note:** Configuration checks are shared with the `doctor` command. The `doctor` command runs these same checks plus additional environment diagnostics (worktree detection, associate path validation). Use `elspais doctor` for a focused setup check.
+Configuration checks always run as part of the full health check. For focused configuration and environment diagnostics, use `elspais doctor`.
 
 | Check | Description |
 |-------|-------------|
@@ -111,7 +110,6 @@ elspais health --tests     # Test mapping checks
 
 | Option | Description |
 |--------|-------------|
-| `--config` | Run configuration checks only |
 | `--spec` | Run spec file checks only |
 | `--code` | Run code reference checks only |
 | `--tests` | Run test mapping checks only |
@@ -146,8 +144,8 @@ elspais health || exit 1
 ### Quick Config Validation
 
 ```bash
-# Just check config before making changes
-elspais health --config
+# Just check config and environment setup
+elspais doctor
 ```
 
 ### Debugging Reference Issues

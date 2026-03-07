@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from unittest.mock import patch
 
 from elspais.commands import health
 from elspais.commands.health import (
@@ -230,35 +229,6 @@ class TestConfigChecks:
 class TestHealthCommand:
     """Tests for the health command run function."""
 
-    def test_config_only_flag(self, tmp_path):
-        """Test --config flag runs only config checks."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        args = argparse.Namespace(
-            spec_dir=None,
-            config=None,
-            config_only=True,
-            spec_only=False,
-            code_only=False,
-            tests_only=False,
-            format="json",
-            verbose=False,
-        )
-
-        # Need to be in a directory with valid config
-        import os
-
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(tmp_path)
-            with patch("sys.stdout"):
-                result = health.run(args)
-            # Should succeed with defaults
-            assert result in (0, 1)  # May warn about missing spec
-        finally:
-            os.chdir(old_cwd)
-
     def test_json_output_format(self, tmp_path, capsys):
         """Test JSON output format is valid."""
         spec_dir = tmp_path / "spec"
@@ -267,7 +237,6 @@ class TestHealthCommand:
         args = argparse.Namespace(
             spec_dir=str(spec_dir),
             config=None,
-            config_only=True,
             spec_only=False,
             code_only=False,
             tests_only=False,
@@ -345,7 +314,6 @@ prd = []
         args = argparse.Namespace(
             spec_dir=str(spec_dir),
             config=str(config_file),
-            config_only=False,
             spec_only=False,
             code_only=False,
             tests_only=False,
