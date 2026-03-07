@@ -2,6 +2,15 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.4] - 2026-03-06
+
+### Changed
+
+- **Extract viewer command** — moved Flask server logic from `trace.py` to `commands/viewer.py`
+  - `elspais viewer` now dispatches to `viewer.run()` instead of `trace.run_viewer()`
+  - `trace --edit-mode` and `trace --server` delegate to `viewer._run_server()`
+  - `trace --view` and `--embed-content` remain on trace (static HTML generation)
+
 ## [0.85.3] - 2026-03-06
 
 ### Added

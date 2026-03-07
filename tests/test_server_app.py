@@ -1058,7 +1058,7 @@ class TestCLIWiring:
             quiet=True,
             embed_content=False,
         )
-        with patch("elspais.commands.trace._run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
@@ -1084,7 +1084,7 @@ class TestCLIWiring:
             quiet=True,
             embed_content=False,
         )
-        with patch("elspais.commands.trace._run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=True)

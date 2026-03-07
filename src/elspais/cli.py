@@ -32,6 +32,7 @@ from elspais.commands import (
     rules_cmd,
     trace,
     validate,
+    viewer,
 )
 
 
@@ -1247,7 +1248,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "viewer":
-            return trace.run_viewer(args)
+            return viewer.run(args)
         elif args.command == "fix":
             return fix_cmd.run(args)
         elif args.command == "index":

@@ -577,7 +577,7 @@ class TestTraceAdvancedFeaturesNotImplemented:
         return spec_dir
 
     def test_edit_mode_delegates_to_server(self, temp_spec_dir: Path):
-        """Test --edit-mode delegates to _run_server with open_browser=True."""
+        """Test --edit-mode delegates to viewer._run_server with open_browser=True."""
         from unittest.mock import patch
 
         from elspais.commands import trace
@@ -596,7 +596,7 @@ class TestTraceAdvancedFeaturesNotImplemented:
             graph_json=False,
         )
 
-        with patch.object(trace, "_run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = trace.run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=True)
@@ -626,7 +626,7 @@ class TestTraceAdvancedFeaturesNotImplemented:
         assert "not yet implemented" in captured.err
 
     def test_server_delegates_to_run_server(self, temp_spec_dir: Path):
-        """Test --server delegates to _run_server with open_browser=False."""
+        """Test --server delegates to viewer._run_server with open_browser=False."""
         from unittest.mock import patch
 
         from elspais.commands import trace
@@ -645,7 +645,7 @@ class TestTraceAdvancedFeaturesNotImplemented:
             graph_json=False,
         )
 
-        with patch.object(trace, "_run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = trace.run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
