@@ -24,7 +24,7 @@ from elspais.utilities.reference_config import (
 if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
 
-# Pattern for expected-broken-links marker (shared with TestScanner)
+# Pattern for expected-broken-links marker
 _EXPECTED_BROKEN_LINKS_RE = re.compile(
     r"(?:#|//|--|/\*|<!--)\s*elspais:\s*expected-broken-links\s+(\d+)",
     re.IGNORECASE,
