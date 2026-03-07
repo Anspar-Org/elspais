@@ -29,6 +29,9 @@ def run(args: argparse.Namespace) -> int:
     dry_run = getattr(args, "dry_run", False)
     validate.run(_make_validate_args(args))
 
+    # Fix stale INDEX.md if present
+    _fix_index(args, dry_run)
+
     if dry_run:
         return 0
 
@@ -123,3 +126,57 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     else:
         print(f"Error: {error}", file=sys.stderr)
         return 1
+
+
+def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
+    """Regenerate INDEX.md if it exists and is stale."""
+    import re
+
+    from elspais.commands.index import _regenerate_index
+    from elspais.config import get_config, get_spec_directories
+    from elspais.graph import NodeKind
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+
+    config = get_config(config_path)
+    spec_dirs = get_spec_directories(spec_dir, config)
+
+    # Only fix if INDEX.md already exists
+    index_path = None
+    for sd in spec_dirs:
+        candidate = sd / "INDEX.md"
+        if candidate.exists():
+            index_path = candidate
+            break
+
+    if not index_path:
+        return
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        scan_code=False,
+        scan_tests=False,
+        canonical_root=canonical_root,
+    )
+
+    # Check if stale
+    content = index_path.read_text()
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
+    graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
+
+    if index_req_ids == graph_req_ids and index_jny_ids == graph_jny_ids:
+        return
+
+    if dry_run:
+        missing = graph_req_ids - index_req_ids
+        extra = index_req_ids - graph_req_ids
+        print(f"Would regenerate INDEX.md ({len(missing)} missing, {len(extra)} extra)")
+        return
+
+    _regenerate_index(graph, spec_dirs, args)

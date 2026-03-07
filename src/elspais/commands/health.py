@@ -477,9 +477,133 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     )
 
 
-def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck]:
+def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
+    """Check that stored requirement hashes match computed hashes."""
+    from elspais.commands.validate import compute_hash_for_node
+    from elspais.graph import NodeKind
+
+    mismatches = []
+    checked = 0
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        stored = node.hash
+        if not stored:
+            continue
+        checked += 1
+        computed = compute_hash_for_node(node, graph.hash_mode)
+        if computed and stored != computed:
+            mismatches.append({"id": node.id, "stored": stored, "computed": computed})
+
+    if not checked:
+        return HealthCheck(
+            name="spec.hash_integrity",
+            passed=True,
+            message="No requirements with hashes to check",
+            category="spec",
+            severity="info",
+        )
+
+    if mismatches:
+        ids = [m["id"] for m in mismatches]
+        return HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message=(
+                f"{len(mismatches)} requirement(s) have stale hashes: "
+                f"{', '.join(ids[:5])}" + (f" (+{len(ids) - 5} more)" if len(ids) > 5 else "")
+            ),
+            category="spec",
+            severity="warning",
+            details={"mismatches": mismatches, "checked": checked},
+        )
+
+    return HealthCheck(
+        name="spec.hash_integrity",
+        passed=True,
+        message=f"All {checked} requirement hashes are up to date",
+        category="spec",
+    )
+
+
+def check_spec_index_current(
+    graph: TraceGraph,
+    spec_dirs: list[Path],
+) -> HealthCheck:
+    """Check that INDEX.md is up to date with current requirements."""
+    import re
+
+    from elspais.graph import NodeKind
+
+    # Find INDEX.md
+    index_path = None
+    for spec_dir in spec_dirs:
+        candidate = spec_dir / "INDEX.md"
+        if candidate.exists():
+            index_path = candidate
+            break
+
+    if not index_path:
+        return HealthCheck(
+            name="spec.index_current",
+            passed=True,
+            message="No INDEX.md found (run 'elspais index regenerate' to create one)",
+            category="spec",
+            severity="info",
+        )
+
+    content = index_path.read_text()
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
+
+    graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
+
+    missing_reqs = graph_req_ids - index_req_ids
+    extra_reqs = index_req_ids - graph_req_ids
+    missing_jnys = graph_jny_ids - index_jny_ids
+    extra_jnys = index_jny_ids - graph_jny_ids
+
+    issues = []
+    if missing_reqs:
+        issues.append(f"{len(missing_reqs)} missing requirement(s)")
+    if extra_reqs:
+        issues.append(f"{len(extra_reqs)} extra requirement(s)")
+    if missing_jnys:
+        issues.append(f"{len(missing_jnys)} missing journey(s)")
+    if extra_jnys:
+        issues.append(f"{len(extra_jnys)} extra journey(s)")
+
+    if issues:
+        return HealthCheck(
+            name="spec.index_current",
+            passed=False,
+            message=f"INDEX.md is stale: {', '.join(issues)}",
+            category="spec",
+            severity="warning",
+            details={
+                "missing_reqs": sorted(missing_reqs),
+                "extra_reqs": sorted(extra_reqs),
+                "missing_jnys": sorted(missing_jnys),
+                "extra_jnys": sorted(extra_jnys),
+            },
+        )
+
+    total = len(graph_req_ids) + len(graph_jny_ids)
+    return HealthCheck(
+        name="spec.index_current",
+        passed=True,
+        message=f"INDEX.md is up to date ({total} entries)",
+        category="spec",
+    )
+
+
+def run_spec_checks(
+    graph: TraceGraph,
+    config: ConfigLoader,
+    spec_dirs: list[Path] | None = None,
+) -> list[HealthCheck]:
     """Run all spec file health checks."""
-    return [
+    checks = [
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_spec_implements_resolve(graph),
@@ -487,7 +611,11 @@ def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck
         check_spec_hierarchy_levels(graph, config),
         check_spec_orphans(graph),
         check_spec_format_rules(graph, config),
+        check_spec_hash_integrity(graph),
     ]
+    if spec_dirs:
+        checks.append(check_spec_index_current(graph, spec_dirs))
+    return checks
 
 
 # =============================================================================
@@ -805,7 +933,11 @@ def render_section(
             report.add(check)
 
     if graph and config:
-        for check in run_spec_checks(graph, config):
+        from elspais.config import get_spec_directories
+
+        spec_dir = getattr(args, "spec_dir", None)
+        resolved_spec_dirs = get_spec_directories(spec_dir, config.get_raw())
+        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
         for check in run_code_checks(graph):
@@ -903,7 +1035,11 @@ def run(args: argparse.Namespace) -> int:
 
     # Spec checks
     if run_spec and graph and config:
-        for check in run_spec_checks(graph, config):
+        from elspais.config import get_spec_directories
+
+        config_dict = config.get_raw()
+        resolved_spec_dirs = get_spec_directories(spec_dir, config_dict)
+        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
 
     # Code checks
