@@ -551,6 +551,20 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def _excluded_note(graph: TraceGraph) -> str:
+    """Build a note about excluded requirements."""
+    from elspais.graph import NodeKind
+
+    counts: dict[str, int] = {}
+    for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if n.status in ("Draft", "Deprecated"):
+            counts[n.status] = counts.get(n.status, 0) + 1
+    if not counts:
+        return ""
+    parts = [f"{v} {k.lower()}" for k, v in sorted(counts.items())]
+    return f" [{', '.join(parts)} excluded]"
+
+
 def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
@@ -558,13 +572,14 @@ def check_code_coverage(graph: TraceGraph) -> HealthCheck:
 
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
     coverage = count_with_code_refs(graph, exclude_status={"Draft", "Deprecated"})
+    note = _excluded_note(graph)
 
     return HealthCheck(
         name="code.coverage",
         passed=True,  # Informational only
         message=(
             f"{coverage['with_code_refs']}/{coverage['total_requirements']} requirements "
-            f"have code references ({coverage['coverage_percent']}%)"
+            f"have code references ({coverage['coverage_percent']}%){note}"
         ),
         category="code",
         severity="info",
@@ -736,13 +751,14 @@ def check_test_coverage(graph: TraceGraph) -> HealthCheck:
                         covered_reqs.add(grandparent.id)
 
     coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
+    note = _excluded_note(graph)
 
     return HealthCheck(
         name="tests.coverage",
         passed=True,  # Informational only
         message=(
             f"{len(covered_reqs)}/{req_count} requirements "
-            f"have test references ({coverage_pct:.1f}%)"
+            f"have test references ({coverage_pct:.1f}%){note}"
         ),
         category="tests",
         severity="info",

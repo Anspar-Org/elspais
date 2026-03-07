@@ -84,10 +84,16 @@ def _collect_coverage(graph: TraceGraph) -> dict:
 
     levels = []
     all_rows = []
+    excluded_counts: dict[str, int] = {}
 
     for level_key, display_name in (("prd", "PRD"), ("ops", "OPS"), ("dev", "DEV")):
         nodes = level_groups[level_key]
         active_nodes = [n for n in nodes if n.status not in exclude_status]
+        excluded = len(nodes) - len(active_nodes)
+        if excluded > 0:
+            for n in nodes:
+                if n.status in exclude_status:
+                    excluded_counts[n.status] = excluded_counts.get(n.status, 0) + 1
 
         level_totals = {
             "level": display_name,
@@ -123,7 +129,11 @@ def _collect_coverage(graph: TraceGraph) -> dict:
 
         levels.append(level_totals)
 
-    return {"levels": levels, "requirements": all_rows}
+    return {
+        "levels": levels,
+        "requirements": all_rows,
+        "excluded": excluded_counts,
+    }
 
 
 def _row_from_rollup(node, rollup: RollupMetrics) -> dict:
@@ -204,6 +214,11 @@ def _render_text(data: dict) -> str:
             f" ({_pct(lv['passing_assertions'], ta):.1f}%)"
         )
 
+    excluded = data.get("excluded", {})
+    if excluded:
+        parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
+        lines.append(f"  ({', '.join(parts)} not included in coverage)")
+
     # Per-requirement table
     lines.append("")
     lines.append("Per-Requirement Coverage")
@@ -244,6 +259,12 @@ def _render_markdown(data: dict) -> str:
         val = f"{va}/{ta} ({_pct(va, ta):.0f}%)"
         pas = f"{pa}/{ta} ({_pct(pa, ta):.0f}%)"
         lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {val} | {pas} |")
+
+    excluded = data.get("excluded", {})
+    if excluded:
+        parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
+        lines.append("")
+        lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # Per-requirement table
     lines.append("")
