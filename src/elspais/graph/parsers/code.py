@@ -195,7 +195,7 @@ class CodeParser:
         After the initial scan, performs a forward-looking fixup:
         comment lines with no function context look ahead up to 5 lines
         to find a subsequent function definition. This handles the common
-        pattern of ``# Implements: REQ-xxx`` placed above a function.
+        pattern of ``# Implements: <REQ-ID>`` placed above a function.
 
         Args:
             lines: List of (line_number, content) tuples.
@@ -316,7 +316,7 @@ class CodeParser:
 
         # Forward-looking fixup: if a comment line has no function context,
         # look ahead up to 5 lines for the next function definition.
-        # This handles "# Implements: REQ-xxx" placed above a function.
+        # This handles "# Implements: <REQ-ID>" placed above a function.
         for idx, (ln, text) in enumerate(lines):
             func_name, class_name, func_line = line_context[ln]
             if func_name is not None:

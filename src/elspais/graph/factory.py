@@ -1,4 +1,4 @@
-# Implements: REQ-d00054-A, REQ-d00054-B, REQ-d00054-C
+# Implements: REQ-d00054-A
 """Graph Factory - Shared utility for building TraceGraph from spec files.
 
 This module provides a single entry point for all commands to build a TraceGraph
