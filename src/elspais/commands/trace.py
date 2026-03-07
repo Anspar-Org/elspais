@@ -327,9 +327,19 @@ def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
                 cells.append("<td>-</td>")
 
         if preset.include_test_refs:
-            if data["test_refs"]:
-                r_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in data["test_refs"])
-                cells.append(f"<td class='refs'>{r_html}</td>")
+            grouped = data["test_refs_grouped"]
+            if grouped:
+                parts = []
+                for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                    if key not in grouped:
+                        continue
+                    refs = grouped[key]
+                    label = "Whole-requirement" if key == "*" else key
+                    ref_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in refs)
+                    parts.append(
+                        f"<strong>{escape_html(label)}</strong> ({len(refs)}):<br>{ref_html}"
+                    )
+                cells.append(f"<td class='refs'>{'<br><br>'.join(parts)}</td>")
             else:
                 cells.append("<td>-</td>")
 

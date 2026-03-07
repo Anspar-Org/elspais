@@ -394,3 +394,133 @@ patterns = ["test_*.py"]
         # C has: test_multi_target file-level ref only = 1
         # (multi-target file ref counts once for C)
         assert "**C** (" in output
+
+
+class TestHtmlGroupedRefs:
+    """Integration tests for grouped test refs in format_html() output."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        """Create a project with spec, tests, and config."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            """# REQ-p00001: Grouped Refs Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A requirement to test grouped refs.
+
+## Assertions
+
+A. The system SHALL validate input.
+B. The system SHALL produce output.
+C. The system SHALL log events.
+
+*End* *Grouped Refs Requirement* | **Hash**: abcd1234
+"""
+        )
+
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+
+        # Test targeting assertion A
+        (test_dir / "test_input_validation.py").write_text(
+            """# Validates: REQ-p00001-A
+def test_REQ_p00001_A_validates_input():
+    pass
+"""
+        )
+
+        # Test targeting assertion B
+        (test_dir / "test_output.py").write_text(
+            """# Validates: REQ-p00001-B
+def test_REQ_p00001_B_produces_output():
+    pass
+"""
+        )
+
+        # Whole-requirement test (no assertion)
+        (test_dir / "test_whole_req.py").write_text(
+            """# Validates: REQ-p00001
+def test_REQ_p00001_general():
+    pass
+"""
+        )
+
+        # Multi-target test (A and C)
+        (test_dir / "test_multi_target.py").write_text(
+            """# Validates: REQ-p00001-A, REQ-p00001-C
+def test_REQ_p00001_A_and_C():
+    pass
+"""
+        )
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """[project]
+name = "test-html-grouped-refs"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[references]
+enabled = true
+
+[references.defaults]
+multi_assertion_separator = "+"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+"""
+        )
+
+        return tmp_path
+
+    def _build_and_format(self, project_dir: Path) -> str:
+        """Build graph and return HTML output as a single string."""
+        from elspais.commands.trace import ReportPreset, format_html
+        from elspais.graph.factory import build_graph
+
+        config_path = project_dir / ".elspais.toml"
+        spec_dir = project_dir / "spec"
+
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=config_path,
+            repo_root=project_dir,
+            scan_code=False,
+            scan_tests=True,
+            scan_sponsors=False,
+        )
+
+        preset = ReportPreset(
+            name="test",
+            columns=["id", "title", "level", "status"],
+            include_test_refs=True,
+        )
+        return "\n".join(format_html(graph, preset))
+
+    def test_html_groups_by_assertion(self, project_dir: Path):
+        """Output contains Whole-requirement, A, and B assertion group labels."""
+        output = self._build_and_format(project_dir)
+        assert "<strong>Whole-requirement</strong>" in output
+        assert "<strong>A</strong>" in output
+        assert "<strong>B</strong>" in output
+
+    def test_html_test_refs_in_code_tags(self, project_dir: Path):
+        """Each test ref is wrapped in <code> tags."""
+        output = self._build_and_format(project_dir)
+        assert "<code>" in output
+        assert "</code>" in output
+        # Verify specific test refs are in code tags
+        assert "<code>test" in output or "<code>tests/" in output
