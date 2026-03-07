@@ -1,0 +1,245 @@
+# Validates: REQ-p00003-A, REQ-p00003-B
+"""Tests for test_refs_grouped in _get_node_data()."""
+
+from pathlib import Path
+
+import pytest
+
+from elspais.graph import NodeKind
+
+
+class TestTraceGroupedRefs:
+    """Integration tests for test_refs_grouped field in _get_node_data()."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        """Create a project with spec, tests, and config."""
+        # Spec directory with a requirement that has assertions
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            """# REQ-p00001: Grouped Refs Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A requirement to test grouped refs.
+
+## Assertions
+
+A. The system SHALL validate input.
+B. The system SHALL produce output.
+C. The system SHALL log events.
+
+*End* *Grouped Refs Requirement* | **Hash**: abcd1234
+"""
+        )
+
+        # Test directory with test files
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+
+        # Test file targeting specific assertions via Validates comments
+        test_assertion_a = test_dir / "test_input_validation.py"
+        test_assertion_a.write_text(
+            """# Validates: REQ-p00001-A
+def test_REQ_p00001_A_validates_input():
+    pass
+"""
+        )
+
+        # Test file targeting assertion B
+        test_assertion_b = test_dir / "test_output.py"
+        test_assertion_b.write_text(
+            """# Validates: REQ-p00001-B
+def test_REQ_p00001_B_produces_output():
+    pass
+"""
+        )
+
+        # Test file targeting whole requirement (no assertion)
+        test_whole_req = test_dir / "test_whole_req.py"
+        test_whole_req.write_text(
+            """# Validates: REQ-p00001
+def test_REQ_p00001_general():
+    pass
+"""
+        )
+
+        # Test file targeting multiple assertions (A and C)
+        test_multi = test_dir / "test_multi_target.py"
+        test_multi.write_text(
+            """# Validates: REQ-p00001-A, REQ-p00001-C
+def test_REQ_p00001_A_and_C():
+    pass
+"""
+        )
+
+        # Config file
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """[project]
+name = "test-grouped-refs"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[references]
+enabled = true
+
+[references.defaults]
+multi_assertion_separator = "+"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+"""
+        )
+
+        return tmp_path
+
+    def _build_and_get_node_data(self, project_dir: Path) -> dict:
+        """Build graph and return _get_node_data for REQ-p00001."""
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.factory import build_graph
+
+        config_path = project_dir / ".elspais.toml"
+        spec_dir = project_dir / "spec"
+
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=config_path,
+            repo_root=project_dir,
+            scan_code=False,
+            scan_tests=True,
+            scan_sponsors=False,
+        )
+
+        # Find REQ-p00001
+        req_node = None
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            if node.id == "REQ-p00001":
+                req_node = node
+                break
+
+        assert req_node is not None, "REQ-p00001 not found in graph"
+        return _get_node_data(req_node, graph)
+
+    def test_whole_requirement_tests_under_star_key(self, project_dir: Path):
+        """Whole-requirement tests (no assertion target) appear under '*' key."""
+        data = self._build_and_get_node_data(project_dir)
+        grouped = data["test_refs_grouped"]
+        assert "*" in grouped, f"Expected '*' key in grouped refs, got: {grouped}"
+        # The whole-req test should be under "*"
+        star_ids = grouped["*"]
+        assert any(
+            "test_whole_req" in tid for tid in star_ids
+        ), f"Expected test_whole_req under '*', got: {star_ids}"
+
+    def test_assertion_targeted_tests_under_label_keys(self, project_dir: Path):
+        """Assertion-targeted tests appear under their label keys."""
+        data = self._build_and_get_node_data(project_dir)
+        grouped = data["test_refs_grouped"]
+        assert "A" in grouped, f"Expected 'A' key in grouped refs, got: {grouped}"
+        assert "B" in grouped, f"Expected 'B' key in grouped refs, got: {grouped}"
+
+    def test_multi_target_tests_appear_under_each_assertion(self, project_dir: Path):
+        """Multi-target tests appear under each targeted assertion."""
+        data = self._build_and_get_node_data(project_dir)
+        grouped = data["test_refs_grouped"]
+        # The multi-target test (A+C) should appear under both A and C
+        assert "A" in grouped
+        assert "C" in grouped
+        a_ids = grouped["A"]
+        c_ids = grouped["C"]
+        # test_multi_target should be in both
+        assert any(
+            "test_multi_target" in tid for tid in a_ids
+        ), f"Expected test_multi_target under 'A', got: {a_ids}"
+        assert any(
+            "test_multi_target" in tid for tid in c_ids
+        ), f"Expected test_multi_target under 'C', got: {c_ids}"
+
+    def test_flat_test_refs_still_populated(self, project_dir: Path):
+        """The flat test_refs list is still populated with all test IDs."""
+        data = self._build_and_get_node_data(project_dir)
+        test_refs = data["test_refs"]
+        assert len(test_refs) > 0, "Expected non-empty test_refs"
+        # Should contain IDs from all test files
+        assert any("test_input_validation" in tid for tid in test_refs)
+        assert any("test_whole_req" in tid for tid in test_refs)
+
+    def test_no_tests_gives_empty_grouped(self, tmp_path: Path):
+        """A requirement with no tests has empty test_refs_grouped."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            """# REQ-p00001: Lonely Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A requirement with no tests.
+
+## Assertions
+
+A. The system SHALL be alone.
+
+*End* *Lonely Requirement* | **Hash**: abcd1234
+"""
+        )
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """[project]
+name = "test-no-tests"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[references]
+enabled = true
+
+[references.defaults]
+multi_assertion_separator = "+"
+
+[testing]
+enabled = false
+"""
+        )
+
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.factory import build_graph
+
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_code=False,
+            scan_tests=False,
+            scan_sponsors=False,
+        )
+
+        req_node = None
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            if node.id == "REQ-p00001":
+                req_node = node
+                break
+
+        assert req_node is not None
+        data = _get_node_data(req_node, graph)
+        assert data["test_refs_grouped"] == {}
+        assert data["test_refs"] == []

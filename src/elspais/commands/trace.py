@@ -107,10 +107,17 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
             code_refs.append(child.id)
 
     # Get test references (TEST nodes that validate this requirement)
+    # Build both flat list and grouped-by-assertion dict
     test_refs = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.TEST:
-            test_refs.append(child.id)
+    test_refs_grouped: dict[str, list[str]] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.target.kind == NodeKind.TEST:
+            test_refs.append(edge.target.id)
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    test_refs_grouped.setdefault(label, []).append(edge.target.id)
+            else:
+                test_refs_grouped.setdefault("*", []).append(edge.target.id)
 
     # Get assertions
     assertions = []
@@ -146,6 +153,7 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
         "assertions": assertions,
         "code_refs": code_refs,
         "test_refs": test_refs,
+        "test_refs_grouped": test_refs_grouped,
         "implemented": _fmt_coverage(impl_count, total_a),
         "validated": _fmt_coverage(val_count, total_a),
         "passing": _fmt_coverage(pass_count, total_a),
