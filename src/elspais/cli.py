@@ -297,9 +297,26 @@ Checks performed:
         help="Output graph structure as JSON",
     )
     trace_parser.add_argument(
-        "--report",
+        "--preset",
         choices=["minimal", "standard", "full"],
-        help="Report preset to use (default: standard)",
+        help="Column preset (default: standard)",
+    )
+    trace_parser.add_argument(
+        "--body",
+        action="store_true",
+        help="Show requirement body text in detail rows",
+    )
+    trace_parser.add_argument(
+        "--assertions",
+        dest="show_assertions",
+        action="store_true",
+        help="Show individual assertions in detail rows",
+    )
+    trace_parser.add_argument(
+        "--tests",
+        dest="show_tests",
+        action="store_true",
+        help="Show test references in detail rows",
     )
 
     # viewer command — shorthand for trace --edit-mode

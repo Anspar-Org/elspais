@@ -145,7 +145,9 @@ A. The system SHALL do something.
         output_path = tmp_path / "output.csv"
         assert output_path.exists()
         content = output_path.read_text()
-        assert "id,title,level,status,implements" in content
+        header = content.split("\n")[0]
+        assert "ID" in header
+        assert "Title" in header
         assert "REQ-p00001" in content
 
 
@@ -285,7 +287,7 @@ A. The implementation SHALL follow the spec.
 
 
 class TestTraceReportPresets:
-    """Tests for --report preset functionality."""
+    """Tests for --preset functionality."""
 
     @pytest.fixture
     def temp_spec_dir(self, tmp_path: Path) -> Path:
@@ -326,7 +328,7 @@ A. The implementation SHALL follow the spec.
         return spec_dir
 
     def test_report_minimal_has_fewer_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report minimal produces fewer columns."""
+        """Test --preset minimal produces fewer columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -341,20 +343,24 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="minimal",
+            preset="minimal",
         )
 
         result = trace.run(args)
         assert result == 0
 
         content = (tmp_path / "minimal.csv").read_text()
-        # Minimal should have: id, title, status (no level, no implements)
-        assert "id,title,status" in content
-        assert "level" not in content.split("\n")[0]
-        assert "implements" not in content.split("\n")[0]
+        header = content.split("\n")[0]
+        # Minimal should have: ID, Title, Level, Status (no coverage columns)
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" not in header
+        assert "Validated" not in header
 
     def test_report_standard_has_default_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report standard produces default columns."""
+        """Test --preset standard produces default columns with coverage."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -369,23 +375,24 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="standard",
+            preset="standard",
         )
 
         result = trace.run(args)
         assert result == 0
 
         content = (tmp_path / "standard.csv").read_text()
-        # Standard should have: id, title, level, status, implements
+        # Standard should have: ID, Title, Level, Status, Implemented, Validated
         header = content.split("\n")[0]
-        assert "id" in header
-        assert "title" in header
-        assert "level" in header
-        assert "status" in header
-        assert "implements" in header
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" in header
+        assert "Validated" in header
 
     def test_report_full_has_all_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report full produces all columns including assertions."""
+        """Test --preset full produces all columns including Passing."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -400,7 +407,7 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="full",
+            preset="full",
         )
 
         result = trace.run(args)
@@ -408,18 +415,17 @@ A. The implementation SHALL follow the spec.
 
         content = (tmp_path / "full.csv").read_text()
         header = content.split("\n")[0]
-        # Full should have all columns including assertions
-        assert "id" in header
-        assert "title" in header
-        assert "level" in header
-        assert "status" in header
-        assert "implements" in header
-        assert "hash" in header
-        assert "file" in header
-        assert "assertions" in header
+        # Full should have all coverage columns
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" in header
+        assert "Validated" in header
+        assert "Passing" in header
 
-    def test_report_full_json_includes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report full with JSON format includes assertions."""
+    def test_report_full_json_includes_coverage(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --preset full with JSON format includes coverage columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -434,7 +440,7 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="full",
+            preset="full",
         )
 
         result = trace.run(args)
@@ -444,14 +450,15 @@ A. The implementation SHALL follow the spec.
         data = json.loads(content)
         assert isinstance(data, list)
 
-        # Find REQ-p00001 and verify it has assertions
+        # Find REQ-p00001 and verify it has coverage fields
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
-        assert "assertions" in parent
-        assert len(parent["assertions"]) == 2
+        assert "implemented" in parent
+        assert "validated" in parent
+        assert "passing" in parent
 
-    def test_report_minimal_json_excludes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report minimal with JSON format excludes assertions."""
+    def test_report_minimal_json_excludes_coverage(self, temp_spec_dir: Path, tmp_path: Path):
+        """Test --preset minimal with JSON format excludes coverage columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -466,7 +473,7 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="minimal",
+            preset="minimal",
         )
 
         result = trace.run(args)
@@ -476,13 +483,14 @@ A. The implementation SHALL follow the spec.
         data = json.loads(content)
         assert isinstance(data, list)
 
-        # Minimal should not include assertions
+        # Minimal should not include coverage columns
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
-        assert "assertions" not in parent
+        assert "implemented" not in parent
+        assert "validated" not in parent
 
     def test_report_invalid_preset_returns_error(self, temp_spec_dir: Path, capsys):
-        """Test invalid --report preset returns error."""
+        """Test invalid --preset returns error."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -497,22 +505,22 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="nonexistent",
+            preset="nonexistent",
         )
 
         result = trace.run(args)
         assert result == 1
 
         captured = capsys.readouterr()
-        assert "Unknown report preset" in captured.err
+        assert "Unknown preset" in captured.err
         assert "minimal" in captured.err  # Should list available presets
 
     def test_report_default_is_standard(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test that no --report defaults to standard."""
+        """Test that no --preset defaults to standard."""
         from elspais.commands import trace
 
-        # Run without --report
-        args_no_report = argparse.Namespace(
+        # Run without --preset
+        args_no_preset = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
@@ -524,13 +532,13 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report=None,
+            preset=None,
         )
 
-        result1 = trace.run(args_no_report)
+        result1 = trace.run(args_no_preset)
         assert result1 == 0
 
-        # Run with explicit --report standard
+        # Run with explicit --preset standard
         args_standard = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
@@ -543,7 +551,7 @@ A. The implementation SHALL follow the spec.
             review_mode=False,
             server=False,
             graph_json=False,
-            report="standard",
+            preset="standard",
         )
 
         result2 = trace.run(args_standard)
@@ -672,7 +680,7 @@ class TestTracePathArgument:
             graph_json=False,
             path=str(hht_like_fixture),
             canonical_root=None,
-            report=None,
+            preset=None,
         )
 
         result = trace.run(args)
@@ -706,7 +714,7 @@ class TestTracePathArgument:
             graph_json=True,
             path=str(hht_like_fixture),
             canonical_root=None,
-            report=None,
+            preset=None,
         )
 
         result = trace.run(args)
@@ -741,7 +749,7 @@ class TestTracePathArgument:
             graph_json=False,
             path=str(nonexistent),
             canonical_root=None,
-            report=None,
+            preset=None,
         )
 
         # A non-existent path should either return non-zero or raise an exception
