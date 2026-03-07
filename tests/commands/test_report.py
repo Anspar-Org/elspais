@@ -55,7 +55,7 @@ def _mock_render_section(name, graph, config, args):
     """A deterministic mock for _render_section."""
     if name == "health":
         return "=== Health Report ===\nAll checks passed.", 0
-    elif name == "coverage":
+    elif name == "summary":
         return "=== Coverage Report ===\nPRD: 100%", 0
     elif name == "trace":
         return "=== Trace Matrix ===\nREQ-p00001", 0
@@ -94,7 +94,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "coverage"], ["--format", "text"])
+                run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -111,7 +111,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["trace", "health", "coverage"], ["--format", "text"])
+                run(["trace", "health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -127,7 +127,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "coverage"], ["--format", "text"])
+                run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -172,7 +172,7 @@ class TestSharedFlagsApplyGlobally:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "coverage"], ["--format", "markdown"])
+                run(["health", "summary"], ["--format", "markdown"])
             finally:
                 patch.stopall()
 
@@ -197,7 +197,7 @@ class TestWorstExitCode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "coverage"], ["--format", "text"])
+                exit_code = run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -209,7 +209,7 @@ class TestWorstExitCode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "coverage"], ["--format", "text"])
+                exit_code = run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -222,7 +222,7 @@ class TestWorstExitCode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "coverage"], ["--format", "text"])
+                exit_code = run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -243,7 +243,7 @@ class TestSingleSectionIdentical:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["coverage"], ["--format", "text"])
+                exit_code = run(["summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -291,7 +291,7 @@ class TestFormatSupportValidation:
     def test_REQ_d00085_E_invalid_format_for_one_section_in_multi(self, capsys):
         """If format is invalid for any section, error is returned early."""
         # csv is not supported for "changed"
-        exit_code = run(["coverage", "changed"], ["--format", "csv"])
+        exit_code = run(["summary", "changed"], ["--format", "csv"])
 
         assert exit_code == 1
         captured = capsys.readouterr()
@@ -303,7 +303,7 @@ class TestFormatSupportValidation:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "coverage"], ["--format", "text"])
+                exit_code = run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -380,7 +380,7 @@ class TestLenientMode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "coverage"], ["--format", "text"])
+                exit_code = run(["health", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -417,7 +417,7 @@ class TestOutputFile:
                 p.start()
             try:
                 exit_code = run(
-                    ["health", "coverage"],
+                    ["health", "summary"],
                     ["--format", "text", "-o", str(output_file)],
                 )
             finally:
@@ -445,12 +445,12 @@ class TestCLIDispatch:
                 with patch("elspais.config.find_canonical_root", return_value=None):
                     from elspais.cli import main
 
-                    exit_code = main(["health", "coverage", "--format", "text"])
+                    exit_code = main(["health", "summary", "--format", "text"])
 
         assert exit_code == 0
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == ["health", "coverage"]
+        assert call_args[0][0] == ["health", "summary"]
         assert "--format" in call_args[0][1]
         assert "text" in call_args[0][1]
 
@@ -461,7 +461,7 @@ class TestCLIDispatch:
 
             # Single section should NOT go through report.run
             try:
-                main(["coverage"])
+                main(["summary"])
             except SystemExit:
                 pass  # coverage may exit, that's fine
 
@@ -479,7 +479,7 @@ class TestComposableSections:
 
     def test_REQ_d00085_A_composable_sections_tuple(self):
         """COMPOSABLE_SECTIONS contains the expected section names."""
-        assert COMPOSABLE_SECTIONS == ("health", "coverage", "trace", "changed")
+        assert COMPOSABLE_SECTIONS == ("health", "summary", "trace", "changed")
 
     def test_REQ_d00085_A_all_sections_in_format_support(self):
         """Every composable section has a FORMAT_SUPPORT entry."""
@@ -501,7 +501,7 @@ class TestIntegrationWithSpecDir:
         monkeypatch.chdir(tmp_path)
 
         exit_code = run(
-            ["coverage"],
+            ["summary"],
             ["--format", "text", "--spec-dir", str(spec_dir)],
         )
 
@@ -514,7 +514,7 @@ class TestIntegrationWithSpecDir:
 
         output_file = tmp_path / "combined.txt"
         run(
-            ["coverage", "health"],
+            ["summary", "health"],
             [
                 "--format",
                 "text",
@@ -528,4 +528,4 @@ class TestIntegrationWithSpecDir:
         assert output_file.exists()
         content = output_file.read_text()
         # Both sections should appear
-        assert "Coverage Report" in content or "REQ-p00001" in content
+        assert "Coverage Summary" in content or "REQ-p00001" in content

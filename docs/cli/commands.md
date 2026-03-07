@@ -113,11 +113,11 @@ Generates a lighter document for stakeholders:
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
 
-## coverage
+## summary
 
-Generate implementation coverage reports.
+Generate coverage summary reports.
 
-  $ elspais coverage              # Coverage report
+  $ elspais summary               # Coverage summary
 
 For hierarchy views, use `elspais trace --view`. For orphan detection,
 use `elspais health --spec`.

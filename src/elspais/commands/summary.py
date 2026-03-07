@@ -1,5 +1,5 @@
 """
-elspais.commands.coverage - Coverage report section.
+elspais.commands.summary - Coverage summary report section.
 
 # Implements: REQ-d00086-A+B+C+D
 
@@ -149,7 +149,7 @@ def _render(data: dict, fmt: str) -> str:
 
 def _render_text(data: dict) -> str:
     lines = []
-    lines.append("Coverage Report")
+    lines.append("Coverage Summary")
     lines.append("=" * 60)
 
     # Level summary
@@ -185,7 +185,7 @@ def _render_text(data: dict) -> str:
 
 def _render_markdown(data: dict) -> str:
     lines = []
-    lines.append("# Coverage Report")
+    lines.append("# Coverage Summary")
     lines.append("")
 
     # Level summary

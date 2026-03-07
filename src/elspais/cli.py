@@ -16,7 +16,6 @@ from elspais.commands import (
     changed,
     completion,
     config_cmd,
-    coverage,
     doctor,
     edit,
     example_cmd,
@@ -29,6 +28,7 @@ from elspais.commands import (
     pdf_cmd,
     reformat_cmd,
     rules_cmd,
+    summary,
     trace,
     viewer,
 )
@@ -60,11 +60,11 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   elspais health                # Check project health (warnings/errors)
-  elspais coverage              # Show requirement coverage report
+  elspais summary               # Show coverage summary by level
   elspais trace --format html   # Generate HTML traceability matrix
   elspais viewer                # Start interactive viewer server
   elspais viewer --static       # Generate interactive HTML file
-  elspais health coverage trace # Compose multiple report sections
+  elspais health summary trace  # Compose multiple report sections
   elspais changed               # Show uncommitted spec changes
   elspais fix                   # Auto-fix hashes and formatting
 
@@ -348,13 +348,13 @@ Examples:
     )
     index_regenerate_parser.add_argument("--mode", **_index_mode_kwargs)
 
-    # coverage command
-    coverage_parser = subparsers.add_parser(
-        "coverage",
+    # summary command
+    summary_parser = subparsers.add_parser(
+        "summary",
         parents=[output_parent],
-        help="Coverage report (implemented, validated, passing)",
+        help="Coverage summary by level (implemented, validated, passing)",
     )
-    coverage_parser.add_argument(
+    summary_parser.add_argument(
         "--format",
         choices=["text", "markdown", "json", "csv"],
         default="text",
@@ -1178,8 +1178,8 @@ def main(argv: list[str] | None = None) -> int:
             return fix_cmd.run(args)
         elif args.command == "index":
             return index.run(args)
-        elif args.command == "coverage":
-            return coverage.run(args)
+        elif args.command == "summary":
+            return summary.run(args)
         elif args.command == "changed":
             return changed.run(args)
         elif args.command == "version":

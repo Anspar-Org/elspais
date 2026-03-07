@@ -1,9 +1,9 @@
 # Validates REQ-d00086-A, REQ-d00086-B, REQ-d00086-C, REQ-d00086-D
-"""Tests for elspais coverage command.
+"""Tests for elspais summary command.
 
-Validates that the coverage command produces correct level groupings
+Validates that the summary command produces correct level groupings
 and supports all four output formats (text, markdown, json, csv).
-Coverage is summary-only; per-requirement detail is in the trace command.
+Summary is level-aggregated only; per-requirement detail is in the trace command.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import csv
 import io
 import json
 
-from elspais.commands.coverage import _collect_coverage, _pct, _render
+from elspais.commands.summary import _collect_coverage, _pct, _render
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
@@ -277,12 +277,12 @@ class TestTextFormat:
     """Validates REQ-d00086-C: Text format output."""
 
     def test_REQ_d00086_C_text_has_header(self):
-        """Text output starts with 'Coverage Report' header."""
+        """Text output starts with 'Coverage Summary' header."""
         graph = _make_graph()
         data = _collect_coverage(graph)
         output = _render(data, "text")
 
-        assert output.startswith("Coverage Report\n")
+        assert output.startswith("Coverage Summary\n")
 
     def test_REQ_d00086_C_text_level_summary(self):
         """Text output contains level summary section."""
@@ -332,12 +332,12 @@ class TestMarkdownFormat:
     """Validates REQ-d00086-C: Markdown format output."""
 
     def test_REQ_d00086_C_markdown_has_heading(self):
-        """Markdown output starts with '# Coverage Report'."""
+        """Markdown output starts with '# Coverage Summary'."""
         graph = _make_graph()
         data = _collect_coverage(graph)
         output = _render(data, "markdown")
 
-        assert "# Coverage Report" in output
+        assert "# Coverage Summary" in output
 
     def test_REQ_d00086_C_markdown_level_summary_table(self):
         """Markdown output has a level summary table with correct headers."""
@@ -535,7 +535,7 @@ class TestRenderDispatch:
         data = _collect_coverage(graph)
         output = _render(data, "unknown")
 
-        assert "Coverage Report" in output
+        assert "Coverage Summary" in output
         assert output == _render(data, "text")
 
     def test_REQ_d00086_C_render_all_formats_non_empty(self):

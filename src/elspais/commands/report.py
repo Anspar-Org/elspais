@@ -2,7 +2,7 @@
 """
 elspais.commands.report - Composable multi-section report system.
 
-Accepts multiple section names (health, coverage, trace, changed) and renders
+Accepts multiple section names (health, summary, trace, changed) and renders
 them in order, concatenating output. Shared flags apply globally. Exit code
 is worst-of-all-sections.
 """
@@ -14,12 +14,12 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-COMPOSABLE_SECTIONS = ("health", "coverage", "trace", "changed")
+COMPOSABLE_SECTIONS = ("health", "summary", "trace", "changed")
 
 # Implements: REQ-d00085-E
 FORMAT_SUPPORT = {
     "health": {"text", "markdown", "json"},
-    "coverage": {"text", "markdown", "json", "csv"},
+    "summary": {"text", "markdown", "json", "csv"},
     "trace": {"text", "markdown", "json", "csv"},
     "changed": {"text", "json"},
 }
@@ -74,7 +74,7 @@ def run(
     # Build graph once for sections that need it
     graph = None
     config = None
-    graph_sections = {"health", "coverage", "trace"}
+    graph_sections = {"health", "summary", "trace"}
     if set(sections) & graph_sections:
         from elspais.config import ConfigLoader, get_config
         from elspais.graph.factory import build_graph
@@ -129,8 +129,8 @@ def _render_section(
         from elspais.commands.health import render_section
 
         return render_section(graph, config, args)
-    elif name == "coverage":
-        from elspais.commands.coverage import render_section
+    elif name == "summary":
+        from elspais.commands.summary import render_section
 
         return render_section(graph, args)
     elif name == "trace":
