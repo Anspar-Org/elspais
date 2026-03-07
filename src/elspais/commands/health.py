@@ -557,7 +557,7 @@ def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     from elspais.graph.annotators import count_with_code_refs
 
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph, exclude_status={"Draft"})
+    coverage = count_with_code_refs(graph, exclude_status={"Draft", "Deprecated"})
 
     return HealthCheck(
         name="code.coverage",
@@ -711,21 +711,28 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
 
 
 def check_test_coverage(graph: TraceGraph) -> HealthCheck:
-    """Check test coverage statistics."""
+    """Check test coverage statistics (excludes Draft requirements)."""
     from elspais.graph import NodeKind
 
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    # Exclude Draft and Deprecated from denominator
+    _exclude = {"Draft", "Deprecated"}
+    req_count = sum(
+        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in _exclude
+    )
 
     # Count requirements with at least one TEST child
     covered_reqs = set()
     for node in graph.nodes_by_kind(NodeKind.TEST):
         for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT:
+            if parent.kind == NodeKind.REQUIREMENT and parent.status not in _exclude:
                 covered_reqs.add(parent.id)
             elif parent.kind == NodeKind.ASSERTION:
                 for grandparent in parent.iter_parents():
-                    if grandparent.kind == NodeKind.REQUIREMENT:
+                    if (
+                        grandparent.kind == NodeKind.REQUIREMENT
+                        and grandparent.status not in _exclude
+                    ):
                         covered_reqs.add(grandparent.id)
 
     coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
