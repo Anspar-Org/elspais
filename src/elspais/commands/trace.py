@@ -575,6 +575,43 @@ def run_viewer(args: argparse.Namespace) -> int:
     return _run_server(args, open_browser=open_browser)
 
 
+# Implements: REQ-d00085-A
+def render_section(
+    graph: TraceGraph,
+    args: argparse.Namespace,
+) -> tuple[str, int]:
+    """Render trace as a composed report section.
+
+    Returns (formatted_output, exit_code).
+    """
+    preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
+    if preset_name not in REPORT_PRESETS:
+        available = ", ".join(REPORT_PRESETS.keys())
+        return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
+    preset = ReportPreset(
+        name=preset_name,
+        columns=list(REPORT_PRESETS[preset_name].columns),
+        include_body=getattr(args, "body", False),
+        include_assertions=getattr(args, "show_assertions", False),
+        include_test_refs=getattr(args, "show_tests", False),
+    )
+
+    fmt = getattr(args, "format", "markdown")
+    formatters = {
+        "text": format_markdown,
+        "markdown": format_markdown,
+        "csv": format_csv,
+        "html": format_html,
+        "json": format_json,
+    }
+    formatter = formatters.get(fmt)
+    if not formatter:
+        return f"Error: Unknown format '{fmt}'", 1
+
+    lines = list(formatter(graph, preset))
+    return "\n".join(lines), 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 

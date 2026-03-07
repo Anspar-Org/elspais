@@ -1159,6 +1159,34 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure)
     """
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Implements: REQ-d00085-A+D
+    # Detect multi-section composition before argparse
+    from elspais.commands.report import COMPOSABLE_SECTIONS
+
+    sections: list[str] = []
+    i = 0
+    while i < len(argv) and argv[i] in COMPOSABLE_SECTIONS:
+        sections.append(argv[i])
+        i += 1
+
+    if len(sections) > 1:
+        import os
+
+        from elspais.config import find_canonical_root, find_git_root
+
+        git_root = find_git_root(Path.cwd())
+        canonical_root = find_canonical_root(Path.cwd())
+        if git_root and git_root != Path.cwd():
+            os.chdir(git_root)
+
+        from elspais.commands import report
+
+        return report.run(sections, argv[i:], canonical_root=canonical_root)
+
+    # Single command — normal argparse dispatch (REQ-d00085-D)
     parser = create_parser()
 
     # Enable shell tab-completion if argcomplete is installed

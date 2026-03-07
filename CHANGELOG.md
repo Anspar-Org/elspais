@@ -2,6 +2,22 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.3] - 2026-03-06
+
+### Added
+
+- **Composable multi-section reports** — `elspais health coverage trace --format markdown` (REQ-d00085)
+  - Multiple section names as positional args, rendered in order and concatenated
+  - Shared flags (`--format`, `-o`, `-q`, `-v`, `--lenient`) apply globally across sections
+  - Exit code is worst-of-all-sections (non-zero if any section has errors/warnings)
+  - Single-section invocation behaves identically to standalone command
+  - Invalid format/section combinations produce clear errors
+  - `render_section()` API on health, coverage, and trace for programmatic use
+
+### Changed
+
+- **`elspais trace`** — `--report` renamed to `--preset`, added `--body`/`--assertions`/`--tests` detail flags, coverage columns (Implemented, Validated, Passing) from RollupMetrics (REQ-d00084-B+C+D)
+
 ## [0.85.2] - 2026-03-06
 
 ### Changed

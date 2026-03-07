@@ -24,6 +24,21 @@ from elspais.graph import NodeKind
 from elspais.graph.metrics import RollupMetrics
 
 
+# Implements: REQ-d00085-A
+def render_section(
+    graph: TraceGraph,
+    args: argparse.Namespace,
+) -> tuple[str, int]:
+    """Render coverage as a composed report section.
+
+    Returns (formatted_output, exit_code).
+    """
+    fmt = getattr(args, "format", "text") or "text"
+    data = _collect_coverage(graph)
+    content = _render(data, fmt)
+    return content.rstrip("\n"), 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the coverage command."""
     from elspais.graph.factory import build_graph

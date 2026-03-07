@@ -749,6 +749,45 @@ def run_test_checks(graph: TraceGraph) -> list[HealthCheck]:
 
 
 # =============================================================================
+# Composable Section API
+# =============================================================================
+
+
+# Implements: REQ-d00085-A
+def render_section(
+    graph: TraceGraph | None,
+    config: ConfigLoader | None,
+    args: argparse.Namespace,
+) -> tuple[str, int]:
+    """Render health as a composed report section.
+
+    Returns (formatted_output, exit_code).
+    """
+    report = HealthReport()
+    config_path = getattr(args, "config", None)
+
+    if config:
+        from elspais.commands.doctor import run_config_checks as _run_config_checks
+
+        for check in _run_config_checks(config_path, config, Path.cwd()):
+            report.add(check)
+
+    if graph and config:
+        for check in run_spec_checks(graph, config):
+            report.add(check)
+    if graph:
+        for check in run_code_checks(graph):
+            report.add(check)
+        for check in run_test_checks(graph):
+            report.add(check)
+
+    output = _format_report(report, args)
+    lenient = getattr(args, "lenient", False)
+    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    return output, 0 if healthy else 1
+
+
+# =============================================================================
 # Main Command
 # =============================================================================
 
@@ -848,26 +887,38 @@ def run(args: argparse.Namespace) -> int:
     return _output_report(report, args)
 
 
-def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
-    """Output the health report in the requested format."""
+def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
+    """Format the health report as a string."""
+    import io
+    from contextlib import redirect_stdout
+
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
     verbose = getattr(args, "verbose", False)
 
-    # Legacy -j/--json flag support
     if getattr(args, "json", False):
         fmt = "json"
 
     if fmt == "json":
-        print(json.dumps(report.to_dict(lenient=lenient), indent=2))
+        return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
-        print(_render_markdown(report))
-    elif quiet:
-        _print_quiet_report(report)
+        return _render_markdown(report)
     else:
-        _print_text_report(report, verbose=verbose)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            if quiet:
+                _print_quiet_report(report)
+            else:
+                _print_text_report(report, verbose=verbose)
+        return buf.getvalue().rstrip("\n")
 
+
+def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
+    """Output the health report in the requested format."""
+    print(_format_report(report, args))
+
+    lenient = getattr(args, "lenient", False)
     healthy = report.is_healthy_lenient if lenient else report.is_healthy
     return 0 if healthy else 1
 
