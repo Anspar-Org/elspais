@@ -224,13 +224,22 @@ def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> It
             yield ""
             yield "</details>"
 
-        if preset.include_test_refs and data["test_refs"]:
+        if preset.include_test_refs and data["test_refs_grouped"]:
+            total = len(data["test_refs"])
             yield ""
-            yield f"<details><summary>Test Refs ({len(data['test_refs'])})</summary>"
+            yield f"<details><summary>Test Refs ({total})</summary>"
             yield ""
-            for ref in data["test_refs"]:
-                yield f"- `{ref}`"
-            yield ""
+            grouped = data["test_refs_grouped"]
+            # Whole-requirement tests first, then assertion labels sorted
+            for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                if key not in grouped:
+                    continue
+                refs = grouped[key]
+                label = "Whole-requirement" if key == "*" else key
+                yield f"**{label}** ({len(refs)}):"
+                for ref in refs:
+                    yield f"- `{ref}`"
+                yield ""
             yield "</details>"
 
 
