@@ -1,9 +1,9 @@
 # Validates REQ-d00086-A, REQ-d00086-B, REQ-d00086-C, REQ-d00086-D
 """Tests for elspais coverage command.
 
-Validates that the coverage command produces correct level groupings,
-per-requirement assertion coverage ratios, and supports all four output
-formats (text, markdown, json, csv).
+Validates that the coverage command produces correct level groupings
+and supports all four output formats (text, markdown, json, csv).
+Coverage is summary-only; per-requirement detail is in the trace command.
 """
 
 from __future__ import annotations
@@ -108,21 +108,16 @@ def _build_mixed_graph() -> TraceGraph:
 
 
 class TestCollectCoverage:
-    """Validates REQ-d00086-D: Uses existing graph aggregate functions.
+    """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
 
-    Tests that _collect_coverage returns the expected data structure
-    from pre-computed RollupMetrics on graph nodes.
-    """
-
-    def test_REQ_d00086_D_returns_levels_and_requirements_keys(self):
-        """_collect_coverage returns dict with 'levels' and 'requirements' keys."""
+    def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
+        """_collect_coverage returns dict with 'levels' and 'excluded' keys."""
         graph = _make_graph()
         data = _collect_coverage(graph)
 
         assert "levels" in data
-        assert "requirements" in data
+        assert "excluded" in data
         assert isinstance(data["levels"], list)
-        assert isinstance(data["requirements"], list)
 
     def test_REQ_d00086_D_levels_always_three(self):
         """There are always exactly 3 level entries (PRD, OPS, DEV)."""
@@ -133,63 +128,12 @@ class TestCollectCoverage:
         level_names = [lv["level"] for lv in data["levels"]]
         assert level_names == ["PRD", "OPS", "DEV"]
 
-    def test_REQ_d00086_D_requirement_row_fields(self):
-        """Each requirement row has all expected fields."""
+    def test_REQ_d00086_D_no_requirements_key(self):
+        """Coverage data no longer includes per-requirement rows."""
         graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
-        _set_rollup(node, total=2, covered=1, tested=1, validated=0)
-
+        _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         data = _collect_coverage(graph)
-        assert len(data["requirements"]) == 1
-
-        row = data["requirements"][0]
-        expected_keys = {
-            "id",
-            "title",
-            "level",
-            "status",
-            "total_assertions",
-            "implemented",
-            "implemented_pct",
-            "validated",
-            "validated_pct",
-            "passing",
-            "passing_pct",
-        }
-        assert set(row.keys()) == expected_keys
-
-    def test_REQ_d00086_D_empty_row_for_no_rollup(self):
-        """Requirements without RollupMetrics get zero-filled rows."""
-        graph = _make_graph()
-        _add_requirement(graph, "REQ-p00001", "No Metrics", level="prd")
-
-        data = _collect_coverage(graph)
-        row = data["requirements"][0]
-
-        assert row["total_assertions"] == 0
-        assert row["implemented"] == 0
-        assert row["implemented_pct"] == 0.0
-        assert row["validated"] == 0
-        assert row["validated_pct"] == 0.0
-        assert row["passing"] == 0
-        assert row["passing_pct"] == 0.0
-
-    def test_REQ_d00086_D_rollup_values_mapped_correctly(self):
-        """RollupMetrics fields map to the correct row fields."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Mapped", level="prd")
-        _set_rollup(node, total=10, covered=7, tested=5, validated=3)
-
-        data = _collect_coverage(graph)
-        row = data["requirements"][0]
-
-        assert row["total_assertions"] == 10
-        assert row["implemented"] == 7
-        assert row["implemented_pct"] == 70.0
-        assert row["validated"] == 5
-        assert row["validated_pct"] == 50.0
-        assert row["passing"] == 3
-        assert row["passing_pct"] == 30.0
+        assert "requirements" not in data
 
 
 # ===========================================================================
@@ -207,11 +151,9 @@ class TestLevelGrouping:
 
         prd, ops, dev = data["levels"]
 
-        # PRD: 2 active reqs (Draft/Deprecated excluded)
         assert prd["level"] == "PRD"
         assert prd["total"] == 2
 
-        # OPS: 1 active req
         assert ops["level"] == "OPS"
         assert ops["total"] == 1
 
@@ -251,7 +193,7 @@ class TestLevelGrouping:
 
         prd, ops, dev = data["levels"]
 
-        assert prd["with_code_refs"] == 2  # both have implemented > 0
+        assert prd["with_code_refs"] == 2
         assert ops["with_code_refs"] == 1
         assert dev["with_code_refs"] == 1
 
@@ -262,7 +204,7 @@ class TestLevelGrouping:
 
         prd, ops, dev = data["levels"]
 
-        assert prd["with_test_refs"] == 2  # both have validated > 0
+        assert prd["with_test_refs"] == 2
         assert ops["with_test_refs"] == 1
         assert dev["with_test_refs"] == 1
 
@@ -300,7 +242,7 @@ class TestStatusExclusion:
     """Validates REQ-d00086-A: Draft and Deprecated requirements are excluded."""
 
     def test_REQ_d00086_A_excludes_draft_from_counts(self):
-        """Draft requirements are excluded from level counts and requirement rows."""
+        """Draft requirements are excluded from level counts."""
         graph = _make_graph()
         _add_requirement(graph, "REQ-d00001", "Active", level="dev", status="Active")
         draft = _add_requirement(graph, "REQ-d00002", "Draft", level="dev", status="Draft")
@@ -310,16 +252,10 @@ class TestStatusExclusion:
         dev = data["levels"][2]
 
         assert dev["total"] == 1
-        # Draft's assertions should not be counted
         assert dev["total_assertions"] == 0
 
-        # Only 1 requirement row (the active one)
-        req_ids = [r["id"] for r in data["requirements"]]
-        assert "REQ-d00001" in req_ids
-        assert "REQ-d00002" not in req_ids
-
     def test_REQ_d00086_A_excludes_deprecated_from_counts(self):
-        """Deprecated requirements are excluded from level counts and requirement rows."""
+        """Deprecated requirements are excluded from level counts."""
         graph = _make_graph()
         _add_requirement(graph, "REQ-d00001", "Active", level="dev", status="Active")
         dep = _add_requirement(graph, "REQ-d00003", "Deprecated", level="dev", status="Deprecated")
@@ -330,77 +266,6 @@ class TestStatusExclusion:
 
         assert dev["total"] == 1
         assert dev["total_assertions"] == 0
-
-        req_ids = [r["id"] for r in data["requirements"]]
-        assert "REQ-d00001" in req_ids
-        assert "REQ-d00003" not in req_ids
-
-
-# ===========================================================================
-# Tests: Per-requirement assertion coverage
-# ===========================================================================
-
-
-class TestPerRequirementCoverage:
-    """Validates REQ-d00086-B: Per-requirement assertion coverage."""
-
-    def test_REQ_d00086_B_full_coverage(self):
-        """Requirement with all assertions covered shows 100% across the board."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Full", level="prd")
-        _set_rollup(node, total=4, covered=4, tested=4, validated=4)
-
-        data = _collect_coverage(graph)
-        row = data["requirements"][0]
-
-        assert row["implemented"] == 4
-        assert row["implemented_pct"] == 100.0
-        assert row["validated"] == 4
-        assert row["validated_pct"] == 100.0
-        assert row["passing"] == 4
-        assert row["passing_pct"] == 100.0
-
-    def test_REQ_d00086_B_partial_coverage(self):
-        """Requirement with partial coverage shows correct ratios."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Partial", level="prd")
-        _set_rollup(node, total=5, covered=3, tested=2, validated=1)
-
-        data = _collect_coverage(graph)
-        row = data["requirements"][0]
-
-        assert row["implemented"] == 3
-        assert row["implemented_pct"] == 60.0
-        assert row["validated"] == 2
-        assert row["validated_pct"] == 40.0
-        assert row["passing"] == 1
-        assert row["passing_pct"] == 20.0
-
-    def test_REQ_d00086_B_zero_assertions(self):
-        """Requirement with zero assertions gets 0.0% (no division by zero)."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Empty", level="prd")
-        _set_rollup(node, total=0, covered=0, tested=0, validated=0)
-
-        data = _collect_coverage(graph)
-        row = data["requirements"][0]
-
-        assert row["total_assertions"] == 0
-        assert row["implemented_pct"] == 0.0
-        assert row["validated_pct"] == 0.0
-        assert row["passing_pct"] == 0.0
-
-    def test_REQ_d00086_B_requirements_sorted_by_id(self):
-        """Requirements within a level are sorted by ID."""
-        graph = _make_graph()
-        _add_requirement(graph, "REQ-p00003", "Third", level="prd")
-        _add_requirement(graph, "REQ-p00001", "First", level="prd")
-        _add_requirement(graph, "REQ-p00002", "Second", level="prd")
-
-        data = _collect_coverage(graph)
-        ids = [r["id"] for r in data["requirements"]]
-
-        assert ids == ["REQ-p00001", "REQ-p00002", "REQ-p00003"]
 
 
 # ===========================================================================
@@ -434,8 +299,8 @@ class TestTextFormat:
         assert "Validated:" in output
         assert "Passing:" in output
 
-    def test_REQ_d00086_C_text_per_requirement_section(self):
-        """Text output contains per-requirement detail section."""
+    def test_REQ_d00086_C_text_no_per_requirement_section(self):
+        """Text output does not contain per-requirement section."""
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "My Requirement", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=0)
@@ -443,9 +308,7 @@ class TestTextFormat:
         data = _collect_coverage(graph)
         output = _render(data, "text")
 
-        assert "Per-Requirement Coverage" in output
-        assert "REQ-p00001" in output
-        assert "My Requirement" in output
+        assert "Per-Requirement Coverage" not in output
 
     def test_REQ_d00086_C_text_skips_empty_levels(self):
         """Text output skips levels with zero requirements."""
@@ -456,20 +319,8 @@ class TestTextFormat:
         output = _render(data, "text")
 
         assert "PRD:" in output
-        # OPS and DEV have 0 requirements, should be skipped in text
         assert "OPS:" not in output
         assert "DEV:" not in output
-
-    def test_REQ_d00086_C_text_na_for_zero_assertions(self):
-        """Text output shows 'n/a' for requirements with no assertions."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "No Assert", level="prd")
-        _set_rollup(node, total=0, covered=0, tested=0, validated=0)
-
-        data = _collect_coverage(graph)
-        output = _render(data, "text")
-
-        assert "n/a" in output
 
 
 # ===========================================================================
@@ -499,11 +350,10 @@ class TestMarkdownFormat:
 
         assert "## Summary by Level" in output
         assert "| Level | Requirements | Assertions | Implemented | Validated | Passing |" in output
-        # Separator line
         assert "|-------|" in output
 
-    def test_REQ_d00086_C_markdown_per_requirement_table(self):
-        """Markdown output has a per-requirement table with correct headers."""
+    def test_REQ_d00086_C_markdown_no_per_requirement_table(self):
+        """Markdown output does not contain per-requirement table."""
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
@@ -511,36 +361,22 @@ class TestMarkdownFormat:
         data = _collect_coverage(graph)
         output = _render(data, "markdown")
 
-        assert "## Per-Requirement Coverage" in output
-        assert "| ID | Title | Level | Implemented | Validated | Passing |" in output
-        assert "|----|" in output
+        assert "## Per-Requirement Coverage" not in output
 
-    def test_REQ_d00086_C_markdown_table_rows_pipe_delimited(self):
-        """Markdown table rows use pipe delimiters."""
+    def test_REQ_d00086_C_markdown_level_rows_pipe_delimited(self):
+        """Markdown level rows use pipe delimiters."""
         graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Pipe Check", level="prd")
+        node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=2, tested=1, validated=1)
 
         data = _collect_coverage(graph)
         output = _render(data, "markdown")
 
         lines = output.split("\n")
-        # Find a data row containing REQ-p00001
-        data_lines = [ln for ln in lines if "REQ-p00001" in ln]
+        data_lines = [ln for ln in lines if "| PRD |" in ln]
         assert len(data_lines) >= 1
         assert data_lines[0].startswith("| ")
         assert data_lines[0].endswith(" |")
-
-    def test_REQ_d00086_C_markdown_na_for_zero_assertions(self):
-        """Markdown output shows 'n/a' for requirements with no assertions."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "No Assert", level="prd")
-        _set_rollup(node, total=0, covered=0, tested=0, validated=0)
-
-        data = _collect_coverage(graph)
-        output = _render(data, "markdown")
-
-        assert "n/a" in output
 
 
 # ===========================================================================
@@ -560,15 +396,15 @@ class TestJsonFormat:
         parsed = json.loads(output)
         assert isinstance(parsed, dict)
 
-    def test_REQ_d00086_C_json_has_levels_and_requirements(self):
-        """JSON output contains 'levels' and 'requirements' keys."""
+    def test_REQ_d00086_C_json_has_levels_and_excluded(self):
+        """JSON output contains 'levels' and 'excluded' keys."""
         graph = _build_mixed_graph()
         data = _collect_coverage(graph)
         output = _render(data, "json")
 
         parsed = json.loads(output)
         assert "levels" in parsed
-        assert "requirements" in parsed
+        assert "excluded" in parsed
 
     def test_REQ_d00086_C_json_level_structure(self):
         """JSON level entries have expected fields."""
@@ -588,39 +424,15 @@ class TestJsonFormat:
         assert prd["validated_assertions"] == 1
         assert prd["passing_assertions"] == 1
 
-    def test_REQ_d00086_C_json_requirement_structure(self):
-        """JSON requirement entries have expected fields and values."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "JSON Req", level="prd")
-        _set_rollup(node, total=4, covered=3, tested=2, validated=1)
-
-        data = _collect_coverage(graph)
-        output = _render(data, "json")
-        parsed = json.loads(output)
-
-        req = parsed["requirements"][0]
-        assert req["id"] == "REQ-p00001"
-        assert req["title"] == "JSON Req"
-        assert req["level"] == "prd"
-        assert req["status"] == "Active"
-        assert req["total_assertions"] == 4
-        assert req["implemented"] == 3
-        assert req["implemented_pct"] == 75.0
-        assert req["validated"] == 2
-        assert req["validated_pct"] == 50.0
-        assert req["passing"] == 1
-        assert req["passing_pct"] == 25.0
-
-    def test_REQ_d00086_C_json_excludes_draft_deprecated(self):
-        """JSON output does not include Draft or Deprecated requirements."""
+    def test_REQ_d00086_C_json_excluded_counts(self):
+        """JSON output includes excluded status counts."""
         graph = _build_mixed_graph()
         data = _collect_coverage(graph)
         output = _render(data, "json")
         parsed = json.loads(output)
 
-        req_ids = [r["id"] for r in parsed["requirements"]]
-        assert "REQ-d00002" not in req_ids  # Draft
-        assert "REQ-d00003" not in req_ids  # Deprecated
+        assert parsed["excluded"]["Draft"] == 1
+        assert parsed["excluded"]["Deprecated"] == 1
 
 
 # ===========================================================================
@@ -641,11 +453,9 @@ class TestCsvFormat:
         headers = next(reader)
 
         expected_headers = [
-            "ID",
-            "Title",
             "Level",
-            "Status",
-            "Total Assertions",
+            "Requirements",
+            "Assertions",
             "Implemented",
             "Implemented %",
             "Validated",
@@ -656,7 +466,7 @@ class TestCsvFormat:
         assert headers == expected_headers
 
     def test_REQ_d00086_C_csv_row_count(self):
-        """CSV has one header row plus one data row per active requirement."""
+        """CSV has one header row plus one row per level."""
         graph = _build_mixed_graph()
         data = _collect_coverage(graph)
         output = _render(data, "csv")
@@ -664,11 +474,11 @@ class TestCsvFormat:
         reader = csv.reader(io.StringIO(output))
         rows = list(reader)
 
-        # 1 header + 4 active reqs (p00001, p00002, o00001, d00001)
-        assert len(rows) == 5
+        # 1 header + 3 levels (PRD, OPS, DEV)
+        assert len(rows) == 4
 
     def test_REQ_d00086_C_csv_row_values(self):
-        """CSV data rows contain correct values."""
+        """CSV data rows contain correct level summary values."""
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "CSV Req", level="prd")
         _set_rollup(node, total=4, covered=3, tested=2, validated=1)
@@ -678,19 +488,17 @@ class TestCsvFormat:
 
         reader = csv.reader(io.StringIO(output))
         _header = next(reader)
-        row = next(reader)
+        row = next(reader)  # PRD row
 
-        assert row[0] == "REQ-p00001"  # ID
-        assert row[1] == "CSV Req"  # Title
-        assert row[2] == "prd"  # Level
-        assert row[3] == "Active"  # Status
-        assert row[4] == "4"  # Total Assertions
-        assert row[5] == "3"  # Implemented
-        assert row[6] == "75.0"  # Implemented %
-        assert row[7] == "2"  # Validated
-        assert row[8] == "50.0"  # Validated %
-        assert row[9] == "1"  # Passing
-        assert row[10] == "25.0"  # Passing %
+        assert row[0] == "PRD"  # Level
+        assert row[1] == "1"  # Requirements
+        assert row[2] == "4"  # Assertions
+        assert row[3] == "3"  # Implemented
+        assert row[4] == "75.0"  # Implemented %
+        assert row[5] == "2"  # Validated
+        assert row[6] == "50.0"  # Validated %
+        assert row[7] == "1"  # Passing
+        assert row[8] == "25.0"  # Passing %
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
@@ -701,27 +509,16 @@ class TestCsvFormat:
         reader = csv.DictReader(io.StringIO(output))
         rows = list(reader)
 
-        assert len(rows) == 4  # 4 active requirements
+        assert len(rows) == 3  # 3 levels
         for row in rows:
-            # All numeric fields should be convertible
-            int(row["Total Assertions"])
+            int(row["Requirements"])
+            int(row["Assertions"])
             int(row["Implemented"])
             float(row["Implemented %"])
             int(row["Validated"])
             float(row["Validated %"])
             int(row["Passing"])
             float(row["Passing %"])
-
-    def test_REQ_d00086_C_csv_excludes_draft_deprecated(self):
-        """CSV output does not include Draft or Deprecated requirements."""
-        graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
-        output = _render(data, "csv")
-
-        reader = csv.DictReader(io.StringIO(output))
-        ids = [row["ID"] for row in reader]
-        assert "REQ-d00002" not in ids
-        assert "REQ-d00003" not in ids
 
 
 # ===========================================================================

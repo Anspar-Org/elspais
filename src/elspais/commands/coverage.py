@@ -3,9 +3,9 @@ elspais.commands.coverage - Coverage report section.
 
 # Implements: REQ-d00086-A+B+C+D
 
-Produces a coverage report showing implementation, validation, and test-passing
-status at the requirement and assertion level. Supports text, markdown, json,
-and csv output formats.
+Produces a coverage summary showing implementation, validation, and test-passing
+status aggregated by level (PRD, OPS, DEV). Per-requirement detail is in the
+trace command. Supports text, markdown, json, and csv output formats.
 """
 
 from __future__ import annotations
@@ -77,7 +77,6 @@ def _collect_coverage(graph: TraceGraph) -> dict:
             level_groups[lvl].append(node)
 
     levels = []
-    all_rows = []
     excluded_counts: dict[str, int] = {}
 
     for level_key, display_name in (("prd", "PRD"), ("ops", "OPS"), ("dev", "DEV")):
@@ -104,65 +103,32 @@ def _collect_coverage(graph: TraceGraph) -> dict:
         for node in sorted(active_nodes, key=lambda n: n.id):
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
             if rollup is None:
-                row = _empty_row(node)
+                total = 0
+                implemented = 0
+                validated = 0
+                passing = 0
             else:
-                row = _row_from_rollup(node, rollup)
+                total = rollup.total_assertions
+                implemented = rollup.covered_assertions
+                validated = rollup.direct_tested
+                passing = rollup.validated
 
-            all_rows.append(row)
-
-            if row["implemented"] > 0:
+            if implemented > 0:
                 level_totals["with_code_refs"] += 1
-            if row["validated"] > 0:
+            if validated > 0:
                 level_totals["with_test_refs"] += 1
-            if row["passing"] > 0:
+            if passing > 0:
                 level_totals["with_passing"] += 1
-            level_totals["total_assertions"] += row["total_assertions"]
-            level_totals["implemented_assertions"] += row["implemented"]
-            level_totals["validated_assertions"] += row["validated"]
-            level_totals["passing_assertions"] += row["passing"]
+            level_totals["total_assertions"] += total
+            level_totals["implemented_assertions"] += implemented
+            level_totals["validated_assertions"] += validated
+            level_totals["passing_assertions"] += passing
 
         levels.append(level_totals)
 
     return {
         "levels": levels,
-        "requirements": all_rows,
         "excluded": excluded_counts,
-    }
-
-
-def _row_from_rollup(node, rollup: RollupMetrics) -> dict:
-    total = rollup.total_assertions
-    implemented = rollup.covered_assertions
-    validated = rollup.direct_tested
-    passing = rollup.validated
-    return {
-        "id": node.id,
-        "title": node.get_label(),
-        "level": node.level or "?",
-        "status": node.status or "?",
-        "total_assertions": total,
-        "implemented": implemented,
-        "implemented_pct": _pct(implemented, total),
-        "validated": validated,
-        "validated_pct": _pct(validated, total),
-        "passing": passing,
-        "passing_pct": _pct(passing, total),
-    }
-
-
-def _empty_row(node) -> dict:
-    return {
-        "id": node.id,
-        "title": node.get_label(),
-        "level": node.level or "?",
-        "status": node.status or "?",
-        "total_assertions": 0,
-        "implemented": 0,
-        "implemented_pct": 0.0,
-        "validated": 0,
-        "validated_pct": 0.0,
-        "passing": 0,
-        "passing_pct": 0.0,
     }
 
 
@@ -213,23 +179,6 @@ def _render_text(data: dict) -> str:
         parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
-    # Per-requirement table
-    lines.append("")
-    lines.append("Per-Requirement Coverage")
-    lines.append("-" * 60)
-    for row in data["requirements"]:
-        ta = row["total_assertions"]
-        if ta == 0:
-            impl_str = "n/a"
-            val_str = "n/a"
-            pass_str = "n/a"
-        else:
-            impl_str = f"{row['implemented']}/{ta} ({row['implemented_pct']:.0f}%)"
-            val_str = f"{row['validated']}/{ta} ({row['validated_pct']:.0f}%)"
-            pass_str = f"{row['passing']}/{ta} ({row['passing_pct']:.0f}%)"
-        lines.append(f"  {row['id']} ({row['level']}): {row['title']}")
-        lines.append(f"    Implemented: {impl_str}  Validated: {val_str}  Passing: {pass_str}")
-
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -260,24 +209,6 @@ def _render_markdown(data: dict) -> str:
         lines.append("")
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
-    # Per-requirement table
-    lines.append("")
-    lines.append("## Per-Requirement Coverage")
-    lines.append("")
-    lines.append("| ID | Title | Level | Implemented | Validated | Passing |")
-    lines.append("|----|-------|-------|-------------|-----------|---------|")
-    for row in data["requirements"]:
-        ta = row["total_assertions"]
-        if ta == 0:
-            impl = "n/a"
-            val = "n/a"
-            pas = "n/a"
-        else:
-            impl = f"{row['implemented']}/{ta} ({row['implemented_pct']:.0f}%)"
-            val = f"{row['validated']}/{ta} ({row['validated_pct']:.0f}%)"
-            pas = f"{row['passing']}/{ta} ({row['passing_pct']:.0f}%)"
-        lines.append(f"| {row['id']} | {row['title']} | {row['level']} | {impl} | {val} | {pas} |")
-
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -291,11 +222,9 @@ def _render_csv(data: dict) -> str:
     writer = csv.writer(buf)
     writer.writerow(
         [
-            "ID",
-            "Title",
             "Level",
-            "Status",
-            "Total Assertions",
+            "Requirements",
+            "Assertions",
             "Implemented",
             "Implemented %",
             "Validated",
@@ -304,20 +233,22 @@ def _render_csv(data: dict) -> str:
             "Passing %",
         ]
     )
-    for row in data["requirements"]:
+    for lv in data["levels"]:
+        ta = lv["total_assertions"]
+        ia = lv["implemented_assertions"]
+        va = lv["validated_assertions"]
+        pa = lv["passing_assertions"]
         writer.writerow(
             [
-                row["id"],
-                row["title"],
-                row["level"],
-                row["status"],
-                row["total_assertions"],
-                row["implemented"],
-                row["implemented_pct"],
-                row["validated"],
-                row["validated_pct"],
-                row["passing"],
-                row["passing_pct"],
+                lv["level"],
+                lv["total"],
+                ta,
+                ia,
+                _pct(ia, ta),
+                va,
+                _pct(va, ta),
+                pa,
+                _pct(pa, ta),
             ]
         )
     return buf.getvalue()
