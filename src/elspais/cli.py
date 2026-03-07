@@ -207,9 +207,9 @@ Checks performed:
     )
     trace_parser.add_argument(
         "--format",
-        choices=["markdown", "html", "csv", "both"],
+        choices=["text", "markdown", "html", "json", "csv", "both"],
         default="both",
-        help="Output format: markdown, html, csv, or both (markdown + csv)",
+        help="Output format: text, markdown, html, json, csv, or both (markdown + csv)",
     )
     trace_parser.add_argument(
         "--output",

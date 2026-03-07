@@ -524,6 +524,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Single format output
     formatters = {
+        "text": format_markdown,
         "markdown": format_markdown,
         "csv": format_csv,
         "html": format_html,
