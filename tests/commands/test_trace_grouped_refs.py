@@ -1,6 +1,7 @@
 # Validates: REQ-p00003-A, REQ-p00003-B
 """Tests for test_refs_grouped in _get_node_data()."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -524,3 +525,136 @@ patterns = ["test_*.py"]
         assert "</code>" in output
         # Verify specific test refs are in code tags
         assert "<code>test" in output or "<code>tests/" in output
+
+
+class TestJsonGroupedRefs:
+    """Integration tests for grouped test refs in format_json() output."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        """Create a project with spec, tests, and config."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            """# REQ-p00001: Grouped Refs Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A requirement to test grouped refs.
+
+## Assertions
+
+A. The system SHALL validate input.
+B. The system SHALL produce output.
+C. The system SHALL log events.
+
+*End* *Grouped Refs Requirement* | **Hash**: abcd1234
+"""
+        )
+
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+
+        # Test targeting assertion A
+        (test_dir / "test_input_validation.py").write_text(
+            """# Validates: REQ-p00001-A
+def test_REQ_p00001_A_validates_input():
+    pass
+"""
+        )
+
+        # Test targeting assertion B
+        (test_dir / "test_output.py").write_text(
+            """# Validates: REQ-p00001-B
+def test_REQ_p00001_B_produces_output():
+    pass
+"""
+        )
+
+        # Whole-requirement test (no assertion)
+        (test_dir / "test_whole_req.py").write_text(
+            """# Validates: REQ-p00001
+def test_REQ_p00001_general():
+    pass
+"""
+        )
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """[project]
+name = "test-json-grouped-refs"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[references]
+enabled = true
+
+[references.defaults]
+multi_assertion_separator = "+"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+"""
+        )
+
+        return tmp_path
+
+    def _build_and_format_json(self, project_dir: Path) -> list[dict]:
+        """Build graph and return parsed JSON output."""
+        from elspais.commands.trace import ReportPreset, format_json
+        from elspais.graph.factory import build_graph
+
+        config_path = project_dir / ".elspais.toml"
+        spec_dir = project_dir / "spec"
+
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=config_path,
+            repo_root=project_dir,
+            scan_code=False,
+            scan_tests=True,
+            scan_sponsors=False,
+        )
+
+        preset = ReportPreset(
+            name="test",
+            columns=["id", "title", "level", "status"],
+            include_test_refs=True,
+        )
+        raw = "\n".join(format_json(graph, preset))
+        return json.loads(raw)
+
+    def test_json_test_refs_is_dict(self, project_dir: Path):
+        """test_refs in JSON output is a dict with '*', 'A', 'B' keys."""
+        nodes = self._build_and_format_json(project_dir)
+        req = next(n for n in nodes if n["id"] == "REQ-p00001")
+        test_refs = req["test_refs"]
+        assert isinstance(test_refs, dict), f"Expected dict, got {type(test_refs)}"
+        assert "*" in test_refs, f"Expected '*' key, got keys: {list(test_refs.keys())}"
+        assert "A" in test_refs, f"Expected 'A' key, got keys: {list(test_refs.keys())}"
+        assert "B" in test_refs, f"Expected 'B' key, got keys: {list(test_refs.keys())}"
+
+    def test_json_grouped_refs_content(self, project_dir: Path):
+        """Grouped refs contain correct test ID counts per key."""
+        nodes = self._build_and_format_json(project_dir)
+        req = next(n for n in nodes if n["id"] == "REQ-p00001")
+        test_refs = req["test_refs"]
+        # '*' should have whole-req tests
+        assert len(test_refs["*"]) >= 1, f"Expected at least 1 test under '*', got {test_refs['*']}"
+        assert any("test_whole_req" in tid for tid in test_refs["*"])
+        # 'A' should have test_input_validation refs
+        assert len(test_refs["A"]) >= 1, f"Expected at least 1 test under 'A', got {test_refs['A']}"
+        assert any("test_input_validation" in tid for tid in test_refs["A"])
+        # 'B' should have test_output refs
+        assert len(test_refs["B"]) >= 1, f"Expected at least 1 test under 'B', got {test_refs['B']}"
+        assert any("test_output" in tid for tid in test_refs["B"])

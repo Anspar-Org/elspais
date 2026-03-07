@@ -379,7 +379,7 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
         if preset.include_assertions:
             node_dict["assertions"] = data["assertions"]
         if preset.include_test_refs:
-            node_dict["test_refs"] = data["test_refs"]
+            node_dict["test_refs"] = data["test_refs_grouped"]
 
         yield json.dumps(node_dict, indent=2)
     yield "]"
