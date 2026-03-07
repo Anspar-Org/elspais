@@ -244,7 +244,11 @@ def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> It
 
 
 def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
-    """Generate CSV. Streams one node at a time."""
+    """Generate CSV. Streams one node at a time.
+
+    When test refs are included, adds a Kind column (first) and Assertion/Test Ref
+    columns (last). Each test ref gets its own TEST row after its parent REQ row.
+    """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
@@ -256,25 +260,42 @@ def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterato
     # Build header
     col_headers = _column_headers()
     header_names = [col_headers.get(c, c.title()) for c in preset.columns]
-    extra_columns = []
-    if preset.include_assertions:
-        extra_columns.append("Assertions")
-    if preset.include_test_refs:
-        extra_columns.append("Test Refs")
 
-    yield ",".join(header_names + extra_columns)
+    extra_prefix = []
+    extra_suffix = []
+    if preset.include_test_refs:
+        extra_prefix.append("Kind")
+        extra_suffix.extend(["Assertion", "Test Ref"])
+    if preset.include_assertions:
+        extra_suffix.insert(0, "Assertions")
+
+    yield ",".join(extra_prefix + header_names + extra_suffix)
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         data = _get_node_data(node, graph)
         row_values = [escape(v) for v in _format_row(data, preset.columns)]
 
+        # Build REQ row
+        req_prefix = ["REQ"] if preset.include_test_refs else []
+        req_suffix = []
         if preset.include_assertions:
             assertions_str = "; ".join(f"{a['label']}: {a['text']}" for a in data["assertions"])
-            row_values.append(escape(assertions_str))
+            req_suffix.append(escape(assertions_str))
         if preset.include_test_refs:
-            row_values.append(escape(";".join(data["test_refs"])))
+            req_suffix.extend(["", ""])  # Empty Assertion and Test Ref columns for REQ row
 
-        yield ",".join(row_values)
+        yield ",".join(req_prefix + row_values + req_suffix)
+
+        # Emit TEST child rows
+        if preset.include_test_refs:
+            grouped = data["test_refs_grouped"]
+            empty_cols = [""] * len(preset.columns)
+            empty_assertions = [""] if preset.include_assertions else []
+            for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                if key not in grouped:
+                    continue
+                for ref in grouped[key]:
+                    yield ",".join(["TEST"] + empty_cols + empty_assertions + [key, escape(ref)])
 
 
 def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:

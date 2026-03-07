@@ -658,3 +658,169 @@ patterns = ["test_*.py"]
         # 'B' should have test_output refs
         assert len(test_refs["B"]) >= 1, f"Expected at least 1 test under 'B', got {test_refs['B']}"
         assert any("test_output" in tid for tid in test_refs["B"])
+
+
+class TestCsvGroupedRefs:
+    """Integration tests for grouped test refs in format_csv() output."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        """Create a project with spec, tests, and config."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            """# REQ-p00001: Grouped Refs Requirement
+
+**Level**: PRD | **Status**: Active
+
+**Purpose:** A requirement to test grouped refs.
+
+## Assertions
+
+A. The system SHALL validate input.
+B. The system SHALL produce output.
+C. The system SHALL log events.
+
+*End* *Grouped Refs Requirement* | **Hash**: abcd1234
+"""
+        )
+
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+
+        # Test targeting assertion A
+        (test_dir / "test_input_validation.py").write_text(
+            """# Validates: REQ-p00001-A
+def test_REQ_p00001_A_validates_input():
+    pass
+"""
+        )
+
+        # Test targeting assertion B
+        (test_dir / "test_output.py").write_text(
+            """# Validates: REQ-p00001-B
+def test_REQ_p00001_B_produces_output():
+    pass
+"""
+        )
+
+        # Whole-requirement test (no assertion)
+        (test_dir / "test_whole_req.py").write_text(
+            """# Validates: REQ-p00001
+def test_REQ_p00001_general():
+    pass
+"""
+        )
+
+        # Multi-target test (A and C)
+        (test_dir / "test_multi_target.py").write_text(
+            """# Validates: REQ-p00001-A, REQ-p00001-C
+def test_REQ_p00001_A_and_C():
+    pass
+"""
+        )
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """[project]
+name = "test-csv-grouped-refs"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[references]
+enabled = true
+
+[references.defaults]
+multi_assertion_separator = "+"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+"""
+        )
+
+        return tmp_path
+
+    def _build_and_format_csv(self, project_dir: Path, include_test_refs: bool = True) -> list[str]:
+        """Build graph and return CSV output as a list of lines."""
+        from elspais.commands.trace import ReportPreset, format_csv
+        from elspais.graph.factory import build_graph
+
+        config_path = project_dir / ".elspais.toml"
+        spec_dir = project_dir / "spec"
+
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=config_path,
+            repo_root=project_dir,
+            scan_code=False,
+            scan_tests=True,
+            scan_sponsors=False,
+        )
+
+        preset = ReportPreset(
+            name="test",
+            columns=["id", "title", "level", "status"],
+            include_test_refs=include_test_refs,
+        )
+        return list(format_csv(graph, preset))
+
+    def test_csv_has_kind_column(self, project_dir: Path):
+        """CSV header starts with 'Kind,' when test refs enabled."""
+        lines = self._build_and_format_csv(project_dir, include_test_refs=True)
+        header = lines[0]
+        assert header.startswith("Kind,"), f"Expected header to start with 'Kind,', got: {header}"
+
+    def test_csv_req_row_kind(self, project_dir: Path):
+        """Requirement rows have Kind=REQ."""
+        lines = self._build_and_format_csv(project_dir, include_test_refs=True)
+        req_rows = [line for line in lines[1:] if line.startswith("REQ,")]
+        assert len(req_rows) >= 1, f"Expected at least one REQ row, got lines: {lines}"
+
+    def test_csv_test_rows_follow_req(self, project_dir: Path):
+        """TEST rows follow their parent REQ row."""
+        lines = self._build_and_format_csv(project_dir, include_test_refs=True)
+        req_idx = None
+        for i, line in enumerate(lines):
+            if line.startswith("REQ,"):
+                req_idx = i
+                break
+        assert req_idx is not None, "No REQ row found"
+        test_rows = [i for i, line in enumerate(lines) if line.startswith("TEST,")]
+        assert len(test_rows) >= 1, f"Expected TEST rows, got lines: {lines}"
+        for tidx in test_rows:
+            assert tidx > req_idx, f"TEST row at {tidx} should come after REQ row at {req_idx}"
+
+    def test_csv_test_row_has_assertion_label(self, project_dir: Path):
+        """TEST rows include assertion label (*, A, B, etc.)."""
+        lines = self._build_and_format_csv(project_dir, include_test_refs=True)
+        test_rows = [line for line in lines if line.startswith("TEST,")]
+        assert len(test_rows) >= 1, "Expected TEST rows"
+        labels_found = set()
+        for row in test_rows:
+            parts = row.split(",")
+            # Assertion label is second-to-last column
+            label = parts[-2]
+            labels_found.add(label)
+        assert "*" in labels_found, f"Expected '*' label in TEST rows, got labels: {labels_found}"
+        assert "A" in labels_found, f"Expected 'A' label in TEST rows, got labels: {labels_found}"
+
+    def test_csv_no_kind_column_without_test_refs(self, project_dir: Path):
+        """Kind column NOT added when test refs not included."""
+        lines = self._build_and_format_csv(project_dir, include_test_refs=False)
+        header = lines[0]
+        assert not header.startswith(
+            "Kind,"
+        ), f"Header should not start with 'Kind,' when test refs disabled, got: {header}"
+        for line in lines[1:]:
+            assert not line.startswith("REQ,"), f"No REQ kind expected without test refs: {line}"
+            assert not line.startswith("TEST,"), f"No TEST kind expected without test refs: {line}"
