@@ -54,16 +54,10 @@ def run(args: argparse.Namespace) -> int:
     )
 
     fmt = getattr(args, "format", "text") or "text"
-    output_path = getattr(args, "output", None)
 
     data = _collect_coverage(graph)
     content = _render(data, fmt)
-
-    if output_path:
-        with open(output_path, "w") as f:
-            f.write(content)
-    else:
-        sys.stdout.write(content)
+    sys.stdout.write(content)
 
     return 0
 

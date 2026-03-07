@@ -242,7 +242,7 @@ class TestHealthCommand:
             spec_only=False,
             code_only=False,
             tests_only=False,
-            json=True,
+            format="json",
             verbose=False,
         )
 
@@ -271,7 +271,7 @@ class TestHealthCommand:
             spec_only=False,
             code_only=False,
             tests_only=False,
-            json=True,
+            format="json",
             verbose=False,
         )
 
@@ -349,7 +349,7 @@ prd = []
             spec_only=False,
             code_only=False,
             tests_only=False,
-            json=True,
+            format="json",
             verbose=False,
         )
 

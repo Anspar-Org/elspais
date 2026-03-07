@@ -43,6 +43,16 @@ def create_parser() -> argparse.ArgumentParser:
     - commands/init.py       (generated .elspais.toml templates)
     - Shell completion        (if new subcommands/args)
     """
+    # Shared parent parser for --output flag (inherited by all output commands)
+    output_parent = argparse.ArgumentParser(add_help=False)
+    output_parent.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="Write output to file instead of stdout",
+        metavar="PATH",
+    )
+
     parser = argparse.ArgumentParser(
         prog="elspais",
         description="Requirements validation and traceability tools (L-Space)",
@@ -52,8 +62,8 @@ Examples:
   elspais health                # Check project health (warnings/errors)
   elspais coverage              # Show requirement coverage report
   elspais trace --format html   # Generate HTML traceability matrix
-  elspais trace --view          # Interactive HTML view
   elspais viewer                # Start interactive viewer server
+  elspais viewer --static       # Generate interactive HTML file
   elspais health coverage trace # Compose multiple report sections
   elspais changed               # Show uncommitted spec changes
   elspais fix                   # Auto-fix hashes and formatting
@@ -111,6 +121,7 @@ For detailed command help: elspais <command> --help
     health_parser = subparsers.add_parser(
         "health",
         help="Check repository and configuration health",
+        parents=[output_parent],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -119,7 +130,7 @@ Examples:
   elspais health --spec       # Check spec files only
   elspais health --code       # Check code references only
   elspais health --tests      # Check test mappings only
-  elspais health -j           # Output JSON for tooling
+  elspais health --format json # Output JSON for tooling
   elspais health -v           # Verbose output with details
 
 Checks performed:
@@ -160,12 +171,6 @@ Checks performed:
         help="Output format (default: text)",
     )
     health_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON (shorthand for --format json)",
-    )
-    health_parser.add_argument(
         "--lenient",
         action="store_true",
         help="Allow warnings without affecting exit code",
@@ -180,12 +185,13 @@ Checks performed:
     # doctor command
     doctor_parser = subparsers.add_parser(
         "doctor",
+        parents=[output_parent],
         help="Diagnose environment and installation health",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   elspais doctor              # Check your elspais setup
-  elspais doctor -j           # Output as JSON
+  elspais doctor --format json # Output as JSON
   elspais doctor -v           # Verbose with details
 
 Checks performed:
@@ -194,69 +200,23 @@ Checks performed:
 """,
     )
     doctor_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # trace command
     trace_parser = subparsers.add_parser(
         "trace",
+        parents=[output_parent],
         help="Generate traceability matrix",
     )
     trace_parser.add_argument(
         "--format",
-        choices=["text", "markdown", "html", "json", "csv", "both"],
-        default="both",
-        help="Output format: text, markdown, html, json, csv, or both (markdown + csv)",
-    )
-    trace_parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output file path",
-        metavar="PATH",
-    )
-    # trace-view enhanced options (requires elspais[trace-view])
-    # --view (static HTML) and --edit-mode/--server (live server) are mutually exclusive
-    trace_mode_group = trace_parser.add_mutually_exclusive_group()
-    trace_mode_group.add_argument(
-        "--view",
-        action="store_true",
-        help="Generate interactive HTML traceability view (requires trace-view extra)",
-    )
-    trace_mode_group.add_argument(
-        "--edit-mode",
-        action="store_true",
-        help="Start live server with in-browser editing (requires trace-review extra)",
-    )
-    trace_mode_group.add_argument(
-        "--review-mode",
-        action="store_true",
-        help="Enable collaborative review with comments and flags",
-    )
-    trace_mode_group.add_argument(
-        "--server",
-        action="store_true",
-        help="Start live server without opening browser (requires trace-review extra)",
-    )
-    trace_parser.add_argument(
-        "--embed-content",
-        action="store_true",
-        help="Embed full requirement markdown in HTML for offline viewing",
-    )
-    trace_parser.add_argument(
-        "--path",
-        type=Path,
-        help="Path to repository root (default: auto-detect from cwd)",
-        metavar="DIR",
-    )
-    # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
-    # Graph-based trace options
-    trace_parser.add_argument(
-        "--graph-json",
-        action="store_true",
-        help="Output graph structure as JSON",
+        choices=["text", "markdown", "html", "json", "csv"],
+        default="markdown",
+        help="Output format (default: markdown)",
     )
     trace_parser.add_argument(
         "--preset",
@@ -281,32 +241,51 @@ Checks performed:
         help="Show test references in detail rows",
     )
 
-    # viewer command — shorthand for trace --edit-mode
+    # viewer command — interactive traceability viewer
     viewer_parser = subparsers.add_parser(
         "viewer",
-        help="Start interactive viewer server (requires trace-review extra)",
+        parents=[output_parent],
+        help="Interactive traceability viewer (live server or static HTML)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Start the interactive traceability viewer in your browser.
+Interactive traceability viewer with search, filtering, and editing.
 
 Examples:
-  elspais viewer                  # Start server and open browser
-  elspais viewer --server         # Start server without opening browser
-  elspais viewer --path /my/repo  # Specify repository root
-
-This is equivalent to: elspais trace --edit-mode
+  elspais viewer                          # Start server and open browser
+  elspais viewer --server                 # Start server without opening browser
+  elspais viewer --static                 # Generate interactive HTML file
+  elspais viewer --static --embed-content # HTML with embedded content (offline)
+  elspais viewer --path /my/repo          # Specify repository root
 """,
     )
-    viewer_parser.add_argument(
+    viewer_mode_group = viewer_parser.add_mutually_exclusive_group()
+    viewer_mode_group.add_argument(
         "--server",
         action="store_true",
         help="Start server without opening browser",
+    )
+    viewer_mode_group.add_argument(
+        "--static",
+        action="store_true",
+        help="Generate interactive HTML file instead of starting server",
+    )
+    viewer_parser.add_argument(
+        "--embed-content",
+        action="store_true",
+        help="Embed full requirement content in HTML for offline viewing",
     )
     viewer_parser.add_argument(
         "--path",
         type=Path,
         help="Path to repository root (default: auto-detect from cwd)",
         metavar="DIR",
+    )
+
+    # graph command — export graph structure as JSON
+    subparsers.add_parser(
+        "graph",
+        parents=[output_parent],
+        help="Export the traceability graph structure as JSON",
     )
 
     # fix command
@@ -372,6 +351,7 @@ Examples:
     # coverage command
     coverage_parser = subparsers.add_parser(
         "coverage",
+        parents=[output_parent],
         help="Coverage report (implemented, validated, passing)",
     )
     coverage_parser.add_argument(
@@ -380,17 +360,11 @@ Examples:
         default="text",
         help="Output format (default: text)",
     )
-    coverage_parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        help="Output file path",
-        metavar="PATH",
-    )
 
     # changed command
     changed_parser = subparsers.add_parser(
         "changed",
+        parents=[output_parent],
         help="Detect git changes to spec files",
     )
     changed_parser.add_argument(
@@ -400,10 +374,10 @@ Examples:
         metavar="BRANCH",
     )
     changed_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
     changed_parser.add_argument(
         "-a",
@@ -580,6 +554,7 @@ Full Documentation:
     # config show
     config_show = config_subparsers.add_parser(
         "show",
+        parents=[output_parent],
         help="Show current configuration",
     )
     config_show.add_argument(
@@ -588,15 +563,16 @@ Full Documentation:
         metavar="SECTION",
     )
     config_show.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # config get
     config_get = config_subparsers.add_parser(
         "get",
+        parents=[output_parent],
         help="Get a configuration value",
     )
     config_get.add_argument(
@@ -604,10 +580,10 @@ Full Documentation:
         help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
     )
     config_get.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # config set
@@ -853,6 +829,7 @@ Prerequisites:
 """,
     )
     pdf_parser.add_argument(
+        "-o",
         "--output",
         type=Path,
         default=Path("spec-output.pdf"),
@@ -1178,6 +1155,13 @@ def main(argv: list[str] | None = None) -> int:
     # Store canonical_root on args for commands to use
     args.canonical_root = canonical_root
 
+    # Global --output: redirect stdout to file
+    output_file = None
+    output_path = getattr(args, "output", None)
+    if output_path and args.command not in {"pdf"}:
+        output_file = open(output_path, "w")  # noqa: SIM115
+        sys.stdout = output_file
+
     try:
         # Dispatch to command handlers
         if args.command == "health":
@@ -1188,6 +1172,8 @@ def main(argv: list[str] | None = None) -> int:
             return trace.run(args)
         elif args.command == "viewer":
             return viewer.run(args)
+        elif args.command == "graph":
+            return trace.run_graph(args)
         elif args.command == "fix":
             return fix_cmd.run(args)
         elif args.command == "index":
@@ -1242,6 +1228,12 @@ def main(argv: list[str] | None = None) -> int:
             raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    finally:
+        if output_file:
+            sys.stdout = sys.__stdout__
+            output_file.close()
+            if not getattr(args, "quiet", False):
+                print(f"Generated: {output_path}", file=sys.stderr)
 
 
 def docs_command(args: argparse.Namespace) -> int:

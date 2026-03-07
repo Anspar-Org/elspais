@@ -31,7 +31,6 @@ import json
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -418,19 +417,6 @@ def run(args: argparse.Namespace) -> int:
 
     Uses graph factory to build TraceGraph, then streams output in requested format.
     """
-    # Handle --review-mode (still not implemented)
-    if getattr(args, "review_mode", False):
-        print("Error: --review-mode not yet implemented", file=sys.stderr)
-        return 1
-
-    # Handle --server and --edit-mode (delegate to viewer module)
-    want_server = getattr(args, "server", False)
-    want_edit = getattr(args, "edit_mode", False)
-    if want_server or want_edit:
-        from elspais.commands.viewer import _run_server
-
-        return _run_server(args, open_browser=want_edit)
-
     # Implements: REQ-d00084-B+C
     # Parse --preset and apply independent detail flags
     preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
@@ -453,76 +439,17 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
-    explicit_path = getattr(args, "path", None)
-    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
-        repo_root=repo_root,
         canonical_root=canonical_root,
     )
 
-    # Handle --view mode (interactive HTML)
-    if getattr(args, "view", False):
-        try:
-            # Get absolute base path for VS Code links
-            base_path = str(repo_root)
-            content = format_view(graph, getattr(args, "embed_content", False), base_path=base_path)
-        except ImportError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-        output_path = args.output or Path("traceability_view.html")
-        Path(output_path).write_text(content, encoding="utf-8")
-
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {output_path}", file=sys.stderr)
-        return 0
-
     # Implements: REQ-d00084-A
-    # Handle --graph-json mode
-    if getattr(args, "graph_json", False):
-        from elspais.graph.annotators import annotate_graph_git_state
-        from elspais.graph.serialize import serialize_graph
-
-        annotate_graph_git_state(graph)
-        output = json.dumps(serialize_graph(graph), indent=2)
-        if args.output:
-            Path(args.output).write_text(output, encoding="utf-8")
-            if not getattr(args, "quiet", False):
-                print(f"Generated: {args.output}", file=sys.stderr)
-        else:
-            print(output)
-        return 0
-
     # Select formatter based on format
     fmt = getattr(args, "format", "markdown")
 
-    # Handle legacy "both" format
-    if fmt == "both":
-        # Generate both markdown and csv
-        output_base = args.output or Path("traceability")
-        if isinstance(output_base, str):
-            output_base = Path(output_base)
-
-        md_path = output_base.with_suffix(".md")
-        csv_path = output_base.with_suffix(".csv")
-
-        with open(md_path, "w", encoding="utf-8") as f:
-            for line in format_markdown(graph, preset):
-                f.write(line + "\n")
-
-        with open(csv_path, "w", encoding="utf-8") as f:
-            for line in format_csv(graph, preset):
-                f.write(line + "\n")
-
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {md_path}", file=sys.stderr)
-            print(f"Generated: {csv_path}", file=sys.stderr)
-        return 0
-
-    # Single format output
     formatters = {
         "text": format_markdown,
         "markdown": format_markdown,
@@ -531,22 +458,30 @@ def run(args: argparse.Namespace) -> int:
         "json": format_json,
     }
 
-    if fmt not in formatters:
-        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
-        return 1
+    for line in formatters[fmt](graph, preset):
+        print(line)
 
-    line_generator = formatters[fmt](graph, preset)
-    output_path = args.output
+    return 0
 
-    # Stream output line by line
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            for line in line_generator:
-                f.write(line + "\n")
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {output_path}", file=sys.stderr)
-    else:
-        for line in line_generator:
-            print(line)
+
+# Implements: REQ-d00084-A
+def run_graph(args: argparse.Namespace) -> int:
+    """Export the full traceability graph structure as JSON."""
+    from elspais.graph.annotators import annotate_graph_git_state
+    from elspais.graph.factory import build_graph
+    from elspais.graph.serialize import serialize_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        canonical_root=canonical_root,
+    )
+
+    annotate_graph_git_state(graph)
+    print(json.dumps(serialize_graph(graph), indent=2))
 
     return 0

@@ -1012,79 +1012,69 @@ class TestTreeDataJourneys:
 
 
 class TestCLIWiring:
-    """Validates REQ-d00010-A: CLI --server and --edit-mode wiring."""
+    """Validates REQ-d00010-A: viewer command wiring."""
 
-    def test_REQ_d00010_A_review_mode_still_not_implemented(self):
-        """--review-mode still returns error code 1."""
-        import argparse
-
-        from elspais.commands.trace import run
-
-        args = argparse.Namespace(
-            review_mode=True,
-            edit_mode=False,
-            server=False,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
-            spec_dir=None,
-            config=None,
-            quiet=True,
-            embed_content=False,
-        )
-        result = run(args)
-        assert result == 1
-
-    def test_REQ_d00010_A_server_flag_calls_run_server(self):
-        """--server flag delegates to _run_server."""
+    def test_REQ_d00010_A_viewer_default_calls_run_server_with_browser(self):
+        """Default viewer delegates to _run_server with open_browser=True."""
         import argparse
         from unittest.mock import patch
 
-        from elspais.commands.trace import run
+        from elspais.commands.viewer import run
 
         args = argparse.Namespace(
-            review_mode=False,
-            edit_mode=False,
-            server=True,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
+            server=False,
+            static=False,
             spec_dir=None,
             config=None,
             quiet=True,
-            embed_content=False,
+            path=None,
+            canonical_root=None,
+        )
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
+            result = run(args)
+            assert result == 0
+            mock.assert_called_once_with(args, open_browser=True)
+
+    def test_REQ_d00010_A_viewer_server_flag_no_browser(self):
+        """--server flag delegates to _run_server with open_browser=False."""
+        import argparse
+        from unittest.mock import patch
+
+        from elspais.commands.viewer import run
+
+        args = argparse.Namespace(
+            server=True,
+            static=False,
+            spec_dir=None,
+            config=None,
+            quiet=True,
+            path=None,
+            canonical_root=None,
         )
         with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
 
-    def test_REQ_d00010_A_edit_mode_flag_calls_run_server_with_browser(self):
-        """--edit-mode flag delegates to _run_server with open_browser=True."""
+    def test_REQ_d00010_A_viewer_static_generates_html(self):
+        """--static flag generates an HTML file."""
         import argparse
         from unittest.mock import patch
 
-        from elspais.commands.trace import run
+        from elspais.commands.viewer import run
 
         args = argparse.Namespace(
-            review_mode=False,
-            edit_mode=True,
             server=False,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
+            static=True,
             spec_dir=None,
             config=None,
             quiet=True,
+            path=None,
+            canonical_root=None,
             embed_content=False,
+            output=None,
         )
-        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_static", return_value=0) as mock:
             result = run(args)
             assert result == 0
-            mock.assert_called_once_with(args, open_browser=True)
+            mock.assert_called_once_with(args)

@@ -50,7 +50,7 @@ def run(args: argparse.Namespace) -> int:
         spec_dir = spec_dir[0] if spec_dir else "spec"
 
     base_branch = getattr(args, "base_branch", None) or "main"
-    json_output = getattr(args, "json", False)
+    json_output = getattr(args, "format", "text") == "json"
     show_all = getattr(args, "all", False)
     quiet = getattr(args, "quiet", False)
 

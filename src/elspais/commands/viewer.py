@@ -226,10 +226,47 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     return 0
 
 
+def _run_static(args: argparse.Namespace) -> int:
+    """Generate a static interactive HTML file."""
+    from pathlib import Path
+
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    explicit_path = getattr(args, "path", None)
+    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
+    canonical_root = getattr(args, "canonical_root", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        repo_root=repo_root,
+        canonical_root=canonical_root,
+    )
+
+    try:
+        from elspais.commands.trace import format_view
+
+        content = format_view(
+            graph,
+            getattr(args, "embed_content", False),
+            base_path=str(repo_root),
+        )
+    except ImportError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    print(content)
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the viewer command.
 
-    Starts the Flask server, opening the browser unless --server is passed.
+    Generates static HTML (--static) or starts the Flask server.
     """
+    if getattr(args, "static", False):
+        return _run_static(args)
     open_browser = not getattr(args, "server", False)
     return _run_server(args, open_browser=open_browser)

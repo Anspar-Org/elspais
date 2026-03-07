@@ -929,9 +929,6 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     quiet = getattr(args, "quiet", False)
     verbose = getattr(args, "verbose", False)
 
-    if getattr(args, "json", False):
-        fmt = "json"
-
     if fmt == "json":
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
