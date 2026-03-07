@@ -1,16 +1,19 @@
 # VALIDATION
 
-## Running Validation
+## Running Health Checks
 
-  $ elspais validate                   # Check all rules
-  $ elspais validate -j                # Output JSON for tooling
-  $ elspais validate -v                # Verbose output
+  $ elspais health                     # Check all rules
+  $ elspais health -j                  # Output JSON for tooling
+  $ elspais health -v                  # Verbose output
 
 ## Command Options
 
-  `-j, --json`          Output requirements as JSON
-  `--export`            Export requirements as JSON dict keyed by ID
-  `--mode {core,combined}`  core: only local specs, combined: include associated repos
+  `--config`       Run configuration checks only
+  `--spec`         Run spec file checks only
+  `--code`         Run code reference checks only
+  `--tests`        Run test mapping checks only
+  `-j, --json`     Output as JSON
+  `-v, --verbose`  Show additional details
 
 ## Auto-Fixing Issues
 
@@ -73,7 +76,7 @@ For expected issues, add inline suppression:
 
 For tooling and CI integration:
 
-  $ elspais validate -j > requirements.json
+  $ elspais health -j > health-report.json
 
 ## CI Integration
 
@@ -84,5 +87,5 @@ Add to your CI pipeline:
 steps:
   - uses: actions/checkout@v4
   - run: pip install elspais
-  - run: elspais validate
+  - run: elspais health
 ```

@@ -82,7 +82,7 @@ class TestDocsContent:
         assert content is not None
         assert "Initialize" in content, "quickstart should mention initialization"
         assert "elspais init" in content, "quickstart should show init command"
-        assert "elspais validate" in content, "quickstart should show validate command"
+        assert "elspais health" in content, "quickstart should show health command"
 
     def test_format_has_structure_section(self):
         """format.md should explain requirement structure."""
@@ -112,7 +112,7 @@ class TestDocsContent:
         content = load_topic("commands")
         assert content is not None
         # Check for key commands
-        for cmd in ["validate", "fix", "trace", "edit", "config", "init"]:
+        for cmd in ["health", "fix", "trace", "edit", "config", "init"]:
             assert f"## {cmd}" in content, f"commands should document {cmd}"
         # Check for global options
         assert "Global Options" in content, "commands should have global options"

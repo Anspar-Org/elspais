@@ -32,7 +32,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Canonical Root (Worktree Support)**: `find_canonical_root()` detects git worktrees and resolves to the main repo root via `git rev-parse --git-common-dir`. Cross-repo associate paths resolve from the canonical root, not the worktree root. Threaded through CLI, all commands, MCP server, and review server.
 **Coverage Source Tracking**: `RollupMetrics` tracks where coverage originates via `direct_covered`, `explicit_covered`, `inferred_covered`:
 **Multi-Assertion Syntax**: `Implements: REQ-p00001-A+B+C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`. The separator (`+` by default) is configured via `multi_assertion_separator` in `[references.defaults]`.
-**Associated Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
+**Associated Spec Scanning**: The `health` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
 **Optional Dependencies**: Advanced features are available via pip extras:
 
 - `elspais[trace-view]`: HTML generation with Jinja2

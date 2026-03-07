@@ -56,5 +56,4 @@ This gives precise traceability coverage.
 
 ## Viewing the Hierarchy
 
-  $ elspais analyze hierarchy  # ASCII tree view
-  $ elspais trace --view       # Interactive HTML
+  $ elspais trace --view       # Interactive HTML tree view

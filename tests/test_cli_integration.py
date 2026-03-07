@@ -48,8 +48,8 @@ class TestCLIHelp:
         assert result.returncode == 0
         assert "elspais" in result.stdout
 
-    def test_REQ_p00001_A_validate_help(self):
-        result = _run_elspais("validate", "--help")
+    def test_REQ_p00001_A_health_help(self):
+        result = _run_elspais("health", "--help")
         assert result.returncode == 0
 
     def test_REQ_p00080_A_pdf_help(self):
@@ -58,11 +58,11 @@ class TestCLIHelp:
         assert "pandoc" in result.stdout.lower() or "pandoc" in result.stderr.lower()
 
 
-class TestValidateCommand:
-    """Test validate command runs end-to-end."""
+class TestHealthCommand:
+    """Test health command runs end-to-end."""
 
-    def test_REQ_p00001_A_validate_core(self):
-        result = _run_elspais("validate", "--mode", "core")
+    def test_REQ_p00001_A_health_core(self):
+        result = _run_elspais("health", "--lenient")
         assert result.returncode == 0
 
     def test_REQ_o00066_C_index_validate(self):

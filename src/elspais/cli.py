@@ -12,7 +12,6 @@ from pathlib import Path
 
 from elspais import __version__
 from elspais.commands import (
-    analyze,
     associate_cmd,
     changed,
     completion,
@@ -31,7 +30,6 @@ from elspais.commands import (
     reformat_cmd,
     rules_cmd,
     trace,
-    validate,
     viewer,
 )
 
@@ -51,14 +49,14 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  elspais validate              # Validate all requirements
-  elspais fix                   # Auto-fix hashes and formatting
-  elspais fix --dry-run         # Preview fixes without applying
+  elspais health                # Check project health (warnings/errors)
+  elspais coverage              # Show requirement coverage report
   elspais trace --format html   # Generate HTML traceability matrix
   elspais trace --view          # Interactive HTML view
   elspais viewer                # Start interactive viewer server
+  elspais health coverage trace # Compose multiple report sections
   elspais changed               # Show uncommitted spec changes
-  elspais analyze hierarchy     # Show requirement hierarchy tree
+  elspais fix                   # Auto-fix hashes and formatting
 
 Configuration:
   elspais init                  # Create .elspais.toml in current directory
@@ -108,43 +106,6 @@ For detailed command help: elspais <command> --help
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # validate command
-    validate_parser = subparsers.add_parser(
-        "validate",
-        help="Validate requirements format, links, and hashes",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais validate                      # Validate all requirements
-  elspais validate -j                   # Output JSON for tooling
-  elspais validate --mode core          # Exclude associated repo specs
-  elspais validate --mode associate     # Local specs only, suppress cross-repo warnings
-
-To auto-fix issues, use: elspais fix
-""",
-    )
-    validate_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output validation results as JSON",
-    )
-    validate_parser.add_argument(
-        "--export",
-        action="store_true",
-        help="Export requirements as JSON dict keyed by ID",
-    )
-    validate_parser.add_argument(
-        "--mode",
-        choices=["core", "combined", "associate"],
-        default="combined",
-        help=(
-            "core: only local specs, associate: local only"
-            " (cross-repo warnings suppressed),"
-            " combined: include associated repos (default)"
-        ),
-    )
 
     # health command
     health_parser = subparsers.add_parser(
@@ -425,26 +386,6 @@ Examples:
         type=Path,
         help="Output file path",
         metavar="PATH",
-    )
-
-    # analyze command
-    analyze_parser = subparsers.add_parser(
-        "analyze",
-        help="Analyze requirement hierarchy (hierarchy, orphans, coverage)",
-    )
-    analyze_subparsers = analyze_parser.add_subparsers(dest="analyze_action")
-
-    analyze_subparsers.add_parser(
-        "hierarchy",
-        help="Show requirement hierarchy tree",
-    )
-    analyze_subparsers.add_parser(
-        "orphans",
-        help="Find requirements with no parent (missing or invalid Implements)",
-    )
-    analyze_subparsers.add_parser(
-        "coverage",
-        help="Implementation coverage report",
     )
 
     # changed command
@@ -1239,9 +1180,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         # Dispatch to command handlers
-        if args.command == "validate":
-            return validate.run(args)
-        elif args.command == "health":
+        if args.command == "health":
             return health.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
@@ -1255,8 +1194,6 @@ def main(argv: list[str] | None = None) -> int:
             return index.run(args)
         elif args.command == "coverage":
             return coverage.run(args)
-        elif args.command == "analyze":
-            return analyze.run(args)
         elif args.command == "changed":
             return changed.run(args)
         elif args.command == "version":

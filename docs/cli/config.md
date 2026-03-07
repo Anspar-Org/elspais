@@ -18,7 +18,7 @@ when working from a worktree in a different directory.
 
 Use `-v` to see which roots were detected:
 
-  $ elspais validate -v
+  $ elspais health -v
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 
@@ -258,8 +258,8 @@ path = "../core"            # Path to core repository
 
 Any config key can be overridden via environment variables:
 
-  ELSPAIS_PATTERNS_PREFIX=MYREQ elspais validate
-  ELSPAIS_RULES_STRICT_MODE=true elspais validate
+  ELSPAIS_PATTERNS_PREFIX=MYREQ elspais health
+  ELSPAIS_RULES_STRICT_MODE=true elspais health
 
 **Conversion:**
   `ELSPAIS_PATTERNS_PREFIX` -> `patterns.prefix`

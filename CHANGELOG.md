@@ -2,6 +2,18 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.85.5] - 2026-03-06
+
+### Removed
+
+- **`analyze` command** — deleted entirely; hierarchy views available via `trace --view`, coverage via `coverage`
+- **`validate` CLI entry point** — removed subparser and dispatch; validation logic retained as library module for `fix` command
+
+### Changed
+
+- **CLI epilog** — updated examples to reference `health`, `coverage`, and composable reports
+- **docs/cli/** — updated 7 doc files to reference `health` instead of `validate`/`analyze`
+
 ## [0.85.4] - 2026-03-06
 
 ### Changed
