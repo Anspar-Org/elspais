@@ -357,10 +357,15 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
 
     Uses graph.orphaned_nodes() which returns all parentless nodes
     that have no meaningful (non-satellite) children.
+    Skips nodes whose broken references are all expected (expected-broken-links).
     """
     by_kind: dict[str, list[dict]] = {}
 
     for node in graph.orphaned_nodes():
+        # Skip nodes where all broken targets are expected
+        expected = node.get_metric("_expected_broken_targets")
+        if expected:
+            continue
         kind_name = node.kind.value
         if kind_name not in by_kind:
             by_kind[kind_name] = []
@@ -612,6 +617,10 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
                 break
 
         if not has_valid_parent:
+            # Skip nodes whose broken targets are all expected
+            expected = node.get_metric("_expected_broken_targets")
+            if expected:
+                continue
             unresolved.append(
                 {
                     "source": node.get_field("source_file", "unknown"),

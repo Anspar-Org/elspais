@@ -24,6 +24,13 @@ from elspais.utilities.reference_config import (
 if TYPE_CHECKING:
     from elspais.utilities.patterns import PatternConfig
 
+# Pattern for expected-broken-links marker (shared with TestScanner)
+_EXPECTED_BROKEN_LINKS_RE = re.compile(
+    r"(?:#|//|--|/\*|<!--)\s*elspais:\s*expected-broken-links\s+(\d+)",
+    re.IGNORECASE,
+)
+_MARKER_HEADER_LINES = 20
+
 
 # Implements: REQ-d00082-J
 class TestParser:
@@ -192,6 +199,14 @@ class TestParser:
         block_header_pattern = build_block_header_pattern(ref_config, "validates")
         block_ref_pattern = build_block_ref_pattern(pattern_config, ref_config)
 
+        # Detect expected-broken-links marker in file header
+        expected_broken_count = 0
+        for _ln, text in lines[:_MARKER_HEADER_LINES]:
+            m = _EXPECTED_BROKEN_LINKS_RE.search(text)
+            if m:
+                expected_broken_count = int(m.group(1))
+                break
+
         # Patterns for tracking function/class context
         func_pattern = re.compile(r"^(\s*)def\s+(test_\w+)\s*\(")
         class_pattern = re.compile(r"^(\s*)class\s+(Test\w*)\s*[:(]")
@@ -314,18 +329,21 @@ class TestParser:
                     validates.append(ref)
 
             if validates:
+                parsed_data: dict = {
+                    "validates": validates,
+                    "function_name": func_name,
+                    "class_name": class_name,
+                    "function_line": func_line,
+                    "file_default_validates": file_default_validates,
+                }
+                if expected_broken_count > 0:
+                    parsed_data["expected_broken_count"] = expected_broken_count
                 yield ParsedContent(
                     content_type="test_ref",
                     start_line=ln,
                     end_line=ln,
                     raw_text=text,
-                    parsed_data={
-                        "validates": validates,
-                        "function_name": func_name,
-                        "class_name": class_name,
-                        "function_line": func_line,
-                        "file_default_validates": file_default_validates,
-                    },
+                    parsed_data=parsed_data,
                 )
                 i += 1
                 continue

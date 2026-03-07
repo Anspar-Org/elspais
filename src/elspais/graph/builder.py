@@ -1854,6 +1854,9 @@ class GraphBuilder:
                     end_line=content.end_line,
                 ),
             )
+            expected_broken = data.get("expected_broken_count", 0)
+            if expected_broken > 0:
+                node.set_metric("_expected_broken_count", expected_broken)
             self._nodes[test_id] = node
             self._orphan_candidates.add(test_id)
 
@@ -2021,6 +2024,16 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                     )
                 )
+
+        # Populate _expected_broken_targets from nodes with the marker
+        for br in self._broken_references:
+            source = self._nodes.get(br.source_id)
+            if source and source.get_metric("_expected_broken_count"):
+                remaining = source.get_metric("_expected_broken_count")
+                targets = source.get_metric("_expected_broken_targets") or []
+                if len(targets) < remaining:
+                    targets.append(br.target_id)
+                    source.set_metric("_expected_broken_targets", targets)
 
         # Implements: REQ-d00071-A, REQ-d00071-B
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
