@@ -96,10 +96,10 @@ include = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "--tb=short --ignore=tests/_obsolete"
+addopts = "--tb=short --ignore=tests/_obsolete -m 'not e2e and not browser'"
 markers = [
-    "e2e: end-to-end tests requiring external tools (claude CLI)",
-    "browser: browser-based tests requiring Playwright",
+    "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
+    "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
 ]
 
 [tool.black]

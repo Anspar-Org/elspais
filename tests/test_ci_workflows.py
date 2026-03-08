@@ -149,6 +149,7 @@ class TestCommitMessageValidation:
 # --- act -l validation (workflow syntax) ---
 
 
+@pytest.mark.e2e
 @pytest.mark.skipif(
     not shutil.which("act"),
     reason="act not installed",

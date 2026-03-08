@@ -72,6 +72,18 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - **ALWAYS** use a sub-agent to write tests (unless you are the sub-agent)
 - **ALWAYS** update user-facing surfaces when adding/modifying CLI features: `docs/cli/*.md`, `docs/configuration.md`, `src/elspais/commands/init.py` templates, CLI help/epilog text, and shell completion
 
+## Testing
+
+**Test tiers** (configured in `pyproject.toml`):
+
+- `pytest` — runs unit/integration tests only (~12s). This is the default during development.
+- `pytest -m e2e` — runs e2e subprocess tests only (CLI commands, MCP protocol, CI workflows).
+- `pytest -m "e2e or browser"` — runs all slow tests.
+- `pytest -m ""` — runs everything (unit + e2e + browser). **Run before `git push`.**
+
+**Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
+**Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
+
 ## Master Plan Workflow
 
 **IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.

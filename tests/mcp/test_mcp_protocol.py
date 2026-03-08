@@ -14,10 +14,13 @@ import pytest
 pytest.importorskip("mcp")
 
 _ELSPAIS = shutil.which("elspais")
-pytestmark = pytest.mark.skipif(
-    _ELSPAIS is None,
-    reason="elspais CLI not found on PATH",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        _ELSPAIS is None,
+        reason="elspais CLI not found on PATH",
+    ),
+    pytest.mark.e2e,
+]
 
 
 def _send(proc, obj: dict) -> None:
