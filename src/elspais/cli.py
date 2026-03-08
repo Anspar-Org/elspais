@@ -278,7 +278,7 @@ Examples:
         "--port",
         type=int,
         default=None,
-        help="Port number for the server (default: 5000)",
+        help="Port number for the server (default: 5001)",
         metavar="PORT",
     )
     viewer_parser.add_argument(
