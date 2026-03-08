@@ -260,6 +260,13 @@ Examples:
         help="Embed full requirement content in HTML for offline viewing",
     )
     viewer_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Port number for the server (default: 5000)",
+        metavar="PORT",
+    )
+    viewer_parser.add_argument(
         "--path",
         type=Path,
         help="Path to repository root (default: auto-detect from cwd)",

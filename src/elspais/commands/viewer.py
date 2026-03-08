@@ -136,10 +136,10 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     app = create_app(repo_root=repo_root, graph=graph, config=config)
     app.config["ELSPAIS_DEBUG"] = getattr(args, "verbose", False)
 
-    port = 5000
+    port = getattr(args, "port", None) or 5000
     quiet = getattr(args, "quiet", False)
 
-    if _is_port_in_use(port):
+    if _is_port_in_use(port) and not getattr(args, "port", None):
         is_elspais = _is_elspais_server(port)
 
         if sys.stdin.isatty():
