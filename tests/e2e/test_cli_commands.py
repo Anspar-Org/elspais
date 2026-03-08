@@ -7,6 +7,7 @@ return codes, output format, and content.
 
 import json
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -197,6 +198,53 @@ class TestHealth:
 
     def test_REQ_p00013_B_health_spec_only_returns_zero(self):
         result = run_elspais("health", "--spec", "--lenient")
+        assert result.returncode == 0
+
+    def test_REQ_p00013_B_health_junit_produces_valid_xml(self):
+        result = run_elspais("health", "--format", "junit", "--lenient")
+        assert result.returncode == 0
+        root = ET.fromstring(result.stdout)
+        assert root.tag == "testsuites"
+
+    def test_REQ_p00013_B_health_junit_has_testsuites(self):
+        result = run_elspais("health", "--format", "junit", "--lenient")
+        assert result.returncode == 0
+        root = ET.fromstring(result.stdout)
+        suites = root.findall("testsuite")
+        assert len(suites) >= 1, "Expected at least one <testsuite> element"
+
+    def test_REQ_p00013_B_health_sarif_produces_valid_json(self):
+        result = run_elspais("health", "--format", "sarif", "--lenient")
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["version"] == "2.1.0"
+        assert "$schema" in data
+
+    def test_REQ_p00013_B_health_sarif_has_runs(self):
+        result = run_elspais("health", "--format", "sarif", "--lenient")
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert len(data["runs"]) == 1
+        assert data["runs"][0]["tool"]["driver"]["name"] == "elspais"
+
+    def test_REQ_p00013_B_health_junit_output_to_file(self, tmp_path):
+        out = tmp_path / "health.xml"
+        result = run_elspais("health", "--format", "junit", "--lenient", "-o", str(out))
+        assert result.returncode == 0
+        assert out.exists(), f"Expected {out} to be created"
+        root = ET.parse(str(out)).getroot()
+        assert root.tag == "testsuites"
+
+    def test_REQ_p00013_B_health_sarif_output_to_file(self, tmp_path):
+        out = tmp_path / "health.sarif"
+        result = run_elspais("health", "--format", "sarif", "--lenient", "-o", str(out))
+        assert result.returncode == 0
+        assert out.exists(), f"Expected {out} to be created"
+        data = json.loads(out.read_text())
+        assert data["version"] == "2.1.0"
+
+    def test_REQ_p00013_B_health_include_passing_details(self):
+        result = run_elspais("health", "--include-passing-details", "--lenient")
         assert result.returncode == 0
 
 

@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.97.0] - 2026-03-08
+
+### Added
+
+- **7 e2e subprocess tests** for JUnit/SARIF formats and `--include-passing-details` flag — validates XML/JSON output, file output via `-o`, and flag acceptance
+
 ## [0.96.0] - 2026-03-08
 
 ### Added
