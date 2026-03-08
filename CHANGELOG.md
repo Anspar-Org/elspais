@@ -2,7 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
-## [0.91.0] - 2026-03-07
+## [0.93.0] - 2026-03-07
+
+### Added
+
+- **`HealthFinding` dataclass** — per-finding detail model with `message`, `file_path`, `line`, `node_id`, and `related` fields; serialized in JSON `to_dict()` output; prerequisite for SARIF format support
+
+## [0.92.0] - 2026-03-07
 
 ### Added
 

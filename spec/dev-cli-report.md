@@ -22,6 +22,8 @@ F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary lin
 
 G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
 H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
+I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass instances, each with `message`, `file_path`, `line`, `node_id`, and `related` fields. The `to_dict()` serialization SHALL include findings. Existing renderers (text, markdown, JUnit) SHALL remain unchanged.
+J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
 ## Rationale
 

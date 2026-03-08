@@ -22,6 +22,27 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
 
 
+# Implements: REQ-d00085-I
+@dataclass
+class HealthFinding:
+    """Individual finding within a health check, with optional source location."""
+
+    message: str
+    file_path: str | None = None
+    line: int | None = None
+    node_id: str | None = None
+    related: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "message": self.message,
+            "file_path": self.file_path,
+            "line": self.line,
+            "node_id": self.node_id,
+            "related": self.related,
+        }
+
+
 @dataclass
 class HealthCheck:
     """Result of a single health check."""
@@ -32,6 +53,7 @@ class HealthCheck:
     category: str  # config, spec, code, tests
     severity: str = "error"  # error, warning, info
     details: dict[str, Any] = field(default_factory=dict)
+    findings: list[HealthFinding] = field(default_factory=list)
 
 
 @dataclass
@@ -85,6 +107,7 @@ class HealthReport:
                     "category": c.category,
                     "severity": c.severity,
                     "details": c.details,
+                    "findings": [f.to_dict() for f in c.findings],
                 }
                 for c in self.checks
             ],
