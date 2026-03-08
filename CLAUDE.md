@@ -67,15 +67,14 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 ## Workflow
 
-**See `WORKFLOW_STATE.md`** for the complete workflow checklist including documentation steps.
+**See `TASK_PROTOCOL.md`** for the complete workflow checklist including documentation steps.
 
-- **ALWAYS** use a sub-agent to write tests
-- **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
+- **ALWAYS** use a sub-agent to write tests (unless you are the sub-agent)
 - **ALWAYS** update user-facing surfaces when adding/modifying CLI features: `docs/cli/*.md`, `docs/configuration.md`, `src/elspais/commands/init.py` templates, CLI help/epilog text, and shell completion
 
 ## Master Plan Workflow
 
-**IMPORTANT**: After `/clear` or at the start of a new session, check `WORKFLOW_STATE.md` for queued issues.
+**IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
 
 **Commit Discipline**: Each phase should result in exactly one commit. This ensures:
 
