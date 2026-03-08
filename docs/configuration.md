@@ -381,6 +381,38 @@ pre_commit = true
 commit_msg = true
 
 #──────────────────────────────────────────────────────────────────────────────
+# CHANGELOG
+#──────────────────────────────────────────────────────────────────────────────
+
+[changelog]
+# Enforce changelog entries when Active requirement hashes change
+enforce = true
+
+# Author identity source: "gh" (GitHub CLI), "git" (git config)
+id_source = "gh"
+
+# Date format: "iso" (YYYY-MM-DD), "us" (MM/DD/YYYY), "eu" (DD/MM/YYYY)
+date_format = "iso"
+
+# Require a ticket or change-order reference in each entry
+require_change_order = false
+
+# Require a reason/description in each entry
+require_reason = true
+
+# Require author full name
+require_author_name = true
+
+# Require author identity (email or handle)
+require_author_id = true
+
+# Author ID format: "email" or "handle"
+author_id_format = "email"
+
+# Restrict allowed author IDs: "all" or a list of allowed values
+allowed_author_ids = "all"
+
+#──────────────────────────────────────────────────────────────────────────────
 # UNIFIED REFERENCE CONFIGURATION (v0.10.0+)
 # Used by: CodeParser, TestParser, JUnitXMLParser, PytestJSONParser
 #──────────────────────────────────────────────────────────────────────────────

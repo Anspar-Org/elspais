@@ -21,7 +21,6 @@ from elspais.commands import (
     example_cmd,
     fix_cmd,
     health,
-    index,
     init,
     install_cmd,
     link_suggest,
@@ -284,6 +283,7 @@ Examples:
   elspais fix                   # Fix all issues
   elspais fix --dry-run         # Preview fixes without applying
   elspais fix REQ-p00001        # Fix hash for a specific requirement
+  elspais fix -m "Clarify API"  # Fix with changelog reason (Active reqs)
 """,
     )
     fix_parser.add_argument(
@@ -297,6 +297,11 @@ Examples:
         help="Show what would be fixed without making changes",
     )
     fix_parser.add_argument(
+        "-m",
+        "--message",
+        help="Changelog reason for Active requirement hash updates",
+    )
+    fix_parser.add_argument(
         "--mode",
         choices=["core", "combined", "associate"],
         default="combined",
@@ -306,33 +311,6 @@ Examples:
             " combined: include associated repos (default)"
         ),
     )
-
-    # index command
-    _index_mode_kwargs = {
-        "choices": ["core", "combined", "associate"],
-        "default": "combined",
-        "help": (
-            "core: only local specs, associate: local only"
-            " (cross-repo warnings suppressed),"
-            " combined: include associated repos (default)"
-        ),
-    }
-    index_parser = subparsers.add_parser(
-        "index",
-        help="Manage INDEX.md file (validate, regenerate)",
-    )
-    index_subparsers = index_parser.add_subparsers(dest="index_action")
-
-    index_validate_parser = index_subparsers.add_parser(
-        "validate",
-        help="Validate INDEX.md accuracy",
-    )
-    index_validate_parser.add_argument("--mode", **_index_mode_kwargs)
-    index_regenerate_parser = index_subparsers.add_parser(
-        "regenerate",
-        help="Regenerate INDEX.md from scratch",
-    )
-    index_regenerate_parser.add_argument("--mode", **_index_mode_kwargs)
 
     # summary command
     summary_parser = subparsers.add_parser(
@@ -1156,8 +1134,7 @@ def main(argv: list[str] | None = None) -> int:
             return trace.run_graph(args)
         elif args.command == "fix":
             return fix_cmd.run(args)
-        elif args.command == "index":
-            return index.run(args)
+
         elif args.command == "summary":
             return summary.run(args)
         elif args.command == "changed":

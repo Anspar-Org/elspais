@@ -525,6 +525,128 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Check that Active requirements' changelog hashes match stored hashes."""
+    from elspais.graph import NodeKind
+
+    changelog_enforce = config.get("changelog.enforce", True)
+    if not changelog_enforce:
+        return HealthCheck(
+            name="spec.changelog_current",
+            passed=True,
+            message="Changelog enforcement disabled",
+            category="spec",
+            severity="info",
+        )
+
+    mismatches = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        if not changelog:
+            continue
+        # Most recent entry is first in the list
+        latest_hash = changelog[0].get("hash", "")
+        stored_hash = node.hash or ""
+        if latest_hash and stored_hash and latest_hash != stored_hash:
+            mismatches.append(
+                {
+                    "id": node.id,
+                    "stored": stored_hash,
+                    "changelog_hash": latest_hash,
+                }
+            )
+
+    if mismatches:
+        ids = [m["id"] for m in mismatches]
+        return HealthCheck(
+            name="spec.changelog_current",
+            passed=False,
+            message=(
+                f"{len(mismatches)} Active requirement(s) have stale"
+                f" changelog entries: {', '.join(ids[:5])}"
+            ),
+            category="spec",
+            severity="error",
+            details={"mismatches": mismatches},
+        )
+
+    return HealthCheck(
+        name="spec.changelog_current",
+        passed=True,
+        message="All Active requirement changelog entries are current",
+        category="spec",
+    )
+
+
+def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Validate changelog entry fields per config requirements."""
+    from elspais.graph import NodeKind
+
+    changelog_enforce = config.get("changelog.enforce", True)
+    if not changelog_enforce:
+        return HealthCheck(
+            name="spec.changelog_format",
+            passed=True,
+            message="Changelog enforcement disabled",
+            category="spec",
+            severity="info",
+        )
+
+    require_reason = config.get("changelog.require_reason", True)
+    require_author_name = config.get("changelog.require_author_name", True)
+    require_author_id = config.get("changelog.require_author_id", True)
+    require_change_order = config.get("changelog.require_change_order", False)
+
+    violations = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        for entry in changelog:
+            missing = []
+            if require_reason and (not entry.get("reason") or entry["reason"] == "-"):
+                missing.append("reason")
+            if require_author_name and (
+                not entry.get("author_name") or entry["author_name"] == "-"
+            ):
+                missing.append("author_name")
+            if require_author_id and (not entry.get("author_id") or entry["author_id"] == "-"):
+                missing.append("author_id")
+            if require_change_order and (
+                not entry.get("change_order") or entry["change_order"] == "-"
+            ):
+                missing.append("change_order")
+            if missing:
+                violations.append(
+                    {
+                        "id": node.id,
+                        "entry_date": entry.get("date", "?"),
+                        "missing_fields": missing,
+                    }
+                )
+
+    if violations:
+        return HealthCheck(
+            name="spec.changelog_format",
+            passed=False,
+            message=(f"{len(violations)} changelog entry/entries" f" missing required fields"),
+            category="spec",
+            severity="error",
+            details={"violations": violations[:10]},
+        )
+
+    return HealthCheck(
+        name="spec.changelog_format",
+        passed=True,
+        message="All changelog entries have required fields",
+        category="spec",
+    )
+
+
 def check_spec_index_current(
     graph: TraceGraph,
     spec_dirs: list[Path],
@@ -612,6 +734,8 @@ def run_spec_checks(
         check_spec_orphans(graph),
         check_spec_format_rules(graph, config),
         check_spec_hash_integrity(graph),
+        check_spec_changelog_current(graph, config),
+        check_spec_changelog_format(graph, config),
     ]
     if spec_dirs:
         checks.append(check_spec_index_current(graph, spec_dirs))

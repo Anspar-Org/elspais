@@ -248,6 +248,16 @@ allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 # [associates]
 # paths = ["../sibling-repo"]
 
+[changelog]
+enforce = true            # Require changelog entries for Active hash changes
+id_source = "gh"          # Author identity source: "gh" | "git"
+date_format = "iso"       # "iso" (YYYY-MM-DD) | "us" | "eu"
+require_change_order = false
+require_reason = true
+require_author_name = true
+require_author_id = true
+author_id_format = "email"  # "email" | "handle"
+
 [testing]
 enabled = false
 test_dirs = ["tests"]

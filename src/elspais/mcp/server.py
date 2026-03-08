@@ -454,6 +454,70 @@ def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
+def _get_active_mutated_reqs(graph: TraceGraph) -> set[str]:
+    """Return IDs of Active requirements that have pending mutations."""
+    from elspais.graph import NodeKind
+
+    mutated_ids: set[str] = set()
+    for entry in graph.mutation_log.iter_entries():
+        target = entry.target_id
+        # Check if target or its parent is an Active requirement
+        node = graph.find_by_id(target)
+        if node is None:
+            continue
+        if node.kind == NodeKind.REQUIREMENT:
+            if (node.status or "").lower() == "active":
+                mutated_ids.add(node.id)
+        elif node.kind == NodeKind.ASSERTION:
+            for parent in node.iter_parents():
+                if (
+                    parent.kind == NodeKind.REQUIREMENT
+                    and (parent.status or "").lower() == "active"
+                ):
+                    mutated_ids.add(parent.id)
+    return mutated_ids
+
+
+def _add_changelog_for_active_mutations(
+    graph: TraceGraph,
+    repo_root: Path,
+    config: dict,
+    message: str,
+) -> None:
+    """Add changelog entries for mutated Active requirements after save."""
+    from datetime import date
+
+    from elspais.commands.validate import compute_hash_for_node
+    from elspais.utilities.git import get_author_info
+    from elspais.utilities.spec_writer import add_changelog_entry
+
+    active_ids = _get_active_mutated_reqs(graph)
+    if not active_ids:
+        return
+
+    id_source = config.get("changelog", {}).get("id_source", "gh")
+    try:
+        author = get_author_info(id_source)
+    except ValueError:
+        return
+
+    for req_id in active_ids:
+        node = graph.find_by_id(req_id)
+        if node is None or node.source is None:
+            continue
+        computed = compute_hash_for_node(node, graph.hash_mode)
+        file_path = repo_root / node.source.path
+        entry = {
+            "date": date.today().isoformat(),
+            "hash": computed or node.hash or "________",
+            "change_order": "-",
+            "author_name": author["name"],
+            "author_id": author["id"],
+            "reason": message,
+        }
+        add_changelog_entry(file_path, req_id, entry)
+
+
 def _refresh_graph(
     repo_root: Path,
     full: bool = False,
@@ -4014,7 +4078,10 @@ def create_server(
         return _list_safety_branches_impl(_state["working_dir"])
 
     @mcp.tool()
-    def save_mutations(save_branch: bool = False) -> dict[str, Any]:
+    def save_mutations(
+        save_branch: bool = False,
+        message: str | None = None,
+    ) -> dict[str, Any]:
         """Persist all pending in-memory mutations (from mutate_* tools) to spec files on disk.
 
         Walks the mutation log and replays each entry to the authoritative spec
@@ -4024,6 +4091,9 @@ def create_server(
 
         Args:
             save_branch: If True, create a git safety branch before writing.
+            message: Changelog reason for Active requirement changes.
+                Required when mutations affect Active requirements
+                (when changelog enforcement is enabled).
         """
         from elspais.server.persistence import replay_mutations_to_disk
 
@@ -4031,12 +4101,33 @@ def create_server(
         if graph is None:
             return {"success": False, "error": "graph not available"}
 
+        # Check changelog enforcement for Active requirements
+        config = _state.get("config", {})
+        changelog_enforce = config.get("changelog", {}).get("enforce", True)
+
+        if changelog_enforce:
+            active_mutated = _get_active_mutated_reqs(graph)
+            if active_mutated and not message:
+                ids = ", ".join(sorted(active_mutated))
+                return {
+                    "success": False,
+                    "error": (
+                        f"Active requirement(s) modified: {ids}. "
+                        "Provide a 'message' parameter with the "
+                        "changelog reason."
+                    ),
+                }
+
         if save_branch:
             from elspais.utilities.git import create_safety_branch
 
             create_safety_branch(_state["working_dir"], "save-mutations")
 
         result = replay_mutations_to_disk(graph, _state["working_dir"])
+
+        # Add changelog entries for Active requirements after save
+        if result.get("success") and changelog_enforce and message:
+            _add_changelog_for_active_mutations(graph, _state["working_dir"], config, message)
 
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):

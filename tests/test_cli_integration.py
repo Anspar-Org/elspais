@@ -65,10 +65,6 @@ class TestHealthCommand:
         result = _run_elspais("health", "--lenient")
         assert result.returncode == 0
 
-    def test_REQ_o00066_C_index_validate(self):
-        result = _run_elspais("index", "validate", "--mode", "core")
-        assert result.returncode == 0
-
 
 class TestDocsCommand:
     """Test docs command outputs content."""

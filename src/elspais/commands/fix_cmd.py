@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 
 def run(args: argparse.Namespace) -> int:
@@ -64,18 +65,23 @@ def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
 
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """Fix hash for a single requirement using shared utilities."""
-    from pathlib import Path
+    from datetime import date
 
     from elspais.commands.validate import compute_hash_for_node
+    from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.mcp.file_mutations import update_hash_in_file
+    from elspais.utilities.spec_writer import add_changelog_entry, update_hash_in_file
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
     dry_run = getattr(args, "dry_run", False)
+    message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
+
+    config = get_config(config_path)
+    changelog_enforce = config.get("changelog", {}).get("enforce", True)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
@@ -105,13 +111,8 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         return 0
 
     stored = node.hash
-    if stored == computed:
-        print(f"{req_id} hash is already up to date")
-        return 0
-
-    if dry_run:
-        print(f"Would update {req_id}: {stored or '(none)'} -> {computed}")
-        return 0
+    status = (node.status or "").lower()
+    is_active = status == "active"
 
     source = node.source
     if source is None:
@@ -119,6 +120,63 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         return 1
 
     file_path = repo_root / source.path
+
+    # If hash is current, check for missing Changelog section on Active reqs
+    if stored == computed:
+        if is_active and changelog_enforce:
+            return _ensure_changelog_section(file_path, req_id, computed, config, dry_run)
+        print(f"{req_id} hash is already up to date")
+        return 0
+
+    # Hash mismatch — need to update
+    if is_active and changelog_enforce:
+        # Require a changelog message for Active requirements
+        if message is None:
+            if sys.stdin.isatty():
+                message = input(f"Changelog reason for {req_id}: ").strip()
+            if not message:
+                print(
+                    f"Error: Active requirement {req_id} requires a changelog"
+                    ' message (-m "reason")',
+                    file=sys.stderr,
+                )
+                return 1
+
+        # Resolve author info
+        from elspais.utilities.git import get_author_info
+
+        id_source = config.get("changelog", {}).get("id_source", "gh")
+        try:
+            author = get_author_info(id_source)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        if dry_run:
+            print(f"Would update {req_id}: {stored or '(none)'} -> {computed}")
+            return 0
+
+        # Add changelog entry before updating hash
+        change_order = "-"
+        entry = {
+            "date": date.today().isoformat(),
+            "hash": computed,
+            "change_order": change_order,
+            "author_name": author["name"],
+            "author_id": author["id"],
+            "reason": message,
+        }
+        cl_error = add_changelog_entry(file_path, req_id, entry)
+        if cl_error:
+            print(f"Error adding changelog: {cl_error}", file=sys.stderr)
+            return 1
+
+    else:
+        # Draft/Deprecated — update hash silently
+        if dry_run:
+            print(f"Would update {req_id}: {stored or '(none)'} -> {computed}")
+            return 0
+
     error = update_hash_in_file(file_path=file_path, req_id=req_id, new_hash=computed)
     if error is None:
         print(f"Updated {req_id}: {stored or '(none)'} -> {computed}")
@@ -126,6 +184,78 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     else:
         print(f"Error: {error}", file=sys.stderr)
         return 1
+
+
+def _ensure_changelog_section(
+    file_path: Path,
+    req_id: str,
+    current_hash: str,
+    config: dict,
+    dry_run: bool,
+) -> int:
+    """Add missing ## Changelog section to an Active requirement.
+
+    Returns 0 on success or if section already exists.
+    """
+    from datetime import date
+
+    content = file_path.read_text(encoding="utf-8")
+
+    # Check if this requirement block already has a ## Changelog section
+    from elspais.utilities.patterns import find_req_header as _find_req_header
+
+    header_match = _find_req_header(content, req_id)
+    if not header_match:
+        return 0
+
+    start_pos = header_match.end()
+    # Find end marker
+    from elspais.utilities.spec_writer import _find_end_marker
+
+    end_match = _find_end_marker(content, start_pos)
+    if not end_match:
+        return 0
+
+    block = content[start_pos : end_match.start()]
+    import re
+
+    if re.search(r"^## Changelog\s*$", block, re.MULTILINE):
+        print(f"{req_id} hash is already up to date")
+        return 0
+
+    if dry_run:
+        print(f"Would add missing Changelog section to {req_id}")
+        return 0
+
+    # Auto-add with default message
+    from elspais.utilities.git import get_author_info
+    from elspais.utilities.spec_writer import add_changelog_entry
+
+    id_source = config.get("changelog", {}).get("id_source", "gh")
+    try:
+        author = get_author_info(id_source)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    entry = {
+        "date": date.today().isoformat(),
+        "hash": current_hash,
+        "change_order": "-",
+        "author_name": author["name"],
+        "author_id": author["id"],
+        "reason": "Adding missing Changelog section",
+    }
+    cl_error = add_changelog_entry(file_path, req_id, entry)
+    if cl_error:
+        print(f"Error: {cl_error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"INFO: Added missing Changelog section to {req_id}",
+        file=sys.stderr,
+    )
+    return 0
 
 
 def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:

@@ -1690,6 +1690,7 @@ class GraphBuilder:
             "status": data.get("status"),
             "hash": data.get("hash"),
             "body_text": data.get("body_text", ""),  # For hash computation
+            "changelog": data.get("changelog", []),
         }
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan

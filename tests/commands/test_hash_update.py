@@ -12,8 +12,11 @@ The fix command updates requirement hashes in spec files:
 
 import os
 import subprocess
+from unittest.mock import patch
 
 import pytest
+
+_MOCK_AUTHOR = {"name": "Test User", "id": "test@test.org"}
 
 
 def _clean_git_env() -> dict[str, str]:
@@ -359,7 +362,10 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content
         assert "00000000" not in content
 
-    def test_REQ_p00001_C_updates_specific_requirement(self, git_repo_with_stale_hash, capsys):
+    @patch("elspais.utilities.git.get_author_info", return_value=_MOCK_AUTHOR)
+    def test_REQ_p00001_C_updates_specific_requirement(
+        self, mock_author, git_repo_with_stale_hash, capsys
+    ):
         """Update hash for a specific requirement only."""
         import argparse
 
@@ -371,6 +377,7 @@ class TestUpdateHashesCommand:
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
             canonical_root=None,
+            message="Hash update",
         )
 
         result = run(args)
