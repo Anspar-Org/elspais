@@ -2,7 +2,7 @@
 
 All notable changes to elspais will be documented in this file.
 
-## [0.90.0] - 2026-03-07
+## [0.91.0] - 2026-03-07
 
 ### Added
 
@@ -14,6 +14,7 @@ All notable changes to elspais will be documented in this file.
 - **6 multi-command workflow tests** — cross-command consistency tests (init→health, health/summary consistency, trace JSON/CSV format, init→config, fix→health, summary idempotency)
 - **`--port` argument for viewer command** — specify server port directly, bypassing interactive port conflict prompts
 - **6 Playwright browser tests** — viewer page load, API endpoints, search filtering, and requirement detail interaction
+- **8 extended MCP protocol tests** — search, get_requirement, get_hierarchy, project_summary, cursor pagination, and mutation/undo roundtrip via stdio transport
 
 ## [0.85.5] - 2026-03-06
 
