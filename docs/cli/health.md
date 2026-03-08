@@ -247,6 +247,24 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 | `--format` | Output format: `text`, `markdown`, `json`, `junit`, `sarif` |
 | `-j`, `--json` | Output as JSON (alias for `--format json`) |
 | `-v`, `--verbose` | Show additional details |
+| `--skip-passing-details` | Hide details for passing checks (default) |
+| `--include-passing-details` | Show full details for passing checks |
+
+## Passing Check Detail Control
+
+By default, `elspais health` suppresses verbose detail for passing checks (`--skip-passing-details`). Use `--include-passing-details` to include them. The two flags are mutually exclusive.
+
+The effect varies by output format:
+
+| Format | Default (`--skip-passing-details`) | With `--include-passing-details` |
+|--------|-------------------------------------|----------------------------------|
+| text | Aggregate summary message only | Adds verbose detail keys for each passing check |
+| markdown | Table with aggregate status | Adds a `<details>` block with per-finding list |
+| json | Full findings always included | No change |
+| junit | Empty `<testcase/>` element | Adds `<system-out>` with finding messages |
+| sarif | Omits passing checks always | No change |
+
+JSON and SARIF formats are unaffected by this flag: JSON always includes full findings, and SARIF always omits passing checks.
 
 ## Exit Codes
 

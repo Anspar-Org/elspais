@@ -1296,13 +1296,14 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
     verbose = getattr(args, "verbose", False)
+    include_passing = getattr(args, "include_passing_details", False)
 
     if fmt == "json":
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
-        return _render_markdown(report)
+        return _render_markdown(report, include_passing_details=include_passing)
     elif fmt == "junit":
-        return _render_junit(report)
+        return _render_junit(report, include_passing_details=include_passing)
     elif fmt == "sarif":
         return _render_sarif(report)
     else:
@@ -1311,7 +1312,11 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
             if quiet:
                 _print_quiet_report(report)
             else:
-                _print_text_report(report, verbose=verbose)
+                _print_text_report(
+                    report,
+                    verbose=verbose,
+                    include_passing_details=include_passing,
+                )
         return buf.getvalue().rstrip("\n")
 
 
@@ -1324,7 +1329,11 @@ def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
     return 0 if healthy else 1
 
 
-def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
+def _print_text_report(
+    report: HealthReport,
+    verbose: bool = False,
+    include_passing_details: bool = False,
+) -> None:
     """Print human-readable health report."""
     categories = ["config", "spec", "code", "tests"]
 
@@ -1350,8 +1359,11 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
 
             print(f"  {icon} {check.name}: {check.message}")
 
-            # Show details in verbose mode
-            if verbose and check.details:
+            # Show details in verbose mode (skip passing unless include flag set)
+            show_details = verbose and check.details
+            if show_details and check.passed and not include_passing_details:
+                show_details = False
+            if show_details:
                 for key, value in check.details.items():
                     if isinstance(value, list) and len(value) > 3:
                         print(f"      {key}: {value[:3]} ... ({len(value)} total)")
@@ -1382,7 +1394,10 @@ def _print_quiet_report(report: HealthReport) -> None:
 
 
 # Implements: REQ-d00085-E
-def _render_markdown(report: HealthReport) -> str:
+def _render_markdown(
+    report: HealthReport,
+    include_passing_details: bool = False,
+) -> str:
     """Render health report as markdown."""
     lines = []
     lines.append("# Health Report")
@@ -1409,6 +1424,23 @@ def _render_markdown(report: HealthReport) -> str:
             else:
                 icon = "FAIL"
             lines.append(f"| {check.name} | {icon} | {check.message} |")
+
+            # Include findings detail for passing checks if requested
+            if check.passed and include_passing_details and check.findings:
+                lines.append("")
+                lines.append("<details>")
+                lines.append(f"<summary>{check.name} details</summary>")
+                lines.append("")
+                for finding in check.findings:
+                    loc = ""
+                    if finding.file_path:
+                        loc = f"{finding.file_path}"
+                        if finding.line is not None:
+                            loc += f":{finding.line}"
+                        loc += ": "
+                    lines.append(f"- {loc}{finding.message}")
+                lines.append("")
+                lines.append("</details>")
         lines.append("")
 
     # Summary
@@ -1424,7 +1456,10 @@ def _render_markdown(report: HealthReport) -> str:
 
 
 # Implements: REQ-d00085-H
-def _render_junit(report: HealthReport) -> str:
+def _render_junit(
+    report: HealthReport,
+    include_passing_details: bool = False,
+) -> str:
     """Render health report as JUnit XML.
 
     Maps categories to <testsuite> elements, checks to <testcase> elements.
@@ -1470,6 +1505,10 @@ def _render_junit(report: HealthReport) -> str:
                 elif check.severity == "warning":
                     sys_err = ET.SubElement(tc, "system-err")
                     sys_err.text = f"WARNING: {check.message}"
+            elif check.passed and include_passing_details and check.findings:
+                sys_out = ET.SubElement(tc, "system-out")
+                finding_lines = [f.message for f in check.findings]
+                sys_out.text = "\n".join(finding_lines)
 
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
 

@@ -131,6 +131,7 @@ Examples:
   elspais health --format junit  # Output JUnit XML for CI
   elspais health --format sarif  # Output SARIF for code scanning
   elspais health -v           # Verbose output with details
+  elspais health --include-passing-details  # Show details for passing checks
 
 Checks performed:
   CONFIG: TOML syntax, required fields, pattern tokens, hierarchy rules, paths
@@ -167,6 +168,18 @@ Checks performed:
         "--lenient",
         action="store_true",
         help="Allow warnings without affecting exit code",
+    )
+    passing_group = health_parser.add_mutually_exclusive_group()
+    passing_group.add_argument(
+        "--skip-passing-details",
+        action="store_true",
+        default=True,
+        help="Hide details for passing checks (default)",
+    )
+    passing_group.add_argument(
+        "--include-passing-details",
+        action="store_true",
+        help="Show full details for passing checks",
     )
 
     # doctor command
