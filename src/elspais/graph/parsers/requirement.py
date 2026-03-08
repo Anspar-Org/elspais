@@ -184,6 +184,7 @@ class RequirementParser:
             "implements": [],
             "refines": [],
             "assertions": [],
+            "changelog": [],
             "hash": None,
             "body_text": "",  # Raw text between header and footer for hash computation
         }
@@ -225,6 +226,9 @@ class RequirementParser:
 
         # Extract non-normative sections from body_text (REQ-d00062-B, REQ-d00064-B)
         data["sections"] = self._extract_sections(data["body_text"], start_line, text)
+
+        # Extract changelog entries from body_text
+        data["changelog"] = self._extract_changelog(data["body_text"])
 
         # Extract hash
         end_match = self.END_MARKER_PATTERN.search(text)
@@ -432,9 +436,9 @@ class RequirementParser:
         (**Level**: ... | **Status**: ...) since it's already parsed
         into structured fields.
 
-        Skips the Assertions section (already parsed as nodes).
+        Skips the Assertions and Changelog sections (parsed separately).
         """
-        if heading is not None and heading.lower() == "assertions":
+        if heading is not None and heading.lower() in ("assertions", "changelog"):
             return
 
         # Strip metadata line from preamble
@@ -458,3 +462,43 @@ class RequirementParser:
                 "line": line_num,
             }
         )
+
+    # Pattern for changelog entry lines
+    _CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \((.+?)\) \| (.+)$")
+
+    def _extract_changelog(self, body_text: str) -> list[dict[str, str]]:
+        """Extract changelog entries from body text.
+
+        Looks for a ## Changelog section and parses each entry line.
+
+        Args:
+            body_text: The body text between header and footer.
+
+        Returns:
+            List of changelog entry dicts with keys:
+            date, hash, change_order, author_name, author_id, reason.
+        """
+        # Find ## Changelog section
+        match = re.search(r"^## Changelog\s*$", body_text, re.MULTILINE)
+        if not match:
+            return []
+
+        changelog_text = body_text[match.end() :]
+        entries: list[dict[str, str]] = []
+
+        for line in changelog_text.split("\n"):
+            line = line.strip()
+            entry_match = self._CHANGELOG_ENTRY_RE.match(line)
+            if entry_match:
+                entries.append(
+                    {
+                        "date": entry_match.group(1),
+                        "hash": entry_match.group(2),
+                        "change_order": entry_match.group(3),
+                        "author_name": entry_match.group(4),
+                        "author_id": entry_match.group(5),
+                        "reason": entry_match.group(6),
+                    }
+                )
+
+        return entries
