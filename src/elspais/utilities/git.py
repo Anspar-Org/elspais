@@ -601,6 +601,69 @@ def delete_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Author Identity Resolution
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def get_author_info(id_source: str = "gh") -> dict[str, str]:
+    """Resolve author name and identity for changelog entries.
+
+    Args:
+        id_source: Identity source — "gh" (GitHub CLI, falls back to git)
+                   or "git" (git config only).
+
+    Returns:
+        Dict with "name" and "id" keys.
+
+    Raises:
+        ValueError: If required author info is unavailable or empty.
+    """
+    if id_source == "gh":
+        try:
+            import json as _json
+
+            result = subprocess.run(
+                ["gh", "api", "user"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            data = _json.loads(result.stdout)
+            name = data.get("name") or ""
+            email = data.get("email") or ""
+            if name and email:
+                return {"name": name, "id": email}
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            pass
+        # Fall through to git fallback
+
+    # Git config fallback
+    name = _git_config("user.name")
+    email = _git_config("user.email")
+
+    if not name:
+        raise ValueError("Author name not available from git config user.name")
+    if not email:
+        raise ValueError("Author ID not available from git config user.email")
+
+    return {"name": name, "id": email}
+
+
+def _git_config(key: str) -> str:
+    """Read a git config value."""
+    try:
+        result = subprocess.run(
+            ["git", "config", key],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -619,4 +682,6 @@ __all__ = [
     "list_safety_branches",
     "restore_from_safety_branch",
     "delete_safety_branch",
+    # Author identity
+    "get_author_info",
 ]

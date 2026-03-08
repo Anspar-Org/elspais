@@ -1,10 +1,11 @@
-# Validates REQ-o00063-A, REQ-o00063-B, REQ-o00063-D
+# Validates REQ-o00063-A, REQ-o00063-B, REQ-o00063-D, REQ-p00004-A
 """Tests for elspais.utilities.spec_writer — spec file I/O helpers.
 
 Validates:
 - REQ-o00063-A: change_reference_type SHALL modify Implements/Refines relationships
 - REQ-o00063-B: move_requirement SHALL relocate a requirement between spec files
 - REQ-o00063-D: File mutations SHALL use encoding="utf-8" consistently
+- REQ-p00004-A: add_changelog_entry SHALL insert changelog entries into spec files
 """
 
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from elspais.utilities.spec_writer import (
+    add_changelog_entry,
     change_reference_type,
     modify_implements,
     modify_status,
@@ -427,3 +429,101 @@ class TestEncodingConsistency:
         content = spec.read_text(encoding="utf-8")
         assert "hacer algo" in content
         assert "**Hash**: deadbeef" in content
+
+
+# ---------------------------------------------------------------------------
+# add_changelog_entry  (REQ-p00004-A)
+# ---------------------------------------------------------------------------
+
+SPEC_WITHOUT_CHANGELOG = """\
+# REQ-t00001: Test Req
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL do X.
+
+*End* *Test Req* | **Hash**: abcdef12
+---
+"""
+
+SPEC_WITH_CHANGELOG = """\
+# REQ-t00001: Test Req
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL do X.
+
+## Changelog
+
+- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (b@b.org) | First version
+
+*End* *Test Req* | **Hash**: abcdef12
+---
+"""
+
+CHANGELOG_ENTRY = {
+    "date": "2026-03-06",
+    "hash": "abcdef12",
+    "change_order": "CUR-1234",
+    "author_name": "Alice",
+    "author_id": "a@b.org",
+    "reason": "Refined A",
+}
+
+
+class TestAddChangelogEntry:
+    """Tests for add_changelog_entry.
+
+    Validates REQ-p00004-A: add_changelog_entry SHALL insert changelog
+    entries into spec files.
+    """
+
+    def test_REQ_p00004_A_adds_changelog_to_req_without_section(self, tmp_path: Path):
+        """A requirement without ## Changelog gets a new section created."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITHOUT_CHANGELOG, encoding="utf-8")
+
+        err = add_changelog_entry(spec, "REQ-t00001", CHANGELOG_ENTRY)
+        assert err is None
+
+        content = spec.read_text(encoding="utf-8")
+        # Section was created
+        assert "## Changelog" in content
+        # Entry is present with correct format
+        assert "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (a@b.org) | Refined A" in content
+        # Changelog appears between assertions and End marker
+        changelog_pos = content.index("## Changelog")
+        assertion_pos = content.index("A. The system SHALL do X.")
+        end_pos = content.index("*End*")
+        assert assertion_pos < changelog_pos < end_pos
+
+    def test_REQ_p00004_A_prepends_entry_to_existing_changelog(self, tmp_path: Path):
+        """A requirement with existing ## Changelog gets the new entry at the top."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITH_CHANGELOG, encoding="utf-8")
+
+        err = add_changelog_entry(spec, "REQ-t00001", CHANGELOG_ENTRY)
+        assert err is None
+
+        content = spec.read_text(encoding="utf-8")
+        # Both entries present
+        new_entry = "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (a@b.org) | Refined A"
+        old_entry = "- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (b@b.org) | First version"
+        assert new_entry in content
+        assert old_entry in content
+        # New entry appears before old entry
+        assert content.index(new_entry) < content.index(old_entry)
+
+    def test_REQ_p00004_A_returns_error_for_missing_req(self, tmp_path: Path):
+        """Returns error string when req_id not found in file."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(SPEC_WITHOUT_CHANGELOG, encoding="utf-8")
+
+        err = add_changelog_entry(spec, "REQ-z99999", CHANGELOG_ENTRY)
+        assert err is not None
+        assert isinstance(err, str)
+        assert "not found" in err

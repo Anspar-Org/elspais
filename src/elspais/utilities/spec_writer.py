@@ -697,3 +697,75 @@ def change_reference_type(
     file_path.write_text(content, encoding="utf-8")
 
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Changelog entry helpers
+# ---------------------------------------------------------------------------
+
+
+def _format_changelog_entry(entry: dict[str, str]) -> str:
+    """Format a changelog entry dict into a markdown line."""
+    return (
+        f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
+        f" | {entry['author_name']} ({entry['author_id']}) | {entry['reason']}"
+    )
+
+
+def add_changelog_entry(
+    file_path: Path,
+    req_id: str,
+    entry: dict[str, str],
+) -> str | None:
+    """Add a changelog entry to a requirement in a spec file.
+
+    If a ## Changelog section exists, inserts the new entry at the top.
+    If no ## Changelog section exists, creates one before the End marker.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: The requirement ID (e.g., 'REQ-p00001').
+        entry: Dict with keys: date, hash, change_order,
+               author_name, author_id, reason.
+
+    Returns:
+        None on success, error string on failure.
+    """
+    file_path = Path(file_path)
+    content = file_path.read_text(encoding="utf-8")
+
+    header_match = _find_req_header(content, req_id)
+    if not header_match:
+        return f"Header for {req_id} not found in {file_path.name}"
+
+    start_pos = header_match.end()
+
+    end_match = _find_end_marker(content, start_pos)
+    if not end_match:
+        return f"No End marker found for {req_id} in {file_path.name}"
+
+    entry_line = _format_changelog_entry(entry)
+
+    # Look for existing ## Changelog section between header and end marker
+    req_block = content[start_pos : end_match.start()]
+    changelog_match = re.search(r"^## Changelog\s*$", req_block, re.MULTILINE)
+
+    if changelog_match:
+        # Insert after the ## Changelog heading (+ blank line)
+        insert_pos = start_pos + changelog_match.end()
+        # Find the first non-blank line after the heading
+        after_heading = content[insert_pos:]
+        # Skip blank lines after heading
+        leading_blank = re.match(r"\n*", after_heading)
+        skip = leading_blank.end() if leading_blank else 0
+        insert_pos += skip
+        new_content = content[:insert_pos] + entry_line + "\n" + content[insert_pos:]
+    else:
+        # Create ## Changelog section before End marker
+        insert_pos = end_match.start()
+        # Ensure proper spacing
+        section = f"\n## Changelog\n\n{entry_line}\n\n"
+        new_content = content[:insert_pos] + section + content[insert_pos:]
+
+    file_path.write_text(new_content, encoding="utf-8")
+    return None

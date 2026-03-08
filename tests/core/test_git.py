@@ -1,5 +1,10 @@
-# Validates REQ-p00004-B
-"""Tests for Git Integration."""
+# Validates REQ-p00004-A, REQ-p00004-B
+"""Tests for Git Integration.
+
+Validates:
+- REQ-p00004-A: get_author_info SHALL retrieve author identity from git/gh
+- REQ-p00004-B: Git change detection
+"""
 
 import subprocess
 from pathlib import Path
@@ -12,6 +17,7 @@ from elspais.utilities.git import (
     MovedRequirement,
     detect_moved_requirements,
     filter_spec_files,
+    get_author_info,
     get_changed_vs_branch,
     get_git_changes,
     get_modified_files,
@@ -316,3 +322,35 @@ class TestGetReqLocationsFromGraph:
         # If we have results, none should start with "REQ-"
         for req_id in result.keys():
             assert not req_id.startswith("REQ-"), f"Expected suffix only, got: {req_id}"
+
+
+class TestGetAuthorInfo:
+    """Tests for get_author_info.
+
+    Validates REQ-p00004-A: get_author_info SHALL retrieve author
+    identity from git config or gh CLI.
+    """
+
+    @patch("elspais.utilities.git.subprocess.run")
+    def test_REQ_p00004_A_get_author_info_git_fallback(self, mock_run):
+        """Git config returns name and email as id."""
+        mock_run.side_effect = [
+            MagicMock(stdout="Jane Doe\n", returncode=0),
+            MagicMock(stdout="jane@example.org\n", returncode=0),
+        ]
+
+        result = get_author_info(id_source="git")
+
+        assert result["name"] == "Jane Doe"
+        assert result["id"] == "jane@example.org"
+
+    @patch("elspais.utilities.git.subprocess.run")
+    def test_REQ_p00004_A_get_author_info_raises_on_empty(self, mock_run):
+        """Raises ValueError when git config returns empty values."""
+        mock_run.side_effect = [
+            MagicMock(stdout="\n", returncode=0),
+            MagicMock(stdout="\n", returncode=0),
+        ]
+
+        with pytest.raises(ValueError):
+            get_author_info(id_source="git")
