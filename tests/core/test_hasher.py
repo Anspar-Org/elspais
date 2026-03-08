@@ -9,6 +9,7 @@ from elspais.utilities.hasher import (
     compute_normalized_hash,
     extract_hash_from_footer,
     normalize_assertion_text,
+    strip_changelog_section,
     verify_hash,
 )
 
@@ -253,3 +254,51 @@ class TestComputeNormalizedHash:
             length=16,
         )
         assert len(result) == 16
+
+
+class TestChangelogStripping:
+    """Validates REQ-p00004-A, REQ-p00002-C: Changelog stripping before hashing."""
+
+    def test_REQ_p00004_A_strip_changelog_removes_section(self):
+        """Body with ## Changelog section returns body without it."""
+        body = "Some requirement text.\n\n## Changelog\n\n- 2026-01-01: Initial version"
+        result = strip_changelog_section(body)
+        assert result == "Some requirement text."
+        assert "## Changelog" not in result
+
+    def test_REQ_p00004_A_strip_changelog_preserves_body_without_changelog(self):
+        """Body without changelog is unchanged."""
+        body = "Some requirement text.\n\nMore details here."
+        result = strip_changelog_section(body)
+        assert result == body
+
+    def test_REQ_p00004_A_strip_changelog_strips_trailing_whitespace(self):
+        """Whitespace before ## Changelog is trimmed."""
+        body = "Some requirement text.\n\n\n## Changelog\n\n- 2026-01-01: Initial version"
+        result = strip_changelog_section(body)
+        assert result == "Some requirement text."
+        assert not result.endswith("\n")
+
+    def test_REQ_p00002_C_hash_excludes_changelog_section(self):
+        """Hash of body WITH changelog == hash of body WITHOUT changelog."""
+        body_without = "Some requirement text."
+        body_with_changelog_v1 = (
+            "Some requirement text.\n\n## Changelog\n\n- 2026-01-01: Initial version"
+        )
+        body_with_changelog_v2 = (
+            "Some requirement text.\n\n## Changelog\n\n- 2026-01-01: Initial version\n"
+            "- 2026-02-01: Updated format"
+        )
+        hash_without = calculate_hash(body_without)
+        hash_with_v1 = calculate_hash(body_with_changelog_v1)
+        hash_with_v2 = calculate_hash(body_with_changelog_v2)
+        assert hash_without == hash_with_v1
+        assert hash_without == hash_with_v2
+
+    def test_REQ_p00002_C_hash_changes_when_body_changes_not_changelog(self):
+        """Changing body text before changelog changes the hash."""
+        body_a = "Requirement version A.\n\n## Changelog\n\n- 2026-01-01: Created"
+        body_b = "Requirement version B.\n\n## Changelog\n\n- 2026-01-01: Created"
+        hash_a = calculate_hash(body_a)
+        hash_b = calculate_hash(body_b)
+        assert hash_a != hash_b

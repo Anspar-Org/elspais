@@ -189,3 +189,39 @@ class TestFindGitRoot:
         root = find_git_root()
         # We're in a git repo, so should find something
         assert root is not None
+
+
+class TestChangelogConfig:
+    """Validates REQ-p00002-A: Changelog configuration defaults and overrides."""
+
+    def test_REQ_p00002_A_changelog_defaults_present(self):
+        """ConfigLoader.from_dict({}) includes changelog section with all expected keys."""
+        config = ConfigLoader.from_dict({})
+        changelog = config.get("changelog")
+        assert changelog is not None
+        assert isinstance(changelog, dict)
+        for key in (
+            "enforce",
+            "id_source",
+            "date_format",
+            "require_change_order",
+            "require_reason",
+        ):
+            assert key in changelog, f"Missing key: {key}"
+
+    def test_REQ_p00002_A_changelog_defaults_values(self):
+        """Verify default values for changelog configuration."""
+        config = ConfigLoader.from_dict({})
+        assert config.get("changelog.enforce") is True
+        assert config.get("changelog.id_source") == "gh"
+        assert config.get("changelog.date_format") == "iso"
+        assert config.get("changelog.require_change_order") is False
+        assert config.get("changelog.require_reason") is True
+
+    def test_REQ_p00002_A_changelog_user_override(self):
+        """User config overrides changelog defaults."""
+        config = ConfigLoader.from_dict({"changelog": {"enforce": False}})
+        assert config.get("changelog.enforce") is False
+        # Non-overridden defaults should still be present
+        assert config.get("changelog.id_source") == "gh"
+        assert config.get("changelog.require_reason") is True

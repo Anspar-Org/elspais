@@ -15,6 +15,24 @@ import re
 HASH_VALUE_PATTERN = r"\S+"
 
 
+def strip_changelog_section(body: str) -> str:
+    """Remove ## Changelog section and everything after it from body before hashing.
+
+    The ## Changelog section is excluded from hash computation so that
+    adding changelog entries does not change the requirement's hash.
+
+    Args:
+        body: Raw requirement body text.
+
+    Returns:
+        Body text with ## Changelog section removed, trailing whitespace stripped.
+    """
+    match = re.search(r"^## Changelog\s*$", body, re.MULTILINE)
+    if match:
+        return body[: match.start()].rstrip()
+    return body
+
+
 def clean_requirement_body(content: str, normalize_whitespace: bool = False) -> str:
     """Clean requirement body text for consistent hashing.
 
@@ -26,6 +44,9 @@ def clean_requirement_body(content: str, normalize_whitespace: bool = False) -> 
     Returns:
         Cleaned text suitable for hashing
     """
+    # Strip ## Changelog section before hashing (changelog is outside hash boundary)
+    content = strip_changelog_section(content)
+
     if normalize_whitespace:
         lines = content.split("\n")
 

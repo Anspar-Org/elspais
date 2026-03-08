@@ -80,6 +80,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "graph": {
         "satellite_kinds": ["assertion", "result"],
     },
+    "changelog": {
+        "enforce": True,
+        "id_source": "gh",
+        "date_format": "iso",
+        "require_change_order": False,
+        "require_reason": True,
+        "require_author_name": True,
+        "require_author_id": True,
+        "author_id_format": "email",
+        "allowed_author_ids": "all",
+    },
 }
 
 
