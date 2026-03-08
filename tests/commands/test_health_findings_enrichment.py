@@ -1,0 +1,528 @@
+# Validates: REQ-d00085
+"""Tests that health check functions populate findings with structured data.
+
+Validates REQ-d00085-I: Each check function should produce HealthFinding instances
+with appropriate message, node_id, file_path, and line fields when issues are detected.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from elspais.commands.health import (
+    HealthFinding,
+    check_code_references_resolve,
+    check_spec_format_rules,
+    check_spec_hierarchy_levels,
+    check_spec_implements_resolve,
+    check_spec_no_duplicates,
+    check_spec_orphans,
+    check_spec_refines_resolve,
+    check_test_references_resolve,
+    check_test_results,
+)
+from elspais.config import ConfigLoader, get_config
+from elspais.graph.builder import TraceGraph
+from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+
+
+def _load_config(config_path: Path) -> ConfigLoader:
+    raw = get_config(config_path)
+    return ConfigLoader.from_dict(raw)
+
+
+def _make_config(tmp_path: Path) -> Path:
+    """Create a minimal .elspais.toml config and return its path."""
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(
+        """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+"""
+    )
+    return config_path
+
+
+def _build(tmp_path: Path, config_path: Path, **kwargs):
+    """Build a graph with common defaults."""
+    defaults = {
+        "spec_dirs": [tmp_path / "spec"],
+        "config_path": config_path,
+        "repo_root": tmp_path,
+        "scan_code": False,
+        "scan_tests": False,
+        "scan_sponsors": False,
+    }
+    defaults.update(kwargs)
+    return build_graph(**defaults)
+
+
+class TestCheckSpecNoDuplicatesFindings:
+    """Findings should identify each duplicate requirement with node_id and file_path."""
+
+    def test_REQ_d00085_I_duplicates_have_findings(self, tmp_path: Path) -> None:
+        # The graph builder deduplicates by ID (dict keyed by ID), so we
+        # construct the graph manually with two nodes sharing the same .id
+        # but stored under different index keys.
+        graph = TraceGraph()
+        node_a = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="First Copy",
+            source=SourceLocation(path="spec/file_a.md", line=1),
+        )
+        node_a.set_field("source_file", "spec/file_a.md")
+        node_b = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Second Copy",
+            source=SourceLocation(path="spec/file_b.md", line=1),
+        )
+        node_b.set_field("source_file", "spec/file_b.md")
+        # Store under different keys so both survive in the index
+        graph._index["REQ-p00001__dup1"] = node_a
+        graph._index["REQ-p00001__dup2"] = node_b
+
+        check = check_spec_no_duplicates(graph)
+
+        assert not check.passed, "Expected check to fail with duplicate IDs"
+        assert len(check.findings) > 0, "Expected findings for duplicates"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+        assert "REQ-p00001" in (finding.node_id or "")
+
+
+class TestCheckSpecImplementsResolveFindings:
+    """Findings should identify each unresolved implements reference."""
+
+    def test_REQ_d00085_I_unresolved_implements_have_findings(self, tmp_path: Path) -> None:
+        # The builder stores implements as pending edge links, not as a node
+        # field. The check function reads node.get_field("implements", []),
+        # so we construct the graph manually with the field set directly.
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-d00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Dev Requirement",
+            source=SourceLocation(path="spec/reqs.md", line=1),
+        )
+        node.set_field("level", "DEV")
+        node.set_field("status", "Active")
+        node.set_field("implements", ["REQ-p99999"])
+        graph._index["REQ-d00001"] = node
+
+        check = check_spec_implements_resolve(graph)
+
+        assert not check.passed, "Expected check to fail with unresolved implements"
+        assert len(check.findings) > 0, "Expected findings for unresolved implements"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id (the 'from' req)"
+        assert "REQ-d00001" in (finding.node_id or "")
+        assert finding.message, "Finding should have a message"
+
+
+class TestCheckSpecRefinesResolveFindings:
+    """Findings should identify each unresolved refines reference."""
+
+    def test_REQ_d00085_I_unresolved_refines_have_findings(self, tmp_path: Path) -> None:
+        # Same issue as implements: the builder stores refines as pending
+        # edge links, not as a node field. Construct manually.
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-d00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Dev Refines",
+            source=SourceLocation(path="spec/reqs.md", line=1),
+        )
+        node.set_field("level", "DEV")
+        node.set_field("status", "Active")
+        node.set_field("refines", ["REQ-p88888"])
+        graph._index["REQ-d00002"] = node
+
+        check = check_spec_refines_resolve(graph)
+
+        assert not check.passed, "Expected check to fail with unresolved refines"
+        assert len(check.findings) > 0, "Expected findings for unresolved refines"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+        assert "REQ-d00002" in (finding.node_id or "")
+        assert finding.message, "Finding should have a message"
+
+
+class TestCheckSpecHierarchyLevelsFindings:
+    """Findings should identify each hierarchy level violation."""
+
+    def test_REQ_d00085_I_hierarchy_violations_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[validation]
+strict_hierarchy = true
+
+[rules.hierarchy]
+prd = []
+ops = ["prd"]
+dev = ["ops", "prd"]
+
+[patterns.types]
+prd = { id = "p", level = 1 }
+ops = { id = "o", level = 2 }
+dev = { id = "d", level = 3 }
+"""
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # PRD implementing PRD is a violation (prd has no allowed parents)
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Parent PRD
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Parent PRD* | **Hash**: eeee5555
+
+# REQ-p00002: Child PRD
+
+**Level**: PRD | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL also exist.
+
+*End* *Child PRD* | **Hash**: ffff6666
+"""
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        check = check_spec_hierarchy_levels(graph, config)
+
+        assert not check.passed, "Expected check to fail with hierarchy violations"
+        assert len(check.findings) > 0, "Expected findings for hierarchy violations"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+
+
+class TestCheckSpecOrphansFindings:
+    """Findings should identify each orphaned node."""
+
+    def test_REQ_d00085_I_orphans_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[directories]
+code = ["src"]
+"""
+        )
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Real Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Real Requirement* | **Hash**: gggg7777
+"""
+        )
+
+        # Create a code file referencing a non-existent requirement to create orphan
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "orphan.py").write_text(
+            """# Implements: REQ-d99999
+def orphan_func():
+    pass
+"""
+        )
+
+        graph = _build(tmp_path, config_path, scan_code=True)
+        check = check_spec_orphans(graph)
+
+        assert not check.passed, "Expected check to fail with orphaned nodes"
+        assert len(check.findings) > 0, "Expected findings for orphaned nodes"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+
+
+class TestCheckSpecFormatRulesFindings:
+    """Findings should identify each format violation."""
+
+    def test_REQ_d00085_I_format_violations_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[rules.format]
+require_hash = true
+require_assertions = true
+"""
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Requirement with no hash and no assertions triggers format violations
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00010: No Hash No Assertions
+
+**Level**: PRD | **Status**: Active
+
+This requirement has no assertions section and no hash.
+
+*End* *No Hash No Assertions*
+"""
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        check = check_spec_format_rules(graph, config)
+
+        assert not check.passed, "Expected check to fail with format violations"
+        assert len(check.findings) > 0, "Expected findings for format violations"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+        assert "REQ-p00010" in (finding.node_id or "")
+
+
+class TestCheckCodeReferencesResolveFindings:
+    """Findings should identify each unresolved code reference with file_path and line."""
+
+    def test_REQ_d00085_I_unresolved_code_refs_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[traceability]
+scan_patterns = ["src/**/*.py"]
+
+[directories]
+code = ["src"]
+"""
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        # Create a requirement so the graph is not empty
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Real Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Real Requirement* | **Hash**: hhhh8888
+"""
+        )
+
+        # Create code file referencing a non-existent requirement
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "example.py").write_text(
+            """# Implements: REQ-d99999
+def broken_ref():
+    pass
+"""
+        )
+
+        graph = _build(tmp_path, config_path, scan_code=True)
+        check = check_code_references_resolve(graph)
+
+        assert not check.passed, "Expected check to fail with unresolved code refs"
+        assert len(check.findings) > 0, "Expected findings for unresolved code refs"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.file_path is not None, "Finding should have file_path"
+        assert finding.message, "Finding should have a message"
+
+
+class TestCheckTestReferencesResolveFindings:
+    """Findings should identify each unresolved test reference with file_path."""
+
+    def test_REQ_d00085_I_unresolved_test_refs_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+patterns = ["test_*.py"]
+"""
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Real Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Real Requirement* | **Hash**: iiii9999
+"""
+        )
+
+        # Create test file referencing a non-existent requirement
+        test_dir = tmp_path / "tests"
+        test_dir.mkdir()
+        (test_dir / "test_broken.py").write_text(
+            """# Validates: REQ-d00085
+def test_REQ_d77777_something():
+    pass
+"""
+        )
+
+        graph = _build(tmp_path, config_path, scan_tests=True)
+        check = check_test_references_resolve(graph)
+
+        assert not check.passed, "Expected check to fail with unresolved test refs"
+        assert len(check.findings) > 0, "Expected findings for unresolved test refs"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.file_path is not None, "Finding should have file_path"
+        assert finding.message, "Finding should have a message"
+
+
+class TestCheckTestResultsFindings:
+    """Findings should identify test failures."""
+
+    def test_REQ_d00085_I_test_failures_have_findings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """[project]
+name = "test"
+
+[requirements]
+spec_dirs = ["spec"]
+
+[requirements.id_pattern]
+prefix = "REQ"
+separator = "-"
+pattern = "REQ-[a-z]\\\\d{5}"
+
+[testing]
+enabled = true
+test_dirs = ["tests"]
+result_files = ["results/junit.xml"]
+"""
+        )
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Real Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Real Requirement* | **Hash**: jjjj0000
+"""
+        )
+
+        # Create a JUnit XML with a failed test
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+        (results_dir / "junit.xml").write_text(
+            """<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="tests" tests="2" failures="1">
+    <testcase classname="tests.test_thing" name="test_REQ_p00001_pass" time="0.01"/>
+    <testcase classname="tests.test_thing" name="test_REQ_p00001_fail" time="0.02">
+      <failure message="AssertionError">assert False</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+"""
+        )
+
+        graph = _build(tmp_path, config_path, scan_tests=True)
+        check = check_test_results(graph)
+
+        assert not check.passed, "Expected check to fail with test failures"
+        assert len(check.findings) > 0, "Expected findings for test failures"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.message, "Finding should have a message"

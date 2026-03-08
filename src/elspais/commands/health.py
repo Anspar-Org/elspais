@@ -188,12 +188,21 @@ def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
     duplicates = {k: v for k, v in seen_ids.items() if len(v) > 1}
 
     if duplicates:
+        findings = [
+            HealthFinding(
+                message=f"Duplicate ID {req_id} in {', '.join(files)}",
+                file_path=files[0],
+                node_id=req_id,
+            )
+            for req_id, files in duplicates.items()
+        ]
         return HealthCheck(
             name="spec.no_duplicates",
             passed=False,
             message=f"Found {len(duplicates)} duplicate requirement IDs",
             category="spec",
             details={"duplicates": duplicates},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -228,13 +237,22 @@ def check_spec_implements_resolve(graph: TraceGraph) -> HealthCheck:
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['from']} -> {u['to']}",
+                node_id=u["from"],
+                related=[u["to"]],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="spec.implements_resolve",
             passed=False,
             message=f"{len(unresolved)} unresolved Implements references",
             category="spec",
             severity="warning",
-            details={"unresolved": unresolved[:10]},  # Limit to first 10
+            details={"unresolved": unresolved[:10]},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -267,6 +285,14 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['from']} -> {u['to']}",
+                node_id=u["from"],
+                related=[u["to"]],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="spec.refines_resolve",
             passed=False,
@@ -274,6 +300,7 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
             category="spec",
             severity="warning",
             details={"unresolved": unresolved[:10]},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -344,6 +371,16 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                 )
 
     if violations:
+        findings = [
+            HealthFinding(
+                message=(
+                    f"{v['child']} ({v['child_level']}) -> " f"{v['parent']} ({v['parent_level']})"
+                ),
+                node_id=v["child"],
+                related=[v["parent"]],
+            )
+            for v in violations
+        ]
         # Severity controlled by validation.strict_hierarchy config
         if strict_hierarchy:
             return HealthCheck(
@@ -353,6 +390,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                 category="spec",
                 severity="warning",
                 details={"violations": violations[:10]},
+                findings=findings,
             )
         else:
             return HealthCheck(
@@ -365,6 +403,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                     "violations": violations[:10],
                     "hint": "Set validation.strict_hierarchy=true to enforce",
                 },
+                findings=findings,
             )
 
     return HealthCheck(
@@ -401,6 +440,14 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
 
     if total:
         summary_parts = [f"{len(v)} {k}" for k, v in sorted(by_kind.items())]
+        findings = [
+            HealthFinding(
+                message=f"Orphan: {entry['id']} ({entry['kind']})",
+                node_id=entry["id"],
+            )
+            for entries in by_kind.values()
+            for entry in entries
+        ]
         return HealthCheck(
             name="spec.orphans",
             passed=False,
@@ -411,6 +458,7 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
                 "by_kind": {k: v[:10] for k, v in by_kind.items()},
                 "total": total,
             },
+            findings=findings,
         )
 
     return HealthCheck(
@@ -462,6 +510,14 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     errors = [v for v in all_violations if v.severity == "error"]
     warnings = [v for v in all_violations if v.severity == "warning"]
 
+    all_findings = [
+        HealthFinding(
+            message=f"{v.rule}: {v.message}",
+            node_id=v.node_id,
+        )
+        for v in all_violations
+    ]
+
     if errors:
         return HealthCheck(
             name="spec.format_rules",
@@ -476,6 +532,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
                 ],
             },
+            findings=all_findings,
         )
 
     if warnings:
@@ -490,6 +547,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
                 ],
             },
+            findings=all_findings,
         )
 
     return HealthCheck(
@@ -808,6 +866,15 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
             )
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved refs in {u['source']}:{u['line']}",
+                file_path=u["source"],
+                line=u["line"] or None,
+                related=u.get("references", []),
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="code.references_resolve",
             passed=False,
@@ -815,6 +882,7 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
             category="code",
             severity="warning",
             details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -919,6 +987,13 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
             )
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['test_name']} in {u['source']}",
+                file_path=u["source"],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="tests.references_resolve",
             passed=False,
@@ -926,6 +1001,7 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
             category="tests",
             severity="warning",
             details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -969,6 +1045,15 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     pass_rate = (passed / total * 100) if total > 0 else 0
 
     if failed > 0:
+        findings = [
+            HealthFinding(
+                message=f"Failed: {node.get_label() or node.id}",
+                node_id=node.id,
+                file_path=node.get_field("source_file", None),
+            )
+            for node in result_nodes
+            if node.get_field("status", "unknown") == "failed"
+        ]
         return HealthCheck(
             name="tests.results",
             passed=False,
@@ -984,6 +1069,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
                 "skipped": skipped,
                 "pass_rate": round(pass_rate, 1),
             },
+            findings=findings,
         )
 
     return HealthCheck(
