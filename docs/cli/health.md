@@ -106,6 +106,54 @@ Configuration checks always run as part of the full health check. For focused co
 }
 ```
 
+### JUnit XML Output (`--format junit`)
+
+Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can ingest natively for test reporting dashboards.
+
+**Mapping:**
+
+| Health Concept | JUnit Element |
+|----------------|---------------|
+| Category (config, spec, code, tests) | `<testsuite>` |
+| Individual check | `<testcase>` with `classname="elspais.health.{category}"` |
+| Passing check | Empty `<testcase/>` |
+| Failed check (error severity) | `<testcase>` with `<failure>` element |
+| Failed check (warning severity) | `<testcase>` with `<system-err>` prefixed `WARNING:` |
+| Info message | `<testcase>` with `<system-out>` |
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="config" tests="6" failures="0" errors="0">
+    <testcase classname="elspais.health.config" name="config.exists"/>
+    <testcase classname="elspais.health.config" name="config.syntax"/>
+  </testsuite>
+  <testsuite name="spec" tests="6" failures="1" errors="1">
+    <testcase classname="elspais.health.spec" name="spec.parseable"/>
+    <testcase classname="elspais.health.spec" name="spec.implements_resolve">
+      <failure message="2 unresolved Implements references">
+        REQ-d99999 referenced by REQ-d00010
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+```
+
+**CI Integration Example (GitHub Actions):**
+
+```yaml
+- name: Run health checks (JUnit)
+  run: elspais health --format junit -o health-results.xml
+
+- name: Publish test results
+  uses: dorny/test-reporter@v1
+  if: always()
+  with:
+    name: elspais health
+    path: health-results.xml
+    reporter: java-junit
+```
+
 ## Command Options
 
 | Option | Description |
@@ -113,7 +161,8 @@ Configuration checks always run as part of the full health check. For focused co
 | `--spec` | Run spec file checks only |
 | `--code` | Run code reference checks only |
 | `--tests` | Run test mapping checks only |
-| `-j`, `--json` | Output as JSON |
+| `--format` | Output format: `text`, `markdown`, `json`, `junit` |
+| `-j`, `--json` | Output as JSON (alias for `--format json`) |
 | `-v`, `--verbose` | Show additional details |
 
 ## Exit Codes

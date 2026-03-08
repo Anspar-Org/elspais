@@ -1192,6 +1192,8 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
         return _render_markdown(report)
+    elif fmt == "junit":
+        return _render_junit(report)
     else:
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -1308,3 +1310,65 @@ def _render_markdown(report: HealthReport) -> str:
         lines.append(f"**UNHEALTHY**: {report.failed} errors," f" {report.warnings} warnings")
 
     return "\n".join(lines)
+
+
+# Implements: REQ-d00085-H
+def _render_junit(report: HealthReport) -> str:
+    """Render health report as JUnit XML.
+
+    Maps categories to <testsuite> elements, checks to <testcase> elements.
+    Failed checks with severity=error become <failure>, severity=warning become
+    <system-err> with WARNING prefix, and severity=info become <system-out>.
+    """
+    import xml.etree.ElementTree as ET
+
+    testsuites = ET.Element("testsuites")
+    categories = ["config", "spec", "code", "tests"]
+
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        failures = sum(1 for c in checks if not c.passed and c.severity == "error")
+        suite = ET.SubElement(
+            testsuites,
+            "testsuite",
+            name=category,
+            tests=str(len(checks)),
+            failures=str(failures),
+            errors="0",
+        )
+
+        for check in checks:
+            tc = ET.SubElement(
+                suite,
+                "testcase",
+                name=check.name,
+                classname=f"elspais.health.{category}",
+            )
+
+            if check.severity == "info":
+                sys_out = ET.SubElement(tc, "system-out")
+                sys_out.text = check.message
+            elif not check.passed:
+                if check.severity == "error":
+                    failure = ET.SubElement(tc, "failure", message=check.message)
+                    if check.details:
+                        failure.text = _format_details(check.details)
+                elif check.severity == "warning":
+                    sys_err = ET.SubElement(tc, "system-err")
+                    sys_err.text = f"WARNING: {check.message}"
+
+    return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
+
+
+def _format_details(details: dict[str, Any]) -> str:
+    """Format check details dict as readable text for XML bodies."""
+    parts = []
+    for key, value in details.items():
+        if isinstance(value, list):
+            parts.append(f"{key}: {', '.join(str(v) for v in value)}")
+        else:
+            parts.append(f"{key}: {value}")
+    return "\n".join(parts)

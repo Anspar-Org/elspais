@@ -127,7 +127,8 @@ Examples:
   elspais health --spec       # Check spec files only
   elspais health --code       # Check code references only
   elspais health --tests      # Check test mappings only
-  elspais health --format json # Output JSON for tooling
+  elspais health --format json  # Output JSON for tooling
+  elspais health --format junit # Output JUnit XML for CI
   elspais health -v           # Verbose output with details
 
 Checks performed:
@@ -157,7 +158,7 @@ Checks performed:
     )
     health_parser.add_argument(
         "--format",
-        choices=["text", "markdown", "json"],
+        choices=["text", "markdown", "json", "junit"],
         default="text",
         help="Output format (default: text)",
     )

@@ -21,6 +21,7 @@ E. The `--format` flag SHALL support `text`, `markdown`, `json`, and `csv` outpu
 F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section. The `-v`/`--verbose` flag SHALL expand all available detail.
 
 G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
+H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
 
 ## Rationale
 
