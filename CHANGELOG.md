@@ -2,7 +2,7 @@
 
 All notable changes to elspais will be documented in this file.
 
-## [0.88.0] - 2026-03-07
+## [0.89.0] - 2026-03-07
 
 ### Added
 
@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 - **E2E test infrastructure** — `tests/e2e/` directory with shared conftest (`run_elspais()`, skip markers, path constants)
 - **27 CLI subprocess tests** — end-to-end tests covering version, doctor, summary, trace, graph, config, example, docs, changed, rules, health, init, and fix commands
 - **`browser` pytest marker** — for Playwright-based browser tests
+- **11 self-validation tests** — e2e tests running elspais against its own repository (health, doctor, summary, trace, graph, subdirectory detection)
+- **6 multi-command workflow tests** — cross-command consistency tests (init→health, health/summary consistency, trace JSON/CSV format, init→config, fix→health, summary idempotency)
 
 ## [0.85.5] - 2026-03-06
 
