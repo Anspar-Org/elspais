@@ -19,6 +19,7 @@
 | REQ-p00010 | Review Git Integration                           | prd-elspais.md           | a410550e |
 | REQ-p00011 | Review Package Lifecycle                         | prd-elspais.md           | 0c09b663 |
 | REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
+| REQ-p00013 | Automated Testing                                | prd-elspais.md           | bedb66fd |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |

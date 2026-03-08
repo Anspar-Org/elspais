@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.87.0"
+version = "0.88.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -96,9 +96,10 @@ include = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --ignore=tests/_obsolete"
+addopts = "--tb=short --ignore=tests/_obsolete"
 markers = [
     "e2e: end-to-end tests requiring external tools (claude CLI)",
+    "browser: browser-based tests requiring Playwright",
 ]
 
 [tool.black]

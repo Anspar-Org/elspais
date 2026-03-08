@@ -2,6 +2,15 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.88.0] - 2026-03-07
+
+### Added
+
+- **REQ-p00013: Automated Testing requirement** — new PRD-level requirement covering unit, e2e, self-validation, workflow, and MCP protocol testing
+- **E2E test infrastructure** — `tests/e2e/` directory with shared conftest (`run_elspais()`, skip markers, path constants)
+- **27 CLI subprocess tests** — end-to-end tests covering version, doctor, summary, trace, graph, config, example, docs, changed, rules, health, init, and fix commands
+- **`browser` pytest marker** — for Playwright-based browser tests
+
 ## [0.85.5] - 2026-03-06
 
 ### Removed

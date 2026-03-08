@@ -359,3 +359,33 @@ B. The system SHALL provide API endpoints for creating, reading, updating, and m
 C. The system SHALL support modifying requirement status in spec files based on review outcomes.
 
 *End* *Review Backend Services* | **Hash**: c1ec12e5
+---
+
+# REQ-p00013: Automated Testing
+
+**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+A requirements management tool must itself be rigorously tested to maintain credibility. Unit tests verify individual components in isolation, but integration and end-to-end tests are essential to catch cross-component failures, CLI subprocess regressions, and real-world workflow breakages that mocked unit tests miss.
+
+The testing strategy follows a pyramid:
+
+- **Unit tests**: Fast, isolated tests for individual functions and classes
+- **Integration tests**: Tests that exercise multiple components together
+- **End-to-end tests**: Subprocess-based tests that invoke the CLI binary and verify real output
+- **Self-validation**: The tool validates its own repository as the strongest regression test
+
+## Assertions
+
+A. The project SHALL maintain unit tests for all core modules with assertion-linked test names.
+
+B. The project SHALL maintain end-to-end tests that invoke the CLI as a subprocess and verify command output, exit codes, and file artifacts.
+
+C. The project SHALL include self-validation tests that run elspais against its own repository and assert health, summary, and trace outputs are correct.
+
+D. The project SHALL include multi-command workflow tests that verify cross-command consistency and sequential operation correctness.
+
+E. The project SHALL include MCP protocol tests that verify tool invocation, search, cursor pagination, and mutation roundtrips via the stdio transport.
+
+*End* *Automated Testing* | **Hash**: bedb66fd

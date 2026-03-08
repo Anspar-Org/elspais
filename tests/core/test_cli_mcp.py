@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,6 @@ import pytest
 
 from elspais.cli import (
     _claude_desktop_config_path,
-    _claude_env,
     _mcp_install,
     _mcp_install_desktop,
     _mcp_uninstall,
@@ -20,9 +20,10 @@ from elspais.cli import (
 
 _has_claude = shutil.which("claude") is not None
 _has_elspais = shutil.which("elspais") is not None
+_inside_claude_code = os.environ.get("CLAUDECODE") == "1"
 _skip_e2e = pytest.mark.skipif(
-    not (_has_claude and _has_elspais),
-    reason="requires claude and elspais on PATH",
+    not (_has_claude and _has_elspais) or _inside_claude_code,
+    reason="requires claude and elspais on PATH, cannot run inside Claude Code session",
 )
 
 
@@ -297,32 +298,53 @@ class TestMcpUninstallDesktop:
 @pytest.mark.e2e
 @_skip_e2e
 class TestMcpInstallE2E:
-    """End-to-end: install registers with claude, uninstall removes it."""
+    """End-to-end: install registers with claude, uninstall removes it.
 
-    def _claude_mcp_list(self) -> str:
-        """Run ``claude mcp list`` and return stdout."""
+    Runs the test logic in a subprocess to prevent the claude CLI from
+    corrupting the parent pytest process's file descriptors (the claude
+    binary writes directly to /dev/tty, which disrupts pytest's output
+    capture and causes all subsequent test output to vanish).
+    """
+
+    def test_e2e_install_and_uninstall(self):
         result = subprocess.run(
-            [shutil.which("claude"), "mcp", "list"],
+            [
+                shutil.which("python") or "python",
+                "-c",
+                _E2E_MCP_SCRIPT,
+            ],
             capture_output=True,
             text=True,
-            env=_claude_env(),
+            timeout=30,
+            start_new_session=True,
         )
-        return result.stdout
+        assert (
+            result.returncode == 0
+        ), f"MCP install/uninstall e2e failed:\n{result.stdout}\n{result.stderr}"
 
-    def test_e2e_install_and_uninstall(self, capsys):
-        # Remove any existing registration so install starts clean
-        _mcp_uninstall(global_scope=True)
-        capsys.readouterr()  # discard uninstall output
 
-        try:
-            # Install at user scope so it doesn't collide with .mcp.json
-            rc = _mcp_install(global_scope=True)
-            assert rc == 0, capsys.readouterr().err
+_E2E_MCP_SCRIPT = """\
+from elspais.cli import _mcp_install, _mcp_uninstall, _claude_env
+import shutil, subprocess
 
-            listing = self._claude_mcp_list()
-            # claude mcp list shows "<name>: <command> - <status>"
-            assert "elspais" in listing
-            assert "elspais mcp serve" in listing
-        finally:
-            # Always clean up, even if assertions fail
-            _mcp_uninstall(global_scope=True)
+def claude_mcp_list():
+    r = subprocess.run(
+        [shutil.which("claude"), "mcp", "list"],
+        capture_output=True, text=True, env=_claude_env(),
+    )
+    return r.stdout
+
+# Clean slate
+_mcp_uninstall(global_scope=True)
+
+try:
+    rc = _mcp_install(global_scope=True)
+    assert rc == 0, f"install failed with rc={rc}"
+    listing = claude_mcp_list()
+    assert "elspais" in listing, f"elspais not in listing: {listing}"
+    assert "elspais mcp serve" in listing, f"serve not in listing: {listing}"
+finally:
+    _mcp_uninstall(global_scope=True)
+
+print("OK")
+"""
