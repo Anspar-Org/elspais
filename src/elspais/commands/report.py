@@ -18,7 +18,7 @@ COMPOSABLE_SECTIONS = ("health", "summary", "trace", "changed")
 
 # Implements: REQ-d00085-E
 FORMAT_SUPPORT = {
-    "health": {"text", "markdown", "json", "junit"},
+    "health": {"text", "markdown", "json", "junit", "sarif"},
     "summary": {"text", "markdown", "json", "csv"},
     "trace": {"text", "markdown", "json", "csv"},
     "changed": {"text", "json"},

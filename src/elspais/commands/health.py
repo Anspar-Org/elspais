@@ -1303,6 +1303,8 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         return _render_markdown(report)
     elif fmt == "junit":
         return _render_junit(report)
+    elif fmt == "sarif":
+        return _render_sarif(report)
     else:
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -1481,3 +1483,88 @@ def _format_details(details: dict[str, Any]) -> str:
         else:
             parts.append(f"{key}: {value}")
     return "\n".join(parts)
+
+
+# Implements: REQ-d00085-J
+def _render_sarif(report: HealthReport) -> str:
+    """Render health report as SARIF v2.1.0 JSON.
+
+    One reportingDescriptor per unique failing check name, one result per
+    HealthFinding with physical locations. Passing checks are omitted.
+    Coverage stats go in run.properties.
+    """
+    _SARIF_SEVERITY = {"error": "error", "warning": "warning", "info": "note"}
+
+    rules: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    rule_index_map: dict[str, int] = {}
+
+    for check in report.checks:
+        if check.passed:
+            continue
+
+        # Register rule if not yet seen
+        if check.name not in rule_index_map:
+            rule_index_map[check.name] = len(rules)
+            rules.append(
+                {
+                    "id": check.name,
+                    "shortDescription": {"text": check.message},
+                }
+            )
+
+        idx = rule_index_map[check.name]
+        level = _SARIF_SEVERITY.get(check.severity, "warning")
+
+        if check.findings:
+            for finding in check.findings:
+                result: dict[str, Any] = {
+                    "ruleId": check.name,
+                    "ruleIndex": idx,
+                    "level": level,
+                    "message": {"text": finding.message},
+                }
+                if finding.file_path:
+                    loc: dict[str, Any] = {
+                        "artifactLocation": {"uri": finding.file_path},
+                    }
+                    if finding.line is not None:
+                        loc["region"] = {"startLine": finding.line}
+                    result["locations"] = [{"physicalLocation": loc}]
+                results.append(result)
+        else:
+            # Failing check with no findings — emit one result from check message
+            results.append(
+                {
+                    "ruleId": check.name,
+                    "ruleIndex": idx,
+                    "level": level,
+                    "message": {"text": check.message},
+                }
+            )
+
+    sarif = {
+        "$schema": (
+            "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/"
+            "sarif-2.1/schema/sarif-schema-2.1.0.json"
+        ),
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "elspais",
+                        "rules": rules,
+                    },
+                },
+                "results": results,
+                "properties": {
+                    "passed": report.passed,
+                    "failed": report.failed,
+                    "warnings": report.warnings,
+                },
+            }
+        ],
+    }
+
+    return json.dumps(sarif, indent=2)

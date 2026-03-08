@@ -154,6 +154,89 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
     reporter: java-junit
 ```
 
+### SARIF Output (`--format sarif`)
+
+Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) JSON for GitHub Code Scanning and other static analysis dashboards. Only failing checks are emitted as results; passing checks are omitted.
+
+**Mapping:**
+
+| Health Concept | SARIF Element |
+|----------------|---------------|
+| Unique failing check name | `reportingDescriptor` in `tool.driver.rules[]` |
+| Individual `HealthFinding` | `result` in `results[]` |
+| Severity `error` | `level: "error"` |
+| Severity `warning` | `level: "warning"` |
+| Severity `info` | `level: "note"` |
+| Finding with `file_path` | `physicalLocation` with `artifactLocation.uri` |
+| Finding with `line` | `region.startLine` |
+| Coverage stats | `run.properties` (`passed`, `failed`, `warnings`) |
+
+```json
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "elspais",
+          "informationUri": "https://github.com/anspar-org/elspais",
+          "rules": [
+            {
+              "id": "spec.implements_resolve",
+              "shortDescription": {
+                "text": "All Implements references resolve"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spec.implements_resolve",
+          "level": "error",
+          "message": {
+            "text": "REQ-d99999 referenced by REQ-d00010"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "spec/dev-spec.md"
+                },
+                "region": {
+                  "startLine": 42
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "passed": 11,
+        "failed": 1,
+        "warnings": 0
+      }
+    }
+  ]
+}
+```
+
+**CI Integration Example (GitHub Code Scanning):**
+
+```yaml
+- name: Run health checks (SARIF)
+  run: elspais health --format sarif -o health-results.sarif
+  continue-on-error: true
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: health-results.sarif
+    category: elspais-health
+```
+
 ## Command Options
 
 | Option | Description |
@@ -161,7 +244,7 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 | `--spec` | Run spec file checks only |
 | `--code` | Run code reference checks only |
 | `--tests` | Run test mapping checks only |
-| `--format` | Output format: `text`, `markdown`, `json`, `junit` |
+| `--format` | Output format: `text`, `markdown`, `json`, `junit`, `sarif` |
 | `-j`, `--json` | Output as JSON (alias for `--format json`) |
 | `-v`, `--verbose` | Show additional details |
 

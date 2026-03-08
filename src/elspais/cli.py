@@ -128,7 +128,8 @@ Examples:
   elspais health --code       # Check code references only
   elspais health --tests      # Check test mappings only
   elspais health --format json  # Output JSON for tooling
-  elspais health --format junit # Output JUnit XML for CI
+  elspais health --format junit  # Output JUnit XML for CI
+  elspais health --format sarif  # Output SARIF for code scanning
   elspais health -v           # Verbose output with details
 
 Checks performed:
@@ -158,7 +159,7 @@ Checks performed:
     )
     health_parser.add_argument(
         "--format",
-        choices=["text", "markdown", "json", "junit"],
+        choices=["text", "markdown", "json", "junit", "sarif"],
         default="text",
         help="Output format (default: text)",
     )

@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.95.0] - 2026-03-08
+
+### Added
+
+- **`--format sarif` for `elspais health`** — SARIF v2.1.0 JSON output for GitHub Code Scanning and static analysis dashboards. One `reportingDescriptor` per unique failing check, one `result` per `HealthFinding` with physical locations (file path, line number). Passing checks omitted. Severity mapped to SARIF levels (`error`→`"error"`, `warning`→`"warning"`, `info`→`"note"`). Coverage stats in `run.properties`
+
 ## [0.94.0] - 2026-03-07
 
 ### Added

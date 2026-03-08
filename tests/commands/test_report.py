@@ -309,9 +309,9 @@ class TestFormatSupportValidation:
 
         assert exit_code == 0
 
-    def test_REQ_d00085_E_health_supports_text_markdown_json_junit(self):
-        """Health section supports text, markdown, json, junit."""
-        assert FORMAT_SUPPORT["health"] == {"text", "markdown", "json", "junit"}
+    def test_REQ_d00085_E_health_supports_text_markdown_json_junit_sarif(self):
+        """Health section supports text, markdown, json, junit, sarif."""
+        assert FORMAT_SUPPORT["health"] == {"text", "markdown", "json", "junit", "sarif"}
 
     def test_REQ_d00085_E_changed_supports_text_json_only(self):
         """Changed section supports only text and json."""
