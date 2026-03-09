@@ -406,6 +406,7 @@ class TestGitStatusSummary:
         assert result["dirty_spec_files"] == []
         assert result["remote_diverged"] is False
         assert result["fast_forward_possible"] is False
+        assert result["main_diverged"] is False
 
     def test_REQ_p00004_C_main_branch_dirty_spec(self, tmp_path):
         """On main with modified spec files."""

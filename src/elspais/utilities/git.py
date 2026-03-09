@@ -460,28 +460,24 @@ def git_status_summary(
     # Check remote divergence
     remote_diverged = False
     fast_forward_possible = False
+    main_diverged = False
+    env = _clean_git_env()
     if branch:
         try:
             # Fetch without modifying working tree
             subprocess.run(
                 ["git", "fetch", "--quiet"],
                 cwd=repo_root,
-                env=_clean_git_env(),
+                env=env,
                 capture_output=True,
                 timeout=10,
             )
-            # Check if remote tracking branch exists and has diverged
+            # Check if remote tracking branch has diverged from local
             remote_ref = f"origin/{branch}"
             result = subprocess.run(
-                [
-                    "git",
-                    "rev-list",
-                    "--left-right",
-                    "--count",
-                    f"{branch}...{remote_ref}",
-                ],
+                ["git", "rev-list", "--left-right", "--count", f"{branch}...{remote_ref}"],
                 cwd=repo_root,
-                env=_clean_git_env(),
+                env=env,
                 capture_output=True,
                 text=True,
             )
@@ -492,6 +488,33 @@ def git_status_summary(
                     remote_ahead = int(parts[1])
                     remote_diverged = remote_ahead > 0
                     fast_forward_possible = remote_ahead > 0 and local_ahead == 0
+
+            # Check if main has diverged since branch point (informational)
+            if not is_main:
+                for main_name in main_branches:
+                    remote_main = f"origin/{main_name}"
+                    # Find merge-base between this branch and remote main
+                    mb = subprocess.run(
+                        ["git", "merge-base", branch, remote_main],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if mb.returncode != 0:
+                        continue
+                    merge_base = mb.stdout.strip()
+                    # Check if remote main has moved past the merge-base
+                    tip = subprocess.run(
+                        ["git", "rev-parse", remote_main],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if tip.returncode == 0 and tip.stdout.strip() != merge_base:
+                        main_diverged = True
+                    break  # Only check the first matching main branch
         except (
             subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
@@ -506,6 +529,7 @@ def git_status_summary(
         "dirty_spec_files": dirty_spec,
         "remote_diverged": remote_diverged,
         "fast_forward_possible": fast_forward_possible,
+        "main_diverged": main_diverged,
     }
 
 

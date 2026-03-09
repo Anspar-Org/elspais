@@ -1078,6 +1078,7 @@ class TestGitStatus:
             "dirty_spec_files": ["spec/prd.md"],
             "remote_diverged": False,
             "fast_forward_possible": False,
+            "main_diverged": False,
         }
         with patch("elspais.utilities.git.git_status_summary", return_value=mock_result):
             resp = client.get("/api/git/status")

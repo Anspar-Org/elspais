@@ -101,7 +101,7 @@ async function refreshBranchStatus() {
         refreshBtn.classList.toggle('hidden', !data.remote_diverged || !data.fast_forward_possible);
     }
     if (warningEl) {
-        warningEl.classList.toggle('hidden', !data.remote_diverged || data.fast_forward_possible);
+        warningEl.classList.toggle('hidden', !data.main_diverged);
     }
     // Push button: enabled when not on main AND dirty spec files exist
     var pushBtn = document.getElementById('btn-push');
@@ -114,7 +114,9 @@ async function refreshBranchStatus() {
 async function doGitPull() {
     var result = await apiFetch('/api/git/pull', {method: 'POST'});
     if (result && result.success) {
-        showToast('Pulled latest changes', 'success');
+        var msg = (result.message && result.message.indexOf('Already up to date') >= 0)
+            ? 'Already up to date' : 'Pulled latest changes';
+        showToast(msg, 'success');
         refreshBranchStatus();
     } else {
         showToast((result && result.error) || 'Pull failed', 'error');
