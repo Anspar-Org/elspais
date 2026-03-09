@@ -461,6 +461,7 @@ def git_status_summary(
     remote_diverged = False
     fast_forward_possible = False
     main_diverged = False
+    local_ahead_count = 0
     env = _clean_git_env()
     if branch:
         try:
@@ -486,6 +487,7 @@ def git_status_summary(
                 if len(parts) == 2:
                     local_ahead = int(parts[0])
                     remote_ahead = int(parts[1])
+                    local_ahead_count = local_ahead
                     remote_diverged = remote_ahead > 0
                     fast_forward_possible = remote_ahead > 0 and local_ahead == 0
 
@@ -527,6 +529,7 @@ def git_status_summary(
         "branch": branch,
         "is_main": is_main,
         "dirty_spec_files": dirty_spec,
+        "local_ahead": local_ahead_count,
         "remote_diverged": remote_diverged,
         "fast_forward_possible": fast_forward_possible,
         "main_diverged": main_diverged,

@@ -95,7 +95,7 @@ async function refreshBranchStatus() {
     nameEl.textContent = data.branch || 'detached';
     dot.className = 'branch-status-dot';
     if (data.is_main) { dot.classList.add('red'); }
-    else if (data.dirty_spec_files && data.dirty_spec_files.length > 0) { dot.classList.add('blue'); }
+    else if (data.local_ahead > 0) { dot.classList.add('blue'); }
     else { dot.classList.add('green'); }
     if (refreshBtn) {
         refreshBtn.classList.toggle('hidden', !data.remote_diverged || !data.fast_forward_possible);
@@ -103,10 +103,10 @@ async function refreshBranchStatus() {
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.main_diverged);
     }
-    // Push button: enabled when not on main AND dirty spec files exist
+    // Push button: enabled when not on main AND local has unpushed commits
     var pushBtn = document.getElementById('btn-push');
     if (pushBtn) {
-        pushBtn.disabled = data.is_main || !data.dirty_spec_files || data.dirty_spec_files.length === 0;
+        pushBtn.disabled = data.is_main || data.local_ahead === 0;
     }
     return data;
 }

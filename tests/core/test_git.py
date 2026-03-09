@@ -404,6 +404,7 @@ class TestGitStatusSummary:
         assert result["branch"] == "feature"
         assert result["is_main"] is False
         assert result["dirty_spec_files"] == []
+        assert result["local_ahead"] == 0
         assert result["remote_diverged"] is False
         assert result["fast_forward_possible"] is False
         assert result["main_diverged"] is False

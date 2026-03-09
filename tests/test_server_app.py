@@ -1077,6 +1077,7 @@ class TestGitStatus:
             "is_main": False,
             "dirty_spec_files": ["spec/prd.md"],
             "remote_diverged": False,
+            "local_ahead": 0,
             "fast_forward_possible": False,
             "main_diverged": False,
         }
