@@ -741,4 +741,62 @@ def create_app(
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 
+    # ─────────────────────────────────────────────────────────────────
+    # Git sync endpoints (REQ-p00004-C/D/E/F)
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/api/git/status")
+    def api_git_status():
+        # Implements: REQ-p00004-C
+        """GET /api/git/status - Git status summary for the viewer UI."""
+        from elspais.utilities.git import git_status_summary
+
+        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        result = git_status_summary(_state["working_dir"], spec_dir=spec_dir)
+        return jsonify(result)
+
+    @app.route("/api/git/branch", methods=["POST"])
+    def api_git_branch():
+        # Implements: REQ-p00004-D
+        """POST /api/git/branch - Create and switch to a new branch."""
+        from elspais.utilities.git import create_and_switch_branch
+
+        data = request.get_json(force=True)
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"success": False, "error": "branch name required"}), 400
+        result = create_and_switch_branch(_state["working_dir"], name)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/git/push", methods=["POST"])
+    def api_git_push():
+        # Implements: REQ-p00004-E
+        """POST /api/git/push - Commit and push spec files."""
+        from elspais.utilities.git import commit_and_push_spec_files
+
+        data = request.get_json(force=True)
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"success": False, "error": "commit message required"}), 400
+        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
+        err_lower = result.get("error", "").lower()
+        if not result.get("success") and (
+            "refusing to commit" in err_lower or "cannot commit" in err_lower
+        ):
+            return jsonify(result), 403
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/git/pull", methods=["POST"])
+    def api_git_pull():
+        # Implements: REQ-p00004-F
+        """POST /api/git/pull - Pull (fast-forward only) from remote."""
+        from elspais.utilities.git import pull_ff_only
+
+        result = pull_ff_only(_state["working_dir"])
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
     return app

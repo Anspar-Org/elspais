@@ -10,6 +10,7 @@ All notable changes to elspais will be documented in this file.
 - **`create_and_switch_branch()` utility function** — creates a new git branch and switches to it, using stash to preserve dirty working tree changes across the switch; supports the viewer branch creation modal (REQ-p00004-D)
 - **`commit_and_push_spec_files()` utility function** — stages all modified spec files, commits with a message, and optionally pushes; refuses to operate on main/master branches; supports the viewer push modal (REQ-p00004-E)
 - **`pull_ff_only()` utility function** — fetches from the remote tracking branch and merges with `--ff-only`; aborts if the merge is not fast-forwardable; handles timeout, no-remote, and diverged-history error cases; supports the viewer refresh/pull action (REQ-p00004-F)
+- **Flask git sync endpoints** — `GET /api/git/status`, `POST /api/git/branch`, `POST /api/git/push`, `POST /api/git/pull` routes in the viewer server; delegates to git utility functions; push on main/master returns 403 (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F)
 
 ## [1.0.0] - 2026-03-08
 
