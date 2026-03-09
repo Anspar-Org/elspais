@@ -718,6 +718,68 @@ def commit_and_push_spec_files(
     return result
 
 
+# Implements: REQ-p00004-F
+def pull_ff_only(
+    repo_root: Path,
+) -> dict[str, Any]:
+    """Fetch from remote and fast-forward merge.
+
+    This function performs a safe pull: it fetches from the remote tracking
+    branch and merges with ``--ff-only``.  If the merge cannot be completed
+    as a fast-forward (e.g. local and remote have diverged), the operation
+    is aborted and an error is returned.  Elspais never rebases or creates
+    merge commits.
+
+    Args:
+        repo_root: Path to repository root.
+
+    Returns:
+        Dict with ``success`` (bool) and either ``message`` (str) on success
+        or ``error`` (str) on failure.
+    """
+    env = _clean_git_env()
+
+    # 1. Fetch
+    try:
+        subprocess.run(
+            ["git", "fetch"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Fetch timed out"}
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        return {"success": False, "error": f"Fetch failed: {stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    # 2. Merge --ff-only
+    try:
+        result = subprocess.run(
+            ["git", "merge", "--ff-only"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {"success": True, "message": result.stdout.strip() or "Already up to date."}
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        return {
+            "success": False,
+            "error": "Cannot fast-forward — resolve differences outside elspais",
+            "detail": stderr,
+        }
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+
 # Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
@@ -967,6 +1029,8 @@ __all__ = [
     "create_and_switch_branch",
     # Commit and push (REQ-p00004-E)
     "commit_and_push_spec_files",
+    # Pull fast-forward (REQ-p00004-F)
+    "pull_ff_only",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

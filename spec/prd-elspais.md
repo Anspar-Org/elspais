@@ -117,7 +117,9 @@ D. The tool SHALL create and switch to a new git branch, using stash to preserve
 
 E. The tool SHALL commit modified spec files and optionally push, refusing to operate on main/master branches.
 
-*End* *Change Detection and Auditability* | **Hash**: 9a6744f5
+F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
+
+*End* *Change Detection and Auditability* | **Hash**: fa53cb96
 ---
 
 # REQ-p00005: Multi-Repository Requirements

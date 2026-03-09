@@ -1,4 +1,4 @@
-# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D, REQ-p00004-E
+# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F
 """Tests for Git Integration.
 
 Validates:
@@ -6,6 +6,7 @@ Validates:
 - REQ-p00004-B: Git change detection
 - REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
 - REQ-p00004-E: commit_and_push_spec_files SHALL commit spec files, refuse on main/master
+- REQ-p00004-F: pull_ff_only SHALL fetch and fast-forward-merge, aborting if not ff-able
 """
 
 import subprocess
@@ -28,6 +29,7 @@ from elspais.utilities.git import (
     get_repo_root,
     get_req_locations_from_graph,
     git_status_summary,
+    pull_ff_only,
     temporary_worktree,
 )
 
@@ -656,3 +658,127 @@ class TestCommitAndPushSpecFiles:
 
         assert result["success"] is True
         assert "spec/new.md" in result["files_committed"]
+
+
+def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Create a bare remote and two clones for pull tests.
+
+    Returns (bare_repo, clone_a, clone_b).
+    """
+    bare = tmp_path / "remote.git"
+    bare.mkdir()
+    subprocess.run(["git", "init", "--bare"], cwd=bare, capture_output=True, check=True)
+
+    clone_a = tmp_path / "clone_a"
+    subprocess.run(["git", "clone", str(bare), str(clone_a)], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=clone_a,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=clone_a,
+        capture_output=True,
+        check=True,
+    )
+    # Create initial commit and push
+    (clone_a / "README.md").write_text("init\n")
+    subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=clone_a, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "push", "-u", "origin", "main"],
+        cwd=clone_a,
+        capture_output=True,
+        check=True,
+    )
+
+    clone_b = tmp_path / "clone_b"
+    subprocess.run(["git", "clone", str(bare), str(clone_b)], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=clone_b,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=clone_b,
+        capture_output=True,
+        check=True,
+    )
+
+    return bare, clone_a, clone_b
+
+
+class TestPullFfOnly:
+    """Tests for pull_ff_only().
+
+    Validates REQ-p00004-F: The tool SHALL fetch and fast-forward-merge
+    from the remote tracking branch, aborting if the merge is not
+    fast-forwardable.
+    """
+
+    def test_REQ_p00004_F_no_remote_returns_error(self, tmp_path):
+        """Returns error when no remote is configured."""
+        _init_git_repo(tmp_path)
+
+        result = pull_ff_only(tmp_path)
+
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_REQ_p00004_F_ff_pull_succeeds(self, tmp_path):
+        """Fast-forward pull succeeds when remote has new commits."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        # Push a new commit from clone_a
+        (clone_a / "new_file.txt").write_text("hello\n")
+        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add file"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        # Pull from clone_b (should fast-forward)
+        result = pull_ff_only(clone_b)
+
+        assert result["success"] is True
+        assert "message" in result
+        # Verify the file arrived
+        assert (clone_b / "new_file.txt").read_text() == "hello\n"
+
+    def test_REQ_p00004_F_not_fast_forwardable_returns_error(self, tmp_path):
+        """Returns error when local and remote have diverged."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        # Push a commit from clone_a
+        (clone_a / "file_a.txt").write_text("from a\n")
+        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "commit from a"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        # Make a local commit in clone_b (diverges from remote)
+        (clone_b / "file_b.txt").write_text("from b\n")
+        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "commit from b"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+
+        # Pull should fail (not fast-forwardable)
+        result = pull_ff_only(clone_b)
+
+        assert result["success"] is False
+        assert "fast-forward" in result["error"].lower() or "Cannot" in result["error"]
