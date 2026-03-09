@@ -52,10 +52,9 @@ function toggleEditMode() {
         el.contentEditable = editState.enabled ? 'true' : 'false';
     });
 
-    // Show/hide edit-only elements
-    document.querySelectorAll('.edit-only').forEach(function(el) {
-        el.style.display = editState.enabled ? '' : 'none';
-    });
+    // .edit-only visibility is handled by CSS:
+    //   .edit-only { display: none; }
+    //   body.edit-mode .edit-only { display: inline-flex; }
 
     saveState();
 }

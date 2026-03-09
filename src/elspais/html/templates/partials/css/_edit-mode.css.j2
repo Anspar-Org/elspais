@@ -2,15 +2,17 @@
 
 /* Edit Mode: hidden by default, shown when body.edit-mode */
 .edit-only {
-    display: none;
+    display: none !important;
 }
 
 body.edit-mode .edit-only {
-    display: inline-flex;
+    display: inline-flex !important;
 }
 
+/* Block-level edit-only elements (e.g. card sections) */
+body.edit-mode div.edit-only,
 body.edit-mode .edit-only-block {
-    display: block;
+    display: block !important;
 }
 
 /* --- Edit Mode Visual Indicators --- */
