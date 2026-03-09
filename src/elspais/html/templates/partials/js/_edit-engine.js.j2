@@ -103,6 +103,11 @@ async function refreshBranchStatus() {
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.remote_diverged || data.fast_forward_possible);
     }
+    // Push button: enabled when not on main AND dirty spec files exist
+    var pushBtn = document.getElementById('btn-push');
+    if (pushBtn) {
+        pushBtn.disabled = data.is_main || !data.dirty_spec_files || data.dirty_spec_files.length === 0;
+    }
     return data;
 }
 
@@ -572,6 +577,119 @@ function onAddRelationship(nodeId, btn) {
 }
 
 // Search functions moved to _search.js.j2 (shared by both modes)
+
+// =====================================================================
+// Push Modal (REQ-p00004-E)
+// =====================================================================
+
+function showPushModal() {
+    apiFetch('/api/git/status').then(function(data) {
+        if (!data || data.is_main) return;
+        var files = data.dirty_spec_files || [];
+        // Remove existing modal
+        var old = document.getElementById('branch-modal-overlay');
+        if (old) old.remove();
+
+        var fileListHtml = files.length > 0
+            ? files.map(function(f) { return '<div class="modal-file">' + escapeHtml(f) + '</div>'; }).join('')
+            : '<div class="modal-file muted">No modified spec files</div>';
+
+        var overlay = document.createElement('div');
+        overlay.id = 'branch-modal-overlay';
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML =
+            '<div class="modal-dialog">' +
+                '<div class="modal-title">Commit &amp; Push</div>' +
+                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch) + '</strong></div>' +
+                '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
+                '<div class="modal-file-list">' + fileListHtml + '</div>' +
+                '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
+                '<input type="text" class="modal-input" id="push-message-input" placeholder="Update requirements" autocomplete="off">' +
+                '<div class="modal-error hidden" id="push-modal-error"></div>' +
+                '<div class="modal-actions">' +
+                    '<button class="btn btn-primary" id="push-modal-confirm"' + (files.length === 0 ? ' disabled' : '') + '>Push</button>' +
+                    '<button class="btn" id="push-modal-cancel">Cancel</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var input = document.getElementById('push-message-input');
+        var errorEl = document.getElementById('push-modal-error');
+        input.focus();
+
+        function doPush() {
+            var msg = input.value.trim();
+            if (!msg) {
+                errorEl.textContent = 'Commit message is required';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            var confirmBtn = document.getElementById('push-modal-confirm');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Pushing...';
+            // Save mutations first, then push
+            apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
+                if (saveResult && saveResult.success === false) {
+                    errorEl.textContent = 'Save failed: ' + (saveResult.error || 'unknown');
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                    return;
+                }
+                return apiFetch('/api/git/push', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+            }).then(function(result) {
+                if (!result) return;
+                if (result.success) {
+                    overlay.remove();
+                    var toast = 'Pushed ' + (result.files_committed || []).length + ' file(s)';
+                    if (result.push_error) {
+                        toast += ' (commit OK, push failed: ' + result.push_error + ')';
+                        showToast(toast, 'warning');
+                    } else {
+                        showToast(toast, 'success');
+                    }
+                    refreshBranchStatus();
+                    refreshDirtyCount();
+                } else {
+                    errorEl.textContent = result.error || 'Push failed';
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                }
+            });
+        }
+
+        document.getElementById('push-modal-confirm').onclick = doPush;
+        document.getElementById('push-modal-cancel').onclick = function() { overlay.remove(); };
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) overlay.remove();
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') doPush();
+            if (e.key === 'Escape') overlay.remove();
+        });
+    });
+}
+
+// =====================================================================
+// Unsaved Changes Warning (REQ-p00004-E)
+// =====================================================================
+
+window.addEventListener('beforeunload', function(e) {
+    var dirtyBadge = document.getElementById('unsaved-badge');
+    var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
+                       parseInt(dirtyBadge.textContent, 10) > 0;
+    var dot = document.getElementById('branch-status-dot');
+    var hasUncommitted = dot && dot.classList.contains('blue');
+    if (hasMutations || hasUncommitted) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
 
 // =====================================================================
 // Branch Status: on-load check and polling (REQ-p00004-C, REQ-p00004-D)

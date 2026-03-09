@@ -59,6 +59,11 @@
         <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes">
             Revert
         </button>
+
+        <button class="btn btn-success edit-only" id="btn-push" onclick="showPushModal()" disabled
+                title="Commit and push spec changes">
+            Push
+        </button>
         {% endif %}
 
         <div class="hamburger-menu" id="hamburger-menu">

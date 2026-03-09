@@ -142,4 +142,20 @@ body.edit-mode .status-badge-wrapper {
 }
 .modal-input:focus { outline: 2px solid var(--color-primary, #3b82f6); }
 .modal-error { color: #ef4444; font-size: 0.85em; margin-top: 8px; }
+.modal-error.hidden { display: none; }
 .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+/* --- Push Modal File List --- */
+
+.modal-file-list {
+    max-height: 120px; overflow-y: auto;
+    border: 1px solid var(--border-color, #ccc); border-radius: 4px; padding: 4px;
+}
+.modal-file { font-family: monospace; font-size: 0.85em; padding: 2px 6px; }
+.modal-file.muted { color: var(--text-secondary, #999); }
+
+/* --- Push Button (Success) --- */
+
+.btn-success { background: #22c55e; color: #fff; border: none; }
+.btn-success:hover:not(:disabled) { background: #16a34a; }
+.btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
