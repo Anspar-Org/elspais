@@ -624,6 +624,100 @@ def create_and_switch_branch(
     return {"success": True, "branch": branch_name}
 
 
+# Implements: REQ-p00004-E
+def commit_and_push_spec_files(
+    repo_root: Path,
+    message: str,
+    spec_dir: str = "spec",
+    push: bool = True,
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Stage all modified spec files, commit with message, and optionally push.
+
+    Refuses to operate on main/master (or other protected) branches.
+
+    Args:
+        repo_root: Path to repository root.
+        message: Commit message.
+        spec_dir: Spec directory relative to repo root (default: ``"spec"``).
+        push: Whether to push after committing (default: ``True``).
+        main_branches: Branch names considered protected.
+
+    Returns:
+        Dict with ``success`` (bool), and either ``files_committed`` (list[str])
+        or ``error`` (str).  If push fails the commit is still reported as
+        successful with a ``push_error`` field.
+    """
+    # Refuse on protected branches
+    branch = get_current_branch(repo_root)
+    if branch in main_branches:
+        return {
+            "success": False,
+            "error": f"Refusing to commit on protected branch '{branch}'",
+        }
+
+    # Find dirty spec files (modified + untracked)
+    modified, untracked = get_modified_files(repo_root)
+    all_dirty = modified | untracked
+    prefix = f"{spec_dir}/"
+    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+
+    if not dirty_spec:
+        return {"success": False, "error": "Nothing to commit — no dirty spec files"}
+
+    # Stage spec files
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + dirty_spec,
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to stage files: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    # Commit
+    try:
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to commit: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    result: dict[str, Any] = {
+        "success": True,
+        "files_committed": dirty_spec,
+    }
+
+    # Optionally push (non-fatal if push fails)
+    if push and branch:
+        try:
+            subprocess.run(
+                ["git", "push", "-u", "origin", branch],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            err_msg = e.stderr if hasattr(e, "stderr") else str(e)
+            result["push_error"] = f"Commit succeeded but push failed: {err_msg}"
+
+    return result
+
+
 # Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
@@ -871,6 +965,8 @@ __all__ = [
     "git_status_summary",
     # Branch creation (REQ-p00004-D)
     "create_and_switch_branch",
+    # Commit and push (REQ-p00004-E)
+    "commit_and_push_spec_files",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

@@ -1,10 +1,11 @@
-# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D
+# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D, REQ-p00004-E
 """Tests for Git Integration.
 
 Validates:
 - REQ-p00004-A: get_author_info SHALL retrieve author identity from git/gh
 - REQ-p00004-B: Git change detection
 - REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
+- REQ-p00004-E: commit_and_push_spec_files SHALL commit spec files, refuse on main/master
 """
 
 import subprocess
@@ -16,6 +17,7 @@ import pytest
 from elspais.utilities.git import (
     GitChangeInfo,
     MovedRequirement,
+    commit_and_push_spec_files,
     create_and_switch_branch,
     detect_moved_requirements,
     filter_spec_files,
@@ -557,3 +559,100 @@ class TestCreateAndSwitchBranch:
         result2 = create_and_switch_branch(tmp_path, "feature/dup")
         assert result2["success"] is False
         assert "error" in result2
+
+
+class TestCommitAndPushSpecFiles:
+    """Tests for commit_and_push_spec_files().
+
+    Validates REQ-p00004-E: The tool SHALL commit modified spec files and
+    optionally push, refusing to operate on main/master branches.
+    """
+
+    def test_REQ_p00004_E_commit_dirty_spec_files(self, tmp_path):
+        """Commits modified spec files on a feature branch."""
+        _init_git_repo(tmp_path)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        )
+
+        # Modify spec file
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
+
+        result = commit_and_push_spec_files(tmp_path, "test commit", push=False)
+
+        assert result["success"] is True
+        assert "spec/test.md" in result["files_committed"]
+
+        # Verify the commit was made
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "test commit" in log.stdout
+
+    def test_REQ_p00004_E_refuse_on_main(self, tmp_path):
+        """Refuses to commit when on main branch."""
+        _init_git_repo(tmp_path)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
+        )
+
+        # Modify spec file while on main
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
+
+        result = commit_and_push_spec_files(tmp_path, "test commit", push=False)
+
+        assert result["success"] is False
+        assert "main" in result["error"].lower() or "protected" in result["error"].lower()
+
+    def test_REQ_p00004_E_nothing_to_commit(self, tmp_path):
+        """Returns error when no dirty spec files exist."""
+        _init_git_repo(tmp_path)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        )
+
+        # No changes made -- nothing to commit
+        result = commit_and_push_spec_files(tmp_path, "test commit", push=False)
+
+        assert result["success"] is False
+        assert "nothing" in result["error"].lower()
+
+    def test_REQ_p00004_E_includes_untracked_spec_files(self, tmp_path):
+        """Stages and commits untracked (new) spec files."""
+        _init_git_repo(tmp_path)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "existing.md").write_text("# REQ-p00001 Existing\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        )
+
+        # Create a new untracked spec file
+        (tmp_path / "spec" / "new.md").write_text("# REQ-p00002 New\n")
+
+        result = commit_and_push_spec_files(tmp_path, "add new spec", push=False)
+
+        assert result["success"] is True
+        assert "spec/new.md" in result["files_committed"]

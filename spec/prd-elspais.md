@@ -115,7 +115,9 @@ C. The tool SHALL provide a git status summary reporting current branch, main-br
 
 D. The tool SHALL create and switch to a new git branch, using stash to preserve dirty working tree changes across the switch.
 
-*End* *Change Detection and Auditability* | **Hash**: 408f8bad
+E. The tool SHALL commit modified spec files and optionally push, refusing to operate on main/master branches.
+
+*End* *Change Detection and Auditability* | **Hash**: 9a6744f5
 ---
 
 # REQ-p00005: Multi-Repository Requirements
