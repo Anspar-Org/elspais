@@ -33,7 +33,9 @@ from elspais.mcp.server import (
     _mutate_add_edge,
     _mutate_change_edge_kind,
     _mutate_change_status,
+    _mutate_delete_assertion,
     _mutate_delete_edge,
+    _mutate_delete_requirement,
     _mutate_update_assertion,
     _mutate_update_title,
     _query_nodes,
@@ -538,6 +540,36 @@ def create_app(
         if not req_id or not label or not text:
             return jsonify({"success": False, "error": "req_id, label, and text required"}), 400
         result = _mutate_add_assertion(_state["graph"], req_id, label, text)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/assertion/delete", methods=["POST"])
+    def api_mutate_assertion_delete():
+        # Implements: REQ-d00010-A
+        """POST /api/mutate/assertion/delete - Delete an assertion."""
+        data = request.get_json(force=True)
+        assertion_id = data.get("assertion_id", "")
+        confirm = data.get("confirm", False)
+        if not assertion_id:
+            return jsonify({"success": False, "error": "assertion_id required"}), 400
+        if not confirm:
+            return jsonify({"success": False, "error": "confirm=true required"}), 400
+        result = _mutate_delete_assertion(_state["graph"], assertion_id, confirm=True)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/requirement/delete", methods=["POST"])
+    def api_mutate_requirement_delete():
+        # Implements: REQ-d00010-A
+        """POST /api/mutate/requirement/delete - Delete a requirement."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        confirm = data.get("confirm", False)
+        if not node_id:
+            return jsonify({"success": False, "error": "node_id required"}), 400
+        if not confirm:
+            return jsonify({"success": False, "error": "confirm=true required"}), 400
+        result = _mutate_delete_requirement(_state["graph"], node_id, confirm=True)
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
 

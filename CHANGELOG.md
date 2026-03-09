@@ -2,6 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.98.0] - 2026-03-08
+
+### Added
+
+- **Flask API: delete assertion and requirement endpoints** — `POST /api/mutate/assertion/delete` and `POST /api/mutate/requirement/delete` with `confirm=true` validation
+- **Default viewer port changed from 5000 to 5001** — avoids conflict with macOS AirPlay Receiver
+
 ## [0.97.0] - 2026-03-08
 
 ### Added

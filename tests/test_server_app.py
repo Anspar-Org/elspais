@@ -647,6 +647,51 @@ class TestMutateEdge:
         assert resp.status_code == 400
 
 
+class TestMutateAssertionDelete:
+    """Validates REQ-d00010-A: Delete assertion endpoint."""
+
+    def test_REQ_d00010_A_delete_assertion_success(self, client):
+        # First add a temp assertion, then delete it
+        client.post(
+            "/api/mutate/assertion/add",
+            json={"req_id": "REQ-p00001", "label": "Z", "text": "Temp assertion"},
+        )
+        resp = client.post(
+            "/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-Z", "confirm": True}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+    def test_REQ_d00010_A_delete_assertion_missing_id(self, client):
+        resp = client.post("/api/mutate/assertion/delete", json={})
+        assert resp.status_code == 400
+
+    def test_REQ_d00010_A_delete_assertion_requires_confirm(self, client):
+        resp = client.post("/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-A"})
+        assert resp.status_code == 400
+
+
+class TestMutateRequirementDelete:
+    """Validates REQ-d00010-A: Delete requirement endpoint."""
+
+    def test_REQ_d00010_A_delete_requirement_success(self, client, sample_graph):
+        # Add a throwaway requirement, then delete it
+        sample_graph.add_requirement(req_id="REQ-z99999", title="Temp", level="DEV")
+        resp = client.post(
+            "/api/mutate/requirement/delete", json={"node_id": "REQ-z99999", "confirm": True}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+    def test_REQ_d00010_A_delete_requirement_missing_id(self, client):
+        resp = client.post("/api/mutate/requirement/delete", json={})
+        assert resp.status_code == 400
+
+    def test_REQ_d00010_A_delete_requirement_requires_confirm(self, client):
+        resp = client.post("/api/mutate/requirement/delete", json={"node_id": "REQ-p00001"})
+        assert resp.status_code == 400
+
+
 class TestMutateUndo:
     """Validates REQ-d00010-A: POST /api/mutate/undo."""
 
