@@ -7,6 +7,7 @@ All notable changes to elspais will be documented in this file.
 ### Added
 
 - **`git_status_summary()` utility function** — returns current branch name, main-branch detection, dirty spec file list, and remote divergence state; supports the viewer branch indicator badge (REQ-p00004-C)
+- **`create_and_switch_branch()` utility function** — creates a new git branch and switches to it, using stash to preserve dirty working tree changes across the switch; supports the viewer branch creation modal (REQ-p00004-D)
 
 ## [1.0.0] - 2026-03-08
 

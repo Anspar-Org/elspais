@@ -509,6 +509,121 @@ def git_status_summary(
     }
 
 
+# Implements: REQ-p00004-D
+def create_and_switch_branch(
+    repo_root: Path,
+    branch_name: str,
+) -> dict[str, Any]:
+    """Create a new git branch and switch to it, preserving dirty working tree.
+
+    If the working tree has uncommitted changes, they are stashed before the
+    branch switch and popped on the new branch.  If branch creation fails and
+    changes were stashed, the stash is popped to restore the original state.
+
+    Args:
+        repo_root: Path to repository root.
+        branch_name: Name for the new branch.
+
+    Returns:
+        Dict with ``success`` (bool) and either ``branch`` (str) or ``error`` (str).
+    """
+    # Validate branch name
+    if not branch_name or not branch_name.strip():
+        return {"success": False, "error": "Branch name must not be empty"}
+
+    # git check-ref-format to validate
+    try:
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", branch_name],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return {"success": False, "error": f"Invalid branch name: {branch_name}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    # Check if dirty
+    modified, untracked = get_modified_files(repo_root)
+    is_dirty = bool(modified or untracked)
+
+    # Stash if dirty
+    if is_dirty:
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "stash",
+                    "push",
+                    "--include-untracked",
+                    "-m",
+                    f"elspais: switching to {branch_name}",
+                ],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            return {"success": False, "error": f"Failed to stash changes: {e.stderr}"}
+        except FileNotFoundError:
+            return {"success": False, "error": "git not found"}
+
+    # Create and switch to the new branch
+    try:
+        subprocess.run(
+            ["git", "checkout", "-b", branch_name],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        # Restore stash if we stashed
+        if is_dirty:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+            )
+        return {"success": False, "error": f"Failed to create branch: {e.stderr}"}
+    except FileNotFoundError:
+        if is_dirty:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+            )
+        return {"success": False, "error": "git not found"}
+
+    # Pop stash on new branch
+    if is_dirty:
+        try:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            return {
+                "success": True,
+                "branch": branch_name,
+                "warning": f"Branch created but stash pop failed: {e.stderr}",
+            }
+
+    return {"success": True, "branch": branch_name}
+
+
 # Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
@@ -754,6 +869,8 @@ __all__ = [
     "get_req_locations_from_graph",
     # Git status summary (REQ-p00004-C)
     "git_status_summary",
+    # Branch creation (REQ-p00004-D)
+    "create_and_switch_branch",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

@@ -1,9 +1,10 @@
-# Validates REQ-p00004-A, REQ-p00004-B
+# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D
 """Tests for Git Integration.
 
 Validates:
 - REQ-p00004-A: get_author_info SHALL retrieve author identity from git/gh
 - REQ-p00004-B: Git change detection
+- REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
 """
 
 import subprocess
@@ -15,6 +16,7 @@ import pytest
 from elspais.utilities.git import (
     GitChangeInfo,
     MovedRequirement,
+    create_and_switch_branch,
     detect_moved_requirements,
     filter_spec_files,
     get_author_info,
@@ -465,3 +467,93 @@ class TestGitStatusSummary:
         result = git_status_summary(tmp_path, spec_dir="spec")
 
         assert result["dirty_spec_files"] == []
+
+
+def _init_git_repo(tmp_path: Path) -> None:
+    """Helper: init a git repo with one commit so branches can be created."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    (tmp_path / "README.md").write_text("init\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+
+
+class TestCreateAndSwitchBranch:
+    """Tests for create_and_switch_branch().
+
+    Validates REQ-p00004-D: The tool SHALL create and switch to a new git
+    branch, using stash to preserve dirty working tree changes across the
+    switch.
+    """
+
+    def test_REQ_p00004_D_clean_switch(self, tmp_path):
+        """Creates branch and switches on a clean working tree."""
+        _init_git_repo(tmp_path)
+
+        result = create_and_switch_branch(tmp_path, "feature/test")
+
+        assert result["success"] is True
+        assert result["branch"] == "feature/test"
+        # Verify we're on the new branch
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert branch_result.stdout.strip() == "feature/test"
+
+    def test_REQ_p00004_D_dirty_stash_preserves_changes(self, tmp_path):
+        """Dirty working tree changes are preserved across branch switch."""
+        _init_git_repo(tmp_path)
+
+        # Create a dirty file (tracked modification)
+        (tmp_path / "README.md").write_text("modified\n")
+        # Create an untracked file
+        (tmp_path / "new_file.txt").write_text("untracked\n")
+
+        result = create_and_switch_branch(tmp_path, "feature/dirty")
+
+        assert result["success"] is True
+        assert result["branch"] == "feature/dirty"
+        # Verify changes survived the switch
+        assert (tmp_path / "README.md").read_text() == "modified\n"
+        assert (tmp_path / "new_file.txt").read_text() == "untracked\n"
+
+    def test_REQ_p00004_D_invalid_branch_name(self, tmp_path):
+        """Rejects invalid branch names."""
+        _init_git_repo(tmp_path)
+
+        result = create_and_switch_branch(tmp_path, "bad..name")
+
+        assert result["success"] is False
+        assert "invalid" in result["error"].lower() or "Invalid" in result["error"]
+
+    def test_REQ_p00004_D_duplicate_branch_name(self, tmp_path):
+        """Rejects a branch name that already exists."""
+        _init_git_repo(tmp_path)
+
+        # Create branch first time -- should succeed
+        result1 = create_and_switch_branch(tmp_path, "feature/dup")
+        assert result1["success"] is True
+
+        # Switch back to main
+        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+
+        # Try to create same branch again -- should fail
+        result2 = create_and_switch_branch(tmp_path, "feature/dup")
+        assert result2["success"] is False
+        assert "error" in result2
