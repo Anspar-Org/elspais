@@ -42,21 +42,185 @@ function showToast(message, type) {
 // Edit Mode
 // =====================================================================
 
-function toggleEditMode() {
-    editState.enabled = !editState.enabled;
-    document.body.classList.toggle('edit-mode', editState.enabled);
-    document.getElementById('edit-toggle').classList.toggle('active', editState.enabled);
-
-    // Toggle contenteditable on assertion text fields
+function _activateEditMode() {
+    editState.enabled = true;
+    document.body.classList.add('edit-mode');
+    document.getElementById('edit-toggle').classList.add('active');
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
-        el.contentEditable = editState.enabled ? 'true' : 'false';
+        el.contentEditable = 'true';
+    });
+    saveState();
+}
+
+function _deactivateEditMode() {
+    editState.enabled = false;
+    document.body.classList.remove('edit-mode');
+    document.getElementById('edit-toggle').classList.remove('active');
+    document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+        el.contentEditable = 'false';
+    });
+    saveState();
+}
+
+function toggleEditMode() {
+    if (editState.enabled) {
+        // Turning OFF — always allowed
+        _deactivateEditMode();
+        return;
+    }
+    // Turning ON — check if on main first
+    refreshBranchStatus().then(function(data) {
+        if (data && data.is_main) {
+            showBranchModal('You are on the main branch. Create a working branch before editing.', function() {
+                _activateEditMode();
+            });
+        } else {
+            _activateEditMode();
+        }
+    });
+}
+
+// =====================================================================
+// Branch Status & Git Pull (REQ-p00004-C, REQ-p00004-D)
+// =====================================================================
+
+async function refreshBranchStatus() {
+    var data = await apiFetch('/api/git/status');
+    if (!data) return null;
+    var dot = document.getElementById('branch-status-dot');
+    var nameEl = document.getElementById('branch-name');
+    var refreshBtn = document.getElementById('branch-refresh-btn');
+    var warningEl = document.getElementById('branch-warning');
+    if (!dot || !nameEl) return data;
+    nameEl.textContent = data.branch || 'detached';
+    dot.className = 'branch-status-dot';
+    if (data.is_main) { dot.classList.add('red'); }
+    else if (data.dirty_spec_files && data.dirty_spec_files.length > 0) { dot.classList.add('blue'); }
+    else { dot.classList.add('green'); }
+    if (refreshBtn) {
+        refreshBtn.classList.toggle('hidden', !data.remote_diverged || !data.fast_forward_possible);
+    }
+    if (warningEl) {
+        warningEl.classList.toggle('hidden', !data.remote_diverged || data.fast_forward_possible);
+    }
+    return data;
+}
+
+async function doGitPull() {
+    var result = await apiFetch('/api/git/pull', {method: 'POST'});
+    if (result && result.success) {
+        showToast('Pulled latest changes', 'success');
+        refreshBranchStatus();
+    } else {
+        showToast((result && result.error) || 'Pull failed', 'error');
+    }
+}
+
+// =====================================================================
+// Branch Creation Modal (REQ-p00004-D)
+// =====================================================================
+
+function showBranchModal(reason, callback) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'branch-modal-overlay';
+
+    var dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+
+    var title = document.createElement('div');
+    title.className = 'modal-title';
+    title.textContent = 'Create a Working Branch';
+
+    var reasonEl = document.createElement('p');
+    reasonEl.style.fontSize = '0.9em';
+    reasonEl.style.marginBottom = '12px';
+    reasonEl.textContent = reason;
+
+    var label = document.createElement('label');
+    label.className = 'modal-label';
+    label.textContent = 'Branch name';
+    label.htmlFor = 'branch-name-input';
+
+    var input = document.createElement('input');
+    input.className = 'modal-input';
+    input.id = 'branch-name-input';
+    input.type = 'text';
+    input.placeholder = 'e.g. feat/my-changes';
+
+    var errorEl = document.createElement('div');
+    errorEl.className = 'modal-error';
+    errorEl.style.display = 'none';
+
+    var actions = document.createElement('div');
+    actions.className = 'modal-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancel';
+
+    var createBtn = document.createElement('button');
+    createBtn.className = 'btn btn-primary';
+    createBtn.textContent = 'Create Branch';
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(createBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(reasonEl);
+    dialog.appendChild(label);
+    dialog.appendChild(input);
+    dialog.appendChild(errorEl);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    input.focus();
+
+    function closeModal() {
+        var el = document.getElementById('branch-modal-overlay');
+        if (el) el.remove();
+    }
+
+    function doCreate() {
+        var name = input.value.trim();
+        if (!name) {
+            errorEl.textContent = 'Branch name is required.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        createBtn.disabled = true;
+        createBtn.textContent = 'Creating...';
+        apiFetch('/api/git/branch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function(result) {
+            if (result && result.success) {
+                closeModal();
+                showToast('Switched to branch: ' + name, 'success');
+                refreshBranchStatus();
+                if (callback) callback();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Failed to create branch.';
+                errorEl.style.display = 'block';
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create Branch';
+            }
+        });
+    }
+
+    createBtn.addEventListener('click', doCreate);
+    cancelBtn.addEventListener('click', closeModal);
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); doCreate(); }
+        if (e.key === 'Escape') { closeModal(); }
     });
 
-    // .edit-only visibility is handled by CSS:
-    //   .edit-only { display: none; }
-    //   body.edit-mode .edit-only { display: inline-flex; }
-
-    saveState();
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
 }
 
 // =====================================================================
@@ -408,3 +572,14 @@ function onAddRelationship(nodeId, btn) {
 }
 
 // Search functions moved to _search.js.j2 (shared by both modes)
+
+// =====================================================================
+// Branch Status: on-load check and polling (REQ-p00004-C, REQ-p00004-D)
+// =====================================================================
+
+refreshBranchStatus().then(function(data) {
+    if (data && data.is_main && data.dirty_spec_files && data.dirty_spec_files.length > 0) {
+        showBranchModal('You have local spec changes on main. Enter a branch name to continue editing.', null);
+    }
+});
+setInterval(refreshBranchStatus, 60000);

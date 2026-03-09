@@ -1,5 +1,5 @@
 {# Partial: _header.html.j2 — Unified header (both modes) #}
-{# Implements: REQ-p00006-A, REQ-p00006-B #}
+{# Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00004-C, REQ-p00004-D #}
 {# Search available in both modes; edit controls (toggle, save/revert) wrapped in mode conditionals #}
 
 <header class="header">
@@ -34,6 +34,14 @@
 
     <div class="header-right">
         {% if mode == 'edit' %}
+        <span class="branch-badge" id="branch-badge" title="Current git branch">
+            <span class="branch-status-dot" id="branch-status-dot"></span>
+            <span id="branch-name">...</span>
+            <button class="branch-refresh-btn hidden" id="branch-refresh-btn"
+                    onclick="doGitPull()" title="Pull latest changes">&#x21bb;</button>
+            <span class="branch-warning hidden" id="branch-warning"
+                  title="Remote has diverged; merge conflicts possible later">!</span>
+        </span>
         <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
             <span class="edit-toggle-indicator"></span>
             <span>Edit Mode</span>
