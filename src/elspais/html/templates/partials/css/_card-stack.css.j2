@@ -196,7 +196,19 @@
 /* Parent Links */
 .card-parents {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.card-parents-empty {
+    font-size: 0.8rem;
+    color: #adb5bd;
+    font-style: italic;
+}
+
+.card-parent-row {
+    display: flex;
+    align-items: center;
     gap: 6px;
 }
 
@@ -213,6 +225,11 @@
     cursor: pointer;
     transition: background 0.15s;
     text-decoration: none;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .card-parent-link:hover {
@@ -224,6 +241,159 @@
     color: #6c757d;
     font-weight: 600;
     text-transform: uppercase;
+}
+
+/* Hide view-only kind badges in edit mode */
+body.edit-mode .card-parent-kind.view-only {
+    display: none;
+}
+
+/* Kind toggle button (edit mode) */
+.card-parent-kind-toggle {
+    border: 1px solid #dee2e6;
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.card-parent-kind-toggle:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+    background: #e7f1ff;
+}
+
+/* Delete edge button */
+.card-parent-delete {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #adb5bd;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.card-parent-delete:hover {
+    color: #dc3545;
+}
+
+/* Add Relationship button */
+.card-add-rel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px dashed #dee2e6;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #6c757d;
+    transition: all 0.15s;
+    margin-top: 6px;
+}
+
+.card-add-rel-btn:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+    background: #f0f4ff;
+}
+
+/* Add Relationship form */
+.card-add-rel-form {
+    margin-top: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.add-rel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.add-rel-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    width: 65px;
+    flex-shrink: 0;
+}
+
+.add-rel-select {
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    outline: none;
+}
+
+.add-rel-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.add-rel-picker-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.add-rel-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.add-rel-add-btn {
+    padding: 4px 14px;
+    background: #0d6efd;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.add-rel-add-btn:hover:not(:disabled) {
+    background: #0b5ed7;
+}
+
+.add-rel-add-btn:disabled {
+    background: #adb5bd;
+    cursor: not-allowed;
+}
+
+.add-rel-cancel-btn {
+    padding: 4px 14px;
+    background: transparent;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.add-rel-cancel-btn:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
 }
 
 /* Assertion List */

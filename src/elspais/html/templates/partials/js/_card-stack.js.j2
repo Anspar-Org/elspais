@@ -201,19 +201,37 @@ function buildCardHtml(nodeId, data, collapsed) {
         escapeHtml(data.title || '') + '</div>';
     html += '</div>';
 
-    // Parents section
+    // Parents section (relationship editor in edit mode)
+    html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
+    html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
-        html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
-        html += '<div class="card-parents">';
         data.parents.forEach(function(p) {
-            const edgeKind = (p.edge_kind || 'implements').toUpperCase();
+            const edgeKind = (p.edge_kind || 'implements').toLowerCase();
+            const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
+            html += '<div class="card-parent-row">';
+            // View-only kind badge
+            html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
+            // Edit-only kind toggle
+            html += '<button class="card-parent-kind-toggle edit-only" ' +
+                'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
+                'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
+                'title="Click to toggle implements/refines">' + edgeKindDisplay + '</button>';
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
-            html += '<span class="card-parent-kind">' + edgeKind + '</span> ';
             html += p.id.replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
             html += '</a>';
+            html += '<button class="card-parent-delete edit-only" ' +
+                'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
+                'title="Remove relationship">&times;</button>';
+            html += '</div>';
         });
-        html += '</div></div>';
+    } else {
+        html += '<div class="card-parents-empty">No parent relationships</div>';
     }
+    html += '</div>';
+    // Add relationship button (edit mode only)
+    html += '<button class="card-add-rel-btn edit-only" ' +
+        'onclick="onAddRelationship(\'' + nodeId + '\', this)">+ Add Relationship</button>';
+    html += '</div>';
 
     // Assertions section
     const assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });

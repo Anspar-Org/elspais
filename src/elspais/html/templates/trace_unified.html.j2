@@ -29,6 +29,7 @@ body {
 {% include "partials/css/_nav-panel.css.j2" %}
 {% include "partials/css/_dividers.css.j2" %}
 {% include "partials/css/_card-stack.css.j2" %}
+{% include "partials/css/_req-search-dropdown.css.j2" %}
 {% include "partials/css/_edit-mode.css.j2" %}
 {% include "partials/css/_file-viewer.css.j2" %}
 /* Pygments syntax highlighting theme */
@@ -214,6 +215,7 @@ const editState = {
 {% include "partials/js/_search.js.j2" %}
 
 {% if mode == 'edit' %}
+{% include "partials/js/_req-search-dropdown.js.j2" %}
 {% include "partials/js/_edit-engine.js.j2" %}
 {% endif %}
 
