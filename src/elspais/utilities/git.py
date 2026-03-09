@@ -433,6 +433,82 @@ def get_current_branch(repo_root: Path) -> str | None:
         return None
 
 
+# Implements: REQ-p00004-C
+def git_status_summary(
+    repo_root: Path,
+    spec_dir: str = "spec",
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Get git status summary for the viewer UI.
+
+    Returns a dict with:
+        branch: Current branch name (or None if detached)
+        is_main: Whether current branch is a main/protected branch
+        dirty_spec_files: List of modified/untracked spec files (relative paths)
+        remote_diverged: Whether the remote tracking branch has diverged
+        fast_forward_possible: Whether a fast-forward pull is possible
+    """
+    branch = get_current_branch(repo_root)
+    is_main = branch in main_branches if branch else False
+
+    # Get dirty spec files
+    modified, untracked = get_modified_files(repo_root)
+    all_dirty = modified | untracked
+    prefix = f"{spec_dir}/"
+    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+
+    # Check remote divergence
+    remote_diverged = False
+    fast_forward_possible = False
+    if branch:
+        try:
+            # Fetch without modifying working tree
+            subprocess.run(
+                ["git", "fetch", "--quiet"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                timeout=10,
+            )
+            # Check if remote tracking branch exists and has diverged
+            remote_ref = f"origin/{branch}"
+            result = subprocess.run(
+                [
+                    "git",
+                    "rev-list",
+                    "--left-right",
+                    "--count",
+                    f"{branch}...{remote_ref}",
+                ],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                parts = result.stdout.strip().split()
+                if len(parts) == 2:
+                    local_ahead = int(parts[0])
+                    remote_ahead = int(parts[1])
+                    remote_diverged = remote_ahead > 0
+                    fast_forward_possible = remote_ahead > 0 and local_ahead == 0
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            ValueError,
+        ):
+            pass  # No remote or fetch failed — treat as not diverged
+
+    return {
+        "branch": branch,
+        "is_main": is_main,
+        "dirty_spec_files": dirty_spec,
+        "remote_diverged": remote_diverged,
+        "fast_forward_possible": fast_forward_possible,
+    }
+
+
 # Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
@@ -676,6 +752,8 @@ __all__ = [
     # Graph-based location extraction
     "temporary_worktree",
     "get_req_locations_from_graph",
+    # Git status summary (REQ-p00004-C)
+    "git_status_summary",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

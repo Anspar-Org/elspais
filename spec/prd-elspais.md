@@ -110,6 +110,7 @@ Together, these mechanisms support:
 A. The tool SHALL compute and verify content hashes for change detection.
 
 B. The tool SHALL detect uncommitted and branch-relative changes to requirement files using git.
+C. The tool SHALL provide a git status summary reporting current branch, main-branch detection, dirty spec files, and remote divergence state.
 
 *End* *Change Detection and Auditability* | **Hash**: 846fefad
 ---

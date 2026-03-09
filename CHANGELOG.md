@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [1.1.0] - 2026-03-09
+
+### Added
+
+- **`git_status_summary()` utility function** — returns current branch name, main-branch detection, dirty spec file list, and remote divergence state; supports the viewer branch indicator badge (REQ-p00004-C)
+
 ## [1.0.0] - 2026-03-08
 
 ### Added

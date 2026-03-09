@@ -23,6 +23,7 @@ from elspais.utilities.git import (
     get_modified_files,
     get_repo_root,
     get_req_locations_from_graph,
+    git_status_summary,
     temporary_worktree,
 )
 
@@ -354,3 +355,113 @@ class TestGetAuthorInfo:
 
         with pytest.raises(ValueError):
             get_author_info(id_source="git")
+
+
+class TestGitStatusSummary:
+    """Tests for git_status_summary().
+
+    Validates REQ-p00004-C: The tool SHALL provide a git status summary
+    reporting current branch, main-branch detection, dirty spec files,
+    and remote divergence state.
+    """
+
+    def test_REQ_p00004_C_clean_feature_branch(self, tmp_path):
+        """On a clean feature branch with no remote divergence."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        )
+
+        result = git_status_summary(tmp_path, spec_dir="spec")
+
+        assert result["branch"] == "feature"
+        assert result["is_main"] is False
+        assert result["dirty_spec_files"] == []
+        assert result["remote_diverged"] is False
+        assert result["fast_forward_possible"] is False
+
+    def test_REQ_p00004_C_main_branch_dirty_spec(self, tmp_path):
+        """On main with modified spec files."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
+        )
+        # Dirty spec file
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
+
+        result = git_status_summary(tmp_path, spec_dir="spec")
+
+        assert result["branch"] == "main"
+        assert result["is_main"] is True
+        assert "spec/test.md" in result["dirty_spec_files"]
+
+    def test_REQ_p00004_C_non_spec_dirty_excluded(self, tmp_path):
+        """Dirty files outside spec/ are excluded from dirty_spec_files."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("clean\n")
+        (tmp_path / "other.txt").write_text("clean\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
+        )
+        # Dirty non-spec file only
+        (tmp_path / "other.txt").write_text("dirty\n")
+
+        result = git_status_summary(tmp_path, spec_dir="spec")
+
+        assert result["dirty_spec_files"] == []
