@@ -1212,7 +1212,7 @@ class TestGitPull:
         from unittest.mock import patch
 
         mock_result = {"success": True, "message": "Already up to date."}
-        with patch("elspais.utilities.git.pull_ff_only", return_value=mock_result):
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -1224,7 +1224,7 @@ class TestGitPull:
         from unittest.mock import patch
 
         mock_result = {"success": False, "error": "Fetch failed: no remote configured"}
-        with patch("elspais.utilities.git.pull_ff_only", return_value=mock_result):
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 400
         data = resp.get_json()
@@ -1239,7 +1239,7 @@ class TestGitPull:
             "success": False,
             "error": "Cannot fast-forward — resolve differences outside elspais",
         }
-        with patch("elspais.utilities.git.pull_ff_only", return_value=mock_result):
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 400
         data = resp.get_json()

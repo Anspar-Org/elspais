@@ -37,11 +37,11 @@
         <span class="branch-badge" id="branch-badge" title="Current git branch">
             <span class="branch-status-dot" id="branch-status-dot"></span>
             <span id="branch-name">...</span>
-            <button class="branch-refresh-btn hidden" id="branch-refresh-btn"
-                    onclick="doGitPull()" title="Pull latest changes">&#x21bb;</button>
             <span class="branch-warning hidden" id="branch-warning"
-                  title="Remote has diverged; merge conflicts possible later">!</span>
+                  title="Main has moved ahead; rebase needed before merge">!</span>
         </span>
+        <button class="btn btn-sync hidden" id="btn-sync" onclick="doGitSync()"
+                title="Sync: merge remote changes and rebase on main">&#x21bb; Sync</button>
         <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
             <span class="edit-toggle-indicator"></span>
             <span>Edit Mode</span>

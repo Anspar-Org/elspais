@@ -89,7 +89,7 @@ async function refreshBranchStatus() {
     if (!data) return null;
     var dot = document.getElementById('branch-status-dot');
     var nameEl = document.getElementById('branch-name');
-    var refreshBtn = document.getElementById('branch-refresh-btn');
+    var syncBtn = document.getElementById('btn-sync');
     var warningEl = document.getElementById('branch-warning');
     if (!dot || !nameEl) return data;
     nameEl.textContent = data.branch || 'detached';
@@ -97,8 +97,10 @@ async function refreshBranchStatus() {
     if (data.is_main) { dot.classList.add('red'); }
     else if (data.local_ahead > 0) { dot.classList.add('blue'); }
     else { dot.classList.add('green'); }
-    if (refreshBtn) {
-        refreshBtn.classList.toggle('hidden', !data.remote_diverged || !data.fast_forward_possible);
+    // Sync button: visible when remote has diverged OR main has moved ahead
+    var needsSync = data.remote_diverged || data.main_diverged;
+    if (syncBtn) {
+        syncBtn.classList.toggle('hidden', !needsSync);
     }
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.main_diverged);
@@ -111,15 +113,17 @@ async function refreshBranchStatus() {
     return data;
 }
 
-async function doGitPull() {
+async function doGitSync() {
+    var syncBtn = document.getElementById('btn-sync');
+    if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing...'; }
     var result = await apiFetch('/api/git/pull', {method: 'POST'});
+    if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = '&#x21bb; Sync'; }
     if (result && result.success) {
-        var msg = (result.message && result.message.indexOf('Already up to date') >= 0)
-            ? 'Already up to date' : 'Pulled latest changes';
-        showToast(msg, 'success');
+        showToast(result.message || 'Synced', 'success');
         refreshBranchStatus();
     } else {
-        showToast((result && result.error) || 'Pull failed', 'error');
+        showToast((result && result.error) || 'Sync failed', 'error');
+        refreshBranchStatus();
     }
 }
 

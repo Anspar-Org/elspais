@@ -792,10 +792,10 @@ def create_app(
     @app.route("/api/git/pull", methods=["POST"])
     def api_git_pull():
         # Implements: REQ-p00004-F
-        """POST /api/git/pull - Pull (fast-forward only) from remote."""
-        from elspais.utilities.git import pull_ff_only
+        """POST /api/git/pull - Sync branch with remote and main."""
+        from elspais.utilities.git import sync_branch
 
-        result = pull_ff_only(_state["working_dir"])
+        result = sync_branch(_state["working_dir"])
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
 

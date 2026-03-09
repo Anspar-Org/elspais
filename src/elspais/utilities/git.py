@@ -746,25 +746,37 @@ def commit_and_push_spec_files(
 
 
 # Implements: REQ-p00004-F
-def pull_ff_only(
+def sync_branch(
     repo_root: Path,
+    main_branches: tuple[str, ...] = ("main", "master"),
 ) -> dict[str, Any]:
-    """Fetch from remote and fast-forward merge.
+    """Sync the current branch with its remote and with main.
 
-    This function performs a safe pull: it fetches from the remote tracking
-    branch and merges with ``--ff-only``.  If the merge cannot be completed
-    as a fast-forward (e.g. local and remote have diverged), the operation
-    is aborted and an error is returned.  Elspais never rebases or creates
-    merge commits.
+    Performs up to two safe operations:
+
+    1. **Merge remote tracking branch** — if ``origin/<branch>`` is ahead,
+       attempt ``git merge --ff-only``.  If that fails (diverged), try
+       ``git merge --no-edit`` and abort on conflict.
+    2. **Rebase on updated main** — if ``origin/main`` has moved past the
+       merge-base, attempt ``git rebase origin/main`` and abort on conflict.
+
+    Both operations abort cleanly if conflicts are detected — the working
+    tree is always left in a usable state.
 
     Args:
         repo_root: Path to repository root.
+        main_branches: Branch names to try rebasing onto.
 
     Returns:
-        Dict with ``success`` (bool) and either ``message`` (str) on success
-        or ``error`` (str) on failure.
+        Dict with ``success`` (bool), ``actions`` (list of descriptions),
+        and optional ``error`` (str).
     """
     env = _clean_git_env()
+    actions: list[str] = []
+    branch = get_current_branch(repo_root)
+
+    if not branch:
+        return {"success": False, "error": "Not on a branch (detached HEAD)"}
 
     # 1. Fetch
     try:
@@ -778,33 +790,124 @@ def pull_ff_only(
             timeout=30,
         )
     except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Fetch timed out"}
+        return {"success": False, "error": "Fetch timed out", "actions": actions}
     except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or "").strip()
-        return {"success": False, "error": f"Fetch failed: {stderr}"}
+        return {
+            "success": False,
+            "error": f"Fetch failed: {(e.stderr or '').strip()}",
+            "actions": actions,
+        }
     except FileNotFoundError:
-        return {"success": False, "error": "git not found"}
+        return {"success": False, "error": "git not found", "actions": actions}
 
-    # 2. Merge --ff-only
+    # 2. Merge remote tracking branch if ahead
+    remote_ref = f"origin/{branch}"
     try:
-        result = subprocess.run(
-            ["git", "merge", "--ff-only"],
+        rev = subprocess.run(
+            ["git", "rev-list", "--left-right", "--count", f"{branch}...{remote_ref}"],
             cwd=repo_root,
             env=env,
             capture_output=True,
             text=True,
-            check=True,
         )
-        return {"success": True, "message": result.stdout.strip() or "Already up to date."}
-    except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or "").strip()
-        return {
-            "success": False,
-            "error": "Cannot fast-forward — resolve differences outside elspais",
-            "detail": stderr,
-        }
-    except FileNotFoundError:
-        return {"success": False, "error": "git not found"}
+        if rev.returncode == 0:
+            parts = rev.stdout.strip().split()
+            if len(parts) == 2:
+                remote_ahead = int(parts[1])
+                if remote_ahead > 0:
+                    # Try ff-only first
+                    ff = subprocess.run(
+                        ["git", "merge", "--ff-only", remote_ref],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if ff.returncode == 0:
+                        actions.append(f"Fast-forwarded from {remote_ref}")
+                    else:
+                        # Try regular merge (auto-resolve)
+                        mg = subprocess.run(
+                            ["git", "merge", "--no-edit", remote_ref],
+                            cwd=repo_root,
+                            env=env,
+                            capture_output=True,
+                            text=True,
+                        )
+                        if mg.returncode == 0:
+                            actions.append(f"Merged {remote_ref}")
+                        else:
+                            # Conflict — abort
+                            subprocess.run(
+                                ["git", "merge", "--abort"],
+                                cwd=repo_root,
+                                env=env,
+                                capture_output=True,
+                            )
+                            return {
+                                "success": False,
+                                "error": f"Merge conflict with {remote_ref} — aborted",
+                                "actions": actions,
+                            }
+    except (subprocess.CalledProcessError, ValueError):
+        pass  # No remote tracking branch — skip merge step
+
+    # 3. Rebase on updated main if diverged
+    if branch not in main_branches:
+        for main_name in main_branches:
+            remote_main = f"origin/{main_name}"
+            try:
+                mb = subprocess.run(
+                    ["git", "merge-base", branch, remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if mb.returncode != 0:
+                    continue
+                merge_base = mb.stdout.strip()
+                tip = subprocess.run(
+                    ["git", "rev-parse", remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if tip.returncode != 0 or tip.stdout.strip() == merge_base:
+                    break  # Main hasn't moved — nothing to do
+
+                # Main has moved — try rebase
+                rb = subprocess.run(
+                    ["git", "rebase", remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if rb.returncode == 0:
+                    actions.append(f"Rebased on {remote_main}")
+                else:
+                    # Conflict — abort
+                    subprocess.run(
+                        ["git", "rebase", "--abort"],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Rebase conflict on {remote_main} — aborted",
+                        "actions": actions,
+                    }
+                break
+            except (subprocess.CalledProcessError, ValueError):
+                continue
+
+    if not actions:
+        return {"success": True, "message": "Already up to date", "actions": actions}
+
+    return {"success": True, "message": "; ".join(actions), "actions": actions}
 
 
 # Implements: REQ-o00063-D
@@ -1057,7 +1160,7 @@ __all__ = [
     # Commit and push (REQ-p00004-E)
     "commit_and_push_spec_files",
     # Pull fast-forward (REQ-p00004-F)
-    "pull_ff_only",
+    "sync_branch",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",

@@ -6,7 +6,7 @@ Validates:
 - REQ-p00004-B: Git change detection
 - REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
 - REQ-p00004-E: commit_and_push_spec_files SHALL commit spec files, refuse on main/master
-- REQ-p00004-F: pull_ff_only SHALL fetch and fast-forward-merge, aborting if not ff-able
+- REQ-p00004-F: sync_branch SHALL fetch, merge remote, and rebase on main, aborting on conflict
 """
 
 import subprocess
@@ -29,7 +29,7 @@ from elspais.utilities.git import (
     get_repo_root,
     get_req_locations_from_graph,
     git_status_summary,
-    pull_ff_only,
+    sync_branch,
     temporary_worktree,
 )
 
@@ -715,21 +715,20 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 
 class TestPullFfOnly:
-    """Tests for pull_ff_only().
+    """Tests for sync_branch().
 
-    Validates REQ-p00004-F: The tool SHALL fetch and fast-forward-merge
-    from the remote tracking branch, aborting if the merge is not
-    fast-forwardable.
+    Validates REQ-p00004-F: The tool SHALL fetch, merge remote changes,
+    and rebase on main — aborting on conflict.
     """
 
-    def test_REQ_p00004_F_no_remote_returns_error(self, tmp_path):
-        """Returns error when no remote is configured."""
+    def test_REQ_p00004_F_no_remote_already_up_to_date(self, tmp_path):
+        """No remote configured returns success (nothing to sync)."""
         _init_git_repo(tmp_path)
 
-        result = pull_ff_only(tmp_path)
+        result = sync_branch(tmp_path)
 
-        assert result["success"] is False
-        assert "error" in result
+        assert result["success"] is True
+        assert result["actions"] == []
 
     def test_REQ_p00004_F_ff_pull_succeeds(self, tmp_path):
         """Fast-forward pull succeeds when remote has new commits."""
@@ -747,18 +746,18 @@ class TestPullFfOnly:
         subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
         # Pull from clone_b (should fast-forward)
-        result = pull_ff_only(clone_b)
+        result = sync_branch(clone_b)
 
         assert result["success"] is True
         assert "message" in result
         # Verify the file arrived
         assert (clone_b / "new_file.txt").read_text() == "hello\n"
 
-    def test_REQ_p00004_F_not_fast_forwardable_returns_error(self, tmp_path):
-        """Returns error when local and remote have diverged."""
+    def test_REQ_p00004_F_diverged_no_conflict_merges(self, tmp_path):
+        """Diverged with no conflict succeeds via merge."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
 
-        # Push a commit from clone_a
+        # Push a commit from clone_a (different file)
         (clone_a / "file_a.txt").write_text("from a\n")
         subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
         subprocess.run(
@@ -769,7 +768,7 @@ class TestPullFfOnly:
         )
         subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
-        # Make a local commit in clone_b (diverges from remote)
+        # Make a local commit in clone_b (different file — no conflict)
         (clone_b / "file_b.txt").write_text("from b\n")
         subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
         subprocess.run(
@@ -779,8 +778,47 @@ class TestPullFfOnly:
             check=True,
         )
 
-        # Pull should fail (not fast-forwardable)
-        result = pull_ff_only(clone_b)
+        result = sync_branch(clone_b)
+
+        assert result["success"] is True
+        assert any("Merged" in a or "Fast-forwarded" in a for a in result["actions"])
+        # Both files present
+        assert (clone_b / "file_a.txt").read_text() == "from a\n"
+        assert (clone_b / "file_b.txt").read_text() == "from b\n"
+
+    def test_REQ_p00004_F_diverged_with_conflict_aborts(self, tmp_path):
+        """Diverged with conflict aborts merge cleanly."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        # Both edit the SAME file (README.md from init)
+        (clone_a / "README.md").write_text("version A\n")
+        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "edit from a"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        (clone_b / "README.md").write_text("version B\n")
+        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "edit from b"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+
+        result = sync_branch(clone_b)
 
         assert result["success"] is False
-        assert "fast-forward" in result["error"].lower() or "Cannot" in result["error"]
+        assert "conflict" in result["error"].lower()
+        # Working tree should be clean (merge aborted)
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+        )
+        assert status.stdout.strip() == ""
