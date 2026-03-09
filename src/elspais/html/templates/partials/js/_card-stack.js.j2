@@ -135,6 +135,9 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<button class="req-card-delete edit-only" style="display:none;" ' +
+        'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
+        'title="Delete requirement">&#10005;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -184,7 +187,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div></div>';
 
     // Editable Title (edit mode only, replaces header title on blur)
-    html += '<div class="card-section edit-only" style="display:none;"><div class="card-section-label">Title</div>';
+    html += '<div class="card-section edit-only" style="display:none;"><div class="card-section-label">Title <span class="edit-pencil" onclick="event.stopPropagation(); this.closest(\'.card-section\').querySelector(\'.editable-field\').focus()">&#9998;</span></div>';
     html += '<div class="editable-field" contenteditable="true" data-node-id="' + nodeId + '" ' +
         'data-field="title" data-original="' + escapeAttr(data.title || '') + '" ' +
         'onblur="onTitleBlur(this)" onkeydown="onEditableKeydown(event)">' +
@@ -216,7 +219,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             const text = a.text || '';
             html += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
             html += '<div class="card-assertion">';
-            html += '<span class="card-assertion-label">' + label + '</span>';
+            html += '<span class="card-assertion-label">' + label + ' <span class="edit-pencil edit-only" style="display:none;" onclick="event.stopPropagation(); this.closest(\'.card-assertion\').querySelector(\'.card-assertion-text\').focus()">&#9998;</span></span>';
             html += '<span class="card-assertion-text editable-field" ' +
                 'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
@@ -230,6 +233,10 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
                 'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
                 'Validation</button>';
+            html += '<button class="assertion-delete-btn edit-only" style="display:none;" ' +
+                'title="Delete assertion" ' +
+                'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
+                '&#10005;</button>';
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';

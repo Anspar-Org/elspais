@@ -338,6 +338,65 @@
     white-space: pre-wrap;
 }
 
+/* --- Requirement Delete Button --- */
+
+.req-card-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #dc3545;
+    opacity: 0;
+    transition: opacity 0.2s;
+    padding: 2px 6px;
+    margin-right: 4px;
+}
+.req-card-header:hover .req-card-delete {
+    opacity: 0.6;
+}
+.req-card-delete:hover {
+    opacity: 1 !important;
+}
+
+/* --- Edit Pencil Icons --- */
+
+.edit-pencil {
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+.card-section:hover .edit-pencil,
+.card-assertion:hover .edit-pencil {
+    opacity: 0.7;
+}
+.edit-pencil:hover {
+    opacity: 1 !important;
+    color: #0d6efd;
+}
+
+/* --- Assertion Delete Button --- */
+
+.assertion-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #dc3545;
+    opacity: 0;
+    transition: opacity 0.2s;
+    padding: 2px 4px;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+.card-assertion:hover .assertion-delete-btn {
+    opacity: 0.6;
+}
+.assertion-delete-btn:hover {
+    opacity: 1 !important;
+}
+
 /* --- Assertion Validation Buttons --- */
 
 .card-assertion-wrapper {

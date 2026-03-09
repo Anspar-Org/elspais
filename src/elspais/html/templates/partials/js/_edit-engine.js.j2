@@ -163,6 +163,31 @@ function onAddAssertion(nodeId) {
     });
 }
 
+function onDeleteRequirement(nodeId) {
+    if (!confirm('Delete ' + nodeId + ' and all its assertions? This can be undone with Ctrl+Z.')) return;
+    mutate('/api/mutate/requirement/delete', {
+        node_id: nodeId,
+        confirm: true
+    }).then(function(result) {
+        if (result && result.success) {
+            closeCard(nodeId);
+            loadTreeData();
+        }
+    });
+}
+
+function onDeleteAssertion(nodeId, assertionId) {
+    if (!confirm('Delete assertion ' + assertionId + '? This can be undone with Ctrl+Z.')) return;
+    mutate('/api/mutate/assertion/delete', {
+        assertion_id: assertionId,
+        confirm: true
+    }).then(function(result) {
+        if (result && result.success) {
+            refreshCard(nodeId);
+        }
+    });
+}
+
 function onEditableKeydown(event) {
     // Enter key = blur (save)
     if (event.key === 'Enter' && !event.shiftKey) {
