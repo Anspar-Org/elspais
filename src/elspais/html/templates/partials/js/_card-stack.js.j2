@@ -113,6 +113,16 @@ function renderCardStack() {
 
     // Re-apply cached coverage colors after DOM rebuild
     recolorCachedButtons();
+
+    // Re-apply edit mode state after DOM rebuild
+    if (editState.enabled) {
+        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+            el.contentEditable = 'true';
+        });
+        document.querySelectorAll('.edit-only').forEach(function(el) {
+            el.style.display = '';
+        });
+    }
 }
 
 function buildCardHtml(nodeId, data, collapsed) {
