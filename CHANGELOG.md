@@ -15,6 +15,7 @@ All notable changes to elspais will be documented in this file.
 - **Flask git sync endpoints** — `GET /api/git/status`, `POST /api/git/branch`, `POST /api/git/push`, `POST /api/git/pull` routes in the viewer server; delegates to git utility functions; push on main/master returns 403 (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F)
 - **Viewer push modal** — Push button in header (disabled on main or no dirty spec files) opens a modal showing branch name, modified spec files, and commit message input; flow: save mutations, commit, push; includes error handling and loading state (REQ-p00004-E)
 - **Unsaved changes warning** — `beforeunload` handler warns when pending mutations exist (unsaved badge > 0) or uncommitted spec files exist (blue dot indicator), preventing accidental data loss (REQ-p00004-E)
+- **E2E integration test for viewer git sync** — full workflow test covering `git_status_summary`, `create_and_switch_branch`, and `commit_and_push_spec_files` in sequence: init on main, dirty spec, create branch, verify carry, commit without push, verify clean (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E)
 
 ## [1.0.0] - 2026-03-08
 
