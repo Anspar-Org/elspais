@@ -606,6 +606,57 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Check that all Active requirements have at least one changelog entry."""
+    from elspais.graph import NodeKind
+
+    require_present = config.get("changelog.require_present", False)
+    if not require_present:
+        return HealthCheck(
+            name="spec.changelog_present",
+            passed=True,
+            message="Changelog presence check disabled",
+            category="spec",
+            severity="info",
+        )
+
+    missing = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        if not changelog:
+            missing.append(node.id)
+
+    if missing:
+        findings = [
+            HealthFinding(
+                message=f"Active requirement {req_id} has no changelog entry",
+                node_id=req_id,
+            )
+            for req_id in missing
+        ]
+        return HealthCheck(
+            name="spec.changelog_present",
+            passed=False,
+            message=(
+                f"{len(missing)} Active requirement(s) missing changelog"
+                f" entries: {', '.join(missing[:5])}"
+                + (f" ... and {len(missing) - 5} more" if len(missing) > 5 else "")
+            ),
+            category="spec",
+            details={"missing": missing},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="spec.changelog_present",
+        passed=True,
+        message="All Active requirements have changelog entries",
+        category="spec",
+    )
+
+
 def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
     from elspais.graph import NodeKind
@@ -815,6 +866,7 @@ def run_spec_checks(
         check_spec_orphans(graph),
         check_spec_format_rules(graph, config),
         check_spec_hash_integrity(graph),
+        check_spec_changelog_present(graph, config),
         check_spec_changelog_current(graph, config),
         check_spec_changelog_format(graph, config),
     ]

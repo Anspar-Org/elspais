@@ -82,6 +82,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "changelog": {
         "enforce": True,
+        "require_present": False,
         "id_source": "gh",
         "date_format": "iso",
         "require_change_order": False,
