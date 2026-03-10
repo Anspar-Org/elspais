@@ -156,17 +156,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      # TODO: Change --mode to combined when sponsor repos are integrated into the build
-      - name: Validate requirement format and IDs
-        run: elspais validate --mode core
-
-      - name: Validate INDEX.md accuracy
-        run: elspais index validate --mode core
+      - name: Run health checks on specs
+        run: elspais health
 
       - name: Generate traceability matrix
         run: |
           mkdir -p build-reports
-          elspais trace --format both --output build-reports/traceability_matrix
+          elspais trace --format markdown --output build-reports/traceability_matrix.md
+          elspais trace --format json --output build-reports/traceability_matrix.json
 
       - name: Upload traceability reports
         if: always()
