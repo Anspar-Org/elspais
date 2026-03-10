@@ -9,19 +9,19 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: #f8f9fa;
+    background: var(--card-stack-bg);
 }
 
 .card-stack-header {
     padding: 8px 16px;
-    background: white;
-    border-bottom: 1px solid #e9ecef;
+    background: var(--card-stack-header-bg);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--secondary-text);
 }
 
 .card-stack-body {
@@ -39,7 +39,7 @@
     align-items: center;
     justify-content: center;
     flex: 1;
-    color: #adb5bd;
+    color: var(--card-stack-empty);
     gap: 8px;
     padding: 40px;
     text-align: center;
@@ -53,8 +53,8 @@
 /* --- Requirement Card --- */
 
 .req-card {
-    background: white;
-    border: 1px solid #e9ecef;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
     transition: box-shadow 0.2s, border-color 0.2s;
 }
@@ -64,7 +64,7 @@
 }
 
 .req-card.focused {
-    border-color: #0d6efd;
+    border-color: var(--card-focused-border);
     box-shadow: 0 0 0 2px rgba(13,110,253,0.15);
 }
 
@@ -73,19 +73,19 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
+    background: var(--card-header-bg);
+    border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     user-select: none;
 }
 
 .req-card-header:hover {
-    background: #e9ecef;
+    background: var(--card-header-hover-bg);
 }
 
 .req-card-expand {
     font-size: 8px;
-    color: #adb5bd;
+    color: var(--card-expand);
     transition: transform 0.15s;
     flex-shrink: 0;
 }
@@ -98,7 +98,7 @@
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #0d6efd;
+    color: var(--card-id);
     flex-shrink: 0;
 }
 
@@ -106,7 +106,7 @@
     flex: 1;
     font-size: 0.9rem;
     font-weight: 500;
-    color: #212529;
+    color: var(--card-title);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -117,7 +117,7 @@
     background: none;
     cursor: pointer;
     font-size: 1.1rem;
-    color: #adb5bd;
+    color: var(--card-close);
     padding: 0 4px;
     line-height: 1;
     transition: color 0.15s;
@@ -125,7 +125,7 @@
 }
 
 .req-card-close:hover {
-    color: #dc3545;
+    color: var(--card-close-hover);
 }
 
 .req-card-body {
@@ -150,7 +150,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #6c757d;
+    color: var(--card-section-label);
     margin-bottom: 4px;
 }
 
@@ -169,12 +169,12 @@
 }
 
 .card-meta-key {
-    color: #6c757d;
+    color: var(--card-meta-key);
     font-weight: 500;
 }
 
 .card-meta-value {
-    color: #212529;
+    color: var(--card-meta-value);
 }
 
 /* Status Badge (in cards) */
@@ -188,10 +188,10 @@
     text-transform: uppercase;
 }
 
-.status-badge.draft { background: #cfe2ff; color: #084298; }
-.status-badge.active { background: #d1e7dd; color: #0f5132; }
-.status-badge.deprecated { background: #f8d7da; color: #842029; }
-.status-badge.proposed { background: #fff3cd; color: #664d03; }
+.status-badge.draft { background: var(--status-draft-bg); color: var(--status-draft-text); }
+.status-badge.active { background: var(--status-active-bg); color: var(--status-active-text); }
+.status-badge.deprecated { background: var(--status-deprecated-bg); color: var(--status-deprecated-text); }
+.status-badge.proposed { background: var(--status-proposed-bg); color: var(--status-proposed-text); }
 
 /* Parent Links */
 .card-parents {
@@ -202,7 +202,7 @@
 
 .card-parents-empty {
     font-size: 0.8rem;
-    color: #adb5bd;
+    color: var(--muted-text);
     font-style: italic;
 }
 
@@ -217,11 +217,11 @@
     align-items: center;
     gap: 4px;
     padding: 3px 8px;
-    background: #f0f4ff;
-    border: 1px solid #b6d4fe;
+    background: var(--card-parent-bg);
+    border: 1px solid var(--card-parent-border);
     border-radius: 12px;
     font-size: 0.75rem;
-    color: #0d6efd;
+    color: var(--card-parent-text);
     cursor: pointer;
     transition: background 0.15s;
     text-decoration: none;
@@ -233,12 +233,12 @@
 }
 
 .card-parent-link:hover {
-    background: #d0e2ff;
+    background: var(--card-parent-hover-bg);
 }
 
 .card-parent-kind {
     font-size: 0.65rem;
-    color: #6c757d;
+    color: var(--card-parent-kind);
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -250,13 +250,13 @@ body.edit-mode .card-parent-kind.view-only {
 
 /* Kind toggle button (edit mode) */
 .card-parent-kind-toggle {
-    border: 1px solid #dee2e6;
-    background: #f8f9fa;
+    border: 1px solid var(--kind-toggle-border);
+    background: var(--kind-toggle-bg);
     border-radius: 4px;
     padding: 2px 8px;
     font-size: 0.7rem;
     font-weight: 600;
-    color: #495057;
+    color: var(--kind-toggle-text);
     cursor: pointer;
     transition: all 0.15s;
     flex-shrink: 0;
@@ -264,9 +264,9 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .card-parent-kind-toggle:hover {
-    border-color: #0d6efd;
-    color: #0d6efd;
-    background: #e7f1ff;
+    border-color: var(--kind-toggle-hover-border);
+    color: var(--kind-toggle-hover-text);
+    background: var(--kind-toggle-hover-bg);
 }
 
 /* Delete edge button */
@@ -275,7 +275,7 @@ body.edit-mode .card-parent-kind.view-only {
     background: none;
     cursor: pointer;
     font-size: 1rem;
-    color: #adb5bd;
+    color: var(--muted-text);
     padding: 0 4px;
     line-height: 1;
     transition: color 0.15s;
@@ -283,7 +283,7 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .card-parent-delete:hover {
-    color: #dc3545;
+    color: var(--delete-hover);
 }
 
 /* Add Relationship button */
@@ -293,27 +293,27 @@ body.edit-mode .card-parent-kind.view-only {
     gap: 4px;
     padding: 4px 10px;
     background: transparent;
-    border: 1px dashed #dee2e6;
+    border: 1px dashed var(--card-add-btn-border);
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.75rem;
-    color: #6c757d;
+    color: var(--card-add-btn-text);
     transition: all 0.15s;
     margin-top: 6px;
 }
 
 .card-add-rel-btn:hover {
-    border-color: #0d6efd;
-    color: #0d6efd;
-    background: #f0f4ff;
+    border-color: var(--card-add-btn-hover-border);
+    color: var(--card-add-btn-hover-text);
+    background: var(--card-add-btn-hover-bg);
 }
 
 /* Add Relationship form */
 .card-add-rel-form {
     margin-top: 8px;
     padding: 10px;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background: var(--add-rel-bg);
+    border: 1px solid var(--add-rel-border);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -329,14 +329,14 @@ body.edit-mode .card-parent-kind.view-only {
 .add-rel-label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #6c757d;
+    color: var(--add-rel-label);
     width: 65px;
     flex-shrink: 0;
 }
 
 .add-rel-select {
     padding: 4px 8px;
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     font-size: 0.8rem;
     font-family: inherit;
@@ -344,7 +344,7 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .add-rel-select:focus {
-    border-color: #0d6efd;
+    border-color: var(--primary);
     box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
 }
 
@@ -361,7 +361,7 @@ body.edit-mode .card-parent-kind.view-only {
 
 .add-rel-add-btn {
     padding: 4px 14px;
-    background: #0d6efd;
+    background: var(--add-rel-add-bg);
     color: white;
     border: none;
     border-radius: 4px;
@@ -372,19 +372,19 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .add-rel-add-btn:hover:not(:disabled) {
-    background: #0b5ed7;
+    background: var(--add-rel-add-hover);
 }
 
 .add-rel-add-btn:disabled {
-    background: #adb5bd;
+    background: var(--add-rel-add-disabled);
     cursor: not-allowed;
 }
 
 .add-rel-cancel-btn {
     padding: 4px 14px;
     background: transparent;
-    color: #6c757d;
-    border: 1px solid #dee2e6;
+    color: var(--add-rel-cancel-text);
+    border: 1px solid var(--add-rel-cancel-border);
     border-radius: 4px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -392,8 +392,8 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .add-rel-cancel-btn:hover {
-    background: #f8f9fa;
-    border-color: #adb5bd;
+    background: var(--add-rel-cancel-hover-bg);
+    border-color: var(--add-rel-cancel-hover-border);
 }
 
 /* Assertion List */
@@ -408,7 +408,7 @@ body.edit-mode .card-parent-kind.view-only {
     gap: 8px;
     padding: 6px 8px;
     border-radius: 4px;
-    background: #f8f9fa;
+    background: var(--card-assertion-bg);
     border: 1px solid transparent;
     transition: background 0.15s, border-color 0.15s;
 }
@@ -417,8 +417,8 @@ body.edit-mode .card-parent-kind.view-only {
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 0.75rem;
     font-weight: 700;
-    color: #0d6efd;
-    background: #e7f1ff;
+    color: var(--card-assertion-label-text);
+    background: var(--card-assertion-label-bg);
     padding: 2px 6px;
     border-radius: 3px;
     flex-shrink: 0;
@@ -427,7 +427,7 @@ body.edit-mode .card-parent-kind.view-only {
 
 .card-assertion-text {
     font-size: 0.8rem;
-    color: #495057;
+    color: var(--card-assertion-text);
     line-height: 1.5;
 }
 
@@ -443,24 +443,24 @@ body.edit-mode .card-parent-kind.view-only {
     align-items: center;
     gap: 3px;
     padding: 2px 8px;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background: var(--card-child-bg);
+    border: 1px solid var(--card-child-border);
     border-radius: 12px;
     font-size: 0.7rem;
-    color: #495057;
+    color: var(--card-child-text);
     cursor: pointer;
     transition: background 0.15s;
     text-decoration: none;
 }
 
 .card-child-link:hover {
-    background: #e9ecef;
-    color: #0d6efd;
+    background: var(--card-child-hover-bg);
+    color: var(--card-child-hover-text);
 }
 
 .card-child-edge-kind {
     font-size: 0.6rem;
-    color: #adb5bd;
+    color: var(--card-child-edge-kind);
     font-weight: 600;
 }
 
@@ -471,19 +471,19 @@ body.edit-mode .card-parent-kind.view-only {
     gap: 4px;
     padding: 4px 10px;
     background: transparent;
-    border: 1px dashed #dee2e6;
+    border: 1px dashed var(--card-add-btn-border);
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.75rem;
-    color: #6c757d;
+    color: var(--card-add-btn-text);
     transition: all 0.15s;
     margin-top: 4px;
 }
 
 .card-add-assertion-btn:hover {
-    border-color: #0d6efd;
-    color: #0d6efd;
-    background: #f0f4ff;
+    border-color: var(--card-add-btn-hover-border);
+    color: var(--card-add-btn-hover-text);
+    background: var(--card-add-btn-hover-bg);
 }
 
 /* --- Journey Card --- */
@@ -492,8 +492,8 @@ body.edit-mode .card-parent-kind.view-only {
     display: inline-flex;
     align-items: center;
     padding: 1px 6px;
-    background: #6c757d;
-    color: white;
+    background: var(--journey-kind-bg);
+    color: var(--journey-kind-text);
     border-radius: 3px;
     font-size: 0.65rem;
     font-weight: 700;
@@ -503,7 +503,7 @@ body.edit-mode .card-parent-kind.view-only {
 
 .journey-card-description {
     font-size: 0.8rem;
-    color: #495057;
+    color: var(--journey-card-description);
     line-height: 1.6;
     white-space: pre-wrap;
 }
@@ -515,7 +515,7 @@ body.edit-mode .card-parent-kind.view-only {
     border: none;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #dc3545;
+    color: var(--delete-btn);
     opacity: 0;
     transition: opacity 0.2s;
     padding: 2px 6px;
@@ -534,7 +534,7 @@ body.edit-mode .card-parent-kind.view-only {
     display: inline-block;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #0d6efd;
+    color: var(--edit-pencil);
     font-weight: normal;
     flex-shrink: 0;
     padding: 0 2px;
@@ -553,7 +553,7 @@ body.edit-mode .card-parent-kind.view-only {
     border: none;
     cursor: pointer;
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--assertion-delete);
     opacity: 0.35;
     transition: opacity 0.2s, color 0.2s;
     padding: 2px 4px;
@@ -565,7 +565,7 @@ body.edit-mode .card-parent-kind.view-only {
 }
 .assertion-delete-btn:hover {
     opacity: 1 !important;
-    color: #dc3545;
+    color: var(--assertion-delete-hover);
 }
 
 /* --- Assertion Validation Buttons --- */
@@ -587,10 +587,10 @@ body.edit-mode .card-parent-kind.view-only {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--assertion-btn-border);
     border-radius: 10px;
     background: transparent;
-    color: #6c757d;
+    color: var(--assertion-btn-text);
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
@@ -601,32 +601,32 @@ body.edit-mode .card-parent-kind.view-only {
 
 .assertion-implemented-btn:hover,
 .assertion-validation-btn:hover {
-    background: #f8f9fa;
-    border-color: #adb5bd;
+    background: var(--assertion-btn-hover-bg);
+    border-color: var(--assertion-btn-hover-border);
 }
 
 /* Implemented button states */
 .assertion-implemented-btn.implemented-yes {
-    border-color: #0d6efd;
-    color: #0d6efd;
+    border-color: var(--impl-yes-border);
+    color: var(--impl-yes-text);
 }
 
 .assertion-implemented-btn.implemented-yes:hover {
-    background: #e7f1ff;
+    background: var(--impl-yes-hover-bg);
 }
 
 .assertion-implemented-btn.implemented-yes.active {
-    background: #0d6efd;
-    color: white;
+    background: var(--impl-yes-active-bg);
+    color: var(--impl-yes-active-text);
 }
 
 .assertion-implemented-btn.implemented-no {
-    border-color: #adb5bd;
-    color: #adb5bd;
+    border-color: var(--impl-no-border);
+    color: var(--impl-no-text);
 }
 
 .assertion-implemented-btn.implemented-no:hover {
-    background: #f8f9fa;
+    background: var(--impl-no-hover-bg);
 }
 
 .assertion-implemented-btn.active {
@@ -634,59 +634,59 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .assertion-validation-btn.validation-pass {
-    border-color: #198754;
-    color: #198754;
+    border-color: var(--valid-pass-border);
+    color: var(--valid-pass-text);
 }
 
 .assertion-validation-btn.validation-pass:hover {
-    background: #d1e7dd;
+    background: var(--valid-pass-hover-bg);
 }
 
 .assertion-validation-btn.validation-pass.active {
-    background: #198754;
-    color: white;
+    background: var(--valid-pass-active-bg);
+    color: var(--valid-pass-active-text);
 }
 
 .assertion-validation-btn.validation-partial {
-    border-color: #ffc107;
-    color: #92400e;
+    border-color: var(--valid-partial-border);
+    color: var(--valid-partial-text);
 }
 
 .assertion-validation-btn.validation-partial:hover {
-    background: #fff3cd;
+    background: var(--valid-partial-hover-bg);
 }
 
 .assertion-validation-btn.validation-partial.active {
-    background: #ffc107;
-    color: #1a1d21;
+    background: var(--valid-partial-active-bg);
+    color: var(--valid-partial-active-text);
 }
 
 .assertion-validation-btn.validation-fail {
-    border-color: #dc3545;
-    color: #dc3545;
+    border-color: var(--valid-fail-border);
+    color: var(--valid-fail-text);
 }
 
 .assertion-validation-btn.validation-fail:hover {
-    background: #f8d7da;
+    background: var(--valid-fail-hover-bg);
 }
 
 .assertion-validation-btn.validation-fail.active {
-    background: #dc3545;
-    color: white;
+    background: var(--valid-fail-active-bg);
+    color: var(--valid-fail-active-text);
 }
 
 .assertion-validation-btn.validation-unknown {
-    border-color: #6c757d;
-    color: #6c757d;
+    border-color: var(--valid-unknown-border);
+    color: var(--valid-unknown-text);
 }
 
 .assertion-validation-btn.validation-unknown:hover {
-    background: #e9ecef;
+    background: var(--valid-unknown-hover-bg);
 }
 
 .assertion-validation-btn.validation-unknown.active {
-    background: #6c757d;
-    color: white;
+    background: var(--valid-unknown-active-bg);
+    color: var(--valid-unknown-active-text);
 }
 
 .assertion-validation-btn.active {
@@ -698,9 +698,9 @@ body.edit-mode .card-parent-kind.view-only {
 .assertion-code-panel {
     margin: 4px 0 2px 28px;
     padding: 8px 10px;
-    background: #f0f4ff;
+    background: var(--assertion-code-panel-bg);
     border-radius: 4px;
-    border-left: 3px solid #0d6efd;
+    border-left: 3px solid var(--assertion-code-panel-border);
     font-size: 0.78rem;
 }
 
@@ -709,15 +709,15 @@ body.edit-mode .card-parent-kind.view-only {
 .assertion-tests-panel {
     margin: 4px 0 2px 28px;
     padding: 8px 10px;
-    background: #f0f4f8;
+    background: var(--assertion-tests-panel-bg);
     border-radius: 4px;
-    border-left: 3px solid #dee2e6;
+    border-left: 3px solid var(--assertion-tests-panel-border);
     font-size: 0.78rem;
 }
 
 .assertion-tests-loading,
 .assertion-tests-empty {
-    color: #6c757d;
+    color: var(--secondary-text);
     font-style: italic;
     padding: 4px 0;
 }
@@ -734,9 +734,9 @@ body.edit-mode .card-parent-kind.view-only {
     border-bottom: none;
 }
 
-.assertion-test-item.test-passed { color: #198754; }
-.assertion-test-item.test-failed { color: #dc3545; }
-.assertion-test-item.test-no-result { color: #6c757d; }
+.assertion-test-item.test-passed { color: var(--assertion-test-passed-text); }
+.assertion-test-item.test-failed { color: var(--assertion-test-failed-text); }
+.assertion-test-item.test-no-result { color: var(--assertion-test-no-result-text); }
 
 .assertion-test-icon {
     flex-shrink: 0;
@@ -746,7 +746,7 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .assertion-test-link {
-    color: #0d6efd;
+    color: var(--assertion-test-link);
     text-decoration: none;
     cursor: pointer;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -761,18 +761,18 @@ body.edit-mode .card-parent-kind.view-only {
 
 a.assertion-test-link:hover {
     text-decoration: underline;
-    color: #0b5ed7;
+    color: var(--assertion-test-link-hover);
 }
 
 .assertion-result-file-link {
     font-size: 0.65rem;
-    color: #6c757d;
+    color: var(--assertion-result-file-link);
     text-decoration: none;
     cursor: pointer;
     margin-left: 4px;
 }
 
 .assertion-result-file-link:hover {
-    color: #0d6efd;
+    color: var(--assertion-result-file-link-hover);
     text-decoration: underline;
 }

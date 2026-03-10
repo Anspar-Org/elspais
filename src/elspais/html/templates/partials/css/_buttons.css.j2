@@ -3,12 +3,12 @@
 /* Save/Revert/Undo Buttons */
 .btn {
     padding: 6px 14px;
-    border: 1px solid #dee2e6;
-    background: white;
+    border: 1px solid var(--btn-border);
+    background: var(--btn-bg);
     border-radius: 5px;
     cursor: pointer;
     font-size: 0.8rem;
-    color: #495057;
+    color: var(--btn-text);
     transition: background 0.15s, border-color 0.15s;
     display: inline-flex;
     align-items: center;
@@ -16,7 +16,7 @@
 }
 
 .btn:hover {
-    background: #f8f9fa;
+    background: var(--btn-hover-bg);
 }
 
 .btn:disabled {
@@ -25,33 +25,33 @@
 }
 
 .btn-primary {
-    background: #0d6efd;
-    color: white;
-    border-color: #0d6efd;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary-border);
 }
 
 .btn-primary:hover {
-    background: #0b5ed7;
+    background: var(--btn-primary-hover);
 }
 
 .btn-warning {
-    background: #ffc107;
-    color: #212529;
-    border-color: #ffc107;
+    background: var(--btn-warning-bg);
+    color: var(--btn-warning-text);
+    border-color: var(--btn-warning-border);
 }
 
 .btn-warning:hover {
-    background: #e0a800;
+    background: var(--btn-warning-hover);
 }
 
 .btn-danger {
-    color: #dc3545;
-    border-color: #dc3545;
+    color: var(--btn-danger-text);
+    border-color: var(--btn-danger-border);
 }
 
 .btn-danger:hover {
-    background: #dc3545;
-    color: white;
+    background: var(--btn-danger-hover-bg);
+    color: var(--btn-danger-hover-text);
 }
 
 .unsaved-badge {
@@ -61,8 +61,8 @@
     min-width: 20px;
     height: 20px;
     padding: 0 5px;
-    background: #dc3545;
-    color: white;
+    background: var(--unsaved-badge-bg);
+    color: var(--unsaved-badge-text);
     border-radius: 10px;
     font-size: 0.7rem;
     font-weight: 700;

@@ -22,7 +22,7 @@
 }
 
 .modal {
-    background: white;
+    background: var(--modal-bg);
     border-radius: 8px;
     padding: 24px;
     max-width: 500px;
@@ -49,13 +49,13 @@
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    color: #6c757d;
+    color: var(--modal-close);
     padding: 0;
     line-height: 1;
 }
 
 .modal-close:hover {
-    color: #333;
+    color: var(--modal-close-hover);
 }
 
 .legend-section {
@@ -65,9 +65,9 @@
 .legend-section h4 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #495057;
+    color: var(--legend-section-title);
     margin-bottom: 8px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--legend-section-border);
     padding-bottom: 4px;
 }
 
