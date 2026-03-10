@@ -21,6 +21,7 @@ from flask_cors import CORS
 
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.html.theme import get_catalog
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_test_map,
@@ -153,6 +154,7 @@ def create_app(
                 node_index={},
                 coverage_index={},
                 status_data={},
+                catalog=get_catalog(),
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200

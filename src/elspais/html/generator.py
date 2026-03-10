@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
+from elspais.html.theme import get_catalog
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
@@ -248,6 +249,7 @@ class HTMLGenerator:
             status_data=status_data,
             version=self.version,
             base_path=self.base_path,
+            catalog=get_catalog(),
         )
 
         return html_content
