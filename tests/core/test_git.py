@@ -822,3 +822,392 @@ class TestPullFfOnly:
             text=True,
         )
         assert status.stdout.strip() == ""
+
+
+def _init_bare_with_spec(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Create a bare remote and two clones with a spec/ directory.
+
+    Returns (bare_repo, clone_a, clone_b).
+    Each clone has spec/prd.md committed and pushed, on a feature branch.
+    """
+    bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+    # Add spec directory in clone_a, push to remote
+    (clone_a / "spec").mkdir()
+    (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Original\n")
+    subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add spec"],
+        cwd=clone_a,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+    # Pull spec into clone_b
+    subprocess.run(["git", "pull"], cwd=clone_b, capture_output=True, check=True)
+
+    return bare, clone_a, clone_b
+
+
+class TestCommitAndPushWithRemote:
+    """Tests for commit_and_push_spec_files() with a real remote.
+
+    Validates REQ-p00004-E push behaviour with bare+clone repos.
+    """
+
+    def test_REQ_p00004_E_commit_and_push_succeeds(self, tmp_path):
+        """Commit and push spec changes to remote."""
+        _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
+
+        # Create feature branch in clone_a
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+
+        # Modify spec file
+        (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Updated\n")
+
+        result = commit_and_push_spec_files(clone_a, "update prd", push=True)
+
+        assert result["success"] is True
+        assert "spec/prd.md" in result["files_committed"]
+        assert "push_error" not in result
+
+        # Verify the push arrived at the remote — clone_b can fetch the branch
+        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        log = subprocess.run(
+            ["git", "log", "origin/feature", "--oneline", "-1"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+        )
+        assert "update prd" in log.stdout
+
+    def test_REQ_p00004_E_push_failure_still_commits(self, tmp_path):
+        """When push fails, commit still succeeds with push_error."""
+        _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
+
+        # Create feature branch in clone_a
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+
+        # Break the remote by removing it
+        subprocess.run(
+            ["git", "remote", "remove", "origin"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+
+        # Modify spec file
+        (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Updated\n")
+
+        result = commit_and_push_spec_files(clone_a, "update prd", push=True)
+
+        # Commit succeeds, push fails gracefully
+        assert result["success"] is True
+        assert "spec/prd.md" in result["files_committed"]
+        assert "push_error" in result
+
+        # Verify the commit was actually made
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            cwd=clone_a,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "update prd" in log.stdout
+
+    def test_REQ_p00004_E_push_arrives_at_remote(self, tmp_path):
+        """Verify pushed spec changes are fetched by another clone."""
+        _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
+
+        # clone_a: create branch, edit, commit, push
+        subprocess.run(
+            ["git", "checkout", "-b", "edit-spec"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Edited by A\n")
+        commit_and_push_spec_files(clone_a, "A edits prd", push=True)
+
+        # clone_b: fetch and checkout the branch
+        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "edit-spec", "origin/edit-spec"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+
+        # Verify the file content arrived
+        assert (clone_b / "spec" / "prd.md").read_text() == "# REQ-p00001 Edited by A\n"
+
+
+class TestAnsiStripping:
+    """Tests for ANSI escape code stripping in commit error messages."""
+
+    def test_ansi_codes_stripped_from_commit_error(self, tmp_path):
+        """ANSI escape codes are removed from commit failure error messages."""
+        _init_git_repo(tmp_path)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        # Create a pre-commit hook that outputs ANSI codes and fails
+        hooks_dir = tmp_path / ".git" / "hooks"
+        hooks_dir.mkdir(exist_ok=True)
+        hook = hooks_dir / "pre-commit"
+        hook.write_text(
+            "#!/bin/sh\n"
+            'echo "\\033[0;31mError:\\033[0m \\033[1;34mvalidation failed\\033[0m" >&2\n'
+            "exit 1\n"
+        )
+        hook.chmod(0o755)
+
+        # Modify spec file so there's something to commit
+        (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
+
+        result = commit_and_push_spec_files(tmp_path, "bad commit", push=False)
+
+        assert result["success"] is False
+        # Error message should not contain ANSI escape sequences
+        assert "\x1b[" not in result["error"]
+        assert "\033[" not in result["error"]
+        # But should still contain the actual error text
+        assert "validation failed" in result["error"]
+
+
+class TestGitStatusSummaryWithRemote:
+    """Tests for git_status_summary() with remote tracking.
+
+    Validates REQ-p00004-C remote divergence and ahead/behind detection.
+    """
+
+    def test_REQ_p00004_C_local_ahead_count(self, tmp_path):
+        """local_ahead reflects unpushed commits."""
+        _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
+
+        # Create feature branch and push it (so remote tracking exists)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "feature"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+
+        # Make two local commits without pushing
+        for i in range(2):
+            (clone_a / "spec" / "prd.md").write_text(f"# REQ-p00001 Edit {i}\n")
+            subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"local edit {i}"],
+                cwd=clone_a,
+                capture_output=True,
+                check=True,
+            )
+
+        result = git_status_summary(clone_a)
+
+        assert result["branch"] == "feature"
+        assert result["local_ahead"] == 2
+        assert result["remote_diverged"] is False
+
+    def test_REQ_p00004_C_remote_diverged_flag(self, tmp_path):
+        """remote_diverged is True when remote has commits we don't have."""
+        _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
+
+        # Both clones on feature branch tracking remote
+        for clone in (clone_a, clone_b):
+            subprocess.run(
+                ["git", "checkout", "-b", "feature"],
+                cwd=clone,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "push", "-u", "origin", "feature"],
+                cwd=clone,
+                capture_output=True,
+                check=True,
+            )
+
+        # clone_b pushes a commit that clone_a doesn't have
+        (clone_b / "spec" / "prd.md").write_text("# REQ-p00001 From B\n")
+        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "B edit"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "push"], cwd=clone_b, capture_output=True, check=True)
+
+        # clone_a checks status — should detect remote divergence
+        result = git_status_summary(clone_a)
+
+        assert result["remote_diverged"] is True
+        assert result["fast_forward_possible"] is True
+
+    def test_REQ_p00004_C_no_remote_no_divergence(self, tmp_path):
+        """No remote tracking → no divergence flags."""
+        _init_git_repo(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        result = git_status_summary(tmp_path)
+
+        assert result["remote_diverged"] is False
+        assert result["fast_forward_possible"] is False
+        assert result["local_ahead"] == 0
+
+
+class TestFullGitSyncWorkflowWithRemote:
+    """End-to-end workflow: branch → edit → commit → push → sync.
+
+    Validates the full git sync flow with a real remote, covering
+    REQ-p00004-C through REQ-p00004-F together.
+    """
+
+    def test_full_workflow_branch_commit_push_sync(self, tmp_path):
+        """Complete workflow: create branch, edit, commit, push, sync."""
+        _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
+
+        # 1. clone_a: status on main, clean
+        status = git_status_summary(clone_a)
+        assert status["is_main"] is True
+        assert status["dirty_spec_files"] == []
+
+        # 2. clone_a: create feature branch
+        result = create_and_switch_branch(clone_a, "feature/prd-update")
+        assert result["success"] is True
+
+        # 3. clone_a: edit spec, verify dirty
+        (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Updated by A\n")
+        status = git_status_summary(clone_a)
+        assert status["branch"] == "feature/prd-update"
+        assert "spec/prd.md" in status["dirty_spec_files"]
+
+        # 4. clone_a: commit and push
+        result = commit_and_push_spec_files(
+            clone_a,
+            "update prd requirement",
+            push=True,
+        )
+        assert result["success"] is True
+        assert "push_error" not in result
+
+        # 5. clone_a: status clean after push
+        status = git_status_summary(clone_a)
+        assert status["dirty_spec_files"] == []
+        assert status["local_ahead"] == 0
+
+        # 6. clone_b: fetch and checkout the feature branch
+        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/prd-update", "origin/feature/prd-update"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+        assert (clone_b / "spec" / "prd.md").read_text() == "# REQ-p00001 Updated by A\n"
+
+        # 7. clone_b: make own edit, commit, push
+        (clone_b / "spec" / "prd.md").write_text("# REQ-p00001 Updated by B\n")
+        result = commit_and_push_spec_files(
+            clone_b,
+            "B updates prd",
+            push=True,
+        )
+        assert result["success"] is True
+
+        # 8. clone_a: sync should pull B's changes
+        result = sync_branch(clone_a)
+        assert result["success"] is True
+        assert (clone_a / "spec" / "prd.md").read_text() == "# REQ-p00001 Updated by B\n"
+
+    def test_sync_conflict_from_concurrent_edits(self, tmp_path):
+        """Two clones edit same file on same branch → sync detects conflict."""
+        _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
+
+        # Both on feature branch
+        for clone in (clone_a, clone_b):
+            subprocess.run(
+                ["git", "checkout", "-b", "feature"],
+                cwd=clone,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "push", "-u", "origin", "feature"],
+                cwd=clone,
+                capture_output=True,
+                check=True,
+            )
+
+        # clone_a edits and pushes
+        (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Version A\n")
+        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "A edit"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        # clone_b edits same file (different content) and commits locally
+        (clone_b / "spec" / "prd.md").write_text("# REQ-p00001 Version B\n")
+        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "B edit"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+
+        # clone_b: sync should detect conflict and abort cleanly
+        result = sync_branch(clone_b)
+        assert result["success"] is False
+        assert "conflict" in result["error"].lower()
+
+        # Working tree should be clean (merge aborted)
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+        )
+        assert status.stdout.strip() == ""
