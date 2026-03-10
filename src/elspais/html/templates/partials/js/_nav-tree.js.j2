@@ -249,16 +249,22 @@ function renderNavTree() {
                 }
             }
         }
-        // Build a set of original indices for matched rows (for dimming context-only rows)
-        matchSet = new Set();
-        var finalIdx = 0;
-        for (var i = 0; i < filteredRows.length; i++) {
-            if (allVisible.has(i)) {
-                if (matchIndices.has(i)) matchSet.add(finalIdx);
-                finalIdx++;
+        // When hideFiltered is active, only show direct matches (no dimmed ancestors)
+        if (af.hideFiltered) {
+            matchSet = null;  // no dimming needed — non-matches are hidden
+            filteredRows = filteredRows.filter(function(r, idx) { return matchIndices.has(idx); });
+        } else {
+            // Build a set of original indices for matched rows (for dimming context-only rows)
+            matchSet = new Set();
+            var finalIdx = 0;
+            for (var i = 0; i < filteredRows.length; i++) {
+                if (allVisible.has(i)) {
+                    if (matchIndices.has(i)) matchSet.add(finalIdx);
+                    finalIdx++;
+                }
             }
+            filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
         }
-        filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
     }
 
     // Update counter
