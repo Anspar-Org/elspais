@@ -77,5 +77,7 @@ class Edge:
         )
 
     def __hash__(self) -> int:
-        """Hash based on source, target, and kind."""
-        return hash((self.source.id, self.target.id, self.kind.value))
+        """Hash based on source, target, kind, and assertion_targets."""
+        return hash(
+            (self.source.id, self.target.id, self.kind.value, tuple(self.assertion_targets))
+        )
