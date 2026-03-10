@@ -12,6 +12,7 @@ from pathlib import Path
 
 from elspais import __version__
 from elspais.commands import (
+    analysis_cmd,
     associate_cmd,
     changed,
     completion,
@@ -370,6 +371,47 @@ Examples:
         "--all",
         action="store_true",
         help="Include all changed files (not just spec)",
+    )
+
+    # analysis command
+    analysis_parser = subparsers.add_parser(
+        "analysis",
+        parents=[output_parent],
+        help="Analyze foundational requirement importance",
+    )
+    analysis_parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="Number of top results to show (default: 10)",
+        metavar="N",
+    )
+    analysis_parser.add_argument(
+        "--weights",
+        help="Centrality,fan-in,uncovered weights (default: 0.4,0.3,0.3)",
+        metavar="W1,W2,W3",
+    )
+    analysis_parser.add_argument(
+        "--format",
+        choices=["table", "json"],
+        default="table",
+        help="Output format (default: table)",
+    )
+    analysis_parser.add_argument(
+        "--show",
+        choices=["foundations", "leaves", "all"],
+        default="all",
+        help="Which sections to show (default: all)",
+    )
+    analysis_parser.add_argument(
+        "--level",
+        choices=["prd", "ops", "dev"],
+        help="Filter results by requirement level",
+    )
+    analysis_parser.add_argument(
+        "--include-code",
+        action="store_true",
+        help="Include CODE nodes in the analysis",
     )
 
     # version command
@@ -1161,6 +1203,8 @@ def main(argv: list[str] | None = None) -> int:
             return summary.run(args)
         elif args.command == "changed":
             return changed.run(args)
+        elif args.command == "analysis":
+            return analysis_cmd.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":

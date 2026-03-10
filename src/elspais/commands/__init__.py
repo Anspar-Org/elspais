@@ -3,6 +3,7 @@ elspais.commands - CLI command implementations
 """
 
 __all__ = [
+    "analysis_cmd",
     "analyze",
     "associate_cmd",
     "changed",
