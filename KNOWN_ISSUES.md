@@ -1,8 +1,9 @@
 # Known Issues
 
-[x] Chore: Update the Legend
-
-[x] Chore: Trace Edit title -> Elspais vx.x.x (repo name) PRD: xyz OPS: pdq ...
+[ ] Bug: run elspais viewer in ~/cure-hht/hht_diary/.
+- It prompts to enter a branch, since that's on main (good)
+- It makes the branch, but the modal to name the branch doesn't disappear
+- Click Cancel: modal disappears. But the new branch shows "!".
 
 [ ] Chore: Clarify that top search bar is for finding things and the other search bar is a filter for the tree view.
 - Add "hide filtered items" checkbox.
