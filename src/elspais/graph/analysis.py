@@ -397,8 +397,8 @@ def analyze_foundations(
         node = req_nodes.get(ns.node_id)
         if node is None:
             continue
-        has_included_children = any(c.id in included_set for c in node.iter_children())
-        if has_included_children:
+        has_req_children = any(c.id in req_nodes for c in node.iter_children())
+        if has_req_children:
             top_foundations.append(ns)
         else:
             actionable_leaves.append(ns)
