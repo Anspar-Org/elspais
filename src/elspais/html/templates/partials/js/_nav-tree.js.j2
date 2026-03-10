@@ -355,26 +355,26 @@ function renderNavTree() {
 function isAncestorCollapsed(row, allRows, matchSet) {
     if (!row.parent_id) return false;
     // Walk up the parent chain
-    let parentId = row.parent_id;
+    var parentId = row.parent_id;
     while (parentId) {
+        // Find parent in the rendered set
+        var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
+        if (pIdx < 0) {
+            // Parent was filtered out — its collapse state is irrelevant.
+            // We can't walk further since we don't know its parent_id.
+            break;
+        }
         if (editState.collapsedTreeNodes.has(parentId)) {
             // If filters are active and the collapsed ancestor is a context-only
             // (dimmed) row, don't honor the collapse — the user wants to see
             // the matching children even if the ancestor was previously collapsed.
-            if (matchSet) {
-                var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
-                if (pIdx >= 0 && !matchSet.has(pIdx)) {
-                    // Context-only ancestor — skip collapse, continue up
-                    parentId = allRows[pIdx].parent_id;
-                    continue;
-                }
+            if (matchSet && !matchSet.has(pIdx)) {
+                parentId = allRows[pIdx].parent_id;
+                continue;
             }
             return true;
         }
-        // Find parent row
-        const parentRow = allRows.find(function(r) { return r.id === parentId; });
-        if (!parentRow) break;
-        parentId = parentRow.parent_id;
+        parentId = allRows[pIdx].parent_id;
     }
     return false;
 }
