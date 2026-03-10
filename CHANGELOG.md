@@ -2,7 +2,7 @@
 
 All notable changes to elspais will be documented in this file.
 
-## [1.1.0] - 2026-03-09
+## [0.100.0] - 2026-03-09
 
 ### Added
 
@@ -17,7 +17,7 @@ All notable changes to elspais will be documented in this file.
 - **Unsaved changes warning** — `beforeunload` handler warns when pending mutations exist (unsaved badge > 0) or uncommitted spec files exist (blue dot indicator), preventing accidental data loss (REQ-p00004-E)
 - **E2E integration test for viewer git sync** — full workflow test covering `git_status_summary`, `create_and_switch_branch`, and `commit_and_push_spec_files` in sequence: init on main, dirty spec, create branch, verify carry, commit without push, verify clean (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E)
 
-## [1.0.0] - 2026-03-08
+## [0.99.0] - 2026-03-08
 
 ### Added
 

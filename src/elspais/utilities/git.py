@@ -718,7 +718,10 @@ def commit_and_push_spec_files(
             check=True,
         )
     except subprocess.CalledProcessError as e:
-        return {"success": False, "error": f"Failed to commit: {e.stderr}"}
+        import re as _re
+
+        clean = _re.sub(r"\x1b\[[0-9;]*m", "", e.stderr or "").strip()
+        return {"success": False, "error": f"Failed to commit: {clean}"}
     except FileNotFoundError:
         return {"success": False, "error": "git not found"}
 

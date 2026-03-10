@@ -133,7 +133,7 @@ async function doGitSync() {
 
 function showBranchModal(reason, callback) {
     var overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
+    overlay.className = 'modal-overlay visible';
     overlay.id = 'branch-modal-overlay';
 
     var dialog = document.createElement('div');
@@ -351,15 +351,33 @@ function onDeleteRequirement(nodeId) {
 }
 
 function onDeleteAssertion(nodeId, assertionId) {
-    if (!confirm('Delete assertion ' + assertionId + '? This can be undone with Ctrl+Z.')) return;
-    mutate('/api/mutate/assertion/delete', {
-        assertion_id: assertionId,
-        confirm: true
-    }).then(function(result) {
-        if (result && result.success) {
-            refreshCard(nodeId);
-        }
-    });
+    // Look up parent requirement status from open card data
+    var info = editState.openCards.get(nodeId);
+    var props = info && info.data && info.data.properties ? info.data.properties : {};
+    var status = (props.status || '').toLowerCase();
+    if (status === 'active') {
+        // Active requirements: deprecate assertion (preserve label for traceability)
+        if (!confirm('Deprecate assertion ' + assertionId + '? The label will be preserved. This can be undone with Ctrl+Z.')) return;
+        mutate('/api/mutate/assertion', {
+            assertion_id: assertionId,
+            new_text: '[DEPRECATED]'
+        }).then(function(result) {
+            if (result && result.success) {
+                refreshCard(nodeId);
+            }
+        });
+    } else {
+        // Draft/Deprecated/other: allow full deletion
+        if (!confirm('Delete assertion ' + assertionId + '? This can be undone with Ctrl+Z.')) return;
+        mutate('/api/mutate/assertion/delete', {
+            assertion_id: assertionId,
+            confirm: true
+        }).then(function(result) {
+            if (result && result.success) {
+                refreshCard(nodeId);
+            }
+        });
+    }
 }
 
 function onEditableKeydown(event) {
@@ -589,7 +607,10 @@ function onAddRelationship(nodeId, btn) {
 // =====================================================================
 
 function showPushModal() {
+    var pushBtn = document.getElementById('btn-push');
+    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Loading...'; }
     apiFetch('/api/git/status').then(function(data) {
+        if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push'; }
         if (!data || data.is_main) return;
         var files = data.dirty_spec_files || [];
         // Remove existing modal
@@ -602,7 +623,7 @@ function showPushModal() {
 
         var overlay = document.createElement('div');
         overlay.id = 'branch-modal-overlay';
-        overlay.className = 'modal-overlay';
+        overlay.className = 'modal-overlay visible';
         overlay.innerHTML =
             '<div class="modal-dialog">' +
                 '<div class="modal-title">Commit &amp; Push</div>' +
@@ -610,7 +631,7 @@ function showPushModal() {
                 '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
                 '<div class="modal-file-list">' + fileListHtml + '</div>' +
                 '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
-                '<input type="text" class="modal-input" id="push-message-input" placeholder="Update requirements" autocomplete="off">' +
+                '<input type="text" class="modal-input" id="push-message-input" placeholder="Commit message" autocomplete="off">' +
                 '<div class="modal-error hidden" id="push-modal-error"></div>' +
                 '<div class="modal-actions">' +
                     '<button class="btn btn-primary" id="push-modal-confirm"' + (files.length === 0 ? ' disabled' : '') + '>Push</button>' +
@@ -624,6 +645,8 @@ function showPushModal() {
         input.focus();
 
         function doPush() {
+            errorEl.textContent = '';
+            errorEl.classList.add('hidden');
             var msg = input.value.trim();
             if (!msg) {
                 errorEl.textContent = 'Commit message is required';
@@ -648,7 +671,13 @@ function showPushModal() {
                     body: JSON.stringify({message: msg})
                 });
             }).then(function(result) {
-                if (!result) return;
+                if (!result) {
+                    errorEl.textContent = 'Push failed — no response from server';
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                    return;
+                }
                 if (result.success) {
                     overlay.remove();
                     var toast = 'Pushed ' + (result.files_committed || []).length + ' file(s)';

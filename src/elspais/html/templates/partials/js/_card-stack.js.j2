@@ -260,9 +260,9 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
                 'Validation</button>';
             html += '<button class="assertion-delete-btn edit-only" ' +
-                'title="Delete assertion" ' +
+                'title="Deprecate assertion" ' +
                 'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
-                '&#10005;</button>';
+                '&#8856;</button>';
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';

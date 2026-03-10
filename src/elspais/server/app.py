@@ -781,13 +781,9 @@ def create_app(
             return jsonify({"success": False, "error": "commit message required"}), 400
         spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
         result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
-        err_lower = result.get("error", "").lower()
-        if not result.get("success") and (
-            "refusing to commit" in err_lower or "cannot commit" in err_lower
-        ):
-            return jsonify(result), 403
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
+        # Always return 200 so the modal JS can display the error inline.
+        # The result contains success=false with an error message on failure.
+        return jsonify(result), 200
 
     @app.route("/api/git/pull", methods=["POST"])
     def api_git_pull():
