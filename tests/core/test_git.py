@@ -680,7 +680,12 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
     """
     bare = tmp_path / "remote.git"
     bare.mkdir()
-    subprocess.run(["git", "init", "--bare"], cwd=bare, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "init", "--bare", "--initial-branch=main"],
+        cwd=bare,
+        capture_output=True,
+        check=True,
+    )
 
     clone_a = tmp_path / "clone_a"
     subprocess.run(["git", "clone", str(bare), str(clone_a)], capture_output=True, check=True)
