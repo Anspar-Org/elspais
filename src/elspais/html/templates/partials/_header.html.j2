@@ -82,8 +82,9 @@
                 <div class="hamburger-divider"></div>
                 <div class="hamburger-label">Theme</div>
                 <div class="hamburger-item theme-controls">
-                    <button class="btn theme-btn" data-theme="light" onclick="event.stopPropagation(); setTheme('light')" title="Light theme">&#9728;</button>
-                    <button class="btn theme-btn" data-theme="dark" onclick="event.stopPropagation(); setTheme('dark')" title="Dark theme">&#9790;</button>
+                    {% for t in catalog.themes %}
+                    <button class="btn theme-btn" data-theme="{{ t.name }}" onclick="event.stopPropagation(); setTheme('{{ t.name }}')" title="{{ t.label }} theme">{{ t.icon }}</button>
+                    {% endfor %}
                     <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
                 </div>
             </div>

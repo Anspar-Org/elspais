@@ -103,3 +103,127 @@ class TestGroupedEntries:
         cat_names = [name for name, _ in groups]
         assert "Coverage Status" in cat_names or "Coverage" in cat_names
         assert len(groups) >= 5  # at least 5 categories
+
+
+class TestComputeValidationColorCatalog:
+    """Test that compute_validation_color returns descriptions from the catalog."""
+
+    def _make_active_node_with_metrics(self, rollup):
+        """Build a minimal Active requirement node and attach rollup metrics."""
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Test Req", status="Active"),
+        )
+        node = graph.find_by_id("REQ-p00001")
+        node.set_metric("rollup_metrics", rollup)
+        return node
+
+    def test_REQ_p00006_A_green_description_from_catalog(self):
+        """Green tier: full direct coverage, all assertions validated, no failures."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_validation_color
+        from elspais.html.theme import get_catalog
+
+        catalog = get_catalog()
+        expected_entry = catalog.by_key("validation_tiers.full-direct")
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            coverage_pct=100.0,
+            validated=2,
+            has_failures=False,
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        css_suffix, description = compute_validation_color(node)
+
+        assert css_suffix == expected_entry.color_key
+        assert description == expected_entry.description
+
+    def test_REQ_p00006_A_red_description_from_catalog(self):
+        """Red tier: has test failures."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_validation_color
+        from elspais.html.theme import get_catalog
+
+        catalog = get_catalog()
+        expected_entry = catalog.by_key("validation_tiers.failing")
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            coverage_pct=50.0,
+            validated=1,
+            has_failures=True,
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        css_suffix, description = compute_validation_color(node)
+
+        assert css_suffix == expected_entry.color_key
+        assert description == expected_entry.description
+
+    def test_REQ_p00006_A_yellow_description_from_catalog(self):
+        """Yellow tier: partial coverage, no failures."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_validation_color
+        from elspais.html.theme import get_catalog
+
+        catalog = get_catalog()
+        expected_entry = catalog.by_key("validation_tiers.partial")
+
+        rollup = RollupMetrics(
+            total_assertions=3,
+            coverage_pct=33.0,
+            indirect_coverage_pct=33.0,
+            validated=1,
+            has_failures=False,
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        css_suffix, description = compute_validation_color(node)
+
+        assert css_suffix == expected_entry.color_key
+        assert description == expected_entry.description
+
+    def test_REQ_p00006_A_yellow_green_description_from_catalog(self):
+        """Yellow-green tier: full indirect coverage, all validated indirectly."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_validation_color
+        from elspais.html.theme import get_catalog
+
+        catalog = get_catalog()
+        expected_entry = catalog.by_key("validation_tiers.full-indirect")
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            coverage_pct=0.0,
+            indirect_coverage_pct=100.0,
+            validated=0,
+            validated_with_indirect=2,
+            has_failures=False,
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        css_suffix, description = compute_validation_color(node)
+
+        assert css_suffix == expected_entry.color_key
+        assert description == expected_entry.description
+
+    def test_REQ_p00006_A_orange_description_from_catalog(self):
+        """Orange tier: assertions exist but zero coverage (anomalous)."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_validation_color
+        from elspais.html.theme import get_catalog
+
+        catalog = get_catalog()
+        expected_entry = catalog.by_key("validation_tiers.anomalous")
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            coverage_pct=0.0,
+            indirect_coverage_pct=0.0,
+            validated=0,
+            has_failures=False,
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        css_suffix, description = compute_validation_color(node)
+
+        assert css_suffix == expected_entry.color_key
+        assert description == expected_entry.description

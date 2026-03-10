@@ -1,4 +1,5 @@
 {# Partial: _legend_modal.html.j2 — Legend overlay modal (both modes) #}
+{# Implements: REQ-p00006-A #}
 
 <div class="modal-overlay" id="legend-modal" onclick="closeLegendOnOverlay(event)">
     <div class="modal" onclick="event.stopPropagation()">
@@ -7,72 +8,20 @@
             <button class="modal-close" onclick="toggleLegend()">&times;</button>
         </div>
 
+        {% for group_name, entries in catalog.grouped_entries() %}
         <div class="legend-section">
-            <h4>Coverage Status</h4>
-            <div class="legend-item">
-                <span class="legend-icon">○</span>
-                <span>No implementations - no code references this requirement</span>
+            <h4>{{ group_name }}</h4>
+            {% for entry in entries %}
+            <div class="legend-item" {% if entry.long_description %}title="{{ entry.long_description }}"{% endif %}>
+                {% if entry.symbol %}
+                <span class="legend-icon {% if entry.css_class %}{{ entry.css_class }}{% endif %}">{{ entry.symbol }}</span>
+                {% elif entry.css_class %}
+                <span class="{{ entry.css_class }}" style="font-size: 0.75rem;">{{ entry.label }}</span>
+                {% endif %}
+                <span>{{ entry.description or entry.label }}</span>
             </div>
-            <div class="legend-item">
-                <span class="legend-icon">◐</span>
-                <span>Partial - some assertions have code implementations</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-icon">●</span>
-                <span>Full - all assertions have code implementations</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-icon" style="color: #ffc107;">⚡</span>
-                <span>Test failures or warnings detected</span>
-            </div>
+            {% endfor %}
         </div>
-
-        <div class="legend-section">
-            <h4>Change Indicators</h4>
-            <div class="legend-item">
-                <span class="legend-icon" style="color: #fd7e14;">◆</span>
-                <span>Changed vs remote main branch</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Assertion Badges</h4>
-            <div class="legend-item">
-                <span class="legend-icon"><span class="assertion-badge">A</span></span>
-                <span>Implements specific assertion(s) from parent requirement</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Status Badges</h4>
-            <div class="legend-item">
-                <span class="status-badge draft">DRAFT</span>
-                <span>Work in progress</span>
-            </div>
-            <div class="legend-item">
-                <span class="status-badge active">ACTIVE</span>
-                <span>Approved and active</span>
-            </div>
-            <div class="legend-item">
-                <span class="status-badge deprecated">DEPRECATED</span>
-                <span>No longer applicable</span>
-            </div>
-        </div>
-
-        <div class="legend-section">
-            <h4>Levels</h4>
-            <div class="legend-item">
-                <span class="stat-badge prd" style="font-size: 0.75rem;">PRD</span>
-                <span>Product Requirements - business-level needs</span>
-            </div>
-            <div class="legend-item">
-                <span class="stat-badge ops" style="font-size: 0.75rem;">OPS</span>
-                <span>Operations Requirements - operational constraints</span>
-            </div>
-            <div class="legend-item">
-                <span class="stat-badge dev" style="font-size: 0.75rem;">DEV</span>
-                <span>Development Requirements - technical specifications</span>
-            </div>
-        </div>
+        {% endfor %}
     </div>
 </div>

@@ -1,9 +1,13 @@
 # Known Issues
 
-[ ] Chore: Update the Legend
-- Maybe also add a "More Help" mode, where the hover-help text shows in a fixed part of the header bar (so it doesn't obscure data being viewed), and is more descriptive.
+[x] Chore: Update the Legend
 
-[ ] Chore: Trace Edit title -> Elspais vx.x.x (repo name) PRD: xyz OPS: pdq ...
+[x] Chore: Trace Edit title -> Elspais vx.x.x (repo name) PRD: xyz OPS: pdq ...
+
+[ ] Chore: Clarify that top search bar is for finding things and the other search bar is a filter for the tree view.
+- Add "hide filtered items" checkbox.
+
+[ ] Feature: "More Help" mode, where the hover-help text shows in a fixed part of the header bar (so it doesn't obscure data being viewed), and is more descriptive.
 
 [ ] Feature: Need a way to change a REQ -> REQ link to a REQ -> Assertion link.
 

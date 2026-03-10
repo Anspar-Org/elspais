@@ -2,6 +2,24 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.101.0] - 2026-03-09
+
+### Added
+
+- **Theme catalog system** — `theme.toml` and `help.toml` TOML data files as single source of truth for all UI colors, symbols, labels, and descriptions; `LegendCatalog` Python class with cached loader, CSS variable generation, and catalog entry lookup (REQ-p00006-A)
+- **Multi-theme support** — arbitrary named themes via `.theme-*` CSS class selectors replacing the old `.dark-theme` approach; theme buttons in hamburger menu generated from catalog (REQ-p00006-A)
+- **Dynamic page title** — browser tab shows `Elspais {version} ({repo_name}) -- PRD: N OPS: N DEV: N` in edit mode and `Elspais {version} -- Requirements Traceability` in view mode (REQ-p00006-A)
+
+### Changed
+
+- **CSS custom properties migration** — all ~176 hardcoded hex colors across 16 CSS partial files replaced with `var(--token)` references generated from `theme.toml` (REQ-p00006-A)
+- **Legend modal rewrite** — hardcoded legend content replaced with catalog-driven template loop over `catalog.grouped_entries()` (REQ-p00006-A)
+- **Validation color descriptions** — `compute_validation_color()` now sources descriptions from catalog `validation_tiers` entries instead of hardcoded strings (REQ-p00006-A)
+
+### Removed
+
+- **`_dark-theme.css.j2`** — 287-line dark theme override file deleted; dark mode now handled entirely by CSS custom properties in `theme.toml` (REQ-p00006-A)
+
 ## [0.100.0] - 2026-03-09
 
 ### Added

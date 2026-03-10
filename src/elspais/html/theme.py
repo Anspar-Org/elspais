@@ -42,6 +42,7 @@ _CATEGORY_LABELS: dict[str, str] = {
     "badges.level": "Requirement Levels",
     "badges.kind": "Node Types",
     "badges.edge": "Relationship Types",
+    "badges.assertion": "Assertion Badges",
     "badges.result": "Test Results",
     "buttons.implemented": "Implementation Status",
     "buttons.validation": "Validation Status",

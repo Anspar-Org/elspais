@@ -148,8 +148,9 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
+                repo_name=_state["working_dir"].name,
                 pygments_css=get_pygments_css(),
-                pygments_css_dark=get_pygments_css(style="monokai", scope=".dark-theme .highlight"),
+                pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data
                 node_index={},
                 coverage_index={},

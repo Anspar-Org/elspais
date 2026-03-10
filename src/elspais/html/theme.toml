@@ -942,6 +942,10 @@ css_class = "card-parent-kind"
 [badges.edge.refines]
 css_class = "card-parent-kind"
 
+[badges.assertion.badge]
+symbol = "A"
+css_class = "assertion-badge"
+
 [badges.result.passed]
 css_class = "nav-tree-result-badge passed"
 

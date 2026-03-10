@@ -6,9 +6,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% if mode == 'edit' %}
-    <title>Trace Edit - Requirements Editor</title>
+    <title>Elspais {{ version }} ({{ repo_name }}) -- PRD: {{ stats.prd_count }} OPS: {{ stats.ops_count }} DEV: {{ stats.dev_count }}</title>
     {% else %}
-    <title>Requirements Traceability</title>
+    <title>Elspais {{ version }} -- Requirements Traceability</title>
     {% endif %}
     <style>
 /* Implements: REQ-p00006-A */
@@ -45,7 +45,6 @@ body {
 {% include "partials/css/_topic-tags.css.j2" %}
 {% include "partials/css/_legend.css.j2" %}
 {% include "partials/css/_journey.css.j2" %}
-{% include "partials/css/_dark-theme.css.j2" %}
 /* Responsive */
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: flex-start; }
@@ -201,14 +200,13 @@ const editState = {
     } catch(e) {}
     // Apply theme immediately
     var html = document.documentElement;
-    html.classList.remove('dark-theme', 'light-theme');
-    if (editState.theme === 'dark') {
-        html.classList.add('dark-theme');
-    } else if (editState.theme === 'light') {
-        html.classList.add('light-theme');
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        html.classList.add('dark-theme');
+    html.className = html.className.replace(/\btheme-\S+/g, '');
+    var _t = editState.theme || 'system';
+    var _resolved = _t;
+    if (_t === 'system') {
+        _resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     }
+    html.classList.add('theme-' + _resolved);
 })();
 
 {% include "partials/js/_cookie-persistence.js.j2" %}
@@ -277,18 +275,12 @@ function setTheme(theme) {
 function applyTheme() {
     var theme = editState.theme || 'system';
     var html = document.documentElement;
-    html.classList.remove('dark-theme', 'light-theme');
-    if (theme === 'dark') {
-        html.classList.add('dark-theme');
-    } else if (theme === 'light') {
-        // light = no dark-theme class, even if system prefers dark
-        html.classList.add('light-theme');
-    } else {
-        // system: check OS preference
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            html.classList.add('dark-theme');
-        }
+    html.className = html.className.replace(/\btheme-\S+/g, '');
+    var resolved = theme;
+    if (theme === 'system') {
+        resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     }
+    html.classList.add('theme-' + resolved);
 }
 
 // Listen for OS theme changes (for system mode)
