@@ -1177,8 +1177,11 @@ class TestGitPush:
         assert data["success"] is False
         assert "required" in data["error"]
 
-    def test_REQ_p00004_E_git_push_on_main_refused_returns_403(self, client):
-        """POST /api/git/push on main branch returns 403."""
+    def test_REQ_p00004_E_git_push_on_main_refused(self, client):
+        """POST /api/git/push on main branch returns 200 with error in JSON.
+
+        The endpoint always returns 200 so the modal JS can display errors inline.
+        """
         from unittest.mock import patch
 
         mock_result = {
@@ -1187,19 +1190,19 @@ class TestGitPush:
         }
         with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
             resp = client.post("/api/git/push", json={"message": "Bad push"})
-        assert resp.status_code == 403
+        assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is False
         assert "Refusing" in data["error"]
 
-    def test_REQ_p00004_E_git_push_generic_error_returns_400(self, client):
-        """POST /api/git/push with generic error returns 400 not 403."""
+    def test_REQ_p00004_E_git_push_generic_error(self, client):
+        """POST /api/git/push with generic error returns 200 with error in JSON."""
         from unittest.mock import patch
 
         mock_result = {"success": False, "error": "Nothing to commit — no dirty spec files"}
         with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
             resp = client.post("/api/git/push", json={"message": "No changes"})
-        assert resp.status_code == 400
+        assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is False
 

@@ -479,6 +479,59 @@ class TestDeleteEdge:
 
         assert "REQ-p00002" not in graph._orphaned_ids
 
+    def test_delete_edge_preserves_other_edges_to_same_parent(self):
+        """Deleting one edge must not delete other edges to the same parent.
+
+        Regression: remove_child() nuked ALL edges between two nodes.
+        """
+        graph = build_graph_with_assertions()
+
+        # Add two separate assertion-targeted edges to the same parent
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, assertion_targets=["A"])
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, assertion_targets=["B"])
+
+        parent = graph.find_by_id("REQ-p00001")
+        child = graph.find_by_id("REQ-p00002")
+
+        # Verify both edges exist
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.target.id == "REQ-p00002" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(edges) == 2
+
+        # Delete the first edge found (targets=["A"])
+        graph.delete_edge("REQ-p00002", "REQ-p00001")
+
+        # The OTHER edge (targets=["B"]) must still exist
+        remaining = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.target.id == "REQ-p00002" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(remaining) == 1
+        assert remaining[0].assertion_targets == ["B"]
+
+        # Parent-child link must still exist
+        assert parent.has_child(child)
+        assert child.has_parent(parent)
+
+    def test_delete_edge_removes_parent_child_when_last_edge(self):
+        """When the last edge between two nodes is deleted, parent/child link is cleaned up."""
+        graph = build_graph_with_assertions()
+
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, assertion_targets=["A"])
+
+        parent = graph.find_by_id("REQ-p00001")
+        child = graph.find_by_id("REQ-p00002")
+        assert parent.has_child(child)
+
+        graph.delete_edge("REQ-p00002", "REQ-p00001")
+
+        assert not parent.has_child(child)
+        assert not child.has_parent(parent)
+
 
 class TestFixBrokenReference:
     """Tests for TraceGraph.fix_broken_reference()."""

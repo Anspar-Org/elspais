@@ -334,11 +334,20 @@ class TraceGraph:
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
             else:
-                # Remove actual edge
+                # Remove the specific edge that was added
                 source = self._index.get(source_id)
                 target = self._index.get(target_id)
                 if source and target:
-                    target.remove_child(source)
+                    edge_kind_val = entry.after_state.get("edge_kind", "")
+                    at = tuple(entry.after_state.get("assertion_targets", []))
+                    for edge in list(target.iter_outgoing_edges()):
+                        if (
+                            edge.target.id == source_id
+                            and edge.kind.value == edge_kind_val
+                            and tuple(edge.assertion_targets) == at
+                        ):
+                            target.remove_edge(edge)
+                            break
 
             # Restore orphan status
             if was_orphan and source_id in self._index:
@@ -1493,8 +1502,8 @@ class TraceGraph:
             },
         )
 
-        # Remove the edge (parent removes child)
-        target.remove_child(source)
+        # Remove the specific edge (not all edges between these nodes)
+        target.remove_edge(edge_to_delete)
 
         # Check if source is now orphaned (no parents, not a root)
         if source.parent_count() == 0 and not self.has_root(source_id):
