@@ -166,7 +166,7 @@ class TestAnalysisOptions:
     def test_REQ_d00125_B_weights_invalid_count_errors(self):
         result = run_elspais("analysis", "--weights", "1.0,0.0")
         assert result.returncode == 1
-        assert "exactly 3" in result.stdout
+        assert "3 or 4" in result.stdout
 
     def test_REQ_d00125_B_weights_non_numeric_errors(self):
         result = run_elspais("analysis", "--weights", "a,b,c")

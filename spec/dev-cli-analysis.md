@@ -12,13 +12,15 @@ A. The module SHALL compute PageRank-style centrality scores for requirement nod
 
 B. The module SHALL compute fan-in as the count of distinct direct parents (among included node kinds) for each node, identifying cross-cutting requirements that serve multiple independent areas.
 
-C. The module SHALL compute uncovered dependent counts by walking descendants and counting leaf requirements with zero coverage.
+C. The module SHALL compute neighborhood density by walking up through each node's ancestors and counting siblings/cousins at each level, applying exponential decay by distance (siblings=1.0, cousins=decay, second-cousins=decay^2).
 
-D. The module SHALL produce a composite score by normalizing each metric to 0.0-1.0 and applying configurable weights (default 0.4 centrality, 0.3 fan-in, 0.3 uncovered).
+D. The module SHALL compute uncovered dependent counts by walking descendants and counting leaf requirements with zero coverage.
 
-E. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and ASSERTION, with ASSERTION nodes included in computation but excluded from ranked output.
+E. The module SHALL produce a composite score by normalizing each metric to 0.0-1.0 and applying configurable weights (default 0.3 centrality, 0.2 fan-in, 0.2 neighborhood, 0.3 uncovered).
 
-F. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
+F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and ASSERTION, with ASSERTION nodes included in computation but excluded from ranked output.
+
+G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
 ## Rationale
 
@@ -38,7 +40,7 @@ The `elspais analysis` command SHALL invoke the graph analysis engine and render
 
 A. The command SHALL accept `--top N` to limit the number of results displayed (default 10).
 
-B. The command SHALL accept `--weights W1,W2,W3` to configure the composite score weights.
+B. The command SHALL accept `--weights W1,W2,W3[,W4]` to configure the composite score weights (3 or 4 values).
 
 C. The command SHALL accept `--format table|json` to select output format, defaulting to table.
 
@@ -48,7 +50,7 @@ E. The command SHALL accept `--level prd|ops|dev` to filter results by requireme
 
 F. The command SHALL accept `--include-code` to include CODE nodes in the analysis.
 
-G. The table output SHALL display columns for Rank, ID, Title, Centrality, Fan-In, Uncovered, and Score.
+G. The table output SHALL display columns for Rank, ID, Title, Centrality, Fan-In, Neighbors, Uncovered, and Score.
 
 H. The JSON output SHALL serialize the full `FoundationReport` structure.
 

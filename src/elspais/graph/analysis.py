@@ -37,6 +37,7 @@ class NodeScore:
     centrality: float
     descendant_count: int
     fan_in_branches: int
+    neighborhood: float
     uncovered_dependents: int
     composite_score: float
 
@@ -160,6 +161,69 @@ def analyze_fan_in(
 
 
 # ---------------------------------------------------------------------------
+# Neighborhood density
+# ---------------------------------------------------------------------------
+
+
+def analyze_neighborhood(
+    graph: TraceGraph,
+    include_kinds: set[NodeKind],
+    decay: float = 0.5,
+) -> dict[str, float]:
+    """Return {node_id: neighborhood_score} for included nodes.
+
+    Measures how dense a node's neighborhood is by counting nearby
+    related nodes with exponential decay by distance:
+    - Siblings (same parent): weight 1.0
+    - Cousins (same grandparent): weight decay (0.5)
+    - Second cousins: weight decay^2 (0.25)
+    - etc.
+
+    Nodes in dense clusters (many siblings/cousins) score higher,
+    identifying foundational areas with lots of related work.
+    """
+    included = _collect_included(graph, include_kinds)
+    included_set = set(included.keys())
+    result: dict[str, float] = {}
+
+    for nid, node in included.items():
+        if node.kind != NodeKind.REQUIREMENT:
+            continue
+        score = 0.0
+        # Walk up through ancestors, collecting siblings at each level
+        visited_ancestors: set[str] = set()
+        frontier: list[tuple[str, int]] = []  # (ancestor_id, distance)
+        # Seed with direct parents at distance 1
+        for p in node.iter_parents():
+            if p.id in included_set:
+                frontier.append((p.id, 1))
+
+        while frontier:
+            anc_id, dist = frontier.pop(0)
+            if anc_id in visited_ancestors:
+                continue
+            visited_ancestors.add(anc_id)
+            anc_node = graph.find_by_id(anc_id)
+            if anc_node is None:
+                continue
+
+            # Count children of this ancestor (siblings/cousins of our node)
+            weight = decay ** (dist - 1)
+            for child in anc_node.iter_children():
+                if child.id in included_set and child.id != nid:
+                    score += weight
+
+            # Continue up to grandparents
+            for gp in anc_node.iter_parents():
+                if gp.id in included_set and gp.id not in visited_ancestors:
+                    frontier.append((gp.id, dist + 1))
+
+        result[nid] = score
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Uncovered dependents
 # ---------------------------------------------------------------------------
 
@@ -249,11 +313,12 @@ def _normalize(values: dict[str, float]) -> dict[str, float]:
 def analyze_foundations(
     graph: TraceGraph,
     include_kinds: set[NodeKind] | None = None,
-    weights: tuple[float, float, float] = (0.4, 0.3, 0.3),
+    weights: tuple[float, ...] = (0.3, 0.2, 0.2, 0.3),
     top_n: int = 10,
 ) -> FoundationReport:
     """Full foundation analysis combining all metrics.
 
+    Weights order: (centrality, fan_in, neighborhood, uncovered).
     Assertions are included in computation (for uncovered_dependents counting)
     but filtered from ranked output -- only REQUIREMENT nodes appear in results.
     Descendant counts are computed internally alongside the other metrics.
@@ -269,6 +334,7 @@ def analyze_foundations(
     # Compute individual metrics
     centrality = analyze_centrality(graph, include_kinds)
     fan_in = analyze_fan_in(graph, include_kinds)
+    neighborhood = analyze_neighborhood(graph, include_kinds)
 
     # Compute uncovered dependents and descendant counts per requirement
     uncovered: dict[str, int] = {}
@@ -283,9 +349,15 @@ def analyze_foundations(
     # Normalize metrics for composite scoring
     norm_centrality = _normalize({k: v for k, v in centrality.items() if k in req_nodes})
     norm_fan_in = _normalize({k: float(v) for k, v in fan_in.items() if k in req_nodes})
+    norm_neighborhood = _normalize({k: v for k, v in neighborhood.items() if k in req_nodes})
     norm_uncovered = _normalize({k: float(v) for k, v in uncovered.items()})
 
-    w_c, w_f, w_u = weights
+    # Unpack weights (support both 3-tuple legacy and 4-tuple)
+    if len(weights) == 3:
+        w_c, w_f, w_u = weights
+        w_n = 0.0
+    else:
+        w_c, w_f, w_n, w_u = weights[0], weights[1], weights[2], weights[3]
 
     # Build NodeScore for each requirement node
     scored: list[NodeScore] = []
@@ -293,6 +365,7 @@ def analyze_foundations(
         composite = (
             w_c * norm_centrality.get(nid, 0.0)
             + w_f * norm_fan_in.get(nid, 0.0)
+            + w_n * norm_neighborhood.get(nid, 0.0)
             + w_u * norm_uncovered.get(nid, 0.0)
         )
         scored.append(
@@ -303,6 +376,7 @@ def analyze_foundations(
                 centrality=centrality.get(nid, 0.0),
                 descendant_count=descendants.get(nid, 0),
                 fan_in_branches=fan_in.get(nid, 0),
+                neighborhood=neighborhood.get(nid, 0.0),
                 uncovered_dependents=uncovered.get(nid, 0),
                 composite_score=composite,
             )

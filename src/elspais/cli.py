@@ -388,8 +388,8 @@ Examples:
     )
     analysis_parser.add_argument(
         "--weights",
-        help="Centrality,fan-in,uncovered weights (default: 0.4,0.3,0.3)",
-        metavar="W1,W2,W3",
+        help="Centrality,fan-in,neighborhood,uncovered weights (default: 0.3,0.2,0.2,0.3)",
+        metavar="W1,W2,W3,W4",
     )
     analysis_parser.add_argument(
         "--format",
