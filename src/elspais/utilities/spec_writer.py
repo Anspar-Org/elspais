@@ -35,6 +35,12 @@ from elspais.utilities.patterns import find_req_header as _find_req_header
 # ---------------------------------------------------------------------------
 
 
+def _extract_prefix(req_id: str) -> str:
+    """Extract the ID prefix from a requirement ID (e.g., 'REQ' from 'REQ-p00001')."""
+    dash = req_id.find("-")
+    return req_id[:dash] if dash > 0 else ""
+
+
 def _find_end_marker(content: str, start_pos: int) -> re.Match | None:
     """Find an End marker with **Hash** after the given position.
 
@@ -46,9 +52,16 @@ def _find_end_marker(content: str, start_pos: int) -> re.Match | None:
     return pattern.search(content, pos=start_pos)
 
 
-def _find_next_req_header(content: str, start_pos: int) -> re.Match | None:
-    """Find the next requirement header after the given position."""
-    pattern = re.compile(r"^#+ [A-Z]+-", re.MULTILINE)
+def _find_next_req_header(content: str, start_pos: int, prefix: str) -> re.Match | None:
+    """Find the next requirement header after the given position.
+
+    Args:
+        content: File content to search.
+        start_pos: Position to start searching from.
+        prefix: Requirement ID prefix (e.g., 'REQ'). Only matches headings
+            starting with this prefix followed by a dash.
+    """
+    pattern = re.compile(rf"^#+ {re.escape(prefix)}-", re.MULTILINE)
     return pattern.search(content, pos=start_pos)
 
 
@@ -89,7 +102,7 @@ def update_hash_in_file(
     if not end_match:
         return f"No End marker with **Hash** found for {req_id} in {file_path.name}"
 
-    next_header_match = _find_next_req_header(content, start_pos)
+    next_header_match = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
     if next_header_match and next_header_match.start() < end_match.start():
         return f"End marker for {req_id} belongs to a different requirement in {file_path.name}"
 
@@ -128,7 +141,7 @@ def add_status_to_file(
 
     start_pos = header_match.end()
 
-    next_header_match = _find_next_req_header(content, start_pos)
+    next_header_match = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
     end_pos = next_header_match.start() if next_header_match else len(content)
 
     # Search for metadata line within this requirement block
@@ -397,7 +410,7 @@ def modify_assertion_text(
     start_pos = req_match.end()
 
     # Find the end of this requirement block
-    next_header = _find_next_req_header(content, start_pos)
+    next_header = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
     end_pos = next_header.start() if next_header else len(content)
 
     block = content[start_pos:end_pos]
@@ -513,7 +526,7 @@ def add_assertion_to_file(
     start_pos = req_match.end()
 
     # Find the end of this requirement block
-    next_header = _find_next_req_header(content, start_pos)
+    next_header = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
     end_pos = next_header.start() if next_header else len(content)
 
     block = content[start_pos:end_pos]
