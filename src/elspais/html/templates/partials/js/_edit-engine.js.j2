@@ -249,12 +249,12 @@ function onStatusChange(selectEl) {
     }
 
     selectEl.classList.add('dirty');
-    mutate('/api/mutate/status', { node_id: nodeId, new_status: newStatus }).then(function(result) {
+    mutate('/api/mutate/status', { node_id: nodeId, new_status: newStatus }).then(async function(result) {
         if (result && result.success) {
             selectEl.dataset.original = newStatus.toLowerCase();
             selectEl.classList.remove('dirty');
             // Refresh the card data
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         }
     });
 }
@@ -278,11 +278,11 @@ function onTitleBlur(el) {
     }
 
     el.classList.add('dirty');
-    mutate('/api/mutate/title', { node_id: nodeId, new_title: newTitle }).then(function(result) {
+    mutate('/api/mutate/title', { node_id: nodeId, new_title: newTitle }).then(async function(result) {
         if (result && result.success) {
             el.dataset.original = newTitle;
             el.classList.remove('dirty');
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         } else {
             el.textContent = original;
             el.classList.remove('dirty');
@@ -330,9 +330,9 @@ function onAddAssertion(nodeId) {
         req_id: nodeId,
         label: label.trim().toUpperCase(),
         text: text.trim()
-    }).then(function(result) {
+    }).then(async function(result) {
         if (result && result.success) {
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         }
     });
 }
@@ -361,9 +361,9 @@ function onDeleteAssertion(nodeId, assertionId) {
         mutate('/api/mutate/assertion', {
             assertion_id: assertionId,
             new_text: '[DEPRECATED]'
-        }).then(function(result) {
+        }).then(async function(result) {
             if (result && result.success) {
-                refreshCard(nodeId);
+                await refreshCard(nodeId);
             }
         });
     } else {
@@ -372,9 +372,9 @@ function onDeleteAssertion(nodeId, assertionId) {
         mutate('/api/mutate/assertion/delete', {
             assertion_id: assertionId,
             confirm: true
-        }).then(function(result) {
+        }).then(async function(result) {
             if (result && result.success) {
-                refreshCard(nodeId);
+                await refreshCard(nodeId);
             }
         });
     }
@@ -461,9 +461,9 @@ function onToggleEdgeKind(el) {
         source_id: sourceId,
         target_id: targetId,
         new_kind: newKind
-    }).then(function(result) {
+    }).then(async function(result) {
         if (result && result.success) {
-            refreshCard(sourceId);
+            await refreshCard(sourceId);
         }
     });
 }
@@ -475,9 +475,9 @@ function onDeleteEdge(sourceId, targetId) {
         action: 'delete',
         source_id: sourceId,
         target_id: targetId
-    }).then(function(result) {
+    }).then(async function(result) {
         if (result && result.success) {
-            refreshCard(sourceId);
+            await refreshCard(sourceId);
             loadTreeData();
         }
     });
@@ -583,10 +583,10 @@ function onAddRelationship(nodeId, btn) {
             payload.assertion_targets = [assertionLabel];
         }
 
-        mutate('/api/mutate/edge', payload).then(function(result) {
+        mutate('/api/mutate/edge', payload).then(async function(result) {
             if (result && result.success) {
                 form.remove();
-                refreshCard(nodeId);
+                await refreshCard(nodeId);
                 loadTreeData();
             }
         });
