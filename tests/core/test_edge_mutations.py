@@ -190,6 +190,63 @@ class TestAddEdge:
 
         assert "REQ-p00002" in graph._orphaned_ids
 
+    def test_add_edge_duplicate_returns_error(self):
+        """Adding the same edge twice returns no-op with duplicate flag."""
+        graph = build_disconnected_graph()
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        entry = graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        assert entry.after_state.get("duplicate") is True
+
+        parent = graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.target.id == "REQ-p00002" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(edges) == 1
+
+    def test_add_edge_assertion_alongside_whole_req_allowed(self):
+        """Adding assertion-targeted edge when whole-req edge exists is allowed."""
+        graph = build_graph_with_assertions()
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        entry = graph.add_edge(
+            "REQ-p00002",
+            "REQ-p00001",
+            EdgeKind.IMPLEMENTS,
+            assertion_targets=["A"],
+        )
+
+        assert entry.after_state.get("duplicate") is not True
+
+        parent = graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.target.id == "REQ-p00002" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(edges) == 2
+
+    def test_add_edge_duplicate_undo_preserves_original(self):
+        """Undoing a duplicate add_edge does not remove the original edge."""
+        graph = build_disconnected_graph()
+
+        # Add legitimate edge
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        # Add duplicate (no-op)
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        # Undo the duplicate
+        graph.undo_last()
+
+        # Original edge must still exist
+        parent = graph.find_by_id("REQ-p00001")
+        child = graph.find_by_id("REQ-p00002")
+        assert parent.has_child(child)
+
     def test_add_edge_undo_removes_broken_ref(self):
         """Undo removes broken reference if target didn't exist."""
         graph = build_disconnected_graph()

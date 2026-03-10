@@ -318,6 +318,8 @@ class TraceGraph:
 
     def _undo_add_edge(self, entry: MutationEntry) -> None:
         """Undo an add edge operation."""
+        if entry.after_state.get("duplicate"):
+            return  # No-op was recorded; nothing to undo
         source_id = entry.before_state.get("source_id")
         target_id = entry.before_state.get("target_id")
         was_orphan = entry.before_state.get("was_orphan", False)
@@ -1347,6 +1349,18 @@ class TraceGraph:
         )
 
         if target:
+            # Check for exact duplicate edge
+            new_at = tuple(assertion_targets or [])
+            for existing in target.iter_outgoing_edges():
+                if (
+                    existing.target.id == source_id
+                    and existing.kind == edge_kind
+                    and tuple(existing.assertion_targets) == new_at
+                ):
+                    entry.after_state["duplicate"] = True
+                    self._mutation_log.append(entry)
+                    return entry
+
             # Create the edge
             target.link(source, edge_kind, assertion_targets)
 
