@@ -80,24 +80,30 @@ def _get_current_implements_list(graph: TraceGraph, req_id: str) -> list[str]:
     """Build the current implements list for a requirement from graph state.
 
     Reads all incoming edges to find parent requirements connected via
-    IMPLEMENTS edges.
+    IMPLEMENTS edges. Reconstructs assertion-qualified IDs when
+    assertion_targets are present (e.g., REQ-p00001 with targets ["A"]
+    becomes REQ-p00001-A).
 
     Args:
         graph: The traceability graph.
         req_id: Requirement ID to inspect.
 
     Returns:
-        Sorted list of parent requirement IDs linked via IMPLEMENTS.
+        Sorted deduplicated list of parent reference IDs.
     """
     node = graph.find_by_id(req_id)
     if node is None:
         return []
 
-    implements: list[str] = []
+    refs: set[str] = set()
     for edge in node.iter_incoming_edges():
         if edge.kind == EdgeKind.IMPLEMENTS and edge.source.kind == NodeKind.REQUIREMENT:
-            implements.append(edge.source.id)
-    return sorted(implements)
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    refs.add(f"{edge.source.id}-{label}")
+            else:
+                refs.add(edge.source.id)
+    return sorted(refs)
 
 
 def check_for_external_changes(
