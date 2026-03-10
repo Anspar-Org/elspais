@@ -365,8 +365,7 @@ function isAncestorCollapsed(row, allRows, matchSet) {
                 var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
                 if (pIdx >= 0 && !matchSet.has(pIdx)) {
                     // Context-only ancestor — skip collapse, continue up
-                    var parentRow = allRows[pIdx];
-                    parentId = parentRow.parent_id;
+                    parentId = allRows[pIdx].parent_id;
                     continue;
                 }
             }
