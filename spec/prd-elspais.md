@@ -6,7 +6,7 @@ This document defines the high-level product requirements for elspais, a require
 
 # REQ-p00001: Requirements Management Tool
 
-**Level**: PRD | **Status**: Active | **Implements**: -
+**Level**: PRD | **Status**: Draft | **Implements**: -
 
 ## Rationale
 
