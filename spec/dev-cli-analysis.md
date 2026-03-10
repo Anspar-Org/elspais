@@ -10,7 +10,7 @@ The `analysis` module SHALL provide read-only analytical functions that operate 
 
 A. The module SHALL compute PageRank-style centrality scores for requirement nodes by iterating on reversed edges (children distribute score to parents) with a configurable damping factor, converging within a tolerance threshold.
 
-B. The module SHALL compute fan-in branch counts measuring how many distinct root-level subtrees transitively depend on each node.
+B. The module SHALL compute fan-in as the count of distinct direct parents (among included node kinds) for each node, identifying cross-cutting requirements that serve multiple independent areas.
 
 C. The module SHALL compute uncovered dependent counts by walking descendants and counting leaf requirements with zero coverage.
 

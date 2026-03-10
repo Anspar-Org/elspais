@@ -129,7 +129,7 @@ class TestAnalyzeCentrality:
 
 
 class TestAnalyzeFanIn:
-    """Validates REQ-d00124-B: Fan-in branch counts (distinct root subtrees)."""
+    """Validates REQ-d00124-B: Fan-in as distinct direct parent count."""
 
     def test_REQ_d00124_B_shared_node_has_higher_fan_in(self):
         """A node reachable from all 3 roots should have fan-in=3,

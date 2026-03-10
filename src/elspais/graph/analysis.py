@@ -141,50 +141,22 @@ def analyze_fan_in(
     graph: TraceGraph,
     include_kinds: set[NodeKind],
 ) -> dict[str, int]:
-    """Return {node_id: distinct_root_count} for included nodes.
+    """Return {node_id: parent_count} for included nodes.
 
-    For each node, counts how many distinct root-level subtrees can
-    reach it. A higher count means the node is more cross-cutting.
-    BFS traverses through all node kinds to avoid missing paths that
-    pass through excluded-kind intermediaries.
+    Counts distinct direct parents (among included kinds) for each node.
+    Nodes with multiple parents are cross-cutting — they serve multiple
+    independent areas of the requirement graph.
     """
     included = _collect_included(graph, include_kinds)
+    result: dict[str, int] = {}
     included_set = set(included.keys())
 
-    # Find roots among included nodes
-    root_ids: set[str] = set()
-    for node in graph.iter_roots():
-        if node.id in included_set:
-            root_ids.add(node.id)
+    for nid, node in included.items():
+        count = sum(1 for p in node.iter_parents() if p.id in included_set)
+        # Roots have 0 parents but are still "in 1 branch" (their own)
+        result[nid] = max(count, 1) if node.kind == NodeKind.REQUIREMENT else count
 
-    if not root_ids:
-        return dict.fromkeys(included_set, 0)
-
-    # For each root, BFS down through ALL nodes to find reachable included nodes
-    root_sets: dict[str, set[str]] = defaultdict(set)
-
-    for root_id in root_ids:
-        root_node = graph.find_by_id(root_id)
-        if root_node is None:
-            continue
-        visited: set[str] = set()
-        queue: deque[str] = deque([root_id])
-        while queue:
-            nid = queue.popleft()
-            if nid in visited:
-                continue
-            visited.add(nid)
-            if nid in included_set:
-                root_sets[nid].add(root_id)
-            node = graph.find_by_id(nid)
-            if node is None:
-                continue
-            # Traverse through ALL children, not just included ones
-            for child in node.iter_children():
-                if child.id not in visited:
-                    queue.append(child.id)
-
-    return {nid: len(root_sets.get(nid, set())) for nid in included_set}
+    return result
 
 
 # ---------------------------------------------------------------------------
