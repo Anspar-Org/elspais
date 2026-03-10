@@ -13,12 +13,17 @@
             <h4>{{ group_name }}</h4>
             {% for entry in entries %}
             <div class="legend-item" {% if entry.long_description %}title="{{ entry.long_description }}"{% endif %}>
-                {% if entry.symbol %}
+                {% if entry.color_key %}
+                <span class="legend-swatch val-{{ entry.color_key }}"></span>
+                <span>{{ entry.label }}</span>
+                <span>{{ entry.description }}</span>
+                {% elif entry.symbol %}
                 <span class="legend-icon {% if entry.css_class %}{{ entry.css_class }}{% endif %}">{{ entry.symbol }}</span>
+                <span>{{ entry.description or entry.label }}</span>
                 {% elif entry.css_class %}
                 <span class="{{ entry.css_class }}" style="font-size: 0.75rem;">{{ entry.label }}</span>
-                {% endif %}
                 <span>{{ entry.description or entry.label }}</span>
+                {% endif %}
             </div>
             {% endfor %}
         </div>

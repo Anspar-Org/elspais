@@ -84,3 +84,21 @@
     text-align: center;
     flex-shrink: 0;
 }
+
+/* Override nav-tree badge alignment inside legend */
+.legend-item .nav-tree-result-badge {
+    margin-left: 0;
+}
+
+/* Validation tier color swatch */
+.legend-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.legend-swatch.val-green { background: var(--val-green-bg); }
+.legend-swatch.val-yellow-green { background: var(--val-yellow-green-bg); }
+.legend-swatch.val-yellow { background: var(--val-yellow-bg); }
+.legend-swatch.val-red { background: var(--val-red-bg); }
+.legend-swatch.val-orange { background: var(--val-orange-bg); }
