@@ -48,6 +48,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
   - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`. Use `set_id()` for ID mutations.
   - **TraceGraph**: Use `iter_roots()` for traversal. Use `root_count()`, `has_root()` for checks. Internal storage uses `_roots`, `_index` prefixed attributes.
   - **UUID for GUI**: Each node has a stable `uuid` (32-char hex) for DOM IDs and API endpoints.
+**Graph Analysis** (`graph/analysis.py`): Read-only analytical functions that rank requirements by foundational importance. Computes PageRank centrality, fan-in branch count, and uncovered dependents. Does not modify the graph.
 **Node Mutation API**: TraceGraph provides mutation methods with full undo support
 **Assertion Mutation API**: TraceGraph provides assertion-specific mutations
 **Edge Mutation API**: TraceGraph provides edge (relationship) mutations
