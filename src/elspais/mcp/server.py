@@ -265,18 +265,25 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                 }
             )
 
-    # ── Common: parents with edge_kind ──
-    edge_map = {e.source.id: e.kind.value for e in node.iter_incoming_edges()}
+    # ── Common: parents with edge_kind and assertion_targets ──
     parents = []
-    for parent in node.iter_parents():
-        parents.append(
-            {
-                "id": parent.id,
-                "kind": parent.kind.value,
-                "title": parent.get_label(),
-                "edge_kind": edge_map.get(parent.id, "unknown"),
-            }
-        )
+    for edge in node.iter_incoming_edges():
+        if edge.kind in (EK.IMPLEMENTS, EK.REFINES):
+            parent = edge.source
+            if parent.kind == NodeKind.REQUIREMENT:
+                ref_id = parent.id
+                if edge.assertion_targets:
+                    ref_id = f"{parent.id}-{edge.assertion_targets[0]}"
+                parents.append(
+                    {
+                        "id": parent.id,
+                        "kind": parent.kind.value,
+                        "title": parent.get_label(),
+                        "edge_kind": edge.kind.value,
+                        "assertion_targets": edge.assertion_targets,
+                        "ref_id": ref_id,
+                    }
+                )
 
     # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
     links = []

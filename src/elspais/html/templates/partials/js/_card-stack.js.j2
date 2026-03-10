@@ -217,7 +217,7 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
                 'title="Click to toggle implements/refines">' + edgeKindDisplay + '</button>';
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
-            html += p.id.replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
+            html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
             html += '</a>';
             html += '<button class="card-parent-delete edit-only" ' +
                 'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
