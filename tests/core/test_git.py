@@ -34,6 +34,17 @@ from elspais.utilities.git import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clean_git_env(monkeypatch):
+    """Strip git env vars that leak from hook execution (e.g. pre-push).
+
+    When tests run inside a git hook, GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE
+    are set and cause subprocess git-init calls to target the real repo.
+    """
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(var, raising=False)
+
+
 class TestGitChangeInfo:
     """Tests for GitChangeInfo dataclass."""
 
