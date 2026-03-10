@@ -287,7 +287,7 @@ function renderNavTree() {
         // Determine if collapsed
         const isCollapsed = editState.collapsedTreeNodes.has(row.id);
         // Check if parent is collapsed (skip rendering)
-        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows)) {
+        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows, matchSet)) {
             return; // don't render
         }
 
@@ -352,12 +352,26 @@ function renderNavTree() {
     container.innerHTML = html;
 }
 
-function isAncestorCollapsed(row, allRows) {
+function isAncestorCollapsed(row, allRows, matchSet) {
     if (!row.parent_id) return false;
     // Walk up the parent chain
     let parentId = row.parent_id;
     while (parentId) {
-        if (editState.collapsedTreeNodes.has(parentId)) return true;
+        if (editState.collapsedTreeNodes.has(parentId)) {
+            // If filters are active and the collapsed ancestor is a context-only
+            // (dimmed) row, don't honor the collapse — the user wants to see
+            // the matching children even if the ancestor was previously collapsed.
+            if (matchSet) {
+                var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
+                if (pIdx >= 0 && !matchSet.has(pIdx)) {
+                    // Context-only ancestor — skip collapse, continue up
+                    var parentRow = allRows[pIdx];
+                    parentId = parentRow.parent_id;
+                    continue;
+                }
+            }
+            return true;
+        }
         // Find parent row
         const parentRow = allRows.find(function(r) { return r.id === parentId; });
         if (!parentRow) break;
