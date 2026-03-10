@@ -382,8 +382,8 @@ class TestActionableLeaves:
             f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before " f"REQ-LEAF-MIN (idx {idx_min})"
         )
 
-    def test_REQ_d00124_F_covered_leaves_excluded(self):
-        """Leaves with coverage > 0 should not appear in actionable_leaves."""
+    def test_REQ_d00124_F_covered_leaves_included(self):
+        """All leaves appear in actionable_leaves regardless of coverage."""
         graph = _make_graph()
         root = _add_node(graph, "REQ-R", level="PRD", is_root=True, coverage_pct=100)
         covered = _add_node(graph, "REQ-COV", level="DEV", coverage_pct=75)
@@ -391,7 +391,21 @@ class TestActionableLeaves:
 
         report = analyze_foundations(graph)
         leaf_ids = [s.node_id for s in report.actionable_leaves]
-        assert "REQ-COV" not in leaf_ids
+        assert "REQ-COV" in leaf_ids
+
+    def test_REQ_d00124_F_deprecated_excluded(self):
+        """Deprecated requirements should not appear in any output."""
+        graph = _make_graph()
+        root = _add_node(graph, "REQ-R", level="PRD", is_root=True, coverage_pct=100)
+        active = _add_node(graph, "REQ-ACT", level="DEV", coverage_pct=0)
+        deprecated = _add_node(graph, "REQ-DEP", level="DEV", status="Deprecated", coverage_pct=0)
+        root.link(active, EdgeKind.IMPLEMENTS)
+        root.link(deprecated, EdgeKind.IMPLEMENTS)
+
+        report = analyze_foundations(graph)
+        all_ids = {s.node_id for s in report.ranked_nodes}
+        assert "REQ-ACT" in all_ids
+        assert "REQ-DEP" not in all_ids
 
     def test_REQ_d00124_F_top_n_limits_results(self):
         """The top_n parameter should limit the number of results in

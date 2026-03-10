@@ -342,6 +342,10 @@ def analyze_foundations(
     req_nodes: dict[str, GraphNode] = {}
     for nid, node in included.items():
         if node.kind == NodeKind.REQUIREMENT:
+            # Skip deprecated/rejected requirements
+            status = (node.status or "").lower()
+            if status in ("deprecated", "rejected"):
+                continue
             req_nodes[nid] = node
             uncovered[nid] = _count_uncovered_descendants(graph, nid, included_set)
             descendants[nid] = _count_descendants(graph, nid, included_set)
@@ -396,7 +400,7 @@ def analyze_foundations(
         has_included_children = any(c.id in included_set for c in node.iter_children())
         if has_included_children:
             top_foundations.append(ns)
-        elif ns.uncovered_dependents > 0 or node.get_metric("coverage_pct", 0) == 0:
+        else:
             actionable_leaves.append(ns)
 
     # Re-rank actionable leaves by sum of ancestor composite scores

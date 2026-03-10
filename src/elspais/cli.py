@@ -380,6 +380,7 @@ Examples:
         help="Analyze foundational requirement importance",
     )
     analysis_parser.add_argument(
+        "-n",
         "--top",
         type=int,
         default=10,
