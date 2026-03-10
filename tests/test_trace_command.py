@@ -5,7 +5,6 @@
 
 import argparse
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -38,7 +37,7 @@ A. The system SHALL do something.
         )
         return spec_dir
 
-    def test_trace_markdown_format(self, temp_spec_dir: Path, tmp_path: Path):
+    def test_trace_markdown_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with markdown format."""
         from elspais.commands import trace
 
@@ -46,26 +45,17 @@ A. The system SHALL do something.
             config=None,
             spec_dir=temp_spec_dir,
             format="markdown",
-            output=str(tmp_path / "output.md"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
         )
 
         result = trace.run(args)
         assert result == 0
 
-        output_path = tmp_path / "output.md"
-        assert output_path.exists()
-        content = output_path.read_text()
+        content = capsys.readouterr().out
         assert "Traceability Matrix" in content
         assert "REQ-p00001" in content
 
-    def test_trace_html_format(self, temp_spec_dir: Path, tmp_path: Path):
+    def test_trace_html_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with basic HTML format."""
         from elspais.commands import trace
 
@@ -73,26 +63,17 @@ A. The system SHALL do something.
             config=None,
             spec_dir=temp_spec_dir,
             format="html",
-            output=str(tmp_path / "output.html"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
         )
 
         result = trace.run(args)
         assert result == 0
 
-        output_path = tmp_path / "output.html"
-        assert output_path.exists()
-        content = output_path.read_text()
+        content = capsys.readouterr().out
         assert "<!DOCTYPE html>" in content
         assert "REQ-p00001" in content
 
-    def test_trace_json_format(self, temp_spec_dir: Path, tmp_path: Path):
+    def test_trace_json_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with JSON format."""
         from elspais.commands import trace
 
@@ -100,28 +81,19 @@ A. The system SHALL do something.
             config=None,
             spec_dir=temp_spec_dir,
             format="json",
-            output=str(tmp_path / "output.json"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
         )
 
         result = trace.run(args)
         assert result == 0
 
-        output_path = tmp_path / "output.json"
-        assert output_path.exists()
-        content = output_path.read_text()
+        content = capsys.readouterr().out
         data = json.loads(content)
         # JSON format returns a list of dicts, not a dict keyed by ID
         assert isinstance(data, list)
         assert any(item["id"] == "REQ-p00001" for item in data)
 
-    def test_trace_csv_format(self, temp_spec_dir: Path, tmp_path: Path):
+    def test_trace_csv_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with CSV format."""
         from elspais.commands import trace
 
@@ -129,163 +101,21 @@ A. The system SHALL do something.
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
-            output=str(tmp_path / "output.csv"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
         )
 
         result = trace.run(args)
         assert result == 0
 
-        output_path = tmp_path / "output.csv"
-        assert output_path.exists()
-        content = output_path.read_text()
-        assert "id,title,level,status,implements" in content
+        content = capsys.readouterr().out
+        header = content.split("\n")[0]
+        assert "ID" in header
+        assert "Title" in header
         assert "REQ-p00001" in content
 
 
-class TestTraceViewCommand:
-    """Tests for trace --view functionality."""
-
-    @pytest.fixture
-    def temp_spec_dir(self, tmp_path: Path) -> Path:
-        """Create a temporary spec directory with requirements."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        # Create requirements with hierarchy
-        req_file = spec_dir / "requirements.md"
-        req_file.write_text(
-            """# REQ-p00001: Parent Requirement
-
-**Level**: PRD | **Status**: Active
-
-**Purpose:** A parent requirement.
-
-## Assertions
-
-A. The system SHALL provide a feature.
-
-*End* *Parent Requirement* | **Hash**: abcd1234
-
----
-
-# REQ-d00001: Child Requirement
-
-**Level**: Dev | **Status**: Active | **Implements**: REQ-p00001
-
-**Purpose:** A child requirement implementing the parent.
-
-## Assertions
-
-A. The implementation SHALL follow the spec.
-
-*End* *Child Requirement* | **Hash**: efgh5678
-"""
-        )
-        return spec_dir
-
-    def test_trace_view_generates_interactive_html(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test trace --view generates interactive 3-panel HTML."""
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="markdown",  # format is ignored when view=True
-            output=str(tmp_path / "view.html"),
-            quiet=True,
-            view=True,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-        )
-
-        result = trace.run(args)
-        assert result == 0
-
-        output_path = tmp_path / "view.html"
-        assert output_path.exists()
-        content = output_path.read_text()
-
-        # Check for interactive 3-panel HTML structure
-        assert "<!DOCTYPE html>" in content
-        assert "Requirements Traceability" in content
-        assert "nav-tree-container" in content  # Nav tree panel
-        assert "card-stack-panel" in content  # Card stack panel
-        assert "switchNavTab" in content  # Nav tab switching JS
-
-    def test_trace_view_default_output_path(self, temp_spec_dir: Path, monkeypatch):
-        """Test trace --view uses default output path when none specified."""
-        from elspais.commands import trace
-
-        # Change to a temp directory for output
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.chdir(tmpdir)
-
-            args = argparse.Namespace(
-                config=None,
-                spec_dir=temp_spec_dir,
-                format="markdown",
-                output=None,  # No output specified
-                quiet=True,
-                view=True,
-                embed_content=False,
-                edit_mode=False,
-                review_mode=False,
-                server=False,
-                graph_json=False,
-            )
-
-            result = trace.run(args)
-            assert result == 0
-
-            # Should create default file
-            default_path = Path(tmpdir) / "traceability_view.html"
-            assert default_path.exists()
-
-    def test_trace_view_with_embed_content(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test trace --view --embed-content includes JSON data."""
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="markdown",
-            output=str(tmp_path / "view_embed.html"),
-            quiet=True,
-            view=True,
-            embed_content=True,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-        )
-
-        result = trace.run(args)
-        assert result == 0
-
-        output_path = tmp_path / "view_embed.html"
-        assert output_path.exists()
-        content = output_path.read_text()
-
-        # Check for embedded JSON data
-        assert 'id="tree-data"' in content
-        assert "application/json" in content
-        # Verify it contains requirement data as JSON
-        assert '"REQ-p00001"' in content
-
-
 class TestTraceReportPresets:
-    """Tests for --report preset functionality."""
+    """Tests for --preset functionality."""
 
     @pytest.fixture
     def temp_spec_dir(self, tmp_path: Path) -> Path:
@@ -325,436 +155,185 @@ A. The implementation SHALL follow the spec.
         )
         return spec_dir
 
-    def test_report_minimal_has_fewer_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report minimal produces fewer columns."""
+    def test_report_minimal_has_fewer_columns(self, temp_spec_dir: Path, capsys):
+        """Test --preset minimal produces fewer columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
-            output=str(tmp_path / "minimal.csv"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="minimal",
+            preset="minimal",
         )
 
         result = trace.run(args)
         assert result == 0
 
-        content = (tmp_path / "minimal.csv").read_text()
-        # Minimal should have: id, title, status (no level, no implements)
-        assert "id,title,status" in content
-        assert "level" not in content.split("\n")[0]
-        assert "implements" not in content.split("\n")[0]
-
-    def test_report_standard_has_default_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report standard produces default columns."""
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="csv",
-            output=str(tmp_path / "standard.csv"),
-            quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="standard",
-        )
-
-        result = trace.run(args)
-        assert result == 0
-
-        content = (tmp_path / "standard.csv").read_text()
-        # Standard should have: id, title, level, status, implements
+        content = capsys.readouterr().out
         header = content.split("\n")[0]
-        assert "id" in header
-        assert "title" in header
-        assert "level" in header
-        assert "status" in header
-        assert "implements" in header
+        # Minimal should have: ID, Title, Level, Status (no coverage columns)
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" not in header
+        assert "Validated" not in header
 
-    def test_report_full_has_all_columns(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report full produces all columns including assertions."""
+    def test_report_standard_has_default_columns(self, temp_spec_dir: Path, capsys):
+        """Test --preset standard produces default columns with coverage."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
-            output=str(tmp_path / "full.csv"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="full",
+            preset="standard",
         )
 
         result = trace.run(args)
         assert result == 0
 
-        content = (tmp_path / "full.csv").read_text()
+        content = capsys.readouterr().out
+        # Standard should have: ID, Title, Level, Status, Implemented, Validated
         header = content.split("\n")[0]
-        # Full should have all columns including assertions
-        assert "id" in header
-        assert "title" in header
-        assert "level" in header
-        assert "status" in header
-        assert "implements" in header
-        assert "hash" in header
-        assert "file" in header
-        assert "assertions" in header
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" in header
+        assert "Validated" in header
 
-    def test_report_full_json_includes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report full with JSON format includes assertions."""
+    def test_report_full_has_all_columns(self, temp_spec_dir: Path, capsys):
+        """Test --preset full produces all columns including Passing."""
+        from elspais.commands import trace
+
+        args = argparse.Namespace(
+            config=None,
+            spec_dir=temp_spec_dir,
+            format="csv",
+            quiet=True,
+            preset="full",
+        )
+
+        result = trace.run(args)
+        assert result == 0
+
+        content = capsys.readouterr().out
+        header = content.split("\n")[0]
+        # Full should have all coverage columns
+        assert "ID" in header
+        assert "Title" in header
+        assert "Level" in header
+        assert "Status" in header
+        assert "Implemented" in header
+        assert "Validated" in header
+        assert "Passing" in header
+
+    def test_report_full_json_includes_coverage(self, temp_spec_dir: Path, capsys):
+        """Test --preset full with JSON format includes coverage columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="json",
-            output=str(tmp_path / "full.json"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="full",
+            preset="full",
         )
 
         result = trace.run(args)
         assert result == 0
 
-        content = (tmp_path / "full.json").read_text()
+        content = capsys.readouterr().out
         data = json.loads(content)
         assert isinstance(data, list)
 
-        # Find REQ-p00001 and verify it has assertions
+        # Find REQ-p00001 and verify it has coverage fields
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
-        assert "assertions" in parent
-        assert len(parent["assertions"]) == 2
+        assert "implemented" in parent
+        assert "validated" in parent
+        assert "passing" in parent
 
-    def test_report_minimal_json_excludes_assertions(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test --report minimal with JSON format excludes assertions."""
+    def test_report_minimal_json_excludes_coverage(self, temp_spec_dir: Path, capsys):
+        """Test --preset minimal with JSON format excludes coverage columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="json",
-            output=str(tmp_path / "minimal.json"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="minimal",
+            preset="minimal",
         )
 
         result = trace.run(args)
         assert result == 0
 
-        content = (tmp_path / "minimal.json").read_text()
+        content = capsys.readouterr().out
         data = json.loads(content)
         assert isinstance(data, list)
 
-        # Minimal should not include assertions
+        # Minimal should not include coverage columns
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
-        assert "assertions" not in parent
+        assert "implemented" not in parent
+        assert "validated" not in parent
 
     def test_report_invalid_preset_returns_error(self, temp_spec_dir: Path, capsys):
-        """Test invalid --report preset returns error."""
+        """Test invalid --preset returns error."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="markdown",
-            output=None,
             quiet=False,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="nonexistent",
+            preset="nonexistent",
         )
 
         result = trace.run(args)
         assert result == 1
 
         captured = capsys.readouterr()
-        assert "Unknown report preset" in captured.err
+        assert "Unknown preset" in captured.err
         assert "minimal" in captured.err  # Should list available presets
 
-    def test_report_default_is_standard(self, temp_spec_dir: Path, tmp_path: Path):
-        """Test that no --report defaults to standard."""
+    def test_report_default_is_standard(self, temp_spec_dir: Path, capsys):
+        """Test that no --preset defaults to standard."""
         from elspais.commands import trace
 
-        # Run without --report
-        args_no_report = argparse.Namespace(
+        # Run without --preset
+        args_no_preset = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
-            output=str(tmp_path / "default.csv"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report=None,
+            preset=None,
         )
 
-        result1 = trace.run(args_no_report)
+        result1 = trace.run(args_no_preset)
         assert result1 == 0
 
-        # Run with explicit --report standard
+        default_output = capsys.readouterr().out
+
+        # Run with explicit --preset standard
         args_standard = argparse.Namespace(
             config=None,
             spec_dir=temp_spec_dir,
             format="csv",
-            output=str(tmp_path / "standard.csv"),
             quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            report="standard",
+            preset="standard",
         )
 
         result2 = trace.run(args_standard)
         assert result2 == 0
 
+        standard_output = capsys.readouterr().out
+
         # Both should produce the same headers
-        default_header = (tmp_path / "default.csv").read_text().split("\n")[0]
-        standard_header = (tmp_path / "standard.csv").read_text().split("\n")[0]
+        default_header = default_output.split("\n")[0]
+        standard_header = standard_output.split("\n")[0]
         assert default_header == standard_header
-
-
-class TestTraceAdvancedFeaturesNotImplemented:
-    """Tests that advanced features show appropriate errors."""
-
-    @pytest.fixture
-    def temp_spec_dir(self, tmp_path: Path) -> Path:
-        """Create minimal spec directory."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        (spec_dir / "dummy.md").write_text(
-            "# REQ-p00001: Dummy\n**Level**: PRD | **Status**: Active\n"
-        )
-        return spec_dir
-
-    def test_edit_mode_delegates_to_server(self, temp_spec_dir: Path):
-        """Test --edit-mode delegates to _run_server with open_browser=True."""
-        from unittest.mock import patch
-
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="markdown",
-            output=None,
-            quiet=False,
-            view=False,
-            embed_content=False,
-            edit_mode=True,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-        )
-
-        with patch.object(trace, "_run_server", return_value=0) as mock:
-            result = trace.run(args)
-            assert result == 0
-            mock.assert_called_once_with(args, open_browser=True)
-
-    def test_review_mode_not_implemented(self, temp_spec_dir: Path, capsys):
-        """Test --review-mode shows not implemented error."""
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="markdown",
-            output=None,
-            quiet=False,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=True,
-            server=False,
-            graph_json=False,
-        )
-
-        result = trace.run(args)
-        assert result == 1
-
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.err
-
-    def test_server_delegates_to_run_server(self, temp_spec_dir: Path):
-        """Test --server delegates to _run_server with open_browser=False."""
-        from unittest.mock import patch
-
-        from elspais.commands import trace
-
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=temp_spec_dir,
-            format="markdown",
-            output=None,
-            quiet=False,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=True,
-            graph_json=False,
-        )
-
-        with patch.object(trace, "_run_server", return_value=0) as mock:
-            result = trace.run(args)
-            assert result == 0
-            mock.assert_called_once_with(args, open_browser=False)
-
-
-class TestTracePathArgument:
-    """Tests for trace --path argument.
-
-    Validates REQ-p00003-A: The tool SHALL generate traceability matrices
-    in Markdown, HTML, and CSV formats.
-    """
-
-    def test_REQ_p00003_A_path_markdown_uses_specified_directory(
-        self, hht_like_fixture: Path, tmp_path: Path
-    ):
-        """Validates REQ-p00003-A: --path with markdown format generates output
-        using the specified directory's config and spec files."""
-        from elspais.commands import trace
-
-        output_file = tmp_path / "output.md"
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=None,
-            format="markdown",
-            output=str(output_file),
-            quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            path=str(hht_like_fixture),
-            canonical_root=None,
-            report=None,
-        )
-
-        result = trace.run(args)
-        assert result == 0
-
-        assert output_file.exists()
-        content = output_file.read_text()
-        assert "Traceability Matrix" in content
-        # The hht-like fixture contains REQ-p00001 in prd-core.md
-        assert "REQ-p00001" in content
-
-    def test_REQ_p00003_A_path_graph_json_uses_specified_directory(
-        self, hht_like_fixture: Path, tmp_path: Path
-    ):
-        """Validates REQ-p00003-A: --path with --graph-json generates graph output
-        from the specified directory."""
-        from elspais.commands import trace
-
-        output_file = tmp_path / "graph.json"
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=None,
-            format="markdown",
-            output=str(output_file),
-            quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=True,
-            path=str(hht_like_fixture),
-            canonical_root=None,
-            report=None,
-        )
-
-        result = trace.run(args)
-        assert result == 0
-
-        assert output_file.exists()
-        content = output_file.read_text()
-        data = json.loads(content)
-        assert "nodes" in data
-        # The hht-like fixture should produce at least one requirement node
-        assert any(
-            node_id.startswith("REQ-") for node_id in data["nodes"]
-        ), "Expected at least one REQ- node in graph JSON output"
-
-    def test_REQ_p00003_A_path_nonexistent_directory_fails(self, tmp_path: Path):
-        """Validates REQ-p00003-A: --path with a non-existent directory
-        results in a non-zero exit or error (graceful failure)."""
-        from elspais.commands import trace
-
-        nonexistent = tmp_path / "does-not-exist"
-        args = argparse.Namespace(
-            config=None,
-            spec_dir=None,
-            format="markdown",
-            output=str(tmp_path / "output.md"),
-            quiet=True,
-            view=False,
-            embed_content=False,
-            edit_mode=False,
-            review_mode=False,
-            server=False,
-            graph_json=False,
-            path=str(nonexistent),
-            canonical_root=None,
-            report=None,
-        )
-
-        # A non-existent path should either return non-zero or raise an exception
-        try:
-            trace.run(args)
-            # If it returns, it should indicate the output has no content
-            # or return non-zero. Either way, the output should not contain
-            # valid requirement data since the dir doesn't exist.
-            output_file = tmp_path / "output.md"
-            if output_file.exists():
-                content = output_file.read_text()
-                # It produced output but with no requirement data (empty trace)
-                assert "REQ-" not in content
-        except (FileNotFoundError, OSError):
-            # Raising an exception for non-existent path is also acceptable
-            pass

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from unittest.mock import patch
 
 from elspais.commands import health
 from elspais.commands.health import (
@@ -85,8 +84,8 @@ class TestHealthReport:
         assert report.failed == 1
         assert report.is_healthy is False
 
-    def test_warnings_dont_fail(self):
-        """Test warnings don't make report unhealthy."""
+    def test_REQ_d00080_A_warnings_fail_by_default(self):
+        """Validates REQ-d00080-A: warnings cause non-zero exit by default."""
         report = HealthReport()
         report.add(HealthCheck("a", True, "ok", "config"))
         report.add(HealthCheck("b", False, "warn", "spec", severity="warning"))
@@ -94,7 +93,8 @@ class TestHealthReport:
         assert report.passed == 1
         assert report.warnings == 1
         assert report.failed == 0
-        assert report.is_healthy is True  # Warnings don't fail
+        assert report.is_healthy is False  # Warnings fail by default
+        assert report.is_healthy_lenient is True  # Lenient ignores warnings
 
     def test_iter_by_category(self):
         """Test filtering checks by category."""
@@ -229,35 +229,6 @@ class TestConfigChecks:
 class TestHealthCommand:
     """Tests for the health command run function."""
 
-    def test_config_only_flag(self, tmp_path):
-        """Test --config flag runs only config checks."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        args = argparse.Namespace(
-            spec_dir=None,
-            config=None,
-            config_only=True,
-            spec_only=False,
-            code_only=False,
-            tests_only=False,
-            json=True,
-            verbose=False,
-        )
-
-        # Need to be in a directory with valid config
-        import os
-
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(tmp_path)
-            with patch("sys.stdout"):
-                result = health.run(args)
-            # Should succeed with defaults
-            assert result in (0, 1)  # May warn about missing spec
-        finally:
-            os.chdir(old_cwd)
-
     def test_json_output_format(self, tmp_path, capsys):
         """Test JSON output format is valid."""
         spec_dir = tmp_path / "spec"
@@ -266,11 +237,10 @@ class TestHealthCommand:
         args = argparse.Namespace(
             spec_dir=str(spec_dir),
             config=None,
-            config_only=True,
             spec_only=False,
             code_only=False,
             tests_only=False,
-            json=True,
+            format="json",
             verbose=False,
         )
 
@@ -344,11 +314,10 @@ prd = []
         args = argparse.Namespace(
             spec_dir=str(spec_dir),
             config=str(config_file),
-            config_only=False,
             spec_only=False,
             code_only=False,
             tests_only=False,
-            json=True,
+            format="json",
             verbose=False,
         )
 

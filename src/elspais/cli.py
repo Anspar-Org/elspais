@@ -12,7 +12,7 @@ from pathlib import Path
 
 from elspais import __version__
 from elspais.commands import (
-    analyze,
+    analysis_cmd,
     associate_cmd,
     changed,
     completion,
@@ -22,15 +22,14 @@ from elspais.commands import (
     example_cmd,
     fix_cmd,
     health,
-    index,
     init,
     install_cmd,
     link_suggest,
     pdf_cmd,
-    reformat_cmd,
     rules_cmd,
+    summary,
     trace,
-    validate,
+    viewer,
 )
 
 
@@ -43,20 +42,30 @@ def create_parser() -> argparse.ArgumentParser:
     - commands/init.py       (generated .elspais.toml templates)
     - Shell completion        (if new subcommands/args)
     """
+    # Shared parent parser for --output flag (inherited by all output commands)
+    output_parent = argparse.ArgumentParser(add_help=False)
+    output_parent.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="Write output to file instead of stdout",
+        metavar="PATH",
+    )
+
     parser = argparse.ArgumentParser(
         prog="elspais",
         description="Requirements validation and traceability tools (L-Space)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  elspais validate              # Validate all requirements
-  elspais fix                   # Auto-fix hashes and formatting
-  elspais fix --dry-run         # Preview fixes without applying
+  elspais health                # Check project health (warnings/errors)
+  elspais summary               # Show coverage summary by level
   elspais trace --format html   # Generate HTML traceability matrix
-  elspais trace --view          # Interactive HTML view
   elspais viewer                # Start interactive viewer server
+  elspais viewer --static       # Generate interactive HTML file
+  elspais health summary trace  # Compose multiple report sections
   elspais changed               # Show uncommitted spec changes
-  elspais analyze hierarchy     # Show requirement hierarchy tree
+  elspais fix                   # Auto-fix hashes and formatting
 
 Configuration:
   elspais init                  # Create .elspais.toml in current directory
@@ -107,57 +116,23 @@ For detailed command help: elspais <command> --help
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # validate command
-    validate_parser = subparsers.add_parser(
-        "validate",
-        help="Validate requirements format, links, and hashes",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais validate                      # Validate all requirements
-  elspais validate -j                   # Output JSON for tooling
-  elspais validate --mode core          # Exclude associated repo specs
-  elspais validate --mode associate     # Local specs only, suppress cross-repo warnings
-
-To auto-fix issues, use: elspais fix
-""",
-    )
-    validate_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output validation results as JSON",
-    )
-    validate_parser.add_argument(
-        "--export",
-        action="store_true",
-        help="Export requirements as JSON dict keyed by ID",
-    )
-    validate_parser.add_argument(
-        "--mode",
-        choices=["core", "combined", "associate"],
-        default="combined",
-        help=(
-            "core: only local specs, associate: local only"
-            " (cross-repo warnings suppressed),"
-            " combined: include associated repos (default)"
-        ),
-    )
-
     # health command
     health_parser = subparsers.add_parser(
         "health",
         help="Check repository and configuration health",
+        parents=[output_parent],
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   elspais health              # Run all health checks
-  elspais health --config     # Check config only
   elspais health --spec       # Check spec files only
   elspais health --code       # Check code references only
   elspais health --tests      # Check test mappings only
-  elspais health -j           # Output JSON for tooling
+  elspais health --format json  # Output JSON for tooling
+  elspais health --format junit  # Output JUnit XML for CI
+  elspais health --format sarif  # Output SARIF for code scanning
   elspais health -v           # Verbose output with details
+  elspais health --include-passing-details  # Show details for passing checks
 
 Checks performed:
   CONFIG: TOML syntax, required fields, pattern tokens, hierarchy rules, paths
@@ -165,12 +140,6 @@ Checks performed:
   CODE:   Code→REQ reference validation, coverage statistics
   TESTS:  Test→REQ mappings, result status, coverage statistics
 """,
-    )
-    health_parser.add_argument(
-        "--config",
-        dest="config_only",
-        action="store_true",
-        help="Run configuration checks only",
     )
     health_parser.add_argument(
         "--spec",
@@ -191,21 +160,39 @@ Checks performed:
         help="Run test mapping checks only",
     )
     health_parser.add_argument(
-        "-j",
-        "--json",
+        "--format",
+        choices=["text", "markdown", "json", "junit", "sarif"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    health_parser.add_argument(
+        "--lenient",
         action="store_true",
-        help="Output as JSON",
+        help="Allow warnings without affecting exit code",
+    )
+    passing_group = health_parser.add_mutually_exclusive_group()
+    passing_group.add_argument(
+        "--skip-passing-details",
+        action="store_true",
+        default=True,
+        help="Hide details for passing checks (default)",
+    )
+    passing_group.add_argument(
+        "--include-passing-details",
+        action="store_true",
+        help="Show full details for passing checks",
     )
 
     # doctor command
     doctor_parser = subparsers.add_parser(
         "doctor",
+        parents=[output_parent],
         help="Diagnose environment and installation health",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   elspais doctor              # Check your elspais setup
-  elspais doctor -j           # Output as JSON
+  elspais doctor --format json # Output as JSON
   elspais doctor -v           # Verbose with details
 
 Checks performed:
@@ -214,103 +201,99 @@ Checks performed:
 """,
     )
     doctor_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # trace command
     trace_parser = subparsers.add_parser(
         "trace",
+        parents=[output_parent],
         help="Generate traceability matrix",
     )
     trace_parser.add_argument(
         "--format",
-        choices=["markdown", "html", "csv", "both"],
-        default="both",
-        help="Output format: markdown, html, csv, or both (markdown + csv)",
+        choices=["text", "markdown", "html", "json", "csv"],
+        default="markdown",
+        help="Output format (default: markdown)",
     )
     trace_parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output file path",
-        metavar="PATH",
-    )
-    # trace-view enhanced options (requires elspais[trace-view])
-    # --view (static HTML) and --edit-mode/--server (live server) are mutually exclusive
-    trace_mode_group = trace_parser.add_mutually_exclusive_group()
-    trace_mode_group.add_argument(
-        "--view",
-        action="store_true",
-        help="Generate interactive HTML traceability view (requires trace-view extra)",
-    )
-    trace_mode_group.add_argument(
-        "--edit-mode",
-        action="store_true",
-        help="Start live server with in-browser editing (requires trace-review extra)",
-    )
-    trace_mode_group.add_argument(
-        "--review-mode",
-        action="store_true",
-        help="Enable collaborative review with comments and flags",
-    )
-    trace_mode_group.add_argument(
-        "--server",
-        action="store_true",
-        help="Start live server without opening browser (requires trace-review extra)",
-    )
-    trace_parser.add_argument(
-        "--embed-content",
-        action="store_true",
-        help="Embed full requirement markdown in HTML for offline viewing",
-    )
-    trace_parser.add_argument(
-        "--path",
-        type=Path,
-        help="Path to repository root (default: auto-detect from cwd)",
-        metavar="DIR",
-    )
-    # NOTE: --port, --mode, --sponsor, --graph removed (dead code - never implemented)
-    # Graph-based trace options
-    trace_parser.add_argument(
-        "--graph-json",
-        action="store_true",
-        help="Output graph structure as JSON",
-    )
-    trace_parser.add_argument(
-        "--report",
+        "--preset",
         choices=["minimal", "standard", "full"],
-        help="Report preset to use (default: standard)",
+        help="Column preset (default: standard)",
     )
-    # NOTE: --depth removed (dead code - never implemented)
+    trace_parser.add_argument(
+        "--body",
+        action="store_true",
+        help="Show requirement body text in detail rows",
+    )
+    trace_parser.add_argument(
+        "--assertions",
+        dest="show_assertions",
+        action="store_true",
+        help="Show individual assertions in detail rows",
+    )
+    trace_parser.add_argument(
+        "--tests",
+        dest="show_tests",
+        action="store_true",
+        help="Show test references in detail rows",
+    )
 
-    # viewer command — shorthand for trace --edit-mode
+    # viewer command — interactive traceability viewer
     viewer_parser = subparsers.add_parser(
         "viewer",
-        help="Start interactive viewer server (requires trace-review extra)",
+        parents=[output_parent],
+        help="Interactive traceability viewer (live server or static HTML)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Start the interactive traceability viewer in your browser.
+Interactive traceability viewer with search, filtering, and editing.
 
 Examples:
-  elspais viewer                  # Start server and open browser
-  elspais viewer --server         # Start server without opening browser
-  elspais viewer --path /my/repo  # Specify repository root
-
-This is equivalent to: elspais trace --edit-mode
+  elspais viewer                          # Start server and open browser
+  elspais viewer --server                 # Start server without opening browser
+  elspais viewer --static                 # Generate interactive HTML file
+  elspais viewer --static --embed-content # HTML with embedded content (offline)
+  elspais viewer --path /my/repo          # Specify repository root
 """,
     )
-    viewer_parser.add_argument(
+    viewer_mode_group = viewer_parser.add_mutually_exclusive_group()
+    viewer_mode_group.add_argument(
         "--server",
         action="store_true",
         help="Start server without opening browser",
     )
+    viewer_mode_group.add_argument(
+        "--static",
+        action="store_true",
+        help="Generate interactive HTML file instead of starting server",
+    )
+    viewer_parser.add_argument(
+        "--embed-content",
+        action="store_true",
+        help="Embed full requirement content in HTML for offline viewing",
+    )
+    viewer_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Port number for the server (default: 5001)",
+        metavar="PORT",
+    )
     viewer_parser.add_argument(
         "--path",
         type=Path,
         help="Path to repository root (default: auto-detect from cwd)",
         metavar="DIR",
+    )
+
+    # graph command — export graph structure as JSON
+    subparsers.add_parser(
+        "graph",
+        parents=[output_parent],
+        help="Export the traceability graph structure as JSON",
     )
 
     # fix command
@@ -323,6 +306,7 @@ Examples:
   elspais fix                   # Fix all issues
   elspais fix --dry-run         # Preview fixes without applying
   elspais fix REQ-p00001        # Fix hash for a specific requirement
+  elspais fix -m "Clarify API"  # Fix with changelog reason (Active reqs)
 """,
     )
     fix_parser.add_argument(
@@ -336,6 +320,11 @@ Examples:
         help="Show what would be fixed without making changes",
     )
     fix_parser.add_argument(
+        "-m",
+        "--message",
+        help="Changelog reason for Active requirement hash updates",
+    )
+    fix_parser.add_argument(
         "--mode",
         choices=["core", "combined", "associate"],
         default="combined",
@@ -346,56 +335,23 @@ Examples:
         ),
     )
 
-    # index command
-    _index_mode_kwargs = {
-        "choices": ["core", "combined", "associate"],
-        "default": "combined",
-        "help": (
-            "core: only local specs, associate: local only"
-            " (cross-repo warnings suppressed),"
-            " combined: include associated repos (default)"
-        ),
-    }
-    index_parser = subparsers.add_parser(
-        "index",
-        help="Manage INDEX.md file (validate, regenerate)",
+    # summary command
+    summary_parser = subparsers.add_parser(
+        "summary",
+        parents=[output_parent],
+        help="Coverage summary by level (implemented, validated, passing)",
     )
-    index_subparsers = index_parser.add_subparsers(dest="index_action")
-
-    index_validate_parser = index_subparsers.add_parser(
-        "validate",
-        help="Validate INDEX.md accuracy",
-    )
-    index_validate_parser.add_argument("--mode", **_index_mode_kwargs)
-    index_regenerate_parser = index_subparsers.add_parser(
-        "regenerate",
-        help="Regenerate INDEX.md from scratch",
-    )
-    index_regenerate_parser.add_argument("--mode", **_index_mode_kwargs)
-
-    # analyze command
-    analyze_parser = subparsers.add_parser(
-        "analyze",
-        help="Analyze requirement hierarchy (hierarchy, orphans, coverage)",
-    )
-    analyze_subparsers = analyze_parser.add_subparsers(dest="analyze_action")
-
-    analyze_subparsers.add_parser(
-        "hierarchy",
-        help="Show requirement hierarchy tree",
-    )
-    analyze_subparsers.add_parser(
-        "orphans",
-        help="Find requirements with no parent (missing or invalid Implements)",
-    )
-    analyze_subparsers.add_parser(
-        "coverage",
-        help="Implementation coverage report",
+    summary_parser.add_argument(
+        "--format",
+        choices=["text", "markdown", "json", "csv"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # changed command
     changed_parser = subparsers.add_parser(
         "changed",
+        parents=[output_parent],
         help="Detect git changes to spec files",
     )
     changed_parser.add_argument(
@@ -405,16 +361,58 @@ Examples:
         metavar="BRANCH",
     )
     changed_parser.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
     changed_parser.add_argument(
         "-a",
         "--all",
         action="store_true",
         help="Include all changed files (not just spec)",
+    )
+
+    # analysis command
+    analysis_parser = subparsers.add_parser(
+        "analysis",
+        parents=[output_parent],
+        help="Analyze foundational requirement importance",
+    )
+    analysis_parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=10,
+        help="Number of top results to show (default: 10)",
+        metavar="N",
+    )
+    analysis_parser.add_argument(
+        "--weights",
+        help="Centrality,fan-in,neighborhood,uncovered weights (default: 0.3,0.2,0.2,0.3)",
+        metavar="W1,W2,W3,W4",
+    )
+    analysis_parser.add_argument(
+        "--format",
+        choices=["table", "json"],
+        default="table",
+        help="Output format (default: table)",
+    )
+    analysis_parser.add_argument(
+        "--show",
+        choices=["foundations", "leaves", "all"],
+        default="all",
+        help="Which sections to show (default: all)",
+    )
+    analysis_parser.add_argument(
+        "--level",
+        choices=["prd", "ops", "dev"],
+        help="Filter results by requirement level",
+    )
+    analysis_parser.add_argument(
+        "--include-code",
+        action="store_true",
+        help="Include CODE nodes in the analysis",
     )
 
     # version command
@@ -425,7 +423,7 @@ Examples:
     version_parser.add_argument(
         "check",
         nargs="?",
-        help="Check for updates (not yet implemented)",
+        help="Check for updates from PyPI",
     )
 
     # init command
@@ -558,7 +556,9 @@ Worktree Support:
 Quick Start (.elspais.toml):
   [project]
   name = "my-project"
-  spec_dir = "spec"              # Where requirement files live
+
+  [spec]
+  directories = ["spec"]         # Where requirement files live
 
   [patterns]
   prefix = "REQ"                 # Requirement ID prefix
@@ -585,6 +585,7 @@ Full Documentation:
     # config show
     config_show = config_subparsers.add_parser(
         "show",
+        parents=[output_parent],
         help="Show current configuration",
     )
     config_show.add_argument(
@@ -593,15 +594,16 @@ Full Documentation:
         metavar="SECTION",
     )
     config_show.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # config get
     config_get = config_subparsers.add_parser(
         "get",
+        parents=[output_parent],
         help="Get a configuration value",
     )
     config_get.add_argument(
@@ -609,10 +611,10 @@ Full Documentation:
         help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
     )
     config_get.add_argument(
-        "-j",
-        "--json",
-        action="store_true",
-        help="Output as JSON",
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
     )
 
     # config set
@@ -695,14 +697,6 @@ Full Documentation:
         "file",
         help="Content rule file name (e.g., 'AI-AGENT.md')",
     )
-
-    # reformat-with-claude command (NOT YET IMPLEMENTED - placeholder for future feature)
-    subparsers.add_parser(
-        "reformat-with-claude",
-        help="[NOT IMPLEMENTED] Reformat requirements using AI (Acceptance Criteria -> Assertions)",
-    )
-    # NOTE: All arguments removed - command not yet implemented
-    # See src/elspais/commands/reformat_cmd.py for planned features
 
     # docs command - comprehensive user documentation
     docs_parser = subparsers.add_parser(
@@ -858,6 +852,7 @@ Prerequisites:
 """,
     )
     pdf_parser.add_argument(
+        "-o",
         "--output",
         type=Path,
         default=Path("spec-output.pdf"),
@@ -1106,6 +1101,34 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure)
     """
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Implements: REQ-d00085-A+D
+    # Detect multi-section composition before argparse
+    from elspais.commands.report import COMPOSABLE_SECTIONS
+
+    sections: list[str] = []
+    i = 0
+    while i < len(argv) and argv[i] in COMPOSABLE_SECTIONS:
+        sections.append(argv[i])
+        i += 1
+
+    if len(sections) > 1:
+        import os
+
+        from elspais.config import find_canonical_root, find_git_root
+
+        git_root = find_git_root(Path.cwd())
+        canonical_root = find_canonical_root(Path.cwd())
+        if git_root and git_root != Path.cwd():
+            os.chdir(git_root)
+
+        from elspais.commands import report
+
+        return report.run(sections, argv[i:], canonical_root=canonical_root)
+
+    # Single command — normal argparse dispatch (REQ-d00085-D)
     parser = create_parser()
 
     # Enable shell tab-completion if argcomplete is installed
@@ -1155,26 +1178,34 @@ def main(argv: list[str] | None = None) -> int:
     # Store canonical_root on args for commands to use
     args.canonical_root = canonical_root
 
+    # Global --output: redirect stdout to file
+    output_file = None
+    output_path = getattr(args, "output", None)
+    if output_path and args.command not in {"pdf"}:
+        output_file = open(output_path, "w")  # noqa: SIM115
+        sys.stdout = output_file
+
     try:
         # Dispatch to command handlers
-        if args.command == "validate":
-            return validate.run(args)
-        elif args.command == "health":
+        if args.command == "health":
             return health.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":
             return trace.run(args)
         elif args.command == "viewer":
-            return trace.run_viewer(args)
+            return viewer.run(args)
+        elif args.command == "graph":
+            return trace.run_graph(args)
         elif args.command == "fix":
             return fix_cmd.run(args)
-        elif args.command == "index":
-            return index.run(args)
-        elif args.command == "analyze":
-            return analyze.run(args)
+
+        elif args.command == "summary":
+            return summary.run(args)
         elif args.command == "changed":
             return changed.run(args)
+        elif args.command == "analysis":
+            return analysis_cmd.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":
@@ -1187,8 +1218,6 @@ def main(argv: list[str] | None = None) -> int:
             return config_cmd.run(args)
         elif args.command == "rules":
             return rules_cmd.run(args)
-        elif args.command == "reformat-with-claude":
-            return reformat_cmd.run(args)
         elif args.command == "docs":
             return docs_command(args)
         elif args.command == "completion":
@@ -1221,6 +1250,12 @@ def main(argv: list[str] | None = None) -> int:
             raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    finally:
+        if output_file:
+            sys.stdout = sys.__stdout__
+            output_file.close()
+            if not getattr(args, "quiet", False):
+                print(f"Generated: {output_path}", file=sys.stderr)
 
 
 def docs_command(args: argparse.Namespace) -> int:

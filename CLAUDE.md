@@ -14,6 +14,13 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 **IMPORTANT**: there is only ONE main graph data struct. there is only _ONE_ modular system for CRUD opertions.
 **IMPORTANT**: **DO NOT** change the structure of Graph or GraphTrace or GraphBuilder. Do not violate the current encapsulation.
+**No Duplicate Library Functions**: Do NOT create duplicate implementations of core functionality across modules:
+- Hierarchy traversal: only in TraceGraph (roots, children, parents, find_by_id)
+- Coverage calculation: only in GraphBuilder (computed during build)
+- Requirement loading: only in core/loader.py (create_parser, parse_requirements_from_directories)
+- Git state detection: only in core/git.py (get_git_changes, GitChangeInfo)
+- Pattern validation: only in core/patterns.py (PatternValidator)
+- Do NOT create hierarchy.py files in multiple locations
 
 **Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.10+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
@@ -24,8 +31,8 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.
 **Canonical Root (Worktree Support)**: `find_canonical_root()` detects git worktrees and resolves to the main repo root via `git rev-parse --git-common-dir`. Cross-repo associate paths resolve from the canonical root, not the worktree root. Threaded through CLI, all commands, MCP server, and review server.
 **Coverage Source Tracking**: `RollupMetrics` tracks where coverage originates via `direct_covered`, `explicit_covered`, `inferred_covered`:
-**Multi-Assertion Syntax**: `Implements: REQ-p00001-A-B-C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`.
-**Associated Spec Scanning**: The `validate` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
+**Multi-Assertion Syntax**: `Implements: REQ-p00001-A+B+C` expands to individual assertion references (`REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`). Same for `Refines:`. The separator (`+` by default) is configured via `multi_assertion_separator` in `[references.defaults]`.
+**Associated Spec Scanning**: The `health` command supports `--mode core|combined` to include/exclude associated repository specs. Uses `.github/config/sponsors.yml` with local override support via `sponsors.local.yml`.
 **Optional Dependencies**: Advanced features are available via pip extras:
 
 - `elspais[trace-view]`: HTML generation with Jinja2
@@ -41,6 +48,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
   - **GraphNode**: Use `iter_children()`, `iter_parents()`, `iter_outgoing_edges()`, `iter_incoming_edges()` for traversal. Use `child_count()`, `parent_count()`, `has_child()`, `has_parent()`, `is_root`, `is_leaf` for checks. Use `get_field()`, `set_field()`, `get_metric()`, `set_metric()` for content/metrics. Convenience properties: `level`, `status`, `hash`. Use `set_id()` for ID mutations.
   - **TraceGraph**: Use `iter_roots()` for traversal. Use `root_count()`, `has_root()` for checks. Internal storage uses `_roots`, `_index` prefixed attributes.
   - **UUID for GUI**: Each node has a stable `uuid` (32-char hex) for DOM IDs and API endpoints.
+**Graph Analysis** (`graph/analysis.py`): Read-only analytical functions that rank requirements by foundational importance. Computes PageRank centrality, fan-in branch count, and uncovered dependents. Does not modify the graph.
 **Node Mutation API**: TraceGraph provides mutation methods with full undo support
 **Assertion Mutation API**: TraceGraph provides assertion-specific mutations
 **Edge Mutation API**: TraceGraph provides edge (relationship) mutations
@@ -60,15 +68,26 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 ## Workflow
 
-**See `WORKFLOW_STATE.md`** for the complete workflow checklist including documentation steps.
+**See `TASK_PROTOCOL.md`** for the complete workflow checklist including documentation steps.
 
-- **ALWAYS** use a sub-agent to write tests
-- **ALWAYS** include assertion references in test names (e.g., `test_REQ_p00001_A_validates_input`) so TEST_RESULT nodes automatically link to requirements in the traceability graph
+- **ALWAYS** use a sub-agent to write tests (unless you are the sub-agent)
 - **ALWAYS** update user-facing surfaces when adding/modifying CLI features: `docs/cli/*.md`, `docs/configuration.md`, `src/elspais/commands/init.py` templates, CLI help/epilog text, and shell completion
+
+## Testing
+
+**Test tiers** (configured in `pyproject.toml`):
+
+- `pytest` — runs unit/integration tests only (~12s). This is the default during development.
+- `pytest -m e2e` — runs e2e subprocess tests only (CLI commands, MCP protocol, CI workflows).
+- `pytest -m "e2e or browser"` — runs all slow tests.
+- `pytest -m ""` — runs everything (unit + e2e + browser). **Run before `git push`.**
+
+**Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
+**Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
 
 ## Master Plan Workflow
 
-**IMPORTANT**: After `/clear` or at the start of a new session, check `WORKFLOW_STATE.md` for queued issues.
+**IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
 
 **Commit Discipline**: Each phase should result in exactly one commit. This ensures:
 

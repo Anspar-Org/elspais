@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
 
 
+# Implements: REQ-p00050-A
 class EdgeKind(Enum):
     """Types of edges in the traceability graph.
 
@@ -32,6 +33,7 @@ class EdgeKind(Enum):
     ADDRESSES = "addresses"
     CONTAINS = "contains"
 
+    # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:
         """Check if this edge type contributes to coverage rollup.
 
@@ -42,6 +44,7 @@ class EdgeKind(Enum):
         return self in (EdgeKind.IMPLEMENTS, EdgeKind.VALIDATES)
 
 
+# Implements: REQ-p00050-A
 @dataclass
 class Edge:
     """A typed edge between two graph nodes.
@@ -74,5 +77,7 @@ class Edge:
         )
 
     def __hash__(self) -> int:
-        """Hash based on source, target, and kind."""
-        return hash((self.source.id, self.target.id, self.kind.value))
+        """Hash based on source, target, kind, and assertion_targets."""
+        return hash(
+            (self.source.id, self.target.id, self.kind.value, tuple(self.assertion_targets))
+        )

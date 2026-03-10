@@ -144,6 +144,15 @@ def run_single_edit(
         result = modify_status(file_path, req_id, args.status, dry_run=dry_run)
         results.append(("status", result))
 
+        # Draft → Active: add initial changelog entry
+        if (
+            result.get("success")
+            and not dry_run
+            and result.get("old_status", "").lower() == "draft"
+            and result.get("new_status", "").lower() == "active"
+        ):
+            _add_initial_changelog(file_path, req_id)
+
     # Apply move
     if hasattr(args, "move_to") and args.move_to:
         dest_path = spec_dir / args.move_to
@@ -328,3 +337,35 @@ def batch_edit(
         results.append(result)
 
     return results
+
+
+def _add_initial_changelog(file_path: Path, req_id: str) -> None:
+    """Add first changelog entry when a requirement transitions Draft → Active."""
+    from datetime import date
+
+    from elspais.utilities.git import get_author_info
+    from elspais.utilities.patterns import find_req_header as _find_req_header
+    from elspais.utilities.spec_writer import _find_end_marker, add_changelog_entry
+
+    content = file_path.read_text(encoding="utf-8")
+    header = _find_req_header(content, req_id)
+    if not header:
+        return
+    end = _find_end_marker(content, header.end())
+    current_hash = end.group(2) if end else "________"
+
+    try:
+        author = get_author_info()
+    except ValueError:
+        # Can't resolve author — skip silently
+        return
+
+    entry = {
+        "date": date.today().isoformat(),
+        "hash": current_hash,
+        "change_order": "-",
+        "author_name": author["name"],
+        "author_id": author["id"],
+        "reason": "First approved version",
+    }
+    add_changelog_entry(file_path, req_id, entry)

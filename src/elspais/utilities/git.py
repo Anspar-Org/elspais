@@ -32,6 +32,7 @@ def _clean_git_env() -> dict[str, str]:
     return env
 
 
+# Implements: REQ-p00004-B
 @contextmanager
 def temporary_worktree(repo_root: Path, ref: str = "HEAD") -> Iterator[Path]:
     """Create a temporary git worktree for a ref.
@@ -118,6 +119,7 @@ class MovedRequirement:
     new_path: str
 
 
+# Implements: REQ-p00004-B
 def get_repo_root(start_path: Path | None = None) -> Path | None:
     """Find the git repository root.
 
@@ -141,6 +143,7 @@ def get_repo_root(start_path: Path | None = None) -> Path | None:
         return None
 
 
+# Implements: REQ-p00004-B
 def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
     """Get sets of modified and untracked files according to git status.
 
@@ -186,6 +189,7 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
         return set(), set()
 
 
+# Implements: REQ-p00004-B
 def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str]:
     """Get set of files changed between current branch and base branch.
 
@@ -220,6 +224,7 @@ def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str
     return set()
 
 
+# Implements: REQ-p00004-B
 def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None) -> dict[str, str]:
     """Extract REQ ID -> file path mapping from a TraceGraph.
 
@@ -272,6 +277,7 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
     return req_locations
 
 
+# Implements: REQ-p00004-B
 def get_req_locations_from_graph(
     repo_root: Path,
     scan_sponsors: bool = False,
@@ -301,6 +307,7 @@ def get_req_locations_from_graph(
     return _extract_req_locations_from_graph(graph, repo_root)
 
 
+# Implements: REQ-p00004-B
 def detect_moved_requirements(
     committed_locations: dict[str, str],
     current_locations: dict[str, str],
@@ -329,6 +336,7 @@ def detect_moved_requirements(
     return moved
 
 
+# Implements: REQ-p00004-B
 def get_git_changes(
     repo_root: Path | None = None,
     spec_dir: str = "spec",
@@ -380,6 +388,7 @@ def get_git_changes(
     )
 
 
+# Implements: REQ-p00004-B
 def filter_spec_files(files: set[str], spec_dir: str = "spec") -> set[str]:
     """Filter a set of files to only include spec directory files.
 
@@ -399,6 +408,7 @@ def filter_spec_files(files: set[str], spec_dir: str = "spec") -> set[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00063-D
 def get_current_branch(repo_root: Path) -> str | None:
     """Get the name of the current git branch.
 
@@ -423,6 +433,487 @@ def get_current_branch(repo_root: Path) -> str | None:
         return None
 
 
+# Implements: REQ-p00004-C
+def git_status_summary(
+    repo_root: Path,
+    spec_dir: str = "spec",
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Get git status summary for the viewer UI.
+
+    Returns a dict with:
+        branch: Current branch name (or None if detached)
+        is_main: Whether current branch is a main/protected branch
+        dirty_spec_files: List of modified/untracked spec files (relative paths)
+        remote_diverged: Whether the remote tracking branch has diverged
+        fast_forward_possible: Whether a fast-forward pull is possible
+    """
+    branch = get_current_branch(repo_root)
+    is_main = branch in main_branches if branch else False
+
+    # Get dirty spec files
+    modified, untracked = get_modified_files(repo_root)
+    all_dirty = modified | untracked
+    prefix = f"{spec_dir}/"
+    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+
+    # Check remote divergence
+    remote_diverged = False
+    fast_forward_possible = False
+    main_diverged = False
+    local_ahead_count = 0
+    env = _clean_git_env()
+    if branch:
+        try:
+            # Fetch without modifying working tree
+            subprocess.run(
+                ["git", "fetch", "--quiet"],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                timeout=10,
+            )
+            # Check if remote tracking branch has diverged from local
+            remote_ref = f"origin/{branch}"
+            result = subprocess.run(
+                ["git", "rev-list", "--left-right", "--count", f"{branch}...{remote_ref}"],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                parts = result.stdout.strip().split()
+                if len(parts) == 2:
+                    local_ahead = int(parts[0])
+                    remote_ahead = int(parts[1])
+                    local_ahead_count = local_ahead
+                    remote_diverged = remote_ahead > 0
+                    fast_forward_possible = remote_ahead > 0 and local_ahead == 0
+
+            # Check if main has diverged since branch point (informational)
+            if not is_main:
+                for main_name in main_branches:
+                    remote_main = f"origin/{main_name}"
+                    # Find merge-base between this branch and remote main
+                    mb = subprocess.run(
+                        ["git", "merge-base", branch, remote_main],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if mb.returncode != 0:
+                        continue
+                    merge_base = mb.stdout.strip()
+                    # Check if remote main has moved past the merge-base
+                    tip = subprocess.run(
+                        ["git", "rev-parse", remote_main],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if tip.returncode == 0 and tip.stdout.strip() != merge_base:
+                        main_diverged = True
+                    break  # Only check the first matching main branch
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            ValueError,
+        ):
+            pass  # No remote or fetch failed — treat as not diverged
+
+    return {
+        "branch": branch,
+        "is_main": is_main,
+        "dirty_spec_files": dirty_spec,
+        "local_ahead": local_ahead_count,
+        "remote_diverged": remote_diverged,
+        "fast_forward_possible": fast_forward_possible,
+        "main_diverged": main_diverged,
+    }
+
+
+# Implements: REQ-p00004-D
+def create_and_switch_branch(
+    repo_root: Path,
+    branch_name: str,
+) -> dict[str, Any]:
+    """Create a new git branch and switch to it, preserving dirty working tree.
+
+    If the working tree has uncommitted changes, they are stashed before the
+    branch switch and popped on the new branch.  If branch creation fails and
+    changes were stashed, the stash is popped to restore the original state.
+
+    Args:
+        repo_root: Path to repository root.
+        branch_name: Name for the new branch.
+
+    Returns:
+        Dict with ``success`` (bool) and either ``branch`` (str) or ``error`` (str).
+    """
+    # Validate branch name
+    if not branch_name or not branch_name.strip():
+        return {"success": False, "error": "Branch name must not be empty"}
+
+    # git check-ref-format to validate
+    try:
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", branch_name],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return {"success": False, "error": f"Invalid branch name: {branch_name}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    # Check if dirty
+    modified, untracked = get_modified_files(repo_root)
+    is_dirty = bool(modified or untracked)
+
+    # Stash if dirty
+    if is_dirty:
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "stash",
+                    "push",
+                    "--include-untracked",
+                    "-m",
+                    f"elspais: switching to {branch_name}",
+                ],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            return {"success": False, "error": f"Failed to stash changes: {e.stderr}"}
+        except FileNotFoundError:
+            return {"success": False, "error": "git not found"}
+
+    # Create and switch to the new branch
+    try:
+        subprocess.run(
+            ["git", "checkout", "-b", branch_name],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        # Restore stash if we stashed
+        if is_dirty:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+            )
+        return {"success": False, "error": f"Failed to create branch: {e.stderr}"}
+    except FileNotFoundError:
+        if is_dirty:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+            )
+        return {"success": False, "error": "git not found"}
+
+    # Pop stash on new branch
+    if is_dirty:
+        try:
+            subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            return {
+                "success": True,
+                "branch": branch_name,
+                "warning": f"Branch created but stash pop failed: {e.stderr}",
+            }
+
+    return {"success": True, "branch": branch_name}
+
+
+# Implements: REQ-p00004-E
+def commit_and_push_spec_files(
+    repo_root: Path,
+    message: str,
+    spec_dir: str = "spec",
+    push: bool = True,
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Stage all modified spec files, commit with message, and optionally push.
+
+    Refuses to operate on main/master (or other protected) branches.
+
+    Args:
+        repo_root: Path to repository root.
+        message: Commit message.
+        spec_dir: Spec directory relative to repo root (default: ``"spec"``).
+        push: Whether to push after committing (default: ``True``).
+        main_branches: Branch names considered protected.
+
+    Returns:
+        Dict with ``success`` (bool), and either ``files_committed`` (list[str])
+        or ``error`` (str).  If push fails the commit is still reported as
+        successful with a ``push_error`` field.
+    """
+    # Refuse on protected branches
+    branch = get_current_branch(repo_root)
+    if branch in main_branches:
+        return {
+            "success": False,
+            "error": f"Refusing to commit on protected branch '{branch}'",
+        }
+
+    # Find dirty spec files (modified + untracked)
+    modified, untracked = get_modified_files(repo_root)
+    all_dirty = modified | untracked
+    prefix = f"{spec_dir}/"
+    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+
+    if not dirty_spec:
+        return {"success": False, "error": "Nothing to commit — no dirty spec files"}
+
+    # Stage spec files
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + dirty_spec,
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to stage files: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    # Commit
+    try:
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        import re as _re
+
+        clean = _re.sub(r"\x1b\[[0-9;]*m", "", e.stderr or "").strip()
+        return {"success": False, "error": f"Failed to commit: {clean}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    result: dict[str, Any] = {
+        "success": True,
+        "files_committed": dirty_spec,
+    }
+
+    # Optionally push (non-fatal if push fails)
+    if push and branch:
+        try:
+            subprocess.run(
+                ["git", "push", "-u", "origin", branch],
+                cwd=repo_root,
+                env=_clean_git_env(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            err_msg = e.stderr if hasattr(e, "stderr") else str(e)
+            result["push_error"] = f"Commit succeeded but push failed: {err_msg}"
+
+    return result
+
+
+# Implements: REQ-p00004-F
+def sync_branch(
+    repo_root: Path,
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Sync the current branch with its remote and with main.
+
+    Performs up to two safe operations:
+
+    1. **Merge remote tracking branch** — if ``origin/<branch>`` is ahead,
+       attempt ``git merge --ff-only``.  If that fails (diverged), try
+       ``git merge --no-edit`` and abort on conflict.
+    2. **Rebase on updated main** — if ``origin/main`` has moved past the
+       merge-base, attempt ``git rebase origin/main`` and abort on conflict.
+
+    Both operations abort cleanly if conflicts are detected — the working
+    tree is always left in a usable state.
+
+    Args:
+        repo_root: Path to repository root.
+        main_branches: Branch names to try rebasing onto.
+
+    Returns:
+        Dict with ``success`` (bool), ``actions`` (list of descriptions),
+        and optional ``error`` (str).
+    """
+    env = _clean_git_env()
+    actions: list[str] = []
+    branch = get_current_branch(repo_root)
+
+    if not branch:
+        return {"success": False, "error": "Not on a branch (detached HEAD)"}
+
+    # 1. Fetch
+    try:
+        subprocess.run(
+            ["git", "fetch"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Fetch timed out", "actions": actions}
+    except subprocess.CalledProcessError as e:
+        return {
+            "success": False,
+            "error": f"Fetch failed: {(e.stderr or '').strip()}",
+            "actions": actions,
+        }
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found", "actions": actions}
+
+    # 2. Merge remote tracking branch if ahead
+    remote_ref = f"origin/{branch}"
+    try:
+        rev = subprocess.run(
+            ["git", "rev-list", "--left-right", "--count", f"{branch}...{remote_ref}"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if rev.returncode == 0:
+            parts = rev.stdout.strip().split()
+            if len(parts) == 2:
+                remote_ahead = int(parts[1])
+                if remote_ahead > 0:
+                    # Try ff-only first
+                    ff = subprocess.run(
+                        ["git", "merge", "--ff-only", remote_ref],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if ff.returncode == 0:
+                        actions.append(f"Fast-forwarded from {remote_ref}")
+                    else:
+                        # Try regular merge (auto-resolve)
+                        mg = subprocess.run(
+                            ["git", "merge", "--no-edit", remote_ref],
+                            cwd=repo_root,
+                            env=env,
+                            capture_output=True,
+                            text=True,
+                        )
+                        if mg.returncode == 0:
+                            actions.append(f"Merged {remote_ref}")
+                        else:
+                            # Conflict — abort
+                            subprocess.run(
+                                ["git", "merge", "--abort"],
+                                cwd=repo_root,
+                                env=env,
+                                capture_output=True,
+                            )
+                            return {
+                                "success": False,
+                                "error": f"Merge conflict with {remote_ref} — aborted",
+                                "actions": actions,
+                            }
+    except (subprocess.CalledProcessError, ValueError):
+        pass  # No remote tracking branch — skip merge step
+
+    # 3. Rebase on updated main if diverged
+    if branch not in main_branches:
+        for main_name in main_branches:
+            remote_main = f"origin/{main_name}"
+            try:
+                mb = subprocess.run(
+                    ["git", "merge-base", branch, remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if mb.returncode != 0:
+                    continue
+                merge_base = mb.stdout.strip()
+                tip = subprocess.run(
+                    ["git", "rev-parse", remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if tip.returncode != 0 or tip.stdout.strip() == merge_base:
+                    break  # Main hasn't moved — nothing to do
+
+                # Main has moved — try rebase
+                rb = subprocess.run(
+                    ["git", "rebase", remote_main],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if rb.returncode == 0:
+                    actions.append(f"Rebased on {remote_main}")
+                else:
+                    # Conflict — abort
+                    subprocess.run(
+                        ["git", "rebase", "--abort"],
+                        cwd=repo_root,
+                        env=env,
+                        capture_output=True,
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Rebase conflict on {remote_main} — aborted",
+                        "actions": actions,
+                    }
+                break
+            except (subprocess.CalledProcessError, ValueError):
+                continue
+
+    if not actions:
+        return {"success": True, "message": "Already up to date", "actions": actions}
+
+    return {"success": True, "message": "; ".join(actions), "actions": actions}
+
+
+# Implements: REQ-o00063-D
 def create_safety_branch(
     repo_root: Path,
     req_id: str,
@@ -461,6 +952,7 @@ def create_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# Implements: REQ-o00063-D
 def list_safety_branches(repo_root: Path) -> list[str]:
     """List all safety branches in the repository.
 
@@ -491,6 +983,7 @@ def list_safety_branches(repo_root: Path) -> list[str]:
         return []
 
 
+# Implements: REQ-o00063-E
 def restore_from_safety_branch(
     repo_root: Path,
     branch_name: str,
@@ -554,6 +1047,7 @@ def restore_from_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# Implements: REQ-o00063-D
 def delete_safety_branch(
     repo_root: Path,
     branch_name: str,
@@ -587,6 +1081,69 @@ def delete_safety_branch(
         return {"success": False, "error": "git not found"}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Author Identity Resolution
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def get_author_info(id_source: str = "gh") -> dict[str, str]:
+    """Resolve author name and identity for changelog entries.
+
+    Args:
+        id_source: Identity source — "gh" (GitHub CLI, falls back to git)
+                   or "git" (git config only).
+
+    Returns:
+        Dict with "name" and "id" keys.
+
+    Raises:
+        ValueError: If required author info is unavailable or empty.
+    """
+    if id_source == "gh":
+        try:
+            import json as _json
+
+            result = subprocess.run(
+                ["gh", "api", "user"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            data = _json.loads(result.stdout)
+            name = data.get("name") or ""
+            email = data.get("email") or ""
+            if name and email:
+                return {"name": name, "id": email}
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            pass
+        # Fall through to git fallback
+
+    # Git config fallback
+    name = _git_config("user.name")
+    email = _git_config("user.email")
+
+    if not name:
+        raise ValueError("Author name not available from git config user.name")
+    if not email:
+        raise ValueError("Author ID not available from git config user.email")
+
+    return {"name": name, "id": email}
+
+
+def _git_config(key: str) -> str:
+    """Read a git config value."""
+    try:
+        result = subprocess.run(
+            ["git", "config", key],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -599,10 +1156,20 @@ __all__ = [
     # Graph-based location extraction
     "temporary_worktree",
     "get_req_locations_from_graph",
+    # Git status summary (REQ-p00004-C)
+    "git_status_summary",
+    # Branch creation (REQ-p00004-D)
+    "create_and_switch_branch",
+    # Commit and push (REQ-p00004-E)
+    "commit_and_push_spec_files",
+    # Pull fast-forward (REQ-p00004-F)
+    "sync_branch",
     # Safety branch utilities (REQ-o00063)
     "get_current_branch",
     "create_safety_branch",
     "list_safety_branches",
     "restore_from_safety_branch",
     "delete_safety_branch",
+    # Author identity
+    "get_author_info",
 ]

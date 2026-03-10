@@ -130,3 +130,111 @@ directories = ["spec"]
         )
 
         yield Path(tmpdir)
+
+
+@pytest.fixture
+def multi_assertion_spec_dir():
+    """Create a spec directory with multi-assertion syntax for integration testing.
+
+    Includes:
+    - A PRD with assertions A, B, C
+    - An OPS using multi-assertion syntax: Implements: REQ-p00001-A+B+C
+    - A code file using: # Implements: REQ-p00001-A+B
+    - Config with multi_assertion_separator = "+"
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        spec_dir = Path(tmpdir) / "spec"
+        spec_dir.mkdir()
+
+        # Create PRD file with assertions A, B, C
+        prd_file = spec_dir / "prd-multi.md"
+        prd_file.write_text(
+            """\
+# Multi-Assertion Product Requirements
+
+## REQ-p00001: Feature Alpha
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL provide feature alpha.
+
+## Assertions
+
+A. The system SHALL support login.
+B. The system SHALL support logout.
+C. The system SHALL support password reset.
+
+*End* *REQ-p00001* | **Hash**: aaa11111
+"""
+        )
+
+        # Create OPS file using multi-assertion syntax
+        ops_file = spec_dir / "ops-multi.md"
+        ops_file.write_text(
+            """\
+# Multi-Assertion Operations Requirements
+
+## REQ-o00001: Implement All Auth Features
+
+**Level**: OPS | **Implements**: REQ-p00001-A+B+C | **Status**: Active
+
+The system SHALL implement all authentication features.
+
+*End* *REQ-o00001*
+"""
+        )
+
+        # Create code directory with Python files using assertion references.
+        # The code parser extracts individual refs (comma-separated), while
+        # the builder's centralized expansion handles multi-assertion syntax.
+        src_dir = Path(tmpdir) / "src"
+        src_dir.mkdir()
+        code_file = src_dir / "auth.py"
+        code_file.write_text(
+            """\
+# Implements: REQ-p00001-A, REQ-p00001-B
+def authenticate():
+    pass
+"""
+        )
+
+        # Create config file with multi_assertion_separator
+        config_file = Path(tmpdir) / ".elspais.toml"
+        config_file.write_text(
+            """\
+[patterns]
+prefix = "REQ"
+id_template = "{prefix}-{type}{id}"
+
+[patterns.types.prd]
+id = "p"
+name = "PRD"
+level = 1
+
+[patterns.types.ops]
+id = "o"
+name = "OPS"
+level = 2
+
+[patterns.types.dev]
+id = "d"
+name = "DEV"
+level = 3
+
+[patterns.id_format]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[spec]
+directories = ["spec"]
+
+[directories]
+code = ["src"]
+
+[references.defaults]
+multi_assertion_separator = "+"
+"""
+        )
+
+        yield Path(tmpdir)

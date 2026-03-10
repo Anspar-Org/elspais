@@ -1,5 +1,5 @@
-# Validates REQ-CUR879-G, REQ-CUR879-H, REQ-CUR879-I
-"""Tests for elspais validate --export and --json flags (CUR-879)."""
+# Validates REQ-d00083-A, REQ-d00083-B
+"""Tests for elspais validate --export and --json flags."""
 
 import argparse
 import json
@@ -93,8 +93,8 @@ B. The system SHALL do something else.
 class TestValidateExport:
     """Tests for validate --export flag."""
 
-    def test_REQ_CUR879_G_export_outputs_requirement_dict(self, spec_repo, capsys):
-        """REQ-CUR879-G: --export outputs requirements as JSON dict keyed by ID."""
+    def test_REQ_d00083_B_export_outputs_requirement_dict(self, spec_repo, capsys):
+        """REQ-d00083-B: --export outputs requirements as JSON dict keyed by ID."""
         from elspais.commands.validate import run
 
         args = argparse.Namespace(
@@ -126,8 +126,8 @@ class TestValidateExport:
         assert "status" in req
         assert "assertions" in req
 
-    def test_REQ_CUR879_H_export_includes_hash_and_file(self, spec_repo, capsys):
-        """REQ-CUR879-H: --export includes hash and file path."""
+    def test_REQ_d00083_B_export_includes_hash_and_file(self, spec_repo, capsys):
+        """REQ-d00083-B: --export includes hash and file path."""
         from elspais.commands.validate import run
 
         args = argparse.Namespace(
@@ -157,8 +157,8 @@ class TestValidateExport:
 class TestValidateJsonStillWorks:
     """Tests that --json still outputs validation results."""
 
-    def test_REQ_CUR879_I_json_still_outputs_validation_results(self, spec_repo, capsys):
-        """REQ-CUR879-I: --json outputs validation results, not export format."""
+    def test_REQ_d00083_A_json_still_outputs_validation_results(self, spec_repo, capsys):
+        """REQ-d00083-A: --json outputs validation results, not export format."""
         from elspais.commands.validate import run
 
         args = argparse.Namespace(

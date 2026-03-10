@@ -12,49 +12,49 @@
 }
 
 .status-badge.draft {
-    background: #cfe2ff;
-    color: #084298;
+    background: var(--status-draft-bg);
+    color: var(--status-draft-text);
 }
 
 .status-badge.active {
-    background: #d1e7dd;
-    color: #0f5132;
+    background: var(--status-active-bg);
+    color: var(--status-active-text);
 }
 
 .status-badge.deprecated {
-    background: #f8d7da;
-    color: #842029;
+    background: var(--status-deprecated-bg);
+    color: var(--status-deprecated-text);
 }
 
 .status-badge.proposed {
-    background: #fff3cd;
-    color: #664d03;
+    background: var(--status-proposed-bg);
+    color: var(--status-proposed-text);
 }
 
 /* Validation-quality color overrides for Active status badges */
 .status-badge.active.val-green {
-    background: #198754;
-    color: #fff;
+    background: var(--val-green-bg);
+    color: var(--val-green-text);
 }
 
 .status-badge.active.val-yellow-green {
-    background: #7bb661;
-    color: #1a3a0a;
+    background: var(--val-yellow-green-bg);
+    color: var(--val-yellow-green-text);
 }
 
 .status-badge.active.val-yellow {
-    background: #ffc107;
-    color: #664d03;
+    background: var(--val-yellow-bg);
+    color: var(--val-yellow-text);
 }
 
 .status-badge.active.val-red {
-    background: #dc3545;
-    color: #fff;
+    background: var(--val-red-bg);
+    color: var(--val-red-text);
 }
 
 .status-badge.active.val-orange {
-    background: #fd7e14;
-    color: #fff;
+    background: var(--val-orange-bg);
+    color: var(--val-orange-text);
 }
 
 /* Delayed hover tooltip for validation-colored badges */
@@ -73,8 +73,8 @@
     font-size: 0.7rem;
     font-weight: 400;
     text-transform: none;
-    background: #212529;
-    color: #f8f9fa;
+    background: var(--tooltip-bg);
+    color: var(--tooltip-text);
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     opacity: 0;
     pointer-events: none;
@@ -87,6 +87,6 @@
 }
 
 .change-indicator {
-    color: #fd7e14;
+    color: var(--change-color);
     font-size: 0.75rem;
 }

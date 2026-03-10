@@ -1,10 +1,7 @@
 """Unified reference configuration for all parsers.
 
-This module provides configurable reference pattern matching used by:
-- CodeParser: # Implements: REQ-xxx
-- TestParser: def test_REQ_xxx() and # Tests: REQ-xxx
-- JUnitXMLParser: test names containing REQ-xxx
-- PytestJSONParser: test names containing REQ-xxx
+This module provides configurable reference pattern matching used by
+CodeParser, TestParser, JUnitXMLParser, and PytestJSONParser.
 
 The configuration supports:
 - Default patterns applied to all files
@@ -49,6 +46,7 @@ class ReferenceConfig:
             "refines": ["Refines", "REFINES"],
         }
     )
+    multi_assertion_separator: str = "+"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ReferenceConfig:
@@ -61,8 +59,19 @@ class ReferenceConfig:
         Returns:
             ReferenceConfig instance with values from dict or defaults
         """
+        mas = data.get("multi_assertion_separator", "+")
+        if mas is False or mas is None:
+            mas = ""
+        mas = str(mas)
+        separators = data.get("separators", ["-", "_"])
+        if mas and mas in separators:
+            raise ValueError(
+                f"multi_assertion_separator {mas!r} conflicts with configured "
+                f"separators {separators}. The multi-assertion separator must be "
+                f"distinct from ID separators."
+            )
         return cls(
-            separators=data.get("separators", ["-", "_"]),
+            separators=separators,
             case_sensitive=data.get("case_sensitive", False),
             prefix_optional=data.get("prefix_optional", False),
             comment_styles=data.get("comment_styles", ["#", "//", "--"]),
@@ -74,6 +83,7 @@ class ReferenceConfig:
                     "refines": ["Refines", "REFINES"],
                 },
             ),
+            multi_assertion_separator=mas,
         )
 
     def merge_with(self, override: ReferenceOverride) -> ReferenceConfig:
@@ -112,6 +122,7 @@ class ReferenceConfig:
                 else self.comment_styles
             ),
             keywords=merged_keywords,
+            multi_assertion_separator=self.multi_assertion_separator,
         )
 
 

@@ -214,13 +214,13 @@ class TestJUnitXMLParserCanParse:
 class TestJUnitXMLParserCustomConfig:
     """Tests for JUnitXMLParser with custom configuration.
 
-    REQ-d00102-A: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00102-B: Parser instantiation with PatternConfig and ReferenceResolver.
-    REQ-d00102-C: Parser extracts custom prefix IDs from test names.
+    REQ-d00082-K: Parser accepts custom PatternConfig for non-standard prefixes.
+    REQ-d00082-K: Parser instantiation with PatternConfig and ReferenceResolver.
+    REQ-d00082-K: Parser extracts custom prefix IDs from test names.
     """
 
-    def test_REQ_d00102_A_custom_prefix_spec(self):
-        """REQ-d00102-A: Parser with custom prefix 'SPEC' extracts correct IDs."""
+    def test_REQ_d00082_K_custom_prefix_spec(self):
+        """REQ-d00082-K: Parser with custom prefix 'SPEC' extracts correct IDs."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(
@@ -246,8 +246,8 @@ class TestJUnitXMLParserCustomConfig:
         assert len(results) == 1
         assert "SPEC-p00102" in results[0]["validates"]
 
-    def test_REQ_d00102_B_instantiation_with_pattern_config_and_resolver(self):
-        """REQ-d00102-B: Parser instantiation with PatternConfig and ReferenceResolver."""
+    def test_REQ_d00082_K_instantiation_with_pattern_config_and_resolver(self):
+        """REQ-d00082-K: Parser instantiation with PatternConfig and ReferenceResolver."""
         from pathlib import Path
 
         from elspais.utilities.patterns import PatternConfig
@@ -286,8 +286,8 @@ class TestJUnitXMLParserCustomConfig:
         assert parser._reference_resolver == resolver
         assert parser._base_path == base_path
 
-    def test_REQ_d00102_C_extracts_custom_prefix_ids(self):
-        """REQ-d00102-C: Parser extracts custom prefix IDs from test names."""
+    def test_REQ_d00082_K_extracts_custom_prefix_ids(self):
+        """REQ-d00082-K: Parser extracts custom prefix IDs from test names."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(

@@ -378,11 +378,16 @@ def get_implementation_status(node: GraphNode) -> str:
         return "Unimplemented"
 
 
-def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
+def count_by_coverage(
+    graph: TraceGraph,
+    exclude_status: set[str] | None = None,
+) -> dict[str, int]:
     """Count requirements by coverage level.
 
     Args:
         graph: The TraceGraph to aggregate.
+        exclude_status: Status values to exclude from both numerator and
+            denominator (e.g. ``{"Draft"}``).
 
     Returns:
         Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
@@ -397,6 +402,8 @@ def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
     }
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if exclude_status and node.status in exclude_status:
+            continue
 
         counts["total"] += 1
         coverage_pct = node.get_metric("coverage_pct", 0)
@@ -411,7 +418,10 @@ def count_by_coverage(graph: TraceGraph) -> dict[str, int]:
     return counts
 
 
-def count_with_code_refs(graph: TraceGraph) -> dict[str, int]:
+def count_with_code_refs(
+    graph: TraceGraph,
+    exclude_status: set[str] | None = None,
+) -> dict[str, int]:
     """Count requirements that have at least one CODE reference.
 
     A requirement has CODE coverage if:
@@ -420,27 +430,40 @@ def count_with_code_refs(graph: TraceGraph) -> dict[str, int]:
 
     Args:
         graph: The TraceGraph to query.
+        exclude_status: Status values to exclude from both numerator and
+            denominator (e.g. ``{"Draft"}``).
 
     Returns:
         Dict with 'total_requirements', 'with_code_refs', 'coverage_percent'.
     """
     from elspais.graph import NodeKind
 
+    # Build set of excluded requirement IDs
+    excluded_ids: set[str] = set()
+    if exclude_status:
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            if node.status in exclude_status:
+                excluded_ids.add(node.id)
+
     total = 0
     covered_req_ids: set[str] = set()
 
     for node in graph.nodes_by_kind(NodeKind.CODE):
         for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT:
+            if parent.kind == NodeKind.REQUIREMENT and parent.id not in excluded_ids:
                 covered_req_ids.add(parent.id)
             elif parent.kind == NodeKind.ASSERTION:
                 # Get the parent requirement of the assertion
                 for grandparent in parent.iter_parents():
-                    if grandparent.kind == NodeKind.REQUIREMENT:
+                    if (
+                        grandparent.kind == NodeKind.REQUIREMENT
+                        and grandparent.id not in excluded_ids
+                    ):
                         covered_req_ids.add(grandparent.id)
 
-    for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        total += 1
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.id not in excluded_ids:
+            total += 1
 
     pct = (len(covered_req_ids) / total * 100) if total > 0 else 0.0
     return {

@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00008 (Reformat Command)
 """
 elspais.commands.reformat_cmd - Reformat requirements using AI.
 
@@ -9,7 +8,6 @@ FUNCTIONALITY (to be reimplemented using Graph):
 
 OPTIONS:
 - --start-req REQ_ID: Start from specific requirement (traverse descendants)
-- --depth N: Maximum traversal depth
 - --dry-run: Preview changes without writing
 - --backup: Create .bak files before modifying
 - --force: Reformat even if already in new format
@@ -46,7 +44,6 @@ def run(args: argparse.Namespace) -> int:
     print()
     print("Planned features:")
     print("  --start-req REQ_ID")
-    print("  --depth N")
     print("  --dry-run")
     print("  --backup")
     print("  --force")

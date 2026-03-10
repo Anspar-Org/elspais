@@ -1,4 +1,5 @@
 # Validates REQ-p00002-B
+# elspais: expected-broken-links 1
 """Tests for TraceGraph detection capabilities (orphans, broken references)."""
 from __future__ import annotations
 

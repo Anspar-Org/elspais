@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 # Implements: REQ-p00001-B, REQ-p00003-A, REQ-p00003-B
 # Implements: REQ-d00052-B, REQ-d00052-C, REQ-d00052-G
 """
@@ -32,7 +31,6 @@ import json
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,7 +41,11 @@ from elspais.graph import NodeKind
 
 @dataclass
 class ReportPreset:
-    """Configuration for a report preset."""
+    """Configuration for a report preset.
+
+    Columns control what appears in the table.
+    Detail flags (include_body, etc.) are set independently via CLI flags.
+    """
 
     name: str
     columns: list[str]
@@ -53,23 +55,35 @@ class ReportPreset:
     include_test_refs: bool = False
 
 
-# Define report presets
+# Implements: REQ-d00084-B
+# Define report presets — columns only, detail flags set via CLI
 REPORT_PRESETS = {
     "minimal": ReportPreset(
         name="minimal",
-        columns=["id", "title", "status"],
+        columns=["id", "title", "level", "status"],
     ),
     "standard": ReportPreset(
         name="standard",
-        columns=["id", "title", "level", "status", "implements"],
+        columns=[
+            "id",
+            "title",
+            "level",
+            "status",
+            "implemented",
+            "validated",
+        ],
     ),
     "full": ReportPreset(
         name="full",
-        columns=["id", "title", "level", "status", "implements", "hash", "file"],
-        include_body=True,
-        include_assertions=True,
-        include_code_refs=True,
-        include_test_refs=True,
+        columns=[
+            "id",
+            "title",
+            "level",
+            "status",
+            "implemented",
+            "validated",
+            "passing",
+        ],
     ),
 }
 
@@ -78,6 +92,8 @@ DEFAULT_PRESET = "standard"
 
 def _get_node_data(node, graph: TraceGraph) -> dict:
     """Extract data from a node for use in formatters."""
+    from elspais.graph.metrics import RollupMetrics
+
     # Get implements IDs via parent iteration
     impl_ids = []
     for parent in node.iter_parents():
@@ -91,10 +107,17 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
             code_refs.append(child.id)
 
     # Get test references (TEST nodes that validate this requirement)
+    # Build both flat list and grouped-by-assertion dict
     test_refs = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.TEST:
-            test_refs.append(child.id)
+    test_refs_grouped: dict[str, list[str]] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.target.kind == NodeKind.TEST:
+            test_refs.append(edge.target.id)
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    test_refs_grouped.setdefault(label, []).append(edge.target.id)
+            else:
+                test_refs_grouped.setdefault("*", []).append(edge.target.id)
 
     # Get assertions
     assertions = []
@@ -103,6 +126,20 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
             assertions.append(
                 {"label": child.get_field("label", ""), "text": child.get_label() or ""}
             )
+
+    # Implements: REQ-d00084-D
+    # Coverage columns from RollupMetrics
+    rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+    total_a = rollup.total_assertions if rollup else 0
+    impl_count = rollup.covered_assertions if rollup else 0
+    val_count = rollup.direct_tested if rollup else 0
+    pass_count = rollup.validated if rollup else 0
+
+    def _fmt_coverage(num: int, total: int) -> str:
+        if total == 0:
+            return "n/a"
+        pct = round(num / total * 100)
+        return f"{num}/{total} ({pct}%)"
 
     return {
         "id": node.id,
@@ -116,7 +153,38 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
         "assertions": assertions,
         "code_refs": code_refs,
         "test_refs": test_refs,
+        "test_refs_grouped": test_refs_grouped,
+        "implemented": _fmt_coverage(impl_count, total_a),
+        "validated": _fmt_coverage(val_count, total_a),
+        "passing": _fmt_coverage(pass_count, total_a),
     }
+
+
+def _column_headers() -> dict[str, str]:
+    """Map column keys to display headers."""
+    return {
+        "id": "ID",
+        "title": "Title",
+        "level": "Level",
+        "status": "Status",
+        "implements": "Implements",
+        "implemented": "Implemented",
+        "validated": "Validated",
+        "passing": "Passing",
+        "hash": "Hash",
+        "file": "File",
+    }
+
+
+def _format_row(data: dict, columns: list[str]) -> list[str]:
+    """Format a single row from node data according to columns."""
+    values = []
+    for col in columns:
+        if col == "implements":
+            values.append(", ".join(data["implements"]) or "-")
+        else:
+            values.append(str(data.get(col, "")))
+    return values
 
 
 def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
@@ -128,30 +196,17 @@ def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> It
     yield ""
 
     # Build header based on preset columns
-    column_headers = {
-        "id": "ID",
-        "title": "Title",
-        "level": "Level",
-        "status": "Status",
-        "implements": "Implements",
-        "hash": "Hash",
-        "file": "File",
-    }
+    column_headers = _column_headers()
     headers = [column_headers.get(col, col.title()) for col in preset.columns]
     yield "| " + " | ".join(headers) + " |"
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         data = _get_node_data(node, graph)
-        row_values = []
-        for col in preset.columns:
-            if col == "implements":
-                row_values.append(", ".join(data["implements"]) or "-")
-            else:
-                row_values.append(str(data.get(col, "")))
+        row_values = _format_row(data, preset.columns)
         yield "| " + " | ".join(row_values) + " |"
 
-        # For full preset, add body and assertions after the row
+        # Detail rows (controlled by flags, independent of preset)
         if preset.include_body and data["body"]:
             yield ""
             yield "<details><summary>Body</summary>"
@@ -169,27 +224,31 @@ def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> It
             yield ""
             yield "</details>"
 
-        if preset.include_code_refs and data["code_refs"]:
+        if preset.include_test_refs and data["test_refs_grouped"]:
+            total = len(data["test_refs"])
             yield ""
-            yield f"<details><summary>Code Refs ({len(data['code_refs'])})</summary>"
+            yield f"<details><summary>Test Refs ({total})</summary>"
             yield ""
-            for ref in data["code_refs"]:
-                yield f"- `{ref}`"
-            yield ""
-            yield "</details>"
-
-        if preset.include_test_refs and data["test_refs"]:
-            yield ""
-            yield f"<details><summary>Test Refs ({len(data['test_refs'])})</summary>"
-            yield ""
-            for ref in data["test_refs"]:
-                yield f"- `{ref}`"
-            yield ""
+            grouped = data["test_refs_grouped"]
+            # Whole-requirement tests first, then assertion labels sorted
+            for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                if key not in grouped:
+                    continue
+                refs = grouped[key]
+                label = "Whole-requirement" if key == "*" else key
+                yield f"**{label}** ({len(refs)}):"
+                for ref in refs:
+                    yield f"- `{ref}`"
+                yield ""
             yield "</details>"
 
 
 def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
-    """Generate CSV. Streams one node at a time."""
+    """Generate CSV. Streams one node at a time.
+
+    When test refs are included, adds a Kind column (first) and Assertion/Test Ref
+    columns (last). Each test ref gets its own TEST row after its parent REQ row.
+    """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
@@ -198,37 +257,45 @@ def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterato
             return '"' + s.replace('"', '""') + '"'
         return s
 
-    # Build header based on preset columns
-    base_columns = list(preset.columns)
-    extra_columns = []
-    if preset.include_assertions:
-        extra_columns.append("assertions")
-    if preset.include_code_refs:
-        extra_columns.append("code_refs")
-    if preset.include_test_refs:
-        extra_columns.append("test_refs")
+    # Build header
+    col_headers = _column_headers()
+    header_names = [col_headers.get(c, c.title()) for c in preset.columns]
 
-    yield ",".join(base_columns + extra_columns)
+    extra_prefix = []
+    extra_suffix = []
+    if preset.include_test_refs:
+        extra_prefix.append("Kind")
+        extra_suffix.extend(["Assertion", "Test Ref"])
+    if preset.include_assertions:
+        extra_suffix.insert(0, "Assertions")
+
+    yield ",".join(extra_prefix + header_names + extra_suffix)
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         data = _get_node_data(node, graph)
-        row_values = []
-        for col in base_columns:
-            if col == "implements":
-                row_values.append(escape(";".join(data["implements"])))
-            else:
-                row_values.append(escape(str(data.get(col, ""))))
+        row_values = [escape(v) for v in _format_row(data, preset.columns)]
 
-        # Add extra columns for full preset
+        # Build REQ row
+        req_prefix = ["REQ"] if preset.include_test_refs else []
+        req_suffix = []
         if preset.include_assertions:
             assertions_str = "; ".join(f"{a['label']}: {a['text']}" for a in data["assertions"])
-            row_values.append(escape(assertions_str))
-        if preset.include_code_refs:
-            row_values.append(escape(";".join(data["code_refs"])))
+            req_suffix.append(escape(assertions_str))
         if preset.include_test_refs:
-            row_values.append(escape(";".join(data["test_refs"])))
+            req_suffix.extend(["", ""])  # Empty Assertion and Test Ref columns for REQ row
 
-        yield ",".join(row_values)
+        yield ",".join(req_prefix + row_values + req_suffix)
+
+        # Emit TEST child rows
+        if preset.include_test_refs:
+            grouped = data["test_refs_grouped"]
+            empty_cols = [""] * len(preset.columns)
+            empty_assertions = [""] if preset.include_assertions else []
+            for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                if key not in grouped:
+                    continue
+                for ref in grouped[key]:
+                    yield ",".join(["TEST"] + empty_cols + empty_assertions + [key, escape(ref)])
 
 
 def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
@@ -252,23 +319,11 @@ def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
 
-    # Build header based on preset columns
-    column_headers = {
-        "id": "ID",
-        "title": "Title",
-        "level": "Level",
-        "status": "Status",
-        "implements": "Implements",
-        "hash": "Hash",
-        "file": "File",
-    }
-    headers = [column_headers.get(col, col.title()) for col in preset.columns]
-
-    # Add extra columns for full preset
+    # Build header
+    col_hdrs = _column_headers()
+    headers = [col_hdrs.get(col, col.title()) for col in preset.columns]
     if preset.include_assertions:
         headers.append("Assertions")
-    if preset.include_code_refs:
-        headers.append("Code Refs")
     if preset.include_test_refs:
         headers.append("Test Refs")
 
@@ -278,37 +333,34 @@ def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         data = _get_node_data(node, graph)
         cells = []
-        for col in preset.columns:
-            if col == "implements":
-                impl_str = ", ".join(data["implements"]) or "-"
-                cells.append(f"<td>{escape_html(impl_str)}</td>")
-            elif col == "title":
-                cells.append(f"<td>{escape_html(data['title'])}</td>")
-            else:
-                cells.append(f"<td>{escape_html(str(data.get(col, '')))}</td>")
+        for val in _format_row(data, preset.columns):
+            cells.append(f"<td>{escape_html(val)}</td>")
 
-        # Add extra columns for full preset
         if preset.include_assertions:
             if data["assertions"]:
-                assertion_html = "<br>".join(
-                    f"<span class='assertion-label'>{a['label']}:</span> {escape_html(a['text'])}"
+                a_html = "<br>".join(
+                    f"<span class='assertion-label'>"
+                    f"{a['label']}:</span> {escape_html(a['text'])}"
                     for a in data["assertions"]
                 )
-                cells.append(f"<td class='assertions'>{assertion_html}</td>")
-            else:
-                cells.append("<td>-</td>")
-
-        if preset.include_code_refs:
-            if data["code_refs"]:
-                refs_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in data["code_refs"])
-                cells.append(f"<td class='refs'>{refs_html}</td>")
+                cells.append(f"<td class='assertions'>{a_html}</td>")
             else:
                 cells.append("<td>-</td>")
 
         if preset.include_test_refs:
-            if data["test_refs"]:
-                refs_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in data["test_refs"])
-                cells.append(f"<td class='refs'>{refs_html}</td>")
+            grouped = data["test_refs_grouped"]
+            if grouped:
+                parts = []
+                for key in ["*"] + sorted(k for k in grouped if k != "*"):
+                    if key not in grouped:
+                        continue
+                    refs = grouped[key]
+                    label = "Whole-requirement" if key == "*" else key
+                    ref_html = "<br>".join(f"<code>{escape_html(r)}</code>" for r in refs)
+                    parts.append(
+                        f"<strong>{escape_html(label)}</strong> ({len(refs)}):<br>{ref_html}"
+                    )
+                cells.append(f"<td class='refs'>{'<br><br>'.join(parts)}</td>")
             else:
                 cells.append("<td>-</td>")
 
@@ -342,15 +394,13 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
             else:
                 node_dict[col] = data.get(col)
 
-        # Add extra fields for full preset
+        # Add detail fields (controlled by flags)
         if preset.include_body:
             node_dict["body"] = data["body"]
         if preset.include_assertions:
             node_dict["assertions"] = data["assertions"]
-        if preset.include_code_refs:
-            node_dict["code_refs"] = data["code_refs"]
         if preset.include_test_refs:
-            node_dict["test_refs"] = data["test_refs"]
+            node_dict["test_refs"] = data["test_refs_grouped"]
 
         yield json.dumps(node_dict, indent=2)
     yield "]"
@@ -370,206 +420,44 @@ def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str =
     return generator.generate(embed_content=embed_content)
 
 
-def _is_port_in_use(port: int) -> bool:
-    """Check if something is listening on 127.0.0.1:port."""
-    import socket
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex(("127.0.0.1", port)) == 0
+# Server/viewer functions moved to commands/viewer.py
 
 
-def _is_elspais_server(port: int) -> bool:
-    """Check if an elspais server is running on the given port."""
-    import json
-    from urllib.request import urlopen
+# Implements: REQ-d00085-A
+def render_section(
+    graph: TraceGraph,
+    args: argparse.Namespace,
+) -> tuple[str, int]:
+    """Render trace as a composed report section.
 
-    try:
-        with urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as resp:
-            data = json.loads(resp.read())
-            return "node_counts" in data
-    except Exception:
-        return False
-
-
-def _shutdown_server(port: int) -> bool:
-    """Shut down an elspais server, preferring the API then falling back to OS kill."""
-    import time
-    from urllib.request import Request, urlopen
-
-    # Try clean shutdown via API
-    try:
-        req = Request(f"http://127.0.0.1:{port}/api/shutdown", method="POST", data=b"")
-        urlopen(req, timeout=3)
-    except Exception:
-        pass  # Server may drop connection as it exits — that's fine
-
-    # Wait for the port to free up
-    for _ in range(10):
-        time.sleep(0.5)
-        if not _is_port_in_use(port):
-            return True
-
-    # Fall back to OS-level kill
-    import os
-    import signal
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        pids = [int(p) for p in result.stdout.strip().split() if p.isdigit()]
-        for pid in pids:
-            os.kill(pid, signal.SIGTERM)
-
-        time.sleep(2)
-        if not _is_port_in_use(port):
-            return True
-
-        # Force kill
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        time.sleep(1)
-    except Exception:
-        pass
-
-    return not _is_port_in_use(port)
-
-
-def _find_free_port(start: int) -> int:
-    """Find the next free port starting from start+1."""
-    for port in range(start + 1, start + 51):
-        if not _is_port_in_use(port):
-            return port
-    raise RuntimeError(f"No free port found in range {start + 1}-{start + 50}")
-
-
-# Implements: REQ-d00010-A
-def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
-    """Start the Flask trace-edit server.
-
-    Builds the graph, creates the Flask app, and runs the dev server.
-
-    Args:
-        args: Parsed CLI arguments.
-        open_browser: If True, open the browser automatically (--edit-mode).
-
-    Returns:
-        Exit code (0 = success).
+    Returns (formatted_output, exit_code).
     """
-    try:
-        from elspais.server import create_app
-    except ImportError:
-        print(
-            "Error: Flask server requires the trace-review extra.\n"
-            "Install with: pip install elspais[trace-review]",
-            file=sys.stderr,
-        )
-        return 1
-
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
-
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    explicit_path = getattr(args, "path", None)
-    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
-
-    config = get_config(start_path=repo_root, quiet=True)
-    canonical_root = getattr(args, "canonical_root", None)
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        repo_root=repo_root,
-        canonical_root=canonical_root,
+    preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
+    if preset_name not in REPORT_PRESETS:
+        available = ", ".join(REPORT_PRESETS.keys())
+        return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
+    preset = ReportPreset(
+        name=preset_name,
+        columns=list(REPORT_PRESETS[preset_name].columns),
+        include_body=getattr(args, "body", False),
+        include_assertions=getattr(args, "show_assertions", False),
+        include_test_refs=getattr(args, "show_tests", False),
     )
 
-    app = create_app(repo_root=repo_root, graph=graph, config=config)
-    app.config["ELSPAIS_DEBUG"] = getattr(args, "verbose", False)
+    fmt = getattr(args, "format", "markdown")
+    formatters = {
+        "text": format_markdown,
+        "markdown": format_markdown,
+        "csv": format_csv,
+        "html": format_html,
+        "json": format_json,
+    }
+    formatter = formatters.get(fmt)
+    if not formatter:
+        return f"Error: Unknown format '{fmt}'", 1
 
-    port = 5000
-    quiet = getattr(args, "quiet", False)
-
-    if _is_port_in_use(port):
-        is_elspais = _is_elspais_server(port)
-
-        if sys.stdin.isatty():
-            if is_elspais:
-                print(f"An elspais server is already running on port {port}.", file=sys.stderr)
-            else:
-                print(f"Port {port} is already in use by another process.", file=sys.stderr)
-            print("  [R]eplace - stop existing and take over (default)", file=sys.stderr)
-            print("  [N]ew port - start alongside on next free port", file=sys.stderr)
-            print("  [A]bort - cancel", file=sys.stderr)
-            choice = input("Choice [R/n/a]: ").strip().lower() or "r"
-        else:
-            choice = "n"
-
-        if choice.startswith("a"):
-            return 0
-        elif choice.startswith("n"):
-            port = _find_free_port(port)
-        else:
-            # Replace
-            if is_elspais:
-                if not quiet:
-                    print(f"Shutting down existing server on port {port}...", file=sys.stderr)
-                if not _shutdown_server(port):
-                    print("Could not stop existing server. Using new port.", file=sys.stderr)
-                    port = _find_free_port(port)
-            else:
-                print("Cannot replace non-elspais process. Using new port.", file=sys.stderr)
-                port = _find_free_port(port)
-
-    url = f"http://127.0.0.1:{port}"
-    verbose = getattr(args, "verbose", False)
-
-    if not quiet:
-        print(f"Starting trace-edit server at {url}", file=sys.stderr)
-
-    if open_browser:
-        import subprocess
-        import webbrowser
-
-        # Suppress GTK/Chrome stderr noise from browser launch
-        try:
-            subprocess.Popen(
-                ["xdg-open", url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except FileNotFoundError:
-            webbrowser.open(url)
-
-    # Suppress Flask/Werkzeug noise unless verbose
-    if not verbose:
-        import logging
-
-        logging.getLogger("werkzeug").setLevel(logging.ERROR)
-
-    try:
-        app.run(host="127.0.0.1", port=port, debug=False)
-    except KeyboardInterrupt:
-        if not quiet:
-            print("\nServer stopped.", file=sys.stderr)
-
-    return 0
-
-
-def run_viewer(args: argparse.Namespace) -> int:
-    """Run the viewer command (shorthand for trace --edit-mode).
-
-    Starts the Flask server, opening the browser unless --server is passed.
-    """
-    open_browser = not getattr(args, "server", False)
-    return _run_server(args, open_browser=open_browser)
+    lines = list(formatter(graph, preset))
+    return "\n".join(lines), 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -577,28 +465,21 @@ def run(args: argparse.Namespace) -> int:
 
     Uses graph factory to build TraceGraph, then streams output in requested format.
     """
-    # Handle --review-mode (still not implemented)
-    if getattr(args, "review_mode", False):
-        print("Error: --review-mode not yet implemented", file=sys.stderr)
+    # Implements: REQ-d00084-B+C
+    # Parse --preset and apply independent detail flags
+    preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
+    if preset_name not in REPORT_PRESETS:
+        available = ", ".join(REPORT_PRESETS.keys())
+        print(f"Error: Unknown preset '{preset_name}'", file=sys.stderr)
+        print(f"Available presets: {available}", file=sys.stderr)
         return 1
-
-    # Handle --server and --edit-mode (trace-edit server)
-    want_server = getattr(args, "server", False)
-    want_edit = getattr(args, "edit_mode", False)
-    if want_server or want_edit:
-        return _run_server(args, open_browser=want_edit)
-
-    # Parse --report preset
-    report_name = getattr(args, "report", None)
-    if report_name:
-        if report_name not in REPORT_PRESETS:
-            available = ", ".join(REPORT_PRESETS.keys())
-            print(f"Error: Unknown report preset '{report_name}'", file=sys.stderr)
-            print(f"Available presets: {available}", file=sys.stderr)
-            return 1
-        preset = REPORT_PRESETS[report_name]
-    else:
-        preset = REPORT_PRESETS[DEFAULT_PRESET]
+    preset = ReportPreset(
+        name=preset_name,
+        columns=list(REPORT_PRESETS[preset_name].columns),
+        include_body=getattr(args, "body", False),
+        include_assertions=getattr(args, "show_assertions", False),
+        include_test_refs=getattr(args, "show_tests", False),
+    )
 
     # Build graph using factory
     from elspais.graph.factory import build_graph
@@ -606,98 +487,49 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
-    explicit_path = getattr(args, "path", None)
-    repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
-        repo_root=repo_root,
         canonical_root=canonical_root,
     )
 
-    # Handle --view mode (interactive HTML)
-    if getattr(args, "view", False):
-        try:
-            # Get absolute base path for VS Code links
-            base_path = str(repo_root)
-            content = format_view(graph, getattr(args, "embed_content", False), base_path=base_path)
-        except ImportError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-        output_path = args.output or Path("traceability_view.html")
-        Path(output_path).write_text(content, encoding="utf-8")
-
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {output_path}", file=sys.stderr)
-        return 0
-
-    # Handle --graph-json mode
-    if getattr(args, "graph_json", False):
-        from elspais.graph.annotators import annotate_graph_git_state
-        from elspais.graph.serialize import serialize_graph
-
-        annotate_graph_git_state(graph)
-        output = json.dumps(serialize_graph(graph), indent=2)
-        if args.output:
-            Path(args.output).write_text(output, encoding="utf-8")
-            if not getattr(args, "quiet", False):
-                print(f"Generated: {args.output}", file=sys.stderr)
-        else:
-            print(output)
-        return 0
-
+    # Implements: REQ-d00084-A
     # Select formatter based on format
     fmt = getattr(args, "format", "markdown")
 
-    # Handle legacy "both" format
-    if fmt == "both":
-        # Generate both markdown and csv
-        output_base = args.output or Path("traceability")
-        if isinstance(output_base, str):
-            output_base = Path(output_base)
-
-        md_path = output_base.with_suffix(".md")
-        csv_path = output_base.with_suffix(".csv")
-
-        with open(md_path, "w", encoding="utf-8") as f:
-            for line in format_markdown(graph, preset):
-                f.write(line + "\n")
-
-        with open(csv_path, "w", encoding="utf-8") as f:
-            for line in format_csv(graph, preset):
-                f.write(line + "\n")
-
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {md_path}", file=sys.stderr)
-            print(f"Generated: {csv_path}", file=sys.stderr)
-        return 0
-
-    # Single format output
     formatters = {
+        "text": format_markdown,
         "markdown": format_markdown,
         "csv": format_csv,
         "html": format_html,
         "json": format_json,
     }
 
-    if fmt not in formatters:
-        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
-        return 1
+    for line in formatters[fmt](graph, preset):
+        print(line)
 
-    line_generator = formatters[fmt](graph, preset)
-    output_path = args.output
+    return 0
 
-    # Stream output line by line
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            for line in line_generator:
-                f.write(line + "\n")
-        if not getattr(args, "quiet", False):
-            print(f"Generated: {output_path}", file=sys.stderr)
-    else:
-        for line in line_generator:
-            print(line)
+
+# Implements: REQ-d00084-A
+def run_graph(args: argparse.Namespace) -> int:
+    """Export the full traceability graph structure as JSON."""
+    from elspais.graph.annotators import annotate_graph_git_state
+    from elspais.graph.factory import build_graph
+    from elspais.graph.serialize import serialize_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        canonical_root=canonical_root,
+    )
+
+    annotate_graph_git_state(graph)
+    print(json.dumps(serialize_graph(graph), indent=2))
 
     return 0

@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from elspais.graph.parsers import ParseContext, ParsedContent
 
 
+# Implements: REQ-d00054-A
 class RemainderParser:
     """Parser for unclaimed remainder content.
 
@@ -23,6 +24,7 @@ class RemainderParser:
 
     priority = 999
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],

@@ -94,6 +94,52 @@ class TestEdge:
 
         assert edge1 != edge2
 
+    def test_hash_consistent_with_eq(self):
+        """Edges that are equal must have the same hash."""
+        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        edge1 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "B"],
+        )
+        edge2 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "B"],
+        )
+
+        assert edge1 == edge2
+        assert hash(edge1) == hash(edge2)
+
+    def test_hash_differs_with_different_assertion_targets(self):
+        """Edges with different assertion_targets must hash differently."""
+        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
+        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+
+        edge1 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "B"],
+        )
+        edge2 = Edge(
+            source=source,
+            target=target,
+            kind=EdgeKind.IMPLEMENTS,
+            assertion_targets=["A", "C"],
+        )
+
+        assert edge1 != edge2
+        # Different assertion_targets should produce different hashes
+        assert hash(edge1) != hash(edge2)
+        # Both should be distinguishable in a set
+        edge_set = {edge1, edge2}
+        assert len(edge_set) == 2
+
     def test_edge_equality_with_non_edge(self):
         """Edge compared with non-Edge returns NotImplemented."""
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)

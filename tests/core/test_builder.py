@@ -1093,3 +1093,184 @@ class TestAddressesEdges:
         # parentless nodes need meaningful children to be roots
         assert not graph.has_root("JNY-Dev-04")
         assert graph.find_by_id("JNY-Dev-04") is not None
+
+
+class TestMultiAssertionExpansion:
+    """Tests for multi-assertion expansion in GraphBuilder.
+
+    Validates REQ-d00081-D, REQ-d00081-E, REQ-d00081-F, REQ-d00081-G:
+    Multi-assertion compact references (e.g. REQ-p00001-A+B+C) are expanded
+    into individual assertion references during link resolution.
+    """
+
+    def test_REQ_d00081_D_code_ref_multi_assertion_expands(self):
+        """REQ-d00081-D: Code ref with REQ-p00001-A+B+C expands and links to all assertions."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First"},
+                    {"label": "B", "text": "Second"},
+                    {"label": "C", "text": "Third"},
+                ],
+            ),
+        )
+        builder.add_parsed_content(
+            make_code_ref(
+                implements=["REQ-p00001-A+B+C"],
+                source_path="src/auth.py",
+                start_line=10,
+            ),
+        )
+        graph = builder.build()
+
+        # Code node should be a child of REQ-p00001 (linked via assertion resolution)
+        req = graph.find_by_id("REQ-p00001")
+        assert req is not None
+        assert "code:src/auth.py:10" in children_string(req)
+
+        # Verify edges have assertion_targets for A, B, and C
+        code_node = graph.find_by_id("code:src/auth.py:10")
+        assert code_node is not None
+        assertion_targets_found = set()
+        for edge in req.iter_outgoing_edges():
+            if edge.target.id == code_node.id:
+                if edge.assertion_targets:
+                    for at in edge.assertion_targets:
+                        assertion_targets_found.add(at)
+        assert {"A", "B", "C"} == assertion_targets_found
+
+    def test_REQ_d00081_G_single_assertion_passes_through(self):
+        """REQ-d00081-G: Single assertion ref REQ-p00001-A passes through unchanged."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First"},
+                    {"label": "B", "text": "Second"},
+                ],
+            ),
+        )
+        builder.add_parsed_content(
+            make_code_ref(
+                implements=["REQ-p00001-A"],
+                source_path="src/auth.py",
+                start_line=10,
+            ),
+        )
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-p00001")
+        assert "code:src/auth.py:10" in children_string(req)
+
+        # Only assertion A should be targeted, not B
+        for edge in req.iter_outgoing_edges():
+            if edge.target.id == "code:src/auth.py:10":
+                assert edge.assertion_targets == ["A"]
+                break
+        else:
+            pytest.fail("Expected edge from REQ-p00001 to code:src/auth.py:10 not found")
+
+    def test_REQ_d00081_E_custom_separator_works(self):
+        """REQ-d00081-E: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
+        builder = GraphBuilder(multi_assertion_separator="&")
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First"},
+                    {"label": "B", "text": "Second"},
+                    {"label": "C", "text": "Third"},
+                ],
+            ),
+        )
+        builder.add_parsed_content(
+            make_code_ref(
+                implements=["REQ-p00001-A&B&C"],
+                source_path="src/auth.py",
+                start_line=10,
+            ),
+        )
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-p00001")
+        assert "code:src/auth.py:10" in children_string(req)
+
+        assertion_targets_found = set()
+        for edge in req.iter_outgoing_edges():
+            if edge.target.id == "code:src/auth.py:10":
+                if edge.assertion_targets:
+                    for at in edge.assertion_targets:
+                        assertion_targets_found.add(at)
+        assert {"A", "B", "C"} == assertion_targets_found
+
+    def test_REQ_d00081_F_empty_separator_disables_expansion(self):
+        """REQ-d00081-F: Empty separator disables expansion."""
+        builder = GraphBuilder(multi_assertion_separator="")
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "First"},
+                    {"label": "B", "text": "Second"},
+                ],
+            ),
+        )
+        builder.add_parsed_content(
+            make_code_ref(
+                implements=["REQ-p00001-A+B"],
+                source_path="src/auth.py",
+                start_line=10,
+            ),
+        )
+        graph = builder.build()
+
+        # With expansion disabled, "REQ-p00001-A+B" is treated as a literal ID
+        # which doesn't exist, so it becomes a broken reference
+        assert graph.has_broken_references()
+        broken_targets = {br.target_id for br in graph.broken_references()}
+        assert "REQ-p00001-A+B" in broken_targets
+
+        # Code node should NOT be linked to the requirement
+        req = graph.find_by_id("REQ-p00001")
+        assert "code:src/auth.py:10" not in children_string(req)
+
+    def test_REQ_d00081_D_test_ref_multi_assertion_expands(self):
+        """REQ-d00081-D: Test ref with multi-assertion also expands, uniform across parser types."""
+        builder = GraphBuilder()
+        builder.add_parsed_content(
+            make_requirement(
+                "REQ-d00001",
+                level="DEV",
+                assertions=[
+                    {"label": "A", "text": "First"},
+                    {"label": "B", "text": "Second"},
+                ],
+            ),
+        )
+        builder.add_parsed_content(
+            make_test_ref(
+                validates=["REQ-d00001-A+B"],
+                source_path="tests/test_auth.py",
+                start_line=5,
+            ),
+        )
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-d00001")
+        assert req is not None
+        assert "test:tests/test_auth.py:5" in children_string(req)
+
+        assertion_targets_found = set()
+        for edge in req.iter_outgoing_edges():
+            if edge.target.id == "test:tests/test_auth.py:5":
+                if edge.assertion_targets:
+                    for at in edge.assertion_targets:
+                        assertion_targets_found.add(at)
+        assert {"A", "B"} == assertion_targets_found

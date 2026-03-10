@@ -1,5 +1,5 @@
 {# Partial: _header.html.j2 — Unified header (both modes) #}
-{# Implements: REQ-p00006-A, REQ-p00006-B #}
+{# Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00004-C, REQ-p00004-D #}
 {# Search available in both modes; edit controls (toggle, save/revert) wrapped in mode conditionals #}
 
 <header class="header">
@@ -27,13 +27,21 @@
 
     <div class="header-center">
         <div class="search-box" id="search-box">
-            <input type="text" id="search-input" placeholder="Search requirements..." autocomplete="off">
+            <input type="text" id="search-input" placeholder="Find requirement..." autocomplete="off" title="Search and navigate to a requirement">
             <div class="search-results" id="search-results"></div>
         </div>
     </div>
 
     <div class="header-right">
         {% if mode == 'edit' %}
+        <span class="branch-badge" id="branch-badge" title="Current git branch">
+            <span class="branch-status-dot" id="branch-status-dot"></span>
+            <span id="branch-name">...</span>
+            <span class="branch-warning hidden" id="branch-warning"
+                  title="Main has moved ahead; rebase needed before merge">!</span>
+        </span>
+        <button class="btn btn-sync hidden" id="btn-sync" onclick="doGitSync()"
+                title="Sync: merge remote changes and rebase on main">&#x21bb; Sync</button>
         <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
             <span class="edit-toggle-indicator"></span>
             <span>Edit Mode</span>
@@ -50,6 +58,11 @@
 
         <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes">
             Revert
+        </button>
+
+        <button class="btn btn-success edit-only" id="btn-push" onclick="showPushModal()" disabled
+                title="Commit and push spec changes">
+            Push
         </button>
         {% endif %}
 
@@ -69,8 +82,9 @@
                 <div class="hamburger-divider"></div>
                 <div class="hamburger-label">Theme</div>
                 <div class="hamburger-item theme-controls">
-                    <button class="btn theme-btn" data-theme="light" onclick="event.stopPropagation(); setTheme('light')" title="Light theme">&#9728;</button>
-                    <button class="btn theme-btn" data-theme="dark" onclick="event.stopPropagation(); setTheme('dark')" title="Dark theme">&#9790;</button>
+                    {% for t in catalog.themes %}
+                    <button class="btn theme-btn" data-theme="{{ t.name }}" onclick="event.stopPropagation(); setTheme('{{ t.name }}')" title="{{ t.label }} theme">{{ t.icon }}</button>
+                    {% endfor %}
                     <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
                 </div>
             </div>

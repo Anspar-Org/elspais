@@ -249,16 +249,22 @@ function renderNavTree() {
                 }
             }
         }
-        // Build a set of original indices for matched rows (for dimming context-only rows)
-        matchSet = new Set();
-        var finalIdx = 0;
-        for (var i = 0; i < filteredRows.length; i++) {
-            if (allVisible.has(i)) {
-                if (matchIndices.has(i)) matchSet.add(finalIdx);
-                finalIdx++;
+        // When hideFiltered is active, only show direct matches (no dimmed ancestors)
+        if (af.hideFiltered) {
+            matchSet = null;  // no dimming needed — non-matches are hidden
+            filteredRows = filteredRows.filter(function(r, idx) { return matchIndices.has(idx); });
+        } else {
+            // Build a set of original indices for matched rows (for dimming context-only rows)
+            matchSet = new Set();
+            var finalIdx = 0;
+            for (var i = 0; i < filteredRows.length; i++) {
+                if (allVisible.has(i)) {
+                    if (matchIndices.has(i)) matchSet.add(finalIdx);
+                    finalIdx++;
+                }
             }
+            filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
         }
-        filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
     }
 
     // Update counter
@@ -281,7 +287,7 @@ function renderNavTree() {
         // Determine if collapsed
         const isCollapsed = editState.collapsedTreeNodes.has(row.id);
         // Check if parent is collapsed (skip rendering)
-        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows)) {
+        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows, matchSet)) {
             return; // don't render
         }
 
@@ -346,16 +352,29 @@ function renderNavTree() {
     container.innerHTML = html;
 }
 
-function isAncestorCollapsed(row, allRows) {
+function isAncestorCollapsed(row, allRows, matchSet) {
     if (!row.parent_id) return false;
     // Walk up the parent chain
-    let parentId = row.parent_id;
+    var parentId = row.parent_id;
     while (parentId) {
-        if (editState.collapsedTreeNodes.has(parentId)) return true;
-        // Find parent row
-        const parentRow = allRows.find(function(r) { return r.id === parentId; });
-        if (!parentRow) break;
-        parentId = parentRow.parent_id;
+        // Find parent in the rendered set
+        var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
+        if (pIdx < 0) {
+            // Parent was filtered out — its collapse state is irrelevant.
+            // We can't walk further since we don't know its parent_id.
+            break;
+        }
+        if (editState.collapsedTreeNodes.has(parentId)) {
+            // If filters are active and the collapsed ancestor is a context-only
+            // (dimmed) row, don't honor the collapse — the user wants to see
+            // the matching children even if the ancestor was previously collapsed.
+            if (matchSet && !matchSet.has(pIdx)) {
+                parentId = allRows[pIdx].parent_id;
+                continue;
+            }
+            return true;
+        }
+        parentId = allRows[pIdx].parent_id;
     }
     return false;
 }

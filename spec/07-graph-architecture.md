@@ -170,33 +170,6 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 *End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
 ---
 
-## REQ-d00053: No Duplicate Library Functions
-
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00050
-
-The system SHALL NOT have duplicate implementations of core functionality across modules.
-
-## Assertions
-
-A. Hierarchy traversal SHALL only exist in TraceGraph (roots, children, parents, find_by_id).
-
-B. Coverage calculation SHALL only exist in TraceGraphBuilder (computed during build).
-
-C. Requirement loading SHALL only exist in core/loader.py (create_parser, parse_requirements_from_directories).
-
-D. Git state detection SHALL only exist in core/git.py (get_git_changes, GitChangeInfo).
-
-E. Pattern validation SHALL only exist in core/patterns.py (PatternValidator).
-
-F. The system SHALL NOT have hierarchy.py files in multiple locations.
-
-## Rationale
-
-Duplicate implementations lead to inconsistencies, bugs, and maintenance burden. Centralizing functionality ensures single source of truth.
-
-*End* *No Duplicate Library Functions* | **Hash**: 2e4696ef
----
-
 ## REQ-d00054: Annotation Pipeline Pattern
 
 **Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
@@ -207,19 +180,11 @@ Output generators SHALL follow a standard annotation pipeline pattern.
 
 A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate output.
 
-B. Annotation SHALL occur after graph construction, before output generation.
-
-C. The standard annotation sequence SHALL be: git_state -> display_info -> implementation_files.
-
-D. Generators MAY add additional annotations specific to their output format.
-
-E. The pipeline SHALL be implemented in TraceViewGenerator._annotate_graph_nodes().
-
 ## Rationale
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
 
-*End* *Annotation Pipeline Pattern* | **Hash**: 2fe44acd
+*End* *Annotation Pipeline Pattern* | **Hash**: 0256df47
 ---
 
 ## REQ-d00055: Node Metrics as Extension Point
@@ -249,7 +214,7 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ## REQ-d00069: Indirect Coverage Source
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00051
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
 
 The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
 
@@ -276,7 +241,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion su
 
 ## REQ-d00070: Indirect Coverage Toggle Display
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00006
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00006
 
 The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
 
@@ -301,7 +266,7 @@ Users need both a strict traceability view (only assertion-targeted tests count)
 
 ## REQ-d00071: Unified Root vs Orphan Classification
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00050, REQ-p00002
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00050, REQ-p00002
 
 The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
 
@@ -324,7 +289,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
 
-**Level**: OPS | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00050
 
 The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
 
@@ -351,7 +316,7 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 ## REQ-d00072: Link Suggestion Core Engine
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00065
 
 The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
 

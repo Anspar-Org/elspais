@@ -316,13 +316,13 @@ class TestPytestJSONParserCanParse:
 class TestPytestJSONParserCustomConfig:
     """Tests for PytestJSONParser with custom configuration.
 
-    REQ-d00103-A: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00103-B: Parser instantiation with PatternConfig and ReferenceResolver.
-    REQ-d00103-C: Parser extracts custom prefix IDs from test node IDs.
+    REQ-d00082-L: Parser accepts custom PatternConfig for non-standard prefixes.
+    REQ-d00082-L: Parser instantiation with PatternConfig and ReferenceResolver.
+    REQ-d00082-L: Parser extracts custom prefix IDs from test node IDs.
     """
 
-    def test_REQ_d00103_A_custom_prefix_spec(self):
-        """REQ-d00103-A: Parser with custom prefix 'SPEC' extracts correct IDs."""
+    def test_REQ_d00082_L_custom_prefix_spec(self):
+        """REQ-d00082-L: Parser with custom prefix 'SPEC' extracts correct IDs."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(
@@ -355,8 +355,8 @@ class TestPytestJSONParserCustomConfig:
         assert len(results) == 1
         assert "SPEC-p00103" in results[0]["validates"]
 
-    def test_REQ_d00103_B_instantiation_with_pattern_config_and_resolver(self):
-        """REQ-d00103-B: Parser instantiation with PatternConfig and ReferenceResolver."""
+    def test_REQ_d00082_L_instantiation_with_pattern_config_and_resolver(self):
+        """REQ-d00082-L: Parser instantiation with PatternConfig and ReferenceResolver."""
         from pathlib import Path
 
         from elspais.utilities.patterns import PatternConfig
@@ -395,8 +395,8 @@ class TestPytestJSONParserCustomConfig:
         assert parser._reference_resolver == resolver
         assert parser._base_path == base_path
 
-    def test_REQ_d00103_C_extracts_custom_prefix_ids(self):
-        """REQ-d00103-C: Parser extracts custom prefix IDs from test node IDs."""
+    def test_REQ_d00082_L_extracts_custom_prefix_ids(self):
+        """REQ-d00082-L: Parser extracts custom prefix IDs from test node IDs."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(

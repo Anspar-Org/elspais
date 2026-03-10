@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 """
 elspais.commands.validate - Validate requirements format and relationships.
 
@@ -85,6 +84,7 @@ def run(args: argparse.Namespace) -> int:
         canonical_root=canonical_root,
     )
 
+    # Implements: REQ-d00083-B
     # Handle --export mode (early return, not validation)
     if getattr(args, "export", False):
         export_dict: dict[str, dict] = {}
@@ -319,6 +319,7 @@ def run(args: argparse.Namespace) -> int:
             }
         )
 
+    # Implements: REQ-d00083-A
     # Output results
     if getattr(args, "json", False):
         result = {

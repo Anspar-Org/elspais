@@ -49,7 +49,40 @@ The 8-character hash is computed from the requirement body content.
 When content changes, the hash changes, triggering review.
 
   $ elspais fix            # Recompute all hashes
-  $ elspais validate       # Check for stale hashes
+  $ elspais health         # Check for stale hashes
+
+## Changelog
+
+Active requirements track a changelog of content changes. The
+`## Changelog` section appears after `## Assertions` (and any other
+sections like Rationale) but before the `*End*` marker. It is
+excluded from hash computation so adding entries does not alter the
+hash.
+
+### Entry Format
+
+```
+- YYYY-MM-DD | <hash> | <change-order> | <author> (<id>) | <reason>
+```
+
+Each field is separated by ` | `. Example:
+
+```
+## Changelog
+
+- 2026-01-15 | 3f8a91c2 | CO-100 | Jane Doe (jdoe@co.com) | First approved version
+- 2026-03-07 | b7c4e1d0 | CO-142 | Jane Doe (jdoe@co.com) | Clarify timeout assertion
+```
+
+### Lifecycle Rules
+
+| Transition              | Behaviour                                    |
+|-------------------------|----------------------------------------------|
+| Draft (no change)       | No changelog entry added. Existing preserved |
+| Draft to Active         | First entry added: "First approved version"  |
+| Active with hash change | New entry required. `fix` fails without `-m` |
+| Active missing section  | `## Changelog` auto-added by `fix`           |
+| Deprecated              | Hash updated silently, no changelog entry    |
 
 ## Multiple Requirements Per File
 

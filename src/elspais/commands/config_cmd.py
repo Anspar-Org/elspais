@@ -67,7 +67,7 @@ def cmd_show(args: argparse.Namespace) -> int:
             return 1
         _print_value(value, section)
     else:
-        if getattr(args, "json", False):
+        if getattr(args, "format", "text") == "json":
             print(json.dumps(config, indent=2))
         else:
             _print_config(config)
@@ -102,7 +102,7 @@ def cmd_get(args: argparse.Namespace) -> int:
             print(f"Key not found: {key}", file=sys.stderr)
             return 1
 
-    if getattr(args, "json", False):
+    if getattr(args, "format", "text") == "json":
         print(json.dumps(value))
     else:
         _print_value(value)

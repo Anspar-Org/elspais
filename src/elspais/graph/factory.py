@@ -1,4 +1,4 @@
-# Implements: REQ-d00054-A, REQ-d00054-B, REQ-d00054-C
+# Implements: REQ-d00054-A
 """Graph Factory - Shared utility for building TraceGraph from spec files.
 
 This module provides a single entry point for all commands to build a TraceGraph
@@ -197,8 +197,15 @@ def build_graph(
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
     graph_config = config.get("graph", {})
     satellite_kinds = graph_config.get("satellite_kinds", None)
+    ref_defaults = config.get("references", {}).get("defaults", {})
+    mas = ref_defaults.get("multi_assertion_separator", "+")
+    if mas is False or mas is None:
+        mas = ""
     builder = GraphBuilder(
-        repo_root=repo_root, hash_mode=hash_mode, satellite_kinds=satellite_kinds
+        repo_root=repo_root,
+        hash_mode=hash_mode,
+        satellite_kinds=satellite_kinds,
+        multi_assertion_separator=str(mas),
     )
 
     # Get ignore configuration for filtering spec files
@@ -264,14 +271,22 @@ def build_graph(
                 recursive=True,
                 skip_dirs=ignore_dirs,
             )
+            # Track files already checked for ignore/dedup in this loop
+            checked_files: set[str] = set()
+            skip_files: set[str] = set()
             for parsed_content in domain_file.deserialize(code_registry):
                 source_path = parsed_content.source_context.metadata.get("path")
                 if source_path:
                     resolved = str(Path(source_path).resolve())
+                    # Skip files already processed by scan_patterns (step 5a)
                     if resolved in scanned_code_files:
                         continue
-                    scanned_code_files.add(resolved)
-                    if ignore_config.should_ignore(source_path, scope="code"):
+                    # Check ignore only once per file
+                    if resolved not in checked_files:
+                        checked_files.add(resolved)
+                        if ignore_config.should_ignore(source_path, scope="code"):
+                            skip_files.add(resolved)
+                    if resolved in skip_files:
                         continue
                 builder.add_parsed_content(parsed_content)
 

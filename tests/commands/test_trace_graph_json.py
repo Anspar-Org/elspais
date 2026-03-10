@@ -1,5 +1,5 @@
-# Validates REQ-CUR879-J
-"""Tests for elspais trace --graph-json with git metrics (CUR-879)."""
+# Validates REQ-d00084-A
+"""Tests for elspais trace --graph-json with git metrics."""
 
 import argparse
 import json
@@ -93,9 +93,9 @@ A. The system SHALL do something.
 class TestTraceGraphJsonGitMetrics:
     """Tests for trace --graph-json including git metrics."""
 
-    def test_REQ_CUR879_J_graph_json_includes_git_metrics(self, spec_repo, capsys):
-        """REQ-CUR879-J: --graph-json calls annotate_graph_git_state before serialization."""
-        from elspais.commands.trace import run
+    def test_REQ_d00084_A_graph_json_includes_git_metrics(self, spec_repo, capsys):
+        """REQ-d00084-A: graph command includes git change annotations in output."""
+        from elspais.commands.trace import run_graph
         from elspais.utilities.git import GitChangeInfo
 
         # Mock git changes - use the absolute path that the parser produces
@@ -109,16 +109,13 @@ class TestTraceGraphJsonGitMetrics:
         args = argparse.Namespace(
             spec_dir=spec_repo / "spec",
             config=spec_repo / ".elspais.toml",
-            graph_json=True,
             output=None,
-            view=False,
-            format="markdown",
             quiet=False,
-            mode="core",
+            canonical_root=None,
         )
 
         with patch("elspais.utilities.git.get_git_changes", return_value=mock_git_info):
-            result = run(args)
+            result = run_graph(args)
 
         assert result == 0
         captured = capsys.readouterr()

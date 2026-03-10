@@ -1,0 +1,146 @@
+/* Partial: _req-search-dropdown.css.j2 — Searchable requirement picker component */
+
+.req-picker {
+    position: relative;
+    width: 100%;
+}
+
+.req-picker-input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--picker-input-border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.req-picker-input:focus {
+    border-color: var(--picker-input-focus-border);
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.req-picker-input::placeholder {
+    color: var(--picker-placeholder);
+}
+
+.req-picker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--picker-dropdown-bg);
+    border: 1px solid var(--picker-dropdown-border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+.req-picker-dropdown.open {
+    display: block;
+}
+
+.req-picker-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s;
+}
+
+.req-picker-item:hover,
+.req-picker-item.highlighted {
+    background: var(--picker-item-hover);
+}
+
+.req-picker-item-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-weight: 600;
+    color: var(--picker-item-id);
+    flex-shrink: 0;
+    font-size: 0.75rem;
+}
+
+.req-picker-item-title {
+    color: var(--picker-item-title);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.req-picker-item-level {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 1px 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.req-picker-item-level.prd { background: var(--picker-level-prd-bg); color: var(--picker-level-prd-text); }
+.req-picker-item-level.ops { background: var(--picker-level-ops-bg); color: var(--picker-level-ops-text); }
+.req-picker-item-level.dev { background: var(--picker-level-dev-bg); color: var(--picker-level-dev-text); }
+
+.req-picker-empty {
+    padding: 10px;
+    text-align: center;
+    color: var(--picker-empty);
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.req-picker-loading {
+    padding: 10px;
+    text-align: center;
+    color: var(--picker-loading);
+    font-size: 0.8rem;
+}
+
+/* Selected state */
+.req-picker-selected {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--picker-selected-bg);
+    border: 1px solid var(--picker-selected-border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.req-picker-selected-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-weight: 600;
+    color: var(--picker-selected-id);
+}
+
+.req-picker-selected-title {
+    color: var(--picker-selected-title);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.req-picker-clear {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--picker-clear);
+    font-size: 1rem;
+    padding: 0 2px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.req-picker-clear:hover {
+    color: var(--picker-clear-hover);
+}

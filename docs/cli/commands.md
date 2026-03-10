@@ -11,22 +11,27 @@ These options work with all commands:
   `--config PATH`    Path to configuration file
   `--spec-dir PATH`  Override spec directory
 
-## validate
+## health
 
-Validate requirements format, links, hashes, and hierarchy.
+Run health checks across configuration, spec files, code, and tests.
 
-  $ elspais validate                   # Check all rules
-  $ elspais validate -j                # Output JSON for tooling
-  $ elspais validate --mode core        # Exclude associated repo specs
-  $ elspais validate --mode associate   # Local specs only, suppress cross-repo warnings
+  $ elspais health                     # Run all checks
+  $ elspais health --config            # Configuration only
+  $ elspais health --spec              # Spec file checks
+  $ elspais health --code              # Code reference checks
+  $ elspais health --tests             # Test mapping checks
+  $ elspais health -j                  # JSON output
 
 To auto-fix issues, use: `elspais fix`
 
 **Options:**
 
-  `-j, --json`          Output requirements as JSON
-  `--export`            Export requirements as JSON dict keyed by ID
-  `--mode {core,combined,associate}`  core: only local specs, associate: local specs with cross-repo warnings suppressed, combined: include associated repos
+  `--config`       Run configuration checks only
+  `--spec`         Run spec file checks only
+  `--code`         Run code reference checks only
+  `--tests`        Run test mapping checks only
+  `-j, --json`     Output as JSON
+  `-v, --verbose`  Show additional details
 
 ## fix
 
@@ -108,19 +113,14 @@ Generates a lighter document for stakeholders:
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
 
-## analyze
+## summary
 
-Analyze requirement hierarchy and coverage.
+Generate coverage summary reports.
 
-  $ elspais analyze hierarchy     # Tree view of requirements
-  $ elspais analyze orphans       # Find parentless requirements
-  $ elspais analyze coverage      # Implementation coverage report
+  $ elspais summary               # Coverage summary
 
-**Subcommands:**
-
-  `hierarchy`   Show requirement hierarchy tree
-  `orphans`     Find requirements with no parent
-  `coverage`    Implementation coverage report
+For hierarchy views, use `elspais trace --view`. For orphan detection,
+use `elspais health --spec`.
 
 ## changed
 
@@ -322,26 +322,6 @@ Diagnose your elspais environment and installation.
 
   `-j, --json`     Output results as JSON
   `-v, --verbose`  Show detailed information for each check
-
-## health
-
-Run health checks across configuration, spec files, code, and tests.
-
-  $ elspais health              # Run all checks
-  $ elspais health --config     # Configuration only
-  $ elspais health --spec       # Spec file checks
-  $ elspais health --code       # Code reference checks
-  $ elspais health --tests      # Test mapping checks
-  $ elspais health -j           # JSON output
-
-**Options:**
-
-  `--config`       Run configuration checks only
-  `--spec`         Run spec file checks only
-  `--code`         Run code reference checks only
-  `--tests`        Run test mapping checks only
-  `-j, --json`     Output as JSON
-  `-v, --verbose`  Show additional details
 
 ## associate
 

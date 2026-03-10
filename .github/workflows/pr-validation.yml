@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-F-G
+# Implements: REQ-o00066-F+G
 name: PR Validation
 
 on:

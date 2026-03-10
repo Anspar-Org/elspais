@@ -193,7 +193,7 @@ class TestDoctorRun:
 
         args = argparse.Namespace(
             config=str(config_path),
-            json=False,
+            format="text",
             verbose=False,
             canonical_root=None,
         )
@@ -208,7 +208,7 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         args = argparse.Namespace(
             config=None,
-            json=True,
+            format="json",
             verbose=False,
             canonical_root=None,
         )
@@ -226,7 +226,7 @@ class TestDoctorRun:
 
         args = argparse.Namespace(
             config=str(config_path),
-            json=False,
+            format="text",
             verbose=False,
             canonical_root=None,
         )

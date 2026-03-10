@@ -678,7 +678,8 @@ def run(args: argparse.Namespace) -> int:
         report.add(check)
 
     # Output
-    if getattr(args, "json", False):
+    fmt = getattr(args, "format", "text") or "text"
+    if fmt == "json":
         import json
 
         print(json.dumps(report.to_dict(), indent=2))

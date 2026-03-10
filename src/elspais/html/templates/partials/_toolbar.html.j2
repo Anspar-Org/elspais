@@ -36,13 +36,17 @@
             <input type="checkbox" id="edit-toggle-roadmap" onchange="toggleEditFilter('roadmap')">
             <span>Hide Roadmap</span>
         </label>
+        <label class="toggle-item">
+            <input type="checkbox" id="edit-toggle-hide-filtered" onchange="toggleEditFilter('hideFiltered')">
+            <span>Hide Filtered</span>
+        </label>
     </div>
 
     <!-- Text Filter -->
     <input type="text" class="filter-text-input" id="edit-filter-text"
            placeholder="Filter tree... (e.g. auth OR password)"
            oninput="onTreeTextFilter()"
-           title="Multi-term search: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
+           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
 
     <!-- Actions -->
     <div class="toolbar-actions">

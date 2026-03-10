@@ -1,0 +1,279 @@
+# Implements: REQ-p00006-A
+# help.toml — Labels, descriptions, and long descriptions for all UI elements.
+# Matches the categorical keys in theme.toml exactly.
+
+# ---------------------------------------------------------------------------
+# Coverage Icons
+# ---------------------------------------------------------------------------
+
+[icons.coverage.full]
+label = "Full Coverage"
+description = "All assertions have code implementations and passing tests"
+long_description = """All assertions for this requirement have direct code
+implementations (# Implements: references) and all linked tests are passing.
+This is the ideal state for a requirement."""
+
+[icons.coverage.partial]
+label = "Partial Coverage"
+description = "Some assertions have implementations or tests"
+long_description = """Some assertions have code implementations or test
+coverage, but not all. Review the assertion list to identify which
+assertions still need implementation or testing."""
+
+[icons.coverage.none]
+label = "No Coverage"
+description = "No code implementations or tests found"
+long_description = """No code references (# Implements:) or test files
+reference this requirement. This requirement is untested and unimplemented
+as far as the traceability graph can detect."""
+
+[icons.coverage.warning]
+label = "Coverage Warning"
+description = "Unexpected coverage anomaly detected"
+long_description = """Tests exist but results are missing, or tests reference
+this requirement but no code implementation is found. Investigate the
+test/code linkage for potential configuration issues."""
+
+# ---------------------------------------------------------------------------
+# Change Indicators
+# ---------------------------------------------------------------------------
+
+[icons.change.changed]
+label = "Changed"
+description = "Requirement has uncommitted changes"
+long_description = """This requirement's spec file has been modified since the
+last git commit. The diamond icon indicates that the content hash has changed.
+Review the changes before committing."""
+
+# ---------------------------------------------------------------------------
+# Status Badges
+# ---------------------------------------------------------------------------
+
+[badges.status.draft]
+label = "Draft"
+description = "Requirement is in draft state, not yet approved"
+long_description = """Draft requirements are being authored and are not yet
+ready for implementation. They may change significantly before being
+promoted to Active status."""
+
+[badges.status.active]
+label = "Active"
+description = "Requirement is approved and active"
+long_description = """Active requirements are approved for implementation.
+They are tracked for code coverage and test validation. The badge color
+changes based on the validation tier (green/yellow/red)."""
+
+[badges.status.deprecated]
+label = "Deprecated"
+description = "Requirement is deprecated and should not be implemented"
+long_description = """Deprecated requirements are no longer relevant. They
+remain in the spec for historical reference but should not receive new
+implementations. Existing implementations may be removed."""
+
+[badges.status.proposed]
+label = "Proposed"
+description = "Requirement is proposed, pending review"
+long_description = """Proposed requirements have been submitted for review
+but not yet approved. They are visible in the traceability view but are
+not tracked for coverage until promoted to Active."""
+
+# ---------------------------------------------------------------------------
+# Level Badges
+# ---------------------------------------------------------------------------
+
+[badges.level.prd]
+label = "PRD"
+description = "Product Requirements - business-level needs"
+long_description = """Product Requirements Documents define high-level
+product features and capabilities. PRD requirements are typically
+implemented by OPS or DEV requirements through the hierarchy."""
+
+[badges.level.ops]
+label = "OPS"
+description = "Operations Requirements - operational constraints"
+long_description = """Operational requirements define process and workflow
+needs. They implement PRD requirements and are further refined by DEV
+requirements for technical implementation."""
+
+[badges.level.dev]
+label = "DEV"
+description = "Development Requirements - technical specifications"
+long_description = """Development requirements define specific technical
+implementations. They are the most granular level and directly map to
+code implementations and test cases."""
+
+# ---------------------------------------------------------------------------
+# Node Kind Badges
+# ---------------------------------------------------------------------------
+
+[badges.kind.code]
+label = "Code"
+description = "Source code file referencing a requirement"
+long_description = """A source file that contains an '# Implements:' or
+'# Refines:' comment linking it to a requirement. Code nodes show which
+files contribute to implementing a requirement."""
+
+[badges.kind.test]
+label = "Test"
+description = "Test file or test case for a requirement"
+long_description = """A test file or individual test case that references a
+requirement ID in its name or content. Test nodes show which tests
+validate a requirement's assertions."""
+
+[badges.kind.result]
+label = "Result"
+description = "Test execution result (pass/fail/error/skip)"
+long_description = """A test result from JUnit XML or pytest JSON output.
+Result nodes are children of test nodes and show whether each test
+passed, failed, errored, or was skipped."""
+
+[badges.kind.journey]
+label = "Journey"
+description = "User journey specification"
+long_description = """A user journey (JNY-*) that describes a real-world
+scenario addressed by one or more requirements. Journeys provide context
+for why requirements exist."""
+
+# ---------------------------------------------------------------------------
+# Edge Type Labels
+# ---------------------------------------------------------------------------
+
+[badges.edge.implements]
+label = "Implements"
+description = "Child requirement implements parent"
+long_description = """An 'Implements' edge means the child requirement
+provides a concrete implementation of the parent requirement. This is
+the standard parent-child relationship in the hierarchy."""
+
+[badges.edge.refines]
+label = "Refines"
+description = "Child requirement refines or extends parent"
+long_description = """A 'Refines' edge means the child requirement adds
+detail or constraints to the parent without being a direct implementation.
+Refinements extend rather than fulfill."""
+
+# ---------------------------------------------------------------------------
+# Assertion Badges
+# ---------------------------------------------------------------------------
+
+[badges.assertion.badge]
+label = "Assertion Badge"
+description = "Implements specific assertion(s) from parent requirement"
+long_description = """Assertion badges (A, B, C...) indicate which specific
+assertions from a parent requirement are implemented or refined by the child.
+Each letter corresponds to a labeled assertion in the parent."""
+
+# ---------------------------------------------------------------------------
+# Test Result Badges
+# ---------------------------------------------------------------------------
+
+[badges.result.passed]
+label = "Passed"
+description = "Test execution succeeded"
+long_description = """The test ran to completion and all assertions within
+the test passed. This contributes to the requirement's validation score."""
+
+[badges.result.failed]
+label = "Failed"
+description = "Test execution failed with assertion errors"
+long_description = """The test ran but one or more assertions failed. This
+indicates the implementation does not match the requirement's expected
+behavior. The requirement will show a red (failing) validation tier."""
+
+[badges.result.error]
+label = "Error"
+description = "Test execution encountered an error"
+long_description = """The test could not complete due to an unexpected error
+(not an assertion failure). This may indicate infrastructure issues,
+missing dependencies, or code errors outside the test logic."""
+
+[badges.result.skipped]
+label = "Skipped"
+description = "Test was skipped during execution"
+long_description = """The test was present but not executed, typically due
+to a skip marker, conditional logic, or platform restriction. Skipped
+tests do not contribute to coverage calculations."""
+
+# ---------------------------------------------------------------------------
+# Implementation Status Buttons
+# ---------------------------------------------------------------------------
+
+[buttons.implemented.yes]
+label = "Implemented"
+description = "Assertion has been implemented in code"
+long_description = """The assertion has at least one code file that references
+it via an '# Implements:' comment. This is the 'yes' state of the
+implementation toggle button."""
+
+[buttons.implemented.no]
+label = "Not Implemented"
+description = "Assertion has no code implementation"
+long_description = """No code file references this assertion. This is the
+'no' state of the implementation toggle button. The assertion needs
+code references to achieve coverage."""
+
+# ---------------------------------------------------------------------------
+# Validation Status Buttons
+# ---------------------------------------------------------------------------
+
+[buttons.validation.pass]
+label = "Pass"
+description = "Assertion validation passed"
+long_description = """All tests covering this assertion are passing. The
+assertion is fully validated by its test suite."""
+
+[buttons.validation.partial]
+label = "Partial"
+description = "Assertion has partial validation"
+long_description = """Some tests pass but coverage is incomplete. The
+assertion may need additional tests or some existing tests are
+not yet passing."""
+
+[buttons.validation.fail]
+label = "Fail"
+description = "Assertion validation failed"
+long_description = """One or more tests covering this assertion have failed.
+The implementation needs to be fixed to match the assertion's expected
+behavior."""
+
+[buttons.validation.unknown]
+label = "Unknown"
+description = "Assertion validation status is unknown"
+long_description = """No test results are available for this assertion. Tests
+may not have been run, or the test results have not been imported into
+the traceability graph."""
+
+# ---------------------------------------------------------------------------
+# Validation Tiers (Active Badge Quality)
+# ---------------------------------------------------------------------------
+
+[validation_tiers.full-direct]
+label = "Full Direct"
+description = "All assertions covered and validated"
+long_description = """All assertions have direct code implementations and all
+tests are passing. This is the highest quality tier."""
+
+[validation_tiers.full-indirect]
+label = "Full Indirect"
+description = "All assertions validated (including indirect)"
+long_description = """All assertions are validated, but some coverage comes
+through inherited implementations from child requirements rather than
+direct code references."""
+
+[validation_tiers.partial]
+label = "Partial"
+description = "Some coverage, no failures"
+long_description = """Some assertions have implementations and passing tests,
+but not all assertions are fully covered yet."""
+
+[validation_tiers.failing]
+label = "Failing"
+description = "Test failures detected"
+long_description = """One or more tests referencing this requirement are failing.
+This takes priority over coverage level."""
+
+[validation_tiers.anomalous]
+label = "Anomalous"
+description = "Unexpected coverage gaps"
+long_description = """Tests exist but results are missing, or tests exist but
+no code implementation is found. Investigate the test/code linkage."""

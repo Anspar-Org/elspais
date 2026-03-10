@@ -36,6 +36,9 @@ max_count = 26
 [validation]
 hash_mode = "normalized-text"
 
+[references.defaults]
+multi_assertion_separator = "+"
+
 [testing]
 enabled = true
 test_dirs = ["tests"]

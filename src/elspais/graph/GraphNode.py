@@ -229,8 +229,9 @@ class GraphNode:
     def remove_child(self, child: GraphNode) -> bool:
         """Remove a child node and clean up all links.
 
-        Removes the bidirectional node link and any edges between
-        this node and the child.
+        Removes the bidirectional node link and ALL edges between
+        this node and the child. Use remove_edge() to remove a single
+        specific edge while preserving others.
 
         Args:
             child: The child node to remove.
@@ -251,6 +252,37 @@ class GraphNode:
 
         # Remove incoming edges from this parent on the child
         child._incoming_edges = [e for e in child._incoming_edges if e.source is not self]
+
+        return True
+
+    def remove_edge(self, edge: Edge) -> bool:
+        """Remove a single specific edge.
+
+        Removes the edge from both outgoing and incoming lists. If no
+        other edges remain between the two nodes, also removes the
+        parent/child node links.
+
+        Args:
+            edge: The exact edge object to remove.
+
+        Returns:
+            True if the edge was found and removed, False otherwise.
+        """
+        if edge not in self._outgoing_edges:
+            return False
+
+        self._outgoing_edges.remove(edge)
+        if edge in edge.target._incoming_edges:
+            edge.target._incoming_edges.remove(edge)
+
+        # Clean up parent/child links only if no more edges remain
+        child = edge.target
+        has_remaining = any(e.target is child for e in self._outgoing_edges)
+        if not has_remaining:
+            if child in self._children:
+                self._children.remove(child)
+            if self in child._parents:
+                child._parents.remove(self)
 
         return True
 

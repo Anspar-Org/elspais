@@ -56,6 +56,7 @@ def _camel_to_snake(name: str) -> str:
     return s2.lower()
 
 
+# Implements: REQ-o00050-C
 def _build_code_index(
     graph: TraceGraph,
     repo_root: Path | None = None,
@@ -93,6 +94,7 @@ def _build_code_index(
     return index
 
 
+# Implements: REQ-d00072-C
 def _extract_candidate_functions(test_node: GraphNode) -> list[str]:
     """Extract candidate source function names from a test node.
 
@@ -145,6 +147,7 @@ def _extract_candidate_functions(test_node: GraphNode) -> list[str]:
     return candidates
 
 
+# Implements: REQ-o00050-C
 def link_tests_to_code(
     graph: TraceGraph,
     repo_root: Path,

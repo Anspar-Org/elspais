@@ -6,7 +6,7 @@ This document defines the high-level product requirements for elspais, a require
 
 # REQ-p00001: Requirements Management Tool
 
-**Level**: PRD | **Status**: Active | **Implements**: -
+**Level**: PRD | **Status**: Draft | **Implements**: -
 
 ## Rationale
 
@@ -30,7 +30,9 @@ B. The tool SHALL generate traceability matrices showing requirement relationshi
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
-*End* *Requirements Management Tool* | **Hash**: bf63eda5
+D. This edit SHALL be reverted, eventually.
+
+*End* *Requirements Management Tool* | **Hash**: 3cddd08e
 ---
 
 # REQ-p00002: Requirements Validation
@@ -111,7 +113,15 @@ A. The tool SHALL compute and verify content hashes for change detection.
 
 B. The tool SHALL detect uncommitted and branch-relative changes to requirement files using git.
 
-*End* *Change Detection and Auditability* | **Hash**: 846fefad
+C. The tool SHALL provide a git status summary reporting current branch, main-branch detection, dirty spec files, and remote divergence state.
+
+D. The tool SHALL create and switch to a new git branch, using stash to preserve dirty working tree changes across the switch.
+
+E. The tool SHALL commit modified spec files and optionally push, refusing to operate on main/master branches.
+
+F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
+
+*End* *Change Detection and Auditability* | **Hash**: fa53cb96
 ---
 
 # REQ-p00005: Multi-Repository Requirements
@@ -359,3 +369,33 @@ B. The system SHALL provide API endpoints for creating, reading, updating, and m
 C. The system SHALL support modifying requirement status in spec files based on review outcomes.
 
 *End* *Review Backend Services* | **Hash**: c1ec12e5
+---
+
+# REQ-p00013: Automated Testing
+
+**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+A requirements management tool must itself be rigorously tested to maintain credibility. Unit tests verify individual components in isolation, but integration and end-to-end tests are essential to catch cross-component failures, CLI subprocess regressions, and real-world workflow breakages that mocked unit tests miss.
+
+The testing strategy follows a pyramid:
+
+- **Unit tests**: Fast, isolated tests for individual functions and classes
+- **Integration tests**: Tests that exercise multiple components together
+- **End-to-end tests**: Subprocess-based tests that invoke the CLI binary and verify real output
+- **Self-validation**: The tool validates its own repository as the strongest regression test
+
+## Assertions
+
+A. The project SHALL maintain unit tests for all core modules with assertion-linked test names.
+
+B. The project SHALL maintain end-to-end tests that invoke the CLI as a subprocess and verify command output, exit codes, and file artifacts.
+
+C. The project SHALL include self-validation tests that run elspais against its own repository and assert health, summary, and trace outputs are correct.
+
+D. The project SHALL include multi-command workflow tests that verify cross-command consistency and sequential operation correctness.
+
+E. The project SHALL include MCP protocol tests that verify tool invocation, search, cursor pagination, and mutation roundtrips via the stdio transport.
+
+*End* *Automated Testing* | **Hash**: bedb66fd

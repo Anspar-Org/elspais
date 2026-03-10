@@ -21,6 +21,7 @@ from typing import Any
 BLANK_LINE_CLEANUP_RE = re.compile(r"\n{3,}")
 
 
+# Implements: REQ-p00002-A
 def find_req_header(content: str, req_id: str) -> re.Match | None:
     """Find a requirement header line by ID.
 
@@ -54,6 +55,7 @@ class ParsedRequirement:
 
 
 @dataclass
+# Implements: REQ-p00002-A
 class PatternConfig:
     """Configuration for requirement ID patterns.
 
@@ -154,6 +156,7 @@ class PatternConfig:
         return 26
 
 
+# Implements: REQ-p00002-A
 class PatternValidator:
     """Validates and parses requirement IDs against configured patterns."""
 
@@ -408,6 +411,7 @@ class PatternValidator:
         return result
 
 
+# Implements: REQ-p00002-A
 def normalize_req_id(
     req_id: str,
     prefix_or_validator: str | PatternValidator = "REQ",

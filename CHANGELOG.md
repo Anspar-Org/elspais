@@ -2,6 +2,179 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.101.0] - 2026-03-09
+
+### Added
+
+- **Theme catalog system** — `theme.toml` and `help.toml` TOML data files as single source of truth for all UI colors, symbols, labels, and descriptions; `LegendCatalog` Python class with cached loader, CSS variable generation, and catalog entry lookup (REQ-p00006-A)
+- **Multi-theme support** — arbitrary named themes via `.theme-*` CSS class selectors replacing the old `.dark-theme` approach; theme buttons in hamburger menu generated from catalog (REQ-p00006-A)
+- **Dynamic page title** — browser tab shows `Elspais {version} ({repo_name}) -- PRD: N OPS: N DEV: N` in edit mode and `Elspais {version} -- Requirements Traceability` in view mode (REQ-p00006-A)
+- **Foundation analysis command** — `elspais analysis` ranks requirements by structural importance using PageRank centrality, fan-in branch count, and uncovered dependent metrics; supports `--top`, `--weights`, `--level`, `--show`, `--include-code`, and `--format json` options (REQ-d00125)
+
+### Changed
+
+- **CSS custom properties migration** — all ~176 hardcoded hex colors across 16 CSS partial files replaced with `var(--token)` references generated from `theme.toml` (REQ-p00006-A)
+- **Legend modal rewrite** — hardcoded legend content replaced with catalog-driven template loop over `catalog.grouped_entries()` (REQ-p00006-A)
+- **Validation color descriptions** — `compute_validation_color()` now sources descriptions from catalog `validation_tiers` entries instead of hardcoded strings (REQ-p00006-A)
+
+### Removed
+
+- **`_dark-theme.css.j2`** — 287-line dark theme override file deleted; dark mode now handled entirely by CSS custom properties in `theme.toml` (REQ-p00006-A)
+
+## [0.100.0] - 2026-03-09
+
+### Added
+
+- **Viewer branch indicator badge** — shows current branch name with colored status dot (green=clean, blue=dirty spec files, red=on main), pull button when remote is fast-forwardable, and warning icon when remote has diverged; polls `/api/git/status` every 60 seconds (REQ-p00004-C)
+- **Viewer branch creation modal** — prompts for a branch name when toggling edit mode on main or when the viewer loads on main with dirty spec files; edit mode only activates after branch creation succeeds (REQ-p00004-D)
+- **`git_status_summary()` utility function** — returns current branch name, main-branch detection, dirty spec file list, and remote divergence state; supports the viewer branch indicator badge (REQ-p00004-C)
+- **`create_and_switch_branch()` utility function** — creates a new git branch and switches to it, using stash to preserve dirty working tree changes across the switch; supports the viewer branch creation modal (REQ-p00004-D)
+- **`commit_and_push_spec_files()` utility function** — stages all modified spec files, commits with a message, and optionally pushes; refuses to operate on main/master branches; supports the viewer push modal (REQ-p00004-E)
+- **`pull_ff_only()` utility function** — fetches from the remote tracking branch and merges with `--ff-only`; aborts if the merge is not fast-forwardable; handles timeout, no-remote, and diverged-history error cases; supports the viewer refresh/pull action (REQ-p00004-F)
+- **Flask git sync endpoints** — `GET /api/git/status`, `POST /api/git/branch`, `POST /api/git/push`, `POST /api/git/pull` routes in the viewer server; delegates to git utility functions; push on main/master returns 403 (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F)
+- **Viewer push modal** — Push button in header (disabled on main or no dirty spec files) opens a modal showing branch name, modified spec files, and commit message input; flow: save mutations, commit, push; includes error handling and loading state (REQ-p00004-E)
+- **Unsaved changes warning** — `beforeunload` handler warns when pending mutations exist (unsaved badge > 0) or uncommitted spec files exist (blue dot indicator), preventing accidental data loss (REQ-p00004-E)
+- **E2E integration test for viewer git sync** — full workflow test covering `git_status_summary`, `create_and_switch_branch`, and `commit_and_push_spec_files` in sequence: init on main, dirty spec, create branch, verify carry, commit without push, verify clean (REQ-p00004-C, REQ-p00004-D, REQ-p00004-E)
+
+## [0.99.0] - 2026-03-08
+
+### Added
+
+- **Viewer edit mode: pencil icons** — blue pencil icons on editable fields (title, assertion text) that scale on hover; visible whenever edit mode is active
+- **Viewer edit mode: delete buttons** — delete assertions (× on each row) and requirements (× in card header) with confirmation dialogs and undo support
+- **Viewer edit mode: relationship editor** — toggle implements/refines type with one click, delete relationships, add new relationships via inline form with searchable requirement dropdown and optional assertion-level targeting
+- **Searchable requirement picker component** — reusable `createReqPicker()` with type-ahead search, keyboard navigation, 300ms debounce, and assertion list fetching
+
+### Fixed
+
+- **Edit-only elements not visible in edit mode** — inline `style="display:none;"` was overriding CSS rules due to higher specificity; now uses CSS-only visibility via `body.edit-mode .edit-only`
+
+## [0.98.0] - 2026-03-08
+
+### Added
+
+- **Flask API: delete assertion and requirement endpoints** — `POST /api/mutate/assertion/delete` and `POST /api/mutate/requirement/delete` with `confirm=true` validation
+- **Default viewer port changed from 5000 to 5001** — avoids conflict with macOS AirPlay Receiver
+
+## [0.97.0] - 2026-03-08
+
+### Added
+
+- **7 e2e subprocess tests** for JUnit/SARIF formats and `--include-passing-details` flag — validates XML/JSON output, file output via `-o`, and flag acceptance
+
+## [0.96.0] - 2026-03-08
+
+### Added
+
+- **`--skip-passing-details` / `--include-passing-details` for `elspais health`** — controls whether passing checks include verbose detail in output. `--skip-passing-details` is the default, suppressing per-finding detail for passing checks. `--include-passing-details` adds detail keys (text), `<details>` blocks (markdown), or `<system-out>` elements (junit). JSON always includes full findings; SARIF always omits passing checks
+
+## [0.95.0] - 2026-03-08
+
+### Added
+
+- **`--format sarif` for `elspais health`** — SARIF v2.1.0 JSON output for GitHub Code Scanning and static analysis dashboards. One `reportingDescriptor` per unique failing check, one `result` per `HealthFinding` with physical locations (file path, line number). Passing checks omitted. Severity mapped to SARIF levels (`error`→`"error"`, `warning`→`"warning"`, `info`→`"note"`). Coverage stats in `run.properties`
+
+## [0.94.0] - 2026-03-07
+
+### Added
+
+- **Health check findings enrichment** — all check functions now populate `HealthFinding` instances with per-item detail (node IDs, file paths, line numbers) for duplicates, unresolved references, hierarchy violations, orphans, format rules, code/test references, and test results
+
+## [0.93.0] - 2026-03-07
+
+### Added
+
+- **`HealthFinding` dataclass** — per-finding detail model with `message`, `file_path`, `line`, `node_id`, and `related` fields; serialized in JSON `to_dict()` output; prerequisite for SARIF format support
+
+## [0.92.0] - 2026-03-07
+
+### Added
+
+- **`--format junit` for `elspais health`** — JUnit XML output for CI test-reporting dashboards (GitHub Actions, Jenkins, GitLab CI). Categories map to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>`, warnings to `<system-err>`, and info to `<system-out>`
+- **REQ-p00013: Automated Testing requirement** — new PRD-level requirement covering unit, e2e, self-validation, workflow, and MCP protocol testing
+- **E2E test infrastructure** — `tests/e2e/` directory with shared conftest (`run_elspais()`, skip markers, path constants)
+- **27 CLI subprocess tests** — end-to-end tests covering version, doctor, summary, trace, graph, config, example, docs, changed, rules, health, init, and fix commands
+- **`browser` pytest marker** — for Playwright-based browser tests
+- **11 self-validation tests** — e2e tests running elspais against its own repository (health, doctor, summary, trace, graph, subdirectory detection)
+- **6 multi-command workflow tests** — cross-command consistency tests (init→health, health/summary consistency, trace JSON/CSV format, init→config, fix→health, summary idempotency)
+- **`--port` argument for viewer command** — specify server port directly, bypassing interactive port conflict prompts
+- **6 Playwright browser tests** — viewer page load, API endpoints, search filtering, and requirement detail interaction
+- **8 extended MCP protocol tests** — search, get_requirement, get_hierarchy, project_summary, cursor pagination, and mutation/undo roundtrip via stdio transport
+
+## [0.85.5] - 2026-03-06
+
+### Removed
+
+- **`analyze` command** — deleted entirely; hierarchy views available via `trace --view`, coverage via `coverage`
+- **`validate` CLI entry point** — removed subparser and dispatch; validation logic retained as library module for `fix` command
+
+### Changed
+
+- **CLI epilog** — updated examples to reference `health`, `coverage`, and composable reports
+- **docs/cli/** — updated 7 doc files to reference `health` instead of `validate`/`analyze`
+
+## [0.85.4] - 2026-03-06
+
+### Changed
+
+- **Extract viewer command** — moved Flask server logic from `trace.py` to `commands/viewer.py`
+  - `elspais viewer` now dispatches to `viewer.run()` instead of `trace.run_viewer()`
+  - `trace --edit-mode` and `trace --server` delegate to `viewer._run_server()`
+  - `trace --view` and `--embed-content` remain on trace (static HTML generation)
+
+## [0.85.3] - 2026-03-06
+
+### Added
+
+- **Composable multi-section reports** — `elspais health coverage trace --format markdown` (REQ-d00085)
+  - Multiple section names as positional args, rendered in order and concatenated
+  - Shared flags (`--format`, `-o`, `-q`, `-v`, `--lenient`) apply globally across sections
+  - Exit code is worst-of-all-sections (non-zero if any section has errors/warnings)
+  - Single-section invocation behaves identically to standalone command
+  - Invalid format/section combinations produce clear errors
+  - `render_section()` API on health, coverage, and trace for programmatic use
+
+### Changed
+
+- **`elspais trace`** — `--report` renamed to `--preset`, added `--body`/`--assertions`/`--tests` detail flags, coverage columns (Implemented, Validated, Passing) from RollupMetrics (REQ-d00084-B+C+D)
+
+## [0.85.2] - 2026-03-06
+
+### Changed
+
+- **`elspais health` exit codes** — warnings now cause non-zero exit by default (REQ-d00080-A)
+  - `--lenient` flag allows warnings to pass without affecting exit code
+  - `-q`/`--quiet` flag for summary-line-only output
+  - `--format text|markdown|json` replaces `-j`/`--json` (still supported as alias)
+  - Markdown output format for health reports
+
+## [0.85.1] - 2026-03-06
+
+### Added
+
+- **`elspais coverage`** — new coverage report command with text, markdown, json, csv output (REQ-d00086)
+  - Per-level summary: requirements, assertions, implemented/validated/passing percentages
+  - Per-requirement assertion coverage: implemented (code refs), validated (test refs), passing (test results)
+  - Excludes Draft/Deprecated requirements from counts
+
+## [0.85.0] - 2026-03-06
+
+### Changed
+
+- **Spec: Unified Report System** — new requirements for composable CLI report output (REQ-d00085, REQ-d00086)
+  - REQ-d00085: Unified Report Composition — multi-command composition, shared flags, `--lenient`
+  - REQ-d00086: Coverage Report Section — per-level and per-assertion coverage in text/markdown/json/csv
+  - REQ-d00084: Trace Command — added column presets, detail flags, coverage columns
+  - REQ-d00080: Exit codes — warnings cause non-zero by default, `--lenient` to relax
+  - REQ-d00083: Validate Command — deprecated, superseded by health
+- Removed `--depth` dead code from CLI and reformat_cmd
+
+## [0.84.3] - 2026-03-04
+
+### Fixed
+
+- **`fix REQ-xxx` fails with "belongs to a different requirement"**: Subheadings inside a requirement body (e.g., `### OS-Level Notifications`) were falsely detected as requirement boundaries because `_find_next_req_header` used the overly broad regex `^#+ [A-Z]+-`. Narrowed the pattern to only match headings with the configured requirement prefix (CUR-1003, REQ-p00004-A)
+
 ## [0.84.2] - 2026-02-26
 
 ### Fixed

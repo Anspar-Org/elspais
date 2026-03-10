@@ -42,22 +42,203 @@ function showToast(message, type) {
 // Edit Mode
 // =====================================================================
 
-function toggleEditMode() {
-    editState.enabled = !editState.enabled;
-    document.body.classList.toggle('edit-mode', editState.enabled);
-    document.getElementById('edit-toggle').classList.toggle('active', editState.enabled);
-
-    // Toggle contenteditable on assertion text fields
+function _activateEditMode() {
+    editState.enabled = true;
+    document.body.classList.add('edit-mode');
+    document.getElementById('edit-toggle').classList.add('active');
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
-        el.contentEditable = editState.enabled ? 'true' : 'false';
+        el.contentEditable = 'true';
     });
-
-    // Show/hide edit-only elements
-    document.querySelectorAll('.edit-only').forEach(function(el) {
-        el.style.display = editState.enabled ? '' : 'none';
-    });
-
     saveState();
+}
+
+function _deactivateEditMode() {
+    editState.enabled = false;
+    document.body.classList.remove('edit-mode');
+    document.getElementById('edit-toggle').classList.remove('active');
+    document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+        el.contentEditable = 'false';
+    });
+    saveState();
+}
+
+function toggleEditMode() {
+    if (editState.enabled) {
+        // Turning OFF — always allowed
+        _deactivateEditMode();
+        return;
+    }
+    // Turning ON — check if on main first
+    refreshBranchStatus().then(function(data) {
+        if (data && data.is_main) {
+            showBranchModal('You are on the main branch. Create a working branch before editing.', function() {
+                _activateEditMode();
+            });
+        } else {
+            _activateEditMode();
+        }
+    });
+}
+
+// =====================================================================
+// Branch Status & Git Pull (REQ-p00004-C, REQ-p00004-D)
+// =====================================================================
+
+async function refreshBranchStatus() {
+    var data = await apiFetch('/api/git/status');
+    if (!data) return null;
+    var dot = document.getElementById('branch-status-dot');
+    var nameEl = document.getElementById('branch-name');
+    var syncBtn = document.getElementById('btn-sync');
+    var warningEl = document.getElementById('branch-warning');
+    if (!dot || !nameEl) return data;
+    nameEl.textContent = data.branch || 'detached';
+    dot.className = 'branch-status-dot';
+    if (data.is_main) { dot.classList.add('red'); }
+    else if (data.local_ahead > 0) { dot.classList.add('blue'); }
+    else { dot.classList.add('green'); }
+    // Sync button: visible when remote has diverged OR main has moved ahead
+    var needsSync = data.remote_diverged || data.main_diverged;
+    if (syncBtn) {
+        syncBtn.classList.toggle('hidden', !needsSync);
+    }
+    if (warningEl) {
+        warningEl.classList.toggle('hidden', !data.main_diverged);
+    }
+    // Push button: enabled when not on main AND local has unpushed commits
+    var pushBtn = document.getElementById('btn-push');
+    if (pushBtn) {
+        pushBtn.disabled = data.is_main || data.local_ahead === 0;
+    }
+    return data;
+}
+
+async function doGitSync() {
+    var syncBtn = document.getElementById('btn-sync');
+    if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing...'; }
+    var result = await apiFetch('/api/git/pull', {method: 'POST'});
+    if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = '&#x21bb; Sync'; }
+    if (result && result.success) {
+        showToast(result.message || 'Synced', 'success');
+        refreshBranchStatus();
+    } else {
+        showToast((result && result.error) || 'Sync failed', 'error');
+        refreshBranchStatus();
+    }
+}
+
+// =====================================================================
+// Branch Creation Modal (REQ-p00004-D)
+// =====================================================================
+
+function showBranchModal(reason, callback) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+    overlay.id = 'branch-modal-overlay';
+
+    var dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+
+    var title = document.createElement('div');
+    title.className = 'modal-title';
+    title.textContent = 'Create a Working Branch';
+
+    var reasonEl = document.createElement('p');
+    reasonEl.style.fontSize = '0.9em';
+    reasonEl.style.marginBottom = '12px';
+    reasonEl.textContent = reason;
+
+    var label = document.createElement('label');
+    label.className = 'modal-label';
+    label.textContent = 'Branch name';
+    label.htmlFor = 'branch-name-input';
+
+    var input = document.createElement('input');
+    input.className = 'modal-input';
+    input.id = 'branch-name-input';
+    input.type = 'text';
+    input.placeholder = 'e.g. feat/my-changes';
+
+    var errorEl = document.createElement('div');
+    errorEl.className = 'modal-error';
+    errorEl.style.display = 'none';
+
+    var actions = document.createElement('div');
+    actions.className = 'modal-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancel';
+
+    var createBtn = document.createElement('button');
+    createBtn.className = 'btn btn-primary';
+    createBtn.textContent = 'Create Branch';
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(createBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(reasonEl);
+    dialog.appendChild(label);
+    dialog.appendChild(input);
+    dialog.appendChild(errorEl);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    input.focus();
+
+    function closeModal() {
+        var el = document.getElementById('branch-modal-overlay');
+        if (el) {
+            el.classList.remove('visible');
+            setTimeout(function() { el.remove(); }, 200);
+        }
+    }
+
+    function doCreate() {
+        var name = input.value.trim();
+        if (!name) {
+            errorEl.textContent = 'Branch name is required.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        createBtn.disabled = true;
+        createBtn.textContent = 'Creating...';
+        apiFetch('/api/git/branch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function(result) {
+            if (result && result.success) {
+                closeModal();
+                showToast('Switched to branch: ' + name, 'success');
+                refreshBranchStatus();
+                if (callback) callback();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Failed to create branch.';
+                errorEl.style.display = 'block';
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create Branch';
+            }
+        }).catch(function(err) {
+            console.error('Branch creation error:', err);
+            closeModal();
+            showToast('Branch may have been created — refresh to check', 'error');
+        });
+    }
+
+    createBtn.addEventListener('click', doCreate);
+    cancelBtn.addEventListener('click', closeModal);
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); doCreate(); }
+        if (e.key === 'Escape') { closeModal(); }
+    });
+
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
 }
 
 // =====================================================================
@@ -75,12 +256,12 @@ function onStatusChange(selectEl) {
     }
 
     selectEl.classList.add('dirty');
-    mutate('/api/mutate/status', { node_id: nodeId, new_status: newStatus }).then(function(result) {
+    mutate('/api/mutate/status', { node_id: nodeId, new_status: newStatus }).then(async function(result) {
         if (result && result.success) {
             selectEl.dataset.original = newStatus.toLowerCase();
             selectEl.classList.remove('dirty');
             // Refresh the card data
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         }
     });
 }
@@ -104,11 +285,11 @@ function onTitleBlur(el) {
     }
 
     el.classList.add('dirty');
-    mutate('/api/mutate/title', { node_id: nodeId, new_title: newTitle }).then(function(result) {
+    mutate('/api/mutate/title', { node_id: nodeId, new_title: newTitle }).then(async function(result) {
         if (result && result.success) {
             el.dataset.original = newTitle;
             el.classList.remove('dirty');
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         } else {
             el.textContent = original;
             el.classList.remove('dirty');
@@ -156,11 +337,54 @@ function onAddAssertion(nodeId) {
         req_id: nodeId,
         label: label.trim().toUpperCase(),
         text: text.trim()
-    }).then(function(result) {
+    }).then(async function(result) {
         if (result && result.success) {
-            refreshCard(nodeId);
+            await refreshCard(nodeId);
         }
     });
+}
+
+function onDeleteRequirement(nodeId) {
+    if (!confirm('Delete ' + nodeId + ' and all its assertions? This can be undone with Ctrl+Z.')) return;
+    mutate('/api/mutate/requirement/delete', {
+        node_id: nodeId,
+        confirm: true
+    }).then(function(result) {
+        if (result && result.success) {
+            closeCard(nodeId);
+            loadTreeData();
+        }
+    });
+}
+
+function onDeleteAssertion(nodeId, assertionId) {
+    // Look up parent requirement status from open card data
+    var info = editState.openCards.get(nodeId);
+    var props = info && info.data && info.data.properties ? info.data.properties : {};
+    var status = (props.status || '').toLowerCase();
+    if (status === 'active') {
+        // Active requirements: deprecate assertion (preserve label for traceability)
+        if (!confirm('Deprecate assertion ' + assertionId + '? The label will be preserved. This can be undone with Ctrl+Z.')) return;
+        mutate('/api/mutate/assertion', {
+            assertion_id: assertionId,
+            new_text: '[DEPRECATED]'
+        }).then(async function(result) {
+            if (result && result.success) {
+                await refreshCard(nodeId);
+            }
+        });
+    } else {
+        // Draft/Deprecated/other: allow full deletion
+        if (!confirm('Delete assertion ' + assertionId + '? This can be undone with Ctrl+Z.')) return;
+        mutate('/api/mutate/assertion/delete', {
+            assertion_id: assertionId,
+            confirm: true
+        }).then(async function(result) {
+            if (result && result.success) {
+                await refreshCard(nodeId);
+            }
+        });
+    }
 }
 
 function onEditableKeydown(event) {
@@ -187,15 +411,6 @@ async function refreshCard(nodeId) {
     delete assertionTestsCache[nodeId];
     delete assertionCodeCache[nodeId];
     renderCardStack();
-    // Restore edit mode state after re-render
-    if (editState.enabled) {
-        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
-            el.contentEditable = 'true';
-        });
-        document.querySelectorAll('.edit-only').forEach(function(el) {
-            el.style.display = '';
-        });
-    }
 }
 
 // =====================================================================
@@ -238,4 +453,293 @@ async function doUndo() {
     }
 }
 
+// =====================================================================
+// Relationship Editor
+// =====================================================================
+
+function onToggleEdgeKind(el) {
+    var sourceId = el.dataset.source;
+    var targetId = el.dataset.target;
+    var currentKind = el.dataset.kind;
+    var newKind = currentKind === 'implements' ? 'refines' : 'implements';
+
+    mutate('/api/mutate/edge', {
+        action: 'change_kind',
+        source_id: sourceId,
+        target_id: targetId,
+        new_kind: newKind
+    }).then(async function(result) {
+        if (result && result.success) {
+            await refreshCard(sourceId);
+        }
+    });
+}
+
+function onDeleteEdge(sourceId, targetId) {
+    if (!confirm('Remove relationship from ' + sourceId + ' to ' + targetId + '?')) return;
+
+    mutate('/api/mutate/edge', {
+        action: 'delete',
+        source_id: sourceId,
+        target_id: targetId
+    }).then(async function(result) {
+        if (result && result.success) {
+            await refreshCard(sourceId);
+            loadTreeData();
+        }
+    });
+}
+
+function onAddRelationship(nodeId, btn) {
+    // If form already exists, remove it
+    var existing = btn.parentNode.querySelector('.card-add-rel-form');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+
+    var form = document.createElement('div');
+    form.className = 'card-add-rel-form';
+
+    // Type select
+    var typeRow = document.createElement('div');
+    typeRow.className = 'add-rel-row';
+    typeRow.innerHTML = '<label class="add-rel-label">Type:</label>';
+    var typeSelect = document.createElement('select');
+    typeSelect.className = 'add-rel-select';
+    typeSelect.innerHTML = '<option value="implements">Implements</option><option value="refines">Refines</option>';
+    typeRow.appendChild(typeSelect);
+    form.appendChild(typeRow);
+
+    // Requirement picker
+    var pickerRow = document.createElement('div');
+    pickerRow.className = 'add-rel-row';
+    pickerRow.innerHTML = '<label class="add-rel-label">Target:</label>';
+    var pickerContainer = document.createElement('div');
+    pickerContainer.className = 'add-rel-picker-container';
+    pickerRow.appendChild(pickerContainer);
+    form.appendChild(pickerRow);
+
+    // Assertion target dropdown (populated after requirement selection)
+    var assertionRow = document.createElement('div');
+    assertionRow.className = 'add-rel-row';
+    assertionRow.style.display = 'none';
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertion:</label>';
+    var assertionSelect = document.createElement('select');
+    assertionSelect.className = 'add-rel-select';
+    assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+    assertionRow.appendChild(assertionSelect);
+    form.appendChild(assertionRow);
+
+    // Buttons
+    var btnRow = document.createElement('div');
+    btnRow.className = 'add-rel-buttons';
+    var addBtn = document.createElement('button');
+    addBtn.className = 'add-rel-add-btn';
+    addBtn.textContent = 'Add';
+    addBtn.disabled = true;
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'add-rel-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    btnRow.appendChild(addBtn);
+    btnRow.appendChild(cancelBtn);
+    form.appendChild(btnRow);
+
+    var picker = createReqPicker(pickerContainer, {
+        placeholder: 'Search for target requirement...',
+        fetchAssertions: true,
+        onSelect: function(item) {
+            addBtn.disabled = false;
+            // Populate assertion dropdown
+            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            if (item.assertions && item.assertions.length > 0) {
+                item.assertions.forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a.label || '';
+                    opt.textContent = (a.label || '') + ': ' + (a.text || '').substring(0, 60);
+                    assertionSelect.appendChild(opt);
+                });
+                assertionRow.style.display = 'flex';
+            } else {
+                assertionRow.style.display = 'none';
+            }
+        },
+        onClear: function() {
+            addBtn.disabled = true;
+            assertionRow.style.display = 'none';
+            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+        }
+    });
+
+    addBtn.addEventListener('click', function() {
+        var selected = picker.getSelected();
+        if (!selected) return;
+
+        var edgeKind = typeSelect.value;
+        var targetId = selected.id;
+        var assertionLabel = assertionSelect.value;
+
+        var payload = {
+            action: 'add',
+            source_id: nodeId,
+            target_id: targetId,
+            edge_kind: edgeKind
+        };
+
+        if (assertionLabel) {
+            payload.assertion_targets = [assertionLabel];
+        }
+
+        mutate('/api/mutate/edge', payload).then(async function(result) {
+            if (result && result.success) {
+                form.remove();
+                await refreshCard(nodeId);
+                loadTreeData();
+            }
+        });
+    });
+
+    cancelBtn.addEventListener('click', function() {
+        picker.destroy();
+        form.remove();
+    });
+
+    btn.parentNode.insertBefore(form, btn);
+}
+
 // Search functions moved to _search.js.j2 (shared by both modes)
+
+// =====================================================================
+// Push Modal (REQ-p00004-E)
+// =====================================================================
+
+function showPushModal() {
+    var pushBtn = document.getElementById('btn-push');
+    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Loading...'; }
+    apiFetch('/api/git/status').then(function(data) {
+        if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push'; }
+        if (!data || data.is_main) return;
+        var files = data.dirty_spec_files || [];
+        // Remove existing modal
+        var old = document.getElementById('branch-modal-overlay');
+        if (old) old.remove();
+
+        var fileListHtml = files.length > 0
+            ? files.map(function(f) { return '<div class="modal-file">' + escapeHtml(f) + '</div>'; }).join('')
+            : '<div class="modal-file muted">No modified spec files</div>';
+
+        var overlay = document.createElement('div');
+        overlay.id = 'branch-modal-overlay';
+        overlay.className = 'modal-overlay visible';
+        overlay.innerHTML =
+            '<div class="modal-dialog">' +
+                '<div class="modal-title">Commit &amp; Push</div>' +
+                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch) + '</strong></div>' +
+                '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
+                '<div class="modal-file-list">' + fileListHtml + '</div>' +
+                '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
+                '<input type="text" class="modal-input" id="push-message-input" placeholder="Commit message" autocomplete="off">' +
+                '<div class="modal-error hidden" id="push-modal-error"></div>' +
+                '<div class="modal-actions">' +
+                    '<button class="btn btn-primary" id="push-modal-confirm"' + (files.length === 0 ? ' disabled' : '') + '>Push</button>' +
+                    '<button class="btn" id="push-modal-cancel">Cancel</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var input = document.getElementById('push-message-input');
+        var errorEl = document.getElementById('push-modal-error');
+        input.focus();
+
+        function doPush() {
+            errorEl.textContent = '';
+            errorEl.classList.add('hidden');
+            var msg = input.value.trim();
+            if (!msg) {
+                errorEl.textContent = 'Commit message is required';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            var confirmBtn = document.getElementById('push-modal-confirm');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Pushing...';
+            // Save mutations first, then push
+            apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
+                if (saveResult && saveResult.success === false) {
+                    errorEl.textContent = 'Save failed: ' + (saveResult.error || 'unknown');
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                    return;
+                }
+                return apiFetch('/api/git/push', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+            }).then(function(result) {
+                if (!result) {
+                    errorEl.textContent = 'Push failed — no response from server';
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                    return;
+                }
+                if (result.success) {
+                    overlay.remove();
+                    var toast = 'Pushed ' + (result.files_committed || []).length + ' file(s)';
+                    if (result.push_error) {
+                        toast += ' (commit OK, push failed: ' + result.push_error + ')';
+                        showToast(toast, 'warning');
+                    } else {
+                        showToast(toast, 'success');
+                    }
+                    refreshBranchStatus();
+                    refreshDirtyCount();
+                } else {
+                    errorEl.textContent = result.error || 'Push failed';
+                    errorEl.classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Push';
+                }
+            });
+        }
+
+        document.getElementById('push-modal-confirm').onclick = doPush;
+        document.getElementById('push-modal-cancel').onclick = function() { overlay.remove(); };
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) overlay.remove();
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') doPush();
+            if (e.key === 'Escape') overlay.remove();
+        });
+    });
+}
+
+// =====================================================================
+// Unsaved Changes Warning (REQ-p00004-E)
+// =====================================================================
+
+window.addEventListener('beforeunload', function(e) {
+    var dirtyBadge = document.getElementById('unsaved-badge');
+    var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
+                       parseInt(dirtyBadge.textContent, 10) > 0;
+    var dot = document.getElementById('branch-status-dot');
+    var hasUncommitted = dot && dot.classList.contains('blue');
+    if (hasMutations || hasUncommitted) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+// =====================================================================
+// Branch Status: on-load check and polling (REQ-p00004-C, REQ-p00004-D)
+// =====================================================================
+
+refreshBranchStatus().then(function(data) {
+    if (data && data.is_main && data.dirty_spec_files && data.dirty_spec_files.length > 0) {
+        showBranchModal('You have local spec changes on main. Enter a branch name to continue editing.', null);
+    }
+});
+setInterval(refreshBranchStatus, 60000);

@@ -1,6 +1,5 @@
 # Implements: REQ-p00050-A, REQ-p00050-D
 # Implements: REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
-# Implements: REQ-d00053-A, REQ-d00053-B
 # Implements: REQ-d00071-A, REQ-d00071-B, REQ-d00071-C, REQ-d00071-D
 """Graph Builder - Constructs TraceGraph from parsed content.
 
@@ -319,6 +318,8 @@ class TraceGraph:
 
     def _undo_add_edge(self, entry: MutationEntry) -> None:
         """Undo an add edge operation."""
+        if entry.after_state.get("duplicate"):
+            return  # No-op was recorded; nothing to undo
         source_id = entry.before_state.get("source_id")
         target_id = entry.before_state.get("target_id")
         was_orphan = entry.before_state.get("was_orphan", False)
@@ -333,11 +334,20 @@ class TraceGraph:
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
             else:
-                # Remove actual edge
+                # Remove the specific edge that was added
                 source = self._index.get(source_id)
                 target = self._index.get(target_id)
                 if source and target:
-                    target.remove_child(source)
+                    edge_kind_val = entry.after_state.get("edge_kind", "")
+                    at = tuple(entry.after_state.get("assertion_targets", []))
+                    for edge in list(target.iter_outgoing_edges()):
+                        if (
+                            edge.target.id == source_id
+                            and edge.kind.value == edge_kind_val
+                            and tuple(edge.assertion_targets) == at
+                        ):
+                            target.remove_edge(edge)
+                            break
 
             # Restore orphan status
             if was_orphan and source_id in self._index:
@@ -1348,6 +1358,18 @@ class TraceGraph:
         )
 
         if target:
+            # Check for exact duplicate edge
+            new_at = tuple(assertion_targets or [])
+            for existing in target.iter_outgoing_edges():
+                if (
+                    existing.target.id == source_id
+                    and existing.kind == edge_kind
+                    and tuple(existing.assertion_targets) == new_at
+                ):
+                    entry.after_state["duplicate"] = True
+                    self._mutation_log.append(entry)
+                    return entry
+
             # Create the edge
             target.link(source, edge_kind, assertion_targets)
 
@@ -1480,8 +1502,8 @@ class TraceGraph:
             },
         )
 
-        # Remove the edge (parent removes child)
-        target.remove_child(source)
+        # Remove the specific edge (not all edges between these nodes)
+        target.remove_edge(edge_to_delete)
 
         # Check if source is now orphaned (no parents, not a root)
         if source.parent_count() == 0 and not self.has_root(source_id):
@@ -1604,6 +1626,7 @@ class GraphBuilder:
         repo_root: Path | None = None,
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
+        multi_assertion_separator: str = "+",
     ) -> None:
         """Initialize the graph builder.
 
@@ -1613,9 +1636,13 @@ class GraphBuilder:
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
                 classification. Defaults to ASSERTION and TEST_RESULT.
+            multi_assertion_separator: Character joining multiple assertion
+                labels in compact references (e.g. "+" for REQ-x-A+B+C).
+                Empty string disables expansion.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        self._multi_assertion_separator = multi_assertion_separator
         if satellite_kinds is not None:
             self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
         else:
@@ -1686,6 +1713,7 @@ class GraphBuilder:
             "status": data.get("status"),
             "hash": data.get("hash"),
             "body_text": data.get("body_text", ""),  # For hash computation
+            "changelog": data.get("changelog", []),
         }
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
@@ -1850,6 +1878,9 @@ class GraphBuilder:
                     end_line=content.end_line,
                 ),
             )
+            expected_broken = data.get("expected_broken_count", 0)
+            if expected_broken > 0:
+                node.set_metric("_expected_broken_count", expected_broken)
             self._nodes[test_id] = node
             self._orphan_candidates.add(test_id)
 
@@ -1928,6 +1959,40 @@ class GraphBuilder:
         node._content = {"text": text}
         self._nodes[remainder_id] = node
 
+    # Implements: REQ-d00081-D+E+G
+    def _expand_multi_assertion(self, target_id: str) -> list[str]:
+        """Expand multi-assertion reference using configured separator.
+
+        REQ-p00001-A+B+C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
+
+        The first assertion label is part of the base ID (normal separator).
+        Additional labels follow the multi-assertion separator.
+        """
+        sep = self._multi_assertion_separator
+        if not sep or sep not in target_id:
+            return [target_id]
+
+        parts = target_id.split(sep)
+        base = parts[0]
+        if not parts[1:]:
+            return [target_id]
+
+        # Find the last ID separator (- or _) to split off the first label
+        last_sep_idx = max(base.rfind("-"), base.rfind("_"))
+        if last_sep_idx < 0:
+            return [target_id]
+
+        base_req = base[:last_sep_idx]
+        id_sep = base[last_sep_idx]
+        first_label = base[last_sep_idx + 1 :]
+
+        result = [f"{base_req}{id_sep}{first_label}"]
+        for label in parts[1:]:
+            if label:
+                result.append(f"{base_req}{id_sep}{label}")
+
+        return result
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -1937,8 +2002,14 @@ class GraphBuilder:
         Returns:
             Complete TraceGraph with detection data populated.
         """
-        # Resolve pending links
+        # Expand multi-assertion references before resolving
+        expanded_links: list[tuple[str, str, EdgeKind]] = []
         for source_id, target_id, edge_kind in self._pending_links:
+            for resolved_target in self._expand_multi_assertion(target_id):
+                expanded_links.append((source_id, resolved_target, edge_kind))
+
+        # Resolve pending links
+        for source_id, target_id, edge_kind in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
 
@@ -1977,6 +2048,16 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                     )
                 )
+
+        # Populate _expected_broken_targets from nodes with the marker
+        for br in self._broken_references:
+            source = self._nodes.get(br.source_id)
+            if source and source.get_metric("_expected_broken_count"):
+                remaining = source.get_metric("_expected_broken_count")
+                targets = source.get_metric("_expected_broken_targets") or []
+                if len(targets) < remaining:
+                    targets.append(br.target_id)
+                    source.set_metric("_expected_broken_targets", targets)
 
         # Implements: REQ-d00071-A, REQ-d00071-B
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes

@@ -637,3 +637,89 @@ class TestEdgeCoalescing:
         assert "REQ-p00001" in content
         assert "REQ-p00002" in content
         assert "REQ-p00003" in content
+
+
+# ---------------------------------------------------------------------------
+# Assertion target persistence
+# ---------------------------------------------------------------------------
+
+
+class TestAssertionTargetPersistence:
+    """Tests that assertion_targets on edges are preserved when saving to disk."""
+
+    def test_assertion_target_written_to_file(self, tmp_path: Path):
+        """Edge with assertion_targets=["A"] produces REQ-p00001-A in file."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        # Delete existing whole-req edge, add assertion-targeted edge
+        graph.delete_edge("REQ-t00001", "REQ-p00001")
+        graph.add_edge("REQ-t00001", "REQ-p00001", EdgeKind.IMPLEMENTS, assertion_targets=["A"])
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-p00001-A" in content
+        # Should NOT contain bare REQ-p00001 in the Implements line
+        # (it was replaced by the assertion-targeted form)
+        for line in content.splitlines():
+            if "**Implements**:" in line:
+                assert "REQ-p00001-A" in line
+                # Ensure no bare REQ-p00001 (without -A suffix) on this line
+                parts = line.split("REQ-p00001")
+                for i, part in enumerate(parts):
+                    if i > 0:  # after each occurrence of REQ-p00001
+                        assert part.startswith(
+                            "-A"
+                        ), f"Expected REQ-p00001-A but found bare REQ-p00001 in: {line}"
+                break
+
+    def test_whole_req_and_assertion_target_coexist(self, tmp_path: Path):
+        """Whole-req ref and assertion-targeted ref coexist in Implements line."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        # Add a second parent REQ-p00002 with assertion target ["B"]
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Second PRD",
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
+        graph._index["REQ-p00002"] = prd2
+        graph._roots.append(prd2)
+
+        graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.IMPLEMENTS, assertion_targets=["B"])
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        # Should have both: whole-req REQ-p00001 and assertion-targeted REQ-p00002-B
+        for line in content.splitlines():
+            if "**Implements**:" in line:
+                assert "REQ-p00001" in line
+                assert "REQ-p00002-B" in line
+                break
+        else:
+            raise AssertionError("No Implements line found in file")
+
+    def test_no_duplicate_refs_written(self, tmp_path: Path):
+        """Deleting and re-adding the same edge does not produce duplicate refs."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        # Delete and re-add the same edge
+        graph.delete_edge("REQ-t00001", "REQ-p00001")
+        graph.add_edge("REQ-t00001", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            if "**Implements**:" in line:
+                # REQ-p00001 should appear exactly once
+                count = line.count("REQ-p00001")
+                assert count == 1, f"Expected REQ-p00001 exactly once but found {count} in: {line}"
+                break
+        else:
+            raise AssertionError("No Implements line found in file")

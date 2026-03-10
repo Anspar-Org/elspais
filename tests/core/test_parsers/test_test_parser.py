@@ -1,14 +1,15 @@
+# elspais: expected-broken-links 1
 """Tests for TestParser - Priority 80 test reference parser."""
 
 from elspais.graph.parsers import ParseContext
-from elspais.graph.parsers.test import TestParser
+from elspais.graph.parsers.test import TestParser as _TestParser
 
 
 class TestTestParserPriority:
     """Tests for TestParser priority."""
 
     def test_priority_is_80(self):
-        parser = TestParser()
+        parser = _TestParser()
         assert parser.priority == 80
 
 
@@ -16,7 +17,7 @@ class TestTestParserBasic:
     """Tests for basic test reference parsing."""
 
     def test_claims_test_with_req_reference(self):
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_user_auth_REQ_p00001():"),
             (2, "    assert True"),
@@ -30,7 +31,7 @@ class TestTestParserBasic:
         assert "REQ-p00001" in results[0].parsed_data["validates"]
 
     def test_claims_test_with_inline_marker(self):
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_something():"),
             (2, "    # Tests REQ-p00001"),
@@ -44,7 +45,7 @@ class TestTestParserBasic:
         assert "REQ-p00001" in results[0].parsed_data["validates"]
 
     def test_no_test_refs_returns_empty(self):
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_unrelated():"),
             (2, "    assert 1 + 1 == 2"),
@@ -57,7 +58,7 @@ class TestTestParserBasic:
 
     def test_REQ_d00066_D_validates_assertion_level_reference(self):
         """REQ-d00066-D: Test names with assertion labels are validated."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_REQ_d00060_A_returns_node_counts():"),
             (2, "    assert True"),
@@ -73,7 +74,7 @@ class TestTestParserBasic:
 
     def test_REQ_d00066_D_validates_multi_assertion_reference(self):
         """REQ-d00066-D: Test names with multiple assertion labels are validated."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_REQ_d00060_A_B_combined_test():"),
             (2, "    assert True"),
@@ -90,13 +91,13 @@ class TestTestParserBasic:
 class TestTestParserCustomConfig:
     """Tests for TestParser with custom configuration.
 
-    REQ-d00101-A: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00101-B: Parser accepts custom comment styles via ReferenceResolver.
-    REQ-d00101-C: Parser validates underscore separators in test names.
+    REQ-d00082-J: Parser accepts custom PatternConfig for non-standard prefixes.
+    REQ-d00082-J: Parser accepts custom comment styles via ReferenceResolver.
+    REQ-d00082-J: Parser validates underscore separators in test names.
     """
 
-    def test_REQ_d00101_A_custom_prefix_spec(self):
-        """REQ-d00101-A: Parser with custom prefix 'SPEC' instead of 'REQ'."""
+    def test_REQ_d00082_J_custom_prefix_spec(self):
+        """REQ-d00082-J: Parser with custom prefix 'SPEC' instead of 'REQ'."""
         from elspais.utilities.patterns import PatternConfig
 
         pattern_config = PatternConfig.from_dict(
@@ -110,7 +111,7 @@ class TestTestParserCustomConfig:
                 "id_format": {"style": "numeric", "digits": 5},
             }
         )
-        parser = TestParser(pattern_config=pattern_config)
+        parser = _TestParser(pattern_config=pattern_config)
         lines = [
             (1, "def test_SPEC_d00101_custom_spec():"),
             (2, "    assert True"),
@@ -122,8 +123,8 @@ class TestTestParserCustomConfig:
         assert len(results) == 1
         assert "SPEC-d00101" in results[0].parsed_data["validates"]
 
-    def test_REQ_d00101_B_custom_comment_styles_with_resolver(self):
-        """REQ-d00101-B: Parser uses custom comment styles from ReferenceResolver."""
+    def test_REQ_d00082_J_custom_comment_styles_with_resolver(self):
+        """REQ-d00082-J: Parser uses custom comment styles from ReferenceResolver."""
         from elspais.utilities.patterns import PatternConfig
         from elspais.utilities.reference_config import (
             ReferenceConfig,
@@ -152,7 +153,7 @@ class TestTestParserCustomConfig:
             },
         )
         resolver = ReferenceResolver(ref_config)
-        parser = TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
 
         lines = [
             (1, "def test_something():"),
@@ -168,8 +169,8 @@ class TestTestParserCustomConfig:
         assert parser._pattern_config == pattern_config
         assert parser._reference_resolver == resolver
 
-    def test_REQ_d00101_C_validates_underscore_separators(self):
-        """REQ-d00101-C: Parser accepts underscore separators in test names."""
+    def test_REQ_d00082_J_validates_underscore_separators(self):
+        """REQ-d00082-J: Parser accepts underscore separators in test names."""
         from elspais.utilities.patterns import PatternConfig
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
@@ -191,10 +192,10 @@ class TestTestParserCustomConfig:
             case_sensitive=False,
         )
         resolver = ReferenceResolver(ref_config)
-        parser = TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
 
         lines = [
-            (1, "def test_REQ_d00101_custom_feature():"),
+            (1, "def test_REQ_d00082_J_custom_feature():"),
             (2, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_underscore.py")
@@ -203,7 +204,7 @@ class TestTestParserCustomConfig:
 
         assert len(results) == 1
         # Should normalize underscores to hyphens in output
-        assert "REQ-d00101" in results[0].parsed_data["validates"]
+        assert "REQ-d00082-J" in results[0].parsed_data["validates"]
 
 
 class TestTestParserFunctionTracking:
@@ -215,7 +216,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_tracks_function_name(self):
         """Function name is captured from the enclosing def statement."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_REQ_p00001_foo():"),
             (2, "    assert True"),
@@ -229,7 +230,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_tracks_class_name(self):
         """Both class and function names are captured for methods in a test class."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "class TestFoo:"),
             (2, "    def test_REQ_p00001_bar(self):"),
@@ -245,7 +246,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_no_function_context_for_module_comment(self):
         """Module-level comments have no function or class context."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "# Tests REQ-p00001"),
             (2, ""),
@@ -264,7 +265,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_file_default_validates(self):
         """File-level REQ comment populates file_default_validates for all items."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "# Tests REQ-p00001"),
             (2, ""),
@@ -282,7 +283,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_function_line_tracks_def_line(self):
         """function_line is the line number of the def statement, not the REQ reference."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "def test_something():"),
             (2, "    # Tests REQ-p00001"),
@@ -299,7 +300,7 @@ class TestTestParserFunctionTracking:
 
     def test_REQ_d00054_A_comment_ref_inside_function(self):
         """A comment reference inside a function body gets the function context."""
-        parser = TestParser()
+        parser = _TestParser()
         lines = [
             (1, "class TestFoo:"),
             (2, "    def test_something(self):"),

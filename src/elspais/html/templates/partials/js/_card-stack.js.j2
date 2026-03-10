@@ -113,6 +113,13 @@ function renderCardStack() {
 
     // Re-apply cached coverage colors after DOM rebuild
     recolorCachedButtons();
+
+    // Re-apply edit mode state after DOM rebuild
+    if (editState.enabled) {
+        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+            el.contentEditable = 'true';
+        });
+    }
 }
 
 function buildCardHtml(nodeId, data, collapsed) {
@@ -135,6 +142,9 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<button class="req-card-delete edit-only" ' +
+        'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
+        'title="Delete requirement">&#10005;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -184,26 +194,44 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div></div>';
 
     // Editable Title (edit mode only, replaces header title on blur)
-    html += '<div class="card-section edit-only" style="display:none;"><div class="card-section-label">Title</div>';
+    html += '<div class="card-section edit-only"><div class="card-section-label">Title <span class="edit-pencil" onclick="event.stopPropagation(); this.closest(\'.card-section\').querySelector(\'.editable-field\').focus()">&#9998;</span></div>';
     html += '<div class="editable-field" contenteditable="true" data-node-id="' + nodeId + '" ' +
         'data-field="title" data-original="' + escapeAttr(data.title || '') + '" ' +
         'onblur="onTitleBlur(this)" onkeydown="onEditableKeydown(event)">' +
         escapeHtml(data.title || '') + '</div>';
     html += '</div>';
 
-    // Parents section
+    // Parents section (relationship editor in edit mode)
+    html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
+    html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
-        html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
-        html += '<div class="card-parents">';
         data.parents.forEach(function(p) {
-            const edgeKind = (p.edge_kind || 'implements').toUpperCase();
+            const edgeKind = (p.edge_kind || 'implements').toLowerCase();
+            const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
+            html += '<div class="card-parent-row">';
+            // View-only kind badge
+            html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
+            // Edit-only kind toggle
+            html += '<button class="card-parent-kind-toggle edit-only" ' +
+                'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
+                'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
+                'title="Click to toggle implements/refines">' + edgeKindDisplay + '</button>';
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
-            html += '<span class="card-parent-kind">' + edgeKind + '</span> ';
-            html += p.id.replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
+            html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
             html += '</a>';
+            html += '<button class="card-parent-delete edit-only" ' +
+                'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
+                'title="Remove relationship">&times;</button>';
+            html += '</div>';
         });
-        html += '</div></div>';
+    } else {
+        html += '<div class="card-parents-empty">No parent relationships</div>';
     }
+    html += '</div>';
+    // Add relationship button (edit mode only)
+    html += '<button class="card-add-rel-btn edit-only" ' +
+        'onclick="onAddRelationship(\'' + nodeId + '\', this)">+ Add Relationship</button>';
+    html += '</div>';
 
     // Assertions section
     const assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });
@@ -217,6 +245,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
             html += '<div class="card-assertion">';
             html += '<span class="card-assertion-label">' + label + '</span>';
+            html += '<span class="edit-pencil edit-only" onclick="event.stopPropagation(); this.closest(\'.card-assertion\').querySelector(\'.card-assertion-text\').focus()">&#9998;</span>';
             html += '<span class="card-assertion-text editable-field" ' +
                 'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
@@ -230,6 +259,10 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
                 'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
                 'Validation</button>';
+            html += '<button class="assertion-delete-btn edit-only" ' +
+                'title="Deprecate assertion" ' +
+                'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
+                '&#8856;</button>';
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
@@ -238,12 +271,12 @@ function buildCardHtml(nodeId, data, collapsed) {
         html += '</div>';
 
         // Add assertion button (edit mode only)
-        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')" style="display:none;">+ Add Assertion</button>';
+        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')">+ Add Assertion</button>';
         html += '</div>';
     } else {
         html += '<div class="card-section"><div class="card-section-label">Assertions</div>';
         html += '<div style="font-size:0.8rem;color:#adb5bd;">No assertions defined</div>';
-        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')" style="display:none;">+ Add Assertion</button>';
+        html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')">+ Add Assertion</button>';
         html += '</div>';
     }
 

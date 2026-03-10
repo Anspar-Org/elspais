@@ -13,12 +13,9 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import tomlkit
-
-if TYPE_CHECKING:
-    from elspais.testing.config import TestingConfig
 
 # Default configuration values
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -65,6 +62,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "case_sensitive": False,
             "prefix_optional": False,
             "comment_styles": ["#", "//", "--"],
+            "multi_assertion_separator": "+",
             "keywords": {
                 "implements": ["Implements", "IMPLEMENTS"],
                 "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
@@ -81,6 +79,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "graph": {
         "satellite_kinds": ["assertion", "result"],
+    },
+    "changelog": {
+        "enforce": True,
+        "require_present": False,
+        "id_source": "gh",
+        "date_format": "iso",
+        "require_change_order": False,
+        "require_reason": True,
+        "require_author_name": True,
+        "require_author_id": True,
+        "author_id_format": "email",
+        "allowed_author_ids": "all",
     },
 }
 
@@ -747,21 +757,6 @@ def validate_project_config(config: dict[str, Any]) -> list[str]:
     return errors
 
 
-def get_testing_config(config: dict[str, Any]) -> TestingConfig:
-    """Get TestingConfig from configuration dictionary.
-
-    Args:
-        config: Configuration dictionary from get_config() or load_config().get_raw()
-
-    Returns:
-        TestingConfig instance with values from [testing] section or defaults.
-    """
-    from elspais.testing.config import TestingConfig
-
-    testing_data = config.get("testing", {})
-    return TestingConfig.from_dict(testing_data)
-
-
 def get_test_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -847,7 +842,6 @@ __all__ = [
     "get_spec_directories",
     "get_code_directories",
     "get_docs_directories",
-    "get_testing_config",
     "get_test_directories",
     "get_ignore_config",
     "validate_project_config",

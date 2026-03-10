@@ -196,10 +196,11 @@ class TestRequirementParserEdgeCases:
         assert len(results) == 1
         assert results[0].end_line == 3
 
-    def test_expands_multi_assertion_syntax(self, parser):
+    def test_passes_through_multi_assertion_syntax(self, parser):
+        """Multi-assertion expansion now happens in builder, not parser."""
         lines = [
             (1, "## REQ-o00001: Multi-Assertion"),
-            (2, "**Implements**: REQ-p00001-A-B-C | **Status**: Active"),
+            (2, "**Implements**: REQ-p00001-A+B+C | **Status**: Active"),
             (3, "Body."),
             (4, "*End* *REQ-o00001*"),
         ]
@@ -208,11 +209,9 @@ class TestRequirementParserEdgeCases:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        # Multi-assertion should be expanded
+        # Parser passes through as-is; builder expands later
         implements = results[0].parsed_data["implements"]
-        assert "REQ-p00001-A" in implements
-        assert "REQ-p00001-B" in implements
-        assert "REQ-p00001-C" in implements
+        assert "REQ-p00001-A+B+C" in implements
 
 
 class TestRoundTripLineNumbers:
@@ -294,3 +293,122 @@ class TestRoundTripLineNumbers:
 
         assertions = results[0].parsed_data["assertions"]
         assert assertions[0]["line"] == 5
+
+
+class TestChangelogParsing:
+    """Changelog entry extraction from requirement body text.
+
+    Validates REQ-p00002-A: The parser extracts structured changelog entries
+    from a ## Changelog section in requirement markdown.
+    """
+
+    REQUIREMENT_WITH_CHANGELOG = [
+        (1, "# REQ-d00001: Test Requirement"),
+        (2, ""),
+        (3, "**Level**: DEV | **Status**: Active | **Implements**: -"),
+        (4, ""),
+        (5, "## Assertions"),
+        (6, ""),
+        (7, "A. The system SHALL do something."),
+        (8, ""),
+        (9, "## Changelog"),
+        (10, ""),
+        (
+            11,
+            "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (a@b.org) | Refined A",
+        ),
+        (
+            12,
+            "- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (b@b.org) | First version",
+        ),
+        (13, ""),
+        (14, "*End* *Test Requirement* | **Hash**: abcdef12"),
+    ]
+
+    REQUIREMENT_WITHOUT_CHANGELOG = [
+        (1, "# REQ-d00001: Test Requirement"),
+        (2, ""),
+        (3, "**Level**: DEV | **Status**: Active | **Implements**: -"),
+        (4, ""),
+        (5, "## Assertions"),
+        (6, ""),
+        (7, "A. The system SHALL do something."),
+        (8, ""),
+        (9, "*End* *Test Requirement* | **Hash**: abcdef12"),
+    ]
+
+    def test_REQ_p00002_A_parses_changelog_entries(self, parser):
+        """A requirement with ## Changelog should have parsed changelog entries."""
+        ctx = ParseContext(file_path="spec/dev.md")
+
+        results = list(parser.claim_and_parse(self.REQUIREMENT_WITH_CHANGELOG, ctx))
+
+        assert len(results) == 1
+        parsed = results[0].parsed_data
+        assert "changelog" in parsed
+        changelog = parsed["changelog"]
+        assert isinstance(changelog, list)
+        assert len(changelog) >= 1
+
+        entry = changelog[0]
+        assert "date" in entry
+        assert "hash" in entry
+        assert "change_order" in entry
+        assert "author_name" in entry
+        assert "author_id" in entry
+        assert "reason" in entry
+
+        assert entry["date"] == "2026-03-06"
+        assert entry["hash"] == "abcdef12"
+        assert entry["change_order"] == "CUR-1234"
+        assert entry["author_name"] == "Alice"
+        assert entry["author_id"] == "a@b.org"
+        assert entry["reason"] == "Refined A"
+
+    def test_REQ_p00002_A_changelog_empty_when_no_section(self, parser):
+        """A requirement without ## Changelog should have changelog: []."""
+        ctx = ParseContext(file_path="spec/dev.md")
+
+        results = list(parser.claim_and_parse(self.REQUIREMENT_WITHOUT_CHANGELOG, ctx))
+
+        assert len(results) == 1
+        parsed = results[0].parsed_data
+        assert "changelog" in parsed
+        assert parsed["changelog"] == []
+
+    def test_REQ_p00002_A_changelog_multiple_entries(self, parser):
+        """Multiple changelog entries are parsed in order (newest first)."""
+        ctx = ParseContext(file_path="spec/dev.md")
+
+        results = list(parser.claim_and_parse(self.REQUIREMENT_WITH_CHANGELOG, ctx))
+
+        assert len(results) == 1
+        changelog = results[0].parsed_data["changelog"]
+        assert len(changelog) == 2
+
+        # First entry (newest)
+        assert changelog[0]["date"] == "2026-03-06"
+        assert changelog[0]["hash"] == "abcdef12"
+        assert changelog[0]["change_order"] == "CUR-1234"
+        assert changelog[0]["author_name"] == "Alice"
+        assert changelog[0]["author_id"] == "a@b.org"
+        assert changelog[0]["reason"] == "Refined A"
+
+        # Second entry (older)
+        assert changelog[1]["date"] == "2026-02-15"
+        assert changelog[1]["hash"] == "bf63eda5"
+        assert changelog[1]["change_order"] == "CUR-1200"
+        assert changelog[1]["author_name"] == "Bob"
+        assert changelog[1]["author_id"] == "b@b.org"
+        assert changelog[1]["reason"] == "First version"
+
+    def test_REQ_p00002_A_changelog_excluded_from_sections(self, parser):
+        """The ## Changelog section should NOT appear in parsed_data['sections']."""
+        ctx = ParseContext(file_path="spec/dev.md")
+
+        results = list(parser.claim_and_parse(self.REQUIREMENT_WITH_CHANGELOG, ctx))
+
+        assert len(results) == 1
+        sections = results[0].parsed_data.get("sections", [])
+        section_headings = [s["heading"] for s in sections]
+        assert "Changelog" not in section_headings

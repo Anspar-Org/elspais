@@ -1,10 +1,14 @@
-# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
+# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F
 """Tests for the Flask trace-edit REST API server.
 
 Validates:
 - REQ-d00010-A: Flask app factory pattern
 - REQ-d00010-F: CORS enabled for cross-origin requests
 - REQ-d00010-G: Static file serving
+- REQ-p00004-C: Git status summary endpoint
+- REQ-p00004-D: Branch creation endpoint
+- REQ-p00004-E: Commit and push endpoint
+- REQ-p00004-F: Pull fast-forward endpoint
 """
 
 from pathlib import Path
@@ -647,6 +651,51 @@ class TestMutateEdge:
         assert resp.status_code == 400
 
 
+class TestMutateAssertionDelete:
+    """Validates REQ-d00010-A: Delete assertion endpoint."""
+
+    def test_REQ_d00010_A_delete_assertion_success(self, client):
+        # First add a temp assertion, then delete it
+        client.post(
+            "/api/mutate/assertion/add",
+            json={"req_id": "REQ-p00001", "label": "Z", "text": "Temp assertion"},
+        )
+        resp = client.post(
+            "/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-Z", "confirm": True}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+    def test_REQ_d00010_A_delete_assertion_missing_id(self, client):
+        resp = client.post("/api/mutate/assertion/delete", json={})
+        assert resp.status_code == 400
+
+    def test_REQ_d00010_A_delete_assertion_requires_confirm(self, client):
+        resp = client.post("/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-A"})
+        assert resp.status_code == 400
+
+
+class TestMutateRequirementDelete:
+    """Validates REQ-d00010-A: Delete requirement endpoint."""
+
+    def test_REQ_d00010_A_delete_requirement_success(self, client, sample_graph):
+        # Add a throwaway requirement, then delete it
+        sample_graph.add_requirement(req_id="REQ-z99999", title="Temp", level="DEV")
+        resp = client.post(
+            "/api/mutate/requirement/delete", json={"node_id": "REQ-z99999", "confirm": True}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+    def test_REQ_d00010_A_delete_requirement_missing_id(self, client):
+        resp = client.post("/api/mutate/requirement/delete", json={})
+        assert resp.status_code == 400
+
+    def test_REQ_d00010_A_delete_requirement_requires_confirm(self, client):
+        resp = client.post("/api/mutate/requirement/delete", json={"node_id": "REQ-p00001"})
+        assert resp.status_code == 400
+
+
 class TestMutateUndo:
     """Validates REQ-d00010-A: POST /api/mutate/undo."""
 
@@ -1011,80 +1060,259 @@ class TestTreeDataJourneys:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Git Sync Endpoint Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGitStatus:
+    """Validates REQ-d00010-A, REQ-p00004-C: GET /api/git/status."""
+
+    def test_REQ_p00004_C_git_status_returns_expected_fields(self, client):
+        """GET /api/git/status returns branch, is_main, dirty_spec_files, remote_diverged."""
+        from unittest.mock import patch
+
+        mock_result = {
+            "branch": "feature-x",
+            "is_main": False,
+            "dirty_spec_files": ["spec/prd.md"],
+            "remote_diverged": False,
+            "local_ahead": 0,
+            "fast_forward_possible": False,
+            "main_diverged": False,
+        }
+        with patch("elspais.utilities.git.git_status_summary", return_value=mock_result):
+            resp = client.get("/api/git/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["branch"] == "feature-x"
+        assert data["is_main"] is False
+        assert data["dirty_spec_files"] == ["spec/prd.md"]
+        assert "remote_diverged" in data
+        assert "fast_forward_possible" in data
+
+    def test_REQ_p00004_C_git_status_uses_config_spec_dir(self, sample_graph):
+        """GET /api/git/status passes spec dir from config."""
+        from unittest.mock import patch
+
+        config = {"spec": {"directories": ["requirements"]}}
+        application = create_app(repo_root=Path("/test/repo"), graph=sample_graph, config=config)
+        application.config["TESTING"] = True
+
+        mock_result = {
+            "branch": "main",
+            "is_main": True,
+            "dirty_spec_files": [],
+            "remote_diverged": False,
+            "fast_forward_possible": False,
+        }
+        with patch("elspais.utilities.git.git_status_summary", return_value=mock_result) as m:
+            with application.test_client() as c:
+                c.get("/api/git/status")
+            m.assert_called_once()
+            _, kwargs = m.call_args
+            assert kwargs.get("spec_dir") == "requirements"
+
+
+class TestGitBranch:
+    """Validates REQ-d00010-A, REQ-p00004-D: POST /api/git/branch."""
+
+    def test_REQ_p00004_D_git_branch_creates_branch(self, client):
+        """POST /api/git/branch with valid name returns success."""
+        from unittest.mock import patch
+
+        mock_result = {"success": True, "branch": "feature-new", "stash_used": False}
+        with patch("elspais.utilities.git.create_and_switch_branch", return_value=mock_result):
+            resp = client.post("/api/git/branch", json={"name": "feature-new"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["branch"] == "feature-new"
+
+    def test_REQ_p00004_D_git_branch_empty_name_returns_400(self, client):
+        """POST /api/git/branch with empty name returns 400."""
+        resp = client.post("/api/git/branch", json={"name": ""})
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "required" in data["error"]
+
+    def test_REQ_p00004_D_git_branch_missing_name_returns_400(self, client):
+        """POST /api/git/branch with no name field returns 400."""
+        resp = client.post("/api/git/branch", json={})
+        assert resp.status_code == 400
+
+    def test_REQ_p00004_D_git_branch_failure_returns_400(self, client):
+        """POST /api/git/branch with duplicate name returns 400."""
+        from unittest.mock import patch
+
+        mock_result = {"success": False, "error": "branch already exists"}
+        with patch("elspais.utilities.git.create_and_switch_branch", return_value=mock_result):
+            resp = client.post("/api/git/branch", json={"name": "existing"})
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["success"] is False
+
+
+class TestGitPush:
+    """Validates REQ-d00010-A, REQ-p00004-E: POST /api/git/push."""
+
+    def test_REQ_p00004_E_git_push_success(self, client):
+        """POST /api/git/push with valid message returns success."""
+        from unittest.mock import patch
+
+        mock_result = {"success": True, "files_committed": ["spec/prd.md"]}
+        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
+            resp = client.post("/api/git/push", json={"message": "Update specs"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "files_committed" in data
+
+    def test_REQ_p00004_E_git_push_empty_message_returns_400(self, client):
+        """POST /api/git/push with empty message returns 400."""
+        resp = client.post("/api/git/push", json={"message": ""})
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "required" in data["error"]
+
+    def test_REQ_p00004_E_git_push_on_main_refused(self, client):
+        """POST /api/git/push on main branch returns 200 with error in JSON.
+
+        The endpoint always returns 200 so the modal JS can display errors inline.
+        """
+        from unittest.mock import patch
+
+        mock_result = {
+            "success": False,
+            "error": "Refusing to commit on protected branch 'main'",
+        }
+        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
+            resp = client.post("/api/git/push", json={"message": "Bad push"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "Refusing" in data["error"]
+
+    def test_REQ_p00004_E_git_push_generic_error(self, client):
+        """POST /api/git/push with generic error returns 200 with error in JSON."""
+        from unittest.mock import patch
+
+        mock_result = {"success": False, "error": "Nothing to commit — no dirty spec files"}
+        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
+            resp = client.post("/api/git/push", json={"message": "No changes"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is False
+
+
+class TestGitPull:
+    """Validates REQ-d00010-A, REQ-p00004-F: POST /api/git/pull."""
+
+    def test_REQ_p00004_F_git_pull_success(self, client):
+        """POST /api/git/pull returns success on fast-forward."""
+        from unittest.mock import patch
+
+        mock_result = {"success": True, "message": "Already up to date."}
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
+            resp = client.post("/api/git/pull")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "message" in data
+
+    def test_REQ_p00004_F_git_pull_no_remote_returns_400(self, client):
+        """POST /api/git/pull with no remote returns 400."""
+        from unittest.mock import patch
+
+        mock_result = {"success": False, "error": "Fetch failed: no remote configured"}
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
+            resp = client.post("/api/git/pull")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "error" in data
+
+    def test_REQ_p00004_F_git_pull_diverged_returns_400(self, client):
+        """POST /api/git/pull with diverged history returns 400."""
+        from unittest.mock import patch
+
+        mock_result = {
+            "success": False,
+            "error": "Cannot fast-forward — resolve differences outside elspais",
+        }
+        with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
+            resp = client.post("/api/git/pull")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "fast-forward" in data["error"]
+
+
 class TestCLIWiring:
-    """Validates REQ-d00010-A: CLI --server and --edit-mode wiring."""
+    """Validates REQ-d00010-A: viewer command wiring."""
 
-    def test_REQ_d00010_A_review_mode_still_not_implemented(self):
-        """--review-mode still returns error code 1."""
-        import argparse
-
-        from elspais.commands.trace import run
-
-        args = argparse.Namespace(
-            review_mode=True,
-            edit_mode=False,
-            server=False,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
-            spec_dir=None,
-            config=None,
-            quiet=True,
-            embed_content=False,
-        )
-        result = run(args)
-        assert result == 1
-
-    def test_REQ_d00010_A_server_flag_calls_run_server(self):
-        """--server flag delegates to _run_server."""
+    def test_REQ_d00010_A_viewer_default_calls_run_server_with_browser(self):
+        """Default viewer delegates to _run_server with open_browser=True."""
         import argparse
         from unittest.mock import patch
 
-        from elspais.commands.trace import run
+        from elspais.commands.viewer import run
 
         args = argparse.Namespace(
-            review_mode=False,
-            edit_mode=False,
-            server=True,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
+            server=False,
+            static=False,
             spec_dir=None,
             config=None,
             quiet=True,
-            embed_content=False,
+            path=None,
+            canonical_root=None,
         )
-        with patch("elspais.commands.trace._run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
+            result = run(args)
+            assert result == 0
+            mock.assert_called_once_with(args, open_browser=True)
+
+    def test_REQ_d00010_A_viewer_server_flag_no_browser(self):
+        """--server flag delegates to _run_server with open_browser=False."""
+        import argparse
+        from unittest.mock import patch
+
+        from elspais.commands.viewer import run
+
+        args = argparse.Namespace(
+            server=True,
+            static=False,
+            spec_dir=None,
+            config=None,
+            quiet=True,
+            path=None,
+            canonical_root=None,
+        )
+        with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
 
-    def test_REQ_d00010_A_edit_mode_flag_calls_run_server_with_browser(self):
-        """--edit-mode flag delegates to _run_server with open_browser=True."""
+    def test_REQ_d00010_A_viewer_static_generates_html(self):
+        """--static flag generates an HTML file."""
         import argparse
         from unittest.mock import patch
 
-        from elspais.commands.trace import run
+        from elspais.commands.viewer import run
 
         args = argparse.Namespace(
-            review_mode=False,
-            edit_mode=True,
             server=False,
-            view=False,
-            graph_json=False,
-            format="markdown",
-            report=None,
-            output=None,
+            static=True,
             spec_dir=None,
             config=None,
             quiet=True,
+            path=None,
+            canonical_root=None,
             embed_content=False,
+            output=None,
         )
-        with patch("elspais.commands.trace._run_server", return_value=0) as mock:
+        with patch("elspais.commands.viewer._run_static", return_value=0) as mock:
             result = run(args)
             assert result == 0
-            mock.assert_called_once_with(args, open_browser=True)
+            mock.assert_called_once_with(args)

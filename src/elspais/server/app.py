@@ -21,6 +21,7 @@ from flask_cors import CORS
 
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.html.theme import get_catalog
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_test_map,
@@ -33,7 +34,9 @@ from elspais.mcp.server import (
     _mutate_add_edge,
     _mutate_change_edge_kind,
     _mutate_change_status,
+    _mutate_delete_assertion,
     _mutate_delete_edge,
+    _mutate_delete_requirement,
     _mutate_update_assertion,
     _mutate_update_title,
     _query_nodes,
@@ -145,12 +148,14 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
+                repo_name=_state["working_dir"].name,
                 pygments_css=get_pygments_css(),
-                pygments_css_dark=get_pygments_css(style="monokai", scope=".dark-theme .highlight"),
+                pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data
                 node_index={},
                 coverage_index={},
                 status_data={},
+                catalog=get_catalog(),
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
@@ -541,6 +546,36 @@ def create_app(
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
 
+    @app.route("/api/mutate/assertion/delete", methods=["POST"])
+    def api_mutate_assertion_delete():
+        # Implements: REQ-d00010-A
+        """POST /api/mutate/assertion/delete - Delete an assertion."""
+        data = request.get_json(force=True)
+        assertion_id = data.get("assertion_id", "")
+        confirm = data.get("confirm", False)
+        if not assertion_id:
+            return jsonify({"success": False, "error": "assertion_id required"}), 400
+        if not confirm:
+            return jsonify({"success": False, "error": "confirm=true required"}), 400
+        result = _mutate_delete_assertion(_state["graph"], assertion_id, confirm=True)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/requirement/delete", methods=["POST"])
+    def api_mutate_requirement_delete():
+        # Implements: REQ-d00010-A
+        """POST /api/mutate/requirement/delete - Delete a requirement."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        confirm = data.get("confirm", False)
+        if not node_id:
+            return jsonify({"success": False, "error": "node_id required"}), 400
+        if not confirm:
+            return jsonify({"success": False, "error": "confirm=true required"}), 400
+        result = _mutate_delete_requirement(_state["graph"], node_id, confirm=True)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
     @app.route("/api/mutate/edge", methods=["POST"])
     def api_mutate_edge():
         """POST /api/mutate/edge - Edge mutations (add/change_kind/delete).
@@ -708,5 +743,59 @@ def create_app(
             return jsonify({"success": True, "message": "Graph reloaded from disk"})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
+
+    # ─────────────────────────────────────────────────────────────────
+    # Git sync endpoints (REQ-p00004-C/D/E/F)
+    # ─────────────────────────────────────────────────────────────────
+
+    @app.route("/api/git/status")
+    def api_git_status():
+        # Implements: REQ-p00004-C
+        """GET /api/git/status - Git status summary for the viewer UI."""
+        from elspais.utilities.git import git_status_summary
+
+        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        result = git_status_summary(_state["working_dir"], spec_dir=spec_dir)
+        return jsonify(result)
+
+    @app.route("/api/git/branch", methods=["POST"])
+    def api_git_branch():
+        # Implements: REQ-p00004-D
+        """POST /api/git/branch - Create and switch to a new branch."""
+        from elspais.utilities.git import create_and_switch_branch
+
+        data = request.get_json(force=True)
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"success": False, "error": "branch name required"}), 400
+        result = create_and_switch_branch(_state["working_dir"], name)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/git/push", methods=["POST"])
+    def api_git_push():
+        # Implements: REQ-p00004-E
+        """POST /api/git/push - Commit and push spec files."""
+        from elspais.utilities.git import commit_and_push_spec_files
+
+        data = request.get_json(force=True)
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"success": False, "error": "commit message required"}), 400
+        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
+        # Always return 200 so the modal JS can display the error inline.
+        # The result contains success=false with an error message on failure.
+        return jsonify(result), 200
+
+    @app.route("/api/git/pull", methods=["POST"])
+    def api_git_pull():
+        # Implements: REQ-p00004-F
+        """POST /api/git/pull - Sync branch with remote and main."""
+        from elspais.utilities.git import sync_branch
+
+        result = sync_branch(_state["working_dir"])
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
 
     return app

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.84.2"
+version = "0.102.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,6 +35,7 @@ dev = [
     "black==25.12.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+    "pyyaml>=6.0",
 ]
 binary = ["pyinstaller>=6.0"]
 mcp = ["mcp>=1.0"]
@@ -77,6 +78,8 @@ packages = ["src/elspais"]
 # Include CLI documentation files in the wheel
 [tool.hatch.build.targets.wheel.force-include]
 "docs/cli" = "elspais/docs/cli"
+"src/elspais/html/theme.toml" = "elspais/html/theme.toml"
+"src/elspais/html/help.toml" = "elspais/html/help.toml"
 
 # REQ-int-d00001-D: Bundle Jinja2 templates for trace-view
 [tool.hatch.build.targets.wheel.shared-data]
@@ -96,9 +99,10 @@ include = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --ignore=tests/_obsolete"
+addopts = "--tb=short --ignore=tests/_obsolete -m 'not e2e and not browser'"
 markers = [
-    "e2e: end-to-end tests requiring external tools (claude CLI)",
+    "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
+    "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
 ]
 
 [tool.black]

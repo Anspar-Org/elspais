@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from elspais.graph.parsers import ParseContext, ParsedContent
 
 
+# Implements: REQ-d00054-A
 class CommentsParser:
     """Parser for HTML comment blocks.
 
@@ -34,6 +35,7 @@ class CommentsParser:
     # Pattern for comment end
     COMMENT_END = re.compile(r"-->")
 
+    # Implements: REQ-d00054-A
     def claim_and_parse(
         self,
         lines: list[tuple[int, str]],

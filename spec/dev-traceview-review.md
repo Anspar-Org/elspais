@@ -6,7 +6,7 @@ These requirements define the collaborative review system for requirement tracea
 
 # REQ-d00001: Review Package Management
 
-**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00009
+**Level**: Dev | **Status**: Active | **Implements**: REQ-p00009
 
 **Purpose:** Define package organization for grouping reviews.
 
@@ -73,7 +73,7 @@ V2 package-centric storage paths are defined in the codebase but not actively us
 
 # REQ-d00003: Review Package Archival
 
-**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00011
+**Level**: Dev | **Status**: Active | **Implements**: REQ-p00011
 
 **Purpose:** Define archival behavior for resolved or deleted packages.
 
@@ -366,7 +366,7 @@ J. Branch cleanup operations SHALL:
 
 # REQ-d00010: Review API Server
 
-**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00012
+**Level**: Dev | **Status**: Active | **Implements**: REQ-p00012
 
 **Purpose:** Flask-based REST API server for the review system.
 

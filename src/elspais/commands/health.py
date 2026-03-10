@@ -1,4 +1,3 @@
-# Implements: REQ-int-d00003 (CLI Extension)
 """
 elspais.commands.health - Diagnose configuration and repository health.
 
@@ -23,6 +22,27 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
 
 
+# Implements: REQ-d00085-I
+@dataclass
+class HealthFinding:
+    """Individual finding within a health check, with optional source location."""
+
+    message: str
+    file_path: str | None = None
+    line: int | None = None
+    node_id: str | None = None
+    related: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "message": self.message,
+            "file_path": self.file_path,
+            "line": self.line,
+            "node_id": self.node_id,
+            "related": self.related,
+        }
+
+
 @dataclass
 class HealthCheck:
     """Result of a single health check."""
@@ -33,6 +53,7 @@ class HealthCheck:
     category: str  # config, spec, code, tests
     severity: str = "error"  # error, warning, info
     details: dict[str, Any] = field(default_factory=dict)
+    findings: list[HealthFinding] = field(default_factory=list)
 
 
 @dataclass
@@ -55,6 +76,10 @@ class HealthReport:
 
     @property
     def is_healthy(self) -> bool:
+        return self.failed == 0 and self.warnings == 0
+
+    @property
+    def is_healthy_lenient(self) -> bool:
         return self.failed == 0
 
     def add(self, check: HealthCheck) -> None:
@@ -65,9 +90,10 @@ class HealthReport:
             if check.category == category:
                 yield check
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, lenient: bool = False) -> dict[str, Any]:
+        healthy = self.is_healthy_lenient if lenient else self.is_healthy
         return {
-            "healthy": self.is_healthy,
+            "healthy": healthy,
             "summary": {
                 "passed": self.passed,
                 "failed": self.failed,
@@ -81,6 +107,7 @@ class HealthReport:
                     "category": c.category,
                     "severity": c.severity,
                     "details": c.details,
+                    "findings": [f.to_dict() for f in c.findings],
                 }
                 for c in self.checks
             ],
@@ -161,12 +188,21 @@ def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
     duplicates = {k: v for k, v in seen_ids.items() if len(v) > 1}
 
     if duplicates:
+        findings = [
+            HealthFinding(
+                message=f"Duplicate ID {req_id} in {', '.join(files)}",
+                file_path=files[0],
+                node_id=req_id,
+            )
+            for req_id, files in duplicates.items()
+        ]
         return HealthCheck(
             name="spec.no_duplicates",
             passed=False,
             message=f"Found {len(duplicates)} duplicate requirement IDs",
             category="spec",
             details={"duplicates": duplicates},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -201,13 +237,22 @@ def check_spec_implements_resolve(graph: TraceGraph) -> HealthCheck:
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['from']} -> {u['to']}",
+                node_id=u["from"],
+                related=[u["to"]],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="spec.implements_resolve",
             passed=False,
             message=f"{len(unresolved)} unresolved Implements references",
             category="spec",
             severity="warning",
-            details={"unresolved": unresolved[:10]},  # Limit to first 10
+            details={"unresolved": unresolved[:10]},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -240,6 +285,14 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['from']} -> {u['to']}",
+                node_id=u["from"],
+                related=[u["to"]],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="spec.refines_resolve",
             passed=False,
@@ -247,6 +300,7 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
             category="spec",
             severity="warning",
             details={"unresolved": unresolved[:10]},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -317,6 +371,16 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                 )
 
     if violations:
+        findings = [
+            HealthFinding(
+                message=(
+                    f"{v['child']} ({v['child_level']}) -> " f"{v['parent']} ({v['parent_level']})"
+                ),
+                node_id=v["child"],
+                related=[v["parent"]],
+            )
+            for v in violations
+        ]
         # Severity controlled by validation.strict_hierarchy config
         if strict_hierarchy:
             return HealthCheck(
@@ -326,6 +390,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                 category="spec",
                 severity="warning",
                 details={"violations": violations[:10]},
+                findings=findings,
             )
         else:
             return HealthCheck(
@@ -338,6 +403,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
                     "violations": violations[:10],
                     "hint": "Set validation.strict_hierarchy=true to enforce",
                 },
+                findings=findings,
             )
 
     return HealthCheck(
@@ -353,10 +419,15 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
 
     Uses graph.orphaned_nodes() which returns all parentless nodes
     that have no meaningful (non-satellite) children.
+    Skips nodes whose broken references are all expected (expected-broken-links).
     """
     by_kind: dict[str, list[dict]] = {}
 
     for node in graph.orphaned_nodes():
+        # Skip nodes where all broken targets are expected
+        expected = node.get_metric("_expected_broken_targets")
+        if expected:
+            continue
         kind_name = node.kind.value
         if kind_name not in by_kind:
             by_kind[kind_name] = []
@@ -369,6 +440,14 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
 
     if total:
         summary_parts = [f"{len(v)} {k}" for k, v in sorted(by_kind.items())]
+        findings = [
+            HealthFinding(
+                message=f"Orphan: {entry['id']} ({entry['kind']})",
+                node_id=entry["id"],
+            )
+            for entries in by_kind.values()
+            for entry in entries
+        ]
         return HealthCheck(
             name="spec.orphans",
             passed=False,
@@ -379,6 +458,7 @@ def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
                 "by_kind": {k: v[:10] for k, v in by_kind.items()},
                 "total": total,
             },
+            findings=findings,
         )
 
     return HealthCheck(
@@ -430,6 +510,14 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     errors = [v for v in all_violations if v.severity == "error"]
     warnings = [v for v in all_violations if v.severity == "warning"]
 
+    all_findings = [
+        HealthFinding(
+            message=f"{v.rule}: {v.message}",
+            node_id=v.node_id,
+        )
+        for v in all_violations
+    ]
+
     if errors:
         return HealthCheck(
             name="spec.format_rules",
@@ -444,6 +532,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
                 ],
             },
+            findings=all_findings,
         )
 
     if warnings:
@@ -458,6 +547,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
                 ],
             },
+            findings=all_findings,
         )
 
     return HealthCheck(
@@ -468,9 +558,306 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     )
 
 
-def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck]:
+def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
+    """Check that stored requirement hashes match computed hashes."""
+    from elspais.commands.validate import compute_hash_for_node
+    from elspais.graph import NodeKind
+
+    mismatches = []
+    checked = 0
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        stored = node.hash
+        if not stored:
+            continue
+        checked += 1
+        computed = compute_hash_for_node(node, graph.hash_mode)
+        if computed and stored != computed:
+            mismatches.append({"id": node.id, "stored": stored, "computed": computed})
+
+    if not checked:
+        return HealthCheck(
+            name="spec.hash_integrity",
+            passed=True,
+            message="No requirements with hashes to check",
+            category="spec",
+            severity="info",
+        )
+
+    if mismatches:
+        ids = [m["id"] for m in mismatches]
+        return HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message=(
+                f"{len(mismatches)} requirement(s) have stale hashes: "
+                f"{', '.join(ids[:5])}" + (f" (+{len(ids) - 5} more)" if len(ids) > 5 else "")
+            ),
+            category="spec",
+            severity="warning",
+            details={"mismatches": mismatches, "checked": checked},
+        )
+
+    return HealthCheck(
+        name="spec.hash_integrity",
+        passed=True,
+        message=f"All {checked} requirement hashes are up to date",
+        category="spec",
+    )
+
+
+def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Check that all Active requirements have at least one changelog entry."""
+    from elspais.graph import NodeKind
+
+    require_present = config.get("changelog.require_present", False)
+    if not require_present:
+        return HealthCheck(
+            name="spec.changelog_present",
+            passed=True,
+            message="Changelog presence check disabled",
+            category="spec",
+            severity="info",
+        )
+
+    missing = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        if not changelog:
+            missing.append(node.id)
+
+    if missing:
+        findings = [
+            HealthFinding(
+                message=f"Active requirement {req_id} has no changelog entry",
+                node_id=req_id,
+            )
+            for req_id in missing
+        ]
+        return HealthCheck(
+            name="spec.changelog_present",
+            passed=False,
+            message=(
+                f"{len(missing)} Active requirement(s) missing changelog"
+                f" entries: {', '.join(missing[:5])}"
+                + (f" ... and {len(missing) - 5} more" if len(missing) > 5 else "")
+            ),
+            category="spec",
+            details={"missing": missing},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="spec.changelog_present",
+        passed=True,
+        message="All Active requirements have changelog entries",
+        category="spec",
+    )
+
+
+def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Check that Active requirements' changelog hashes match stored hashes."""
+    from elspais.graph import NodeKind
+
+    changelog_enforce = config.get("changelog.enforce", True)
+    if not changelog_enforce:
+        return HealthCheck(
+            name="spec.changelog_current",
+            passed=True,
+            message="Changelog enforcement disabled",
+            category="spec",
+            severity="info",
+        )
+
+    mismatches = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        if not changelog:
+            continue
+        # Most recent entry is first in the list
+        latest_hash = changelog[0].get("hash", "")
+        stored_hash = node.hash or ""
+        if latest_hash and stored_hash and latest_hash != stored_hash:
+            mismatches.append(
+                {
+                    "id": node.id,
+                    "stored": stored_hash,
+                    "changelog_hash": latest_hash,
+                }
+            )
+
+    if mismatches:
+        ids = [m["id"] for m in mismatches]
+        return HealthCheck(
+            name="spec.changelog_current",
+            passed=False,
+            message=(
+                f"{len(mismatches)} Active requirement(s) have stale"
+                f" changelog entries: {', '.join(ids[:5])}"
+            ),
+            category="spec",
+            severity="error",
+            details={"mismatches": mismatches},
+        )
+
+    return HealthCheck(
+        name="spec.changelog_current",
+        passed=True,
+        message="All Active requirement changelog entries are current",
+        category="spec",
+    )
+
+
+def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+    """Validate changelog entry fields per config requirements."""
+    from elspais.graph import NodeKind
+
+    changelog_enforce = config.get("changelog.enforce", True)
+    if not changelog_enforce:
+        return HealthCheck(
+            name="spec.changelog_format",
+            passed=True,
+            message="Changelog enforcement disabled",
+            category="spec",
+            severity="info",
+        )
+
+    require_reason = config.get("changelog.require_reason", True)
+    require_author_name = config.get("changelog.require_author_name", True)
+    require_author_id = config.get("changelog.require_author_id", True)
+    require_change_order = config.get("changelog.require_change_order", False)
+
+    violations = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.status or "").lower() != "active":
+            continue
+        changelog = node.get_field("changelog", [])
+        for entry in changelog:
+            missing = []
+            if require_reason and (not entry.get("reason") or entry["reason"] == "-"):
+                missing.append("reason")
+            if require_author_name and (
+                not entry.get("author_name") or entry["author_name"] == "-"
+            ):
+                missing.append("author_name")
+            if require_author_id and (not entry.get("author_id") or entry["author_id"] == "-"):
+                missing.append("author_id")
+            if require_change_order and (
+                not entry.get("change_order") or entry["change_order"] == "-"
+            ):
+                missing.append("change_order")
+            if missing:
+                violations.append(
+                    {
+                        "id": node.id,
+                        "entry_date": entry.get("date", "?"),
+                        "missing_fields": missing,
+                    }
+                )
+
+    if violations:
+        return HealthCheck(
+            name="spec.changelog_format",
+            passed=False,
+            message=(f"{len(violations)} changelog entry/entries" f" missing required fields"),
+            category="spec",
+            severity="error",
+            details={"violations": violations[:10]},
+        )
+
+    return HealthCheck(
+        name="spec.changelog_format",
+        passed=True,
+        message="All changelog entries have required fields",
+        category="spec",
+    )
+
+
+def check_spec_index_current(
+    graph: TraceGraph,
+    spec_dirs: list[Path],
+) -> HealthCheck:
+    """Check that INDEX.md is up to date with current requirements."""
+    import re
+
+    from elspais.graph import NodeKind
+
+    # Find INDEX.md
+    index_path = None
+    for spec_dir in spec_dirs:
+        candidate = spec_dir / "INDEX.md"
+        if candidate.exists():
+            index_path = candidate
+            break
+
+    if not index_path:
+        return HealthCheck(
+            name="spec.index_current",
+            passed=True,
+            message="No INDEX.md found (run 'elspais index regenerate' to create one)",
+            category="spec",
+            severity="info",
+        )
+
+    content = index_path.read_text()
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
+
+    graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
+
+    missing_reqs = graph_req_ids - index_req_ids
+    extra_reqs = index_req_ids - graph_req_ids
+    missing_jnys = graph_jny_ids - index_jny_ids
+    extra_jnys = index_jny_ids - graph_jny_ids
+
+    issues = []
+    if missing_reqs:
+        issues.append(f"{len(missing_reqs)} missing requirement(s)")
+    if extra_reqs:
+        issues.append(f"{len(extra_reqs)} extra requirement(s)")
+    if missing_jnys:
+        issues.append(f"{len(missing_jnys)} missing journey(s)")
+    if extra_jnys:
+        issues.append(f"{len(extra_jnys)} extra journey(s)")
+
+    if issues:
+        return HealthCheck(
+            name="spec.index_current",
+            passed=False,
+            message=f"INDEX.md is stale: {', '.join(issues)}",
+            category="spec",
+            severity="warning",
+            details={
+                "missing_reqs": sorted(missing_reqs),
+                "extra_reqs": sorted(extra_reqs),
+                "missing_jnys": sorted(missing_jnys),
+                "extra_jnys": sorted(extra_jnys),
+            },
+        )
+
+    total = len(graph_req_ids) + len(graph_jny_ids)
+    return HealthCheck(
+        name="spec.index_current",
+        passed=True,
+        message=f"INDEX.md is up to date ({total} entries)",
+        category="spec",
+    )
+
+
+def run_spec_checks(
+    graph: TraceGraph,
+    config: ConfigLoader,
+    spec_dirs: list[Path] | None = None,
+) -> list[HealthCheck]:
     """Run all spec file health checks."""
-    return [
+    checks = [
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_spec_implements_resolve(graph),
@@ -478,7 +865,14 @@ def run_spec_checks(graph: TraceGraph, config: ConfigLoader) -> list[HealthCheck
         check_spec_hierarchy_levels(graph, config),
         check_spec_orphans(graph),
         check_spec_format_rules(graph, config),
+        check_spec_hash_integrity(graph),
+        check_spec_changelog_present(graph, config),
+        check_spec_changelog_current(graph, config),
+        check_spec_changelog_format(graph, config),
     ]
+    if spec_dirs:
+        checks.append(check_spec_index_current(graph, spec_dirs))
+    return checks
 
 
 # =============================================================================
@@ -524,6 +918,15 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
             )
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved refs in {u['source']}:{u['line']}",
+                file_path=u["source"],
+                line=u["line"] or None,
+                related=u.get("references", []),
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="code.references_resolve",
             passed=False,
@@ -531,6 +934,7 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
             category="code",
             severity="warning",
             details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -542,20 +946,35 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
+def _excluded_note(graph: TraceGraph) -> str:
+    """Build a note about excluded requirements."""
+    from elspais.graph import NodeKind
+
+    counts: dict[str, int] = {}
+    for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if n.status in ("Draft", "Deprecated"):
+            counts[n.status] = counts.get(n.status, 0) + 1
+    if not counts:
+        return ""
+    parts = [f"{v} {k.lower()}" for k, v in sorted(counts.items())]
+    return f" [{', '.join(parts)} excluded]"
+
+
 def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
     from elspais.graph.annotators import count_with_code_refs
 
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph)
+    coverage = count_with_code_refs(graph, exclude_status={"Draft", "Deprecated"})
+    note = _excluded_note(graph)
 
     return HealthCheck(
         name="code.coverage",
         passed=True,  # Informational only
         message=(
             f"{coverage['with_code_refs']}/{coverage['total_requirements']} requirements "
-            f"have code references ({coverage['coverage_percent']}%)"
+            f"have code references ({coverage['coverage_percent']}%){note}"
         ),
         category="code",
         severity="info",
@@ -608,6 +1027,10 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
                 break
 
         if not has_valid_parent:
+            # Skip nodes whose broken targets are all expected
+            expected = node.get_metric("_expected_broken_targets")
+            if expected:
+                continue
             unresolved.append(
                 {
                     "source": node.get_field("source_file", "unknown"),
@@ -616,6 +1039,13 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
             )
 
     if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['test_name']} in {u['source']}",
+                file_path=u["source"],
+            )
+            for u in unresolved
+        ]
         return HealthCheck(
             name="tests.references_resolve",
             passed=False,
@@ -623,6 +1053,7 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
             category="tests",
             severity="warning",
             details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -666,6 +1097,15 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     pass_rate = (passed / total * 100) if total > 0 else 0
 
     if failed > 0:
+        findings = [
+            HealthFinding(
+                message=f"Failed: {node.get_label() or node.id}",
+                node_id=node.id,
+                file_path=node.get_field("source_file", None),
+            )
+            for node in result_nodes
+            if node.get_field("status", "unknown") == "failed"
+        ]
         return HealthCheck(
             name="tests.results",
             passed=False,
@@ -681,6 +1121,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
                 "skipped": skipped,
                 "pass_rate": round(pass_rate, 1),
             },
+            findings=findings,
         )
 
     return HealthCheck(
@@ -698,31 +1139,39 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
 
 
 def check_test_coverage(graph: TraceGraph) -> HealthCheck:
-    """Check test coverage statistics."""
+    """Check test coverage statistics (excludes Draft requirements)."""
     from elspais.graph import NodeKind
 
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    # Exclude Draft and Deprecated from denominator
+    _exclude = {"Draft", "Deprecated"}
+    req_count = sum(
+        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in _exclude
+    )
 
     # Count requirements with at least one TEST child
     covered_reqs = set()
     for node in graph.nodes_by_kind(NodeKind.TEST):
         for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT:
+            if parent.kind == NodeKind.REQUIREMENT and parent.status not in _exclude:
                 covered_reqs.add(parent.id)
             elif parent.kind == NodeKind.ASSERTION:
                 for grandparent in parent.iter_parents():
-                    if grandparent.kind == NodeKind.REQUIREMENT:
+                    if (
+                        grandparent.kind == NodeKind.REQUIREMENT
+                        and grandparent.status not in _exclude
+                    ):
                         covered_reqs.add(grandparent.id)
 
     coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
+    note = _excluded_note(graph)
 
     return HealthCheck(
         name="tests.coverage",
         passed=True,  # Informational only
         message=(
             f"{len(covered_reqs)}/{req_count} requirements "
-            f"have test references ({coverage_pct:.1f}%)"
+            f"have test references ({coverage_pct:.1f}%){note}"
         ),
         category="tests",
         severity="info",
@@ -742,6 +1191,49 @@ def run_test_checks(graph: TraceGraph) -> list[HealthCheck]:
         check_test_results(graph),
         check_test_coverage(graph),
     ]
+
+
+# =============================================================================
+# Composable Section API
+# =============================================================================
+
+
+# Implements: REQ-d00085-A
+def render_section(
+    graph: TraceGraph | None,
+    config: ConfigLoader | None,
+    args: argparse.Namespace,
+) -> tuple[str, int]:
+    """Render health as a composed report section.
+
+    Returns (formatted_output, exit_code).
+    """
+    report = HealthReport()
+    config_path = getattr(args, "config", None)
+
+    if config:
+        from elspais.commands.doctor import run_config_checks as _run_config_checks
+
+        for check in _run_config_checks(config_path, config, Path.cwd()):
+            report.add(check)
+
+    if graph and config:
+        from elspais.config import get_spec_directories
+
+        spec_dir = getattr(args, "spec_dir", None)
+        resolved_spec_dirs = get_spec_directories(spec_dir, config.get_raw())
+        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
+            report.add(check)
+    if graph:
+        for check in run_code_checks(graph):
+            report.add(check)
+        for check in run_test_checks(graph):
+            report.add(check)
+
+    output = _format_report(report, args)
+    lenient = getattr(args, "lenient", False)
+    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    return output, 0 if healthy else 1
 
 
 # =============================================================================
@@ -767,14 +1259,13 @@ def run(args: argparse.Namespace) -> int:
     # Determine which checks to run
     run_all = not any(
         [
-            getattr(args, "config_only", False),
             getattr(args, "spec_only", False),
             getattr(args, "code_only", False),
             getattr(args, "tests_only", False),
         ]
     )
 
-    run_config = run_all or getattr(args, "config_only", False)
+    run_config = run_all
     run_spec = run_all or getattr(args, "spec_only", False)
     run_code = run_all or getattr(args, "code_only", False)
     run_tests = run_all or getattr(args, "tests_only", False)
@@ -828,7 +1319,11 @@ def run(args: argparse.Namespace) -> int:
 
     # Spec checks
     if run_spec and graph and config:
-        for check in run_spec_checks(graph, config):
+        from elspais.config import get_spec_directories
+
+        config_dict = config.get_raw()
+        resolved_spec_dirs = get_spec_directories(spec_dir, config_dict)
+        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
 
     # Code checks
@@ -844,17 +1339,53 @@ def run(args: argparse.Namespace) -> int:
     return _output_report(report, args)
 
 
+def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
+    """Format the health report as a string."""
+    import io
+    from contextlib import redirect_stdout
+
+    fmt = getattr(args, "format", "text") or "text"
+    lenient = getattr(args, "lenient", False)
+    quiet = getattr(args, "quiet", False)
+    verbose = getattr(args, "verbose", False)
+    include_passing = getattr(args, "include_passing_details", False)
+
+    if fmt == "json":
+        return json.dumps(report.to_dict(lenient=lenient), indent=2)
+    elif fmt == "markdown":
+        return _render_markdown(report, include_passing_details=include_passing)
+    elif fmt == "junit":
+        return _render_junit(report, include_passing_details=include_passing)
+    elif fmt == "sarif":
+        return _render_sarif(report)
+    else:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            if quiet:
+                _print_quiet_report(report)
+            else:
+                _print_text_report(
+                    report,
+                    verbose=verbose,
+                    include_passing_details=include_passing,
+                )
+        return buf.getvalue().rstrip("\n")
+
+
 def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
     """Output the health report in the requested format."""
-    if getattr(args, "json", False):
-        print(json.dumps(report.to_dict(), indent=2))
-    else:
-        _print_text_report(report, verbose=getattr(args, "verbose", False))
+    print(_format_report(report, args))
 
-    return 0 if report.is_healthy else 1
+    lenient = getattr(args, "lenient", False)
+    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    return 0 if healthy else 1
 
 
-def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
+def _print_text_report(
+    report: HealthReport,
+    verbose: bool = False,
+    include_passing_details: bool = False,
+) -> None:
     """Print human-readable health report."""
     categories = ["config", "spec", "code", "tests"]
 
@@ -880,8 +1411,11 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
 
             print(f"  {icon} {check.name}: {check.message}")
 
-            # Show details in verbose mode
-            if verbose and check.details:
+            # Show details in verbose mode (skip passing unless include flag set)
+            show_details = verbose and check.details
+            if show_details and check.passed and not include_passing_details:
+                show_details = False
+            if show_details:
                 for key, value in check.details.items():
                     if isinstance(value, list) and len(value) > 3:
                         print(f"      {key}: {value[:3]} ... ({len(value)} total)")
@@ -891,8 +1425,237 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
     # Summary
     print()
     print("=" * 40)
-    if report.is_healthy:
-        print(f"✓ HEALTHY: {report.passed} checks passed")
-    else:
-        print(f"✗ UNHEALTHY: {report.failed} errors, {report.warnings} warnings")
+    _print_summary_line(report)
     print("=" * 40)
+
+
+def _print_summary_line(report: HealthReport) -> None:
+    """Print a single summary line."""
+    total = report.passed + report.failed + report.warnings
+    if report.failed == 0 and report.warnings == 0:
+        print(f"HEALTHY: {total}/{total} checks passed")
+    elif report.failed == 0:
+        print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
+    else:
+        print(f"UNHEALTHY: {report.failed} errors," f" {report.warnings} warnings")
+
+
+def _print_quiet_report(report: HealthReport) -> None:
+    """Print summary line only (for -q/--quiet)."""
+    _print_summary_line(report)
+
+
+# Implements: REQ-d00085-E
+def _render_markdown(
+    report: HealthReport,
+    include_passing_details: bool = False,
+) -> str:
+    """Render health report as markdown."""
+    lines = []
+    lines.append("# Health Report")
+    lines.append("")
+
+    categories = ["config", "spec", "code", "tests"]
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        passed = sum(1 for c in checks if c.passed)
+        total = len(checks)
+        status = "pass" if passed == total else "FAIL"
+        lines.append(f"## {category.upper()} ({passed}/{total} {status})")
+        lines.append("")
+        lines.append("| Check | Status | Message |")
+        lines.append("|-------|--------|---------|")
+        for check in checks:
+            if check.passed:
+                icon = "PASS"
+            elif check.severity == "warning":
+                icon = "WARN"
+            else:
+                icon = "FAIL"
+            lines.append(f"| {check.name} | {icon} | {check.message} |")
+
+            # Include findings detail for passing checks if requested
+            if check.passed and include_passing_details and check.findings:
+                lines.append("")
+                lines.append("<details>")
+                lines.append(f"<summary>{check.name} details</summary>")
+                lines.append("")
+                for finding in check.findings:
+                    loc = ""
+                    if finding.file_path:
+                        loc = f"{finding.file_path}"
+                        if finding.line is not None:
+                            loc += f":{finding.line}"
+                        loc += ": "
+                    lines.append(f"- {loc}{finding.message}")
+                lines.append("")
+                lines.append("</details>")
+        lines.append("")
+
+    # Summary
+    total = report.passed + report.failed + report.warnings
+    if report.failed == 0 and report.warnings == 0:
+        lines.append(f"**HEALTHY**: {total}/{total} checks passed")
+    elif report.failed == 0:
+        lines.append(f"**{report.passed}/{total}** checks passed," f" {report.warnings} warnings")
+    else:
+        lines.append(f"**UNHEALTHY**: {report.failed} errors," f" {report.warnings} warnings")
+
+    return "\n".join(lines)
+
+
+# Implements: REQ-d00085-H
+def _render_junit(
+    report: HealthReport,
+    include_passing_details: bool = False,
+) -> str:
+    """Render health report as JUnit XML.
+
+    Maps categories to <testsuite> elements, checks to <testcase> elements.
+    Failed checks with severity=error become <failure>, severity=warning become
+    <system-err> with WARNING prefix, and severity=info become <system-out>.
+    """
+    import xml.etree.ElementTree as ET
+
+    testsuites = ET.Element("testsuites")
+    categories = ["config", "spec", "code", "tests"]
+
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        failures = sum(1 for c in checks if not c.passed and c.severity == "error")
+        suite = ET.SubElement(
+            testsuites,
+            "testsuite",
+            name=category,
+            tests=str(len(checks)),
+            failures=str(failures),
+            errors="0",
+        )
+
+        for check in checks:
+            tc = ET.SubElement(
+                suite,
+                "testcase",
+                name=check.name,
+                classname=f"elspais.health.{category}",
+            )
+
+            if check.severity == "info":
+                sys_out = ET.SubElement(tc, "system-out")
+                sys_out.text = check.message
+            elif not check.passed:
+                if check.severity == "error":
+                    failure = ET.SubElement(tc, "failure", message=check.message)
+                    if check.details:
+                        failure.text = _format_details(check.details)
+                elif check.severity == "warning":
+                    sys_err = ET.SubElement(tc, "system-err")
+                    sys_err.text = f"WARNING: {check.message}"
+            elif check.passed and include_passing_details and check.findings:
+                sys_out = ET.SubElement(tc, "system-out")
+                finding_lines = [f.message for f in check.findings]
+                sys_out.text = "\n".join(finding_lines)
+
+    return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
+
+
+def _format_details(details: dict[str, Any]) -> str:
+    """Format check details dict as readable text for XML bodies."""
+    parts = []
+    for key, value in details.items():
+        if isinstance(value, list):
+            parts.append(f"{key}: {', '.join(str(v) for v in value)}")
+        else:
+            parts.append(f"{key}: {value}")
+    return "\n".join(parts)
+
+
+# Implements: REQ-d00085-J
+def _render_sarif(report: HealthReport) -> str:
+    """Render health report as SARIF v2.1.0 JSON.
+
+    One reportingDescriptor per unique failing check name, one result per
+    HealthFinding with physical locations. Passing checks are omitted.
+    Coverage stats go in run.properties.
+    """
+    _SARIF_SEVERITY = {"error": "error", "warning": "warning", "info": "note"}
+
+    rules: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    rule_index_map: dict[str, int] = {}
+
+    for check in report.checks:
+        if check.passed:
+            continue
+
+        # Register rule if not yet seen
+        if check.name not in rule_index_map:
+            rule_index_map[check.name] = len(rules)
+            rules.append(
+                {
+                    "id": check.name,
+                    "shortDescription": {"text": check.message},
+                }
+            )
+
+        idx = rule_index_map[check.name]
+        level = _SARIF_SEVERITY.get(check.severity, "warning")
+
+        if check.findings:
+            for finding in check.findings:
+                result: dict[str, Any] = {
+                    "ruleId": check.name,
+                    "ruleIndex": idx,
+                    "level": level,
+                    "message": {"text": finding.message},
+                }
+                if finding.file_path:
+                    loc: dict[str, Any] = {
+                        "artifactLocation": {"uri": finding.file_path},
+                    }
+                    if finding.line is not None:
+                        loc["region"] = {"startLine": finding.line}
+                    result["locations"] = [{"physicalLocation": loc}]
+                results.append(result)
+        else:
+            # Failing check with no findings — emit one result from check message
+            results.append(
+                {
+                    "ruleId": check.name,
+                    "ruleIndex": idx,
+                    "level": level,
+                    "message": {"text": check.message},
+                }
+            )
+
+    sarif = {
+        "$schema": (
+            "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/"
+            "sarif-2.1/schema/sarif-schema-2.1.0.json"
+        ),
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "elspais",
+                        "rules": rules,
+                    },
+                },
+                "results": results,
+                "properties": {
+                    "passed": report.passed,
+                    "failed": report.failed,
+                    "warnings": report.warnings,
+                },
+            }
+        ],
+    }
+
+    return json.dumps(sarif, indent=2)

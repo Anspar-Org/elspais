@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
+from elspais.html.theme import get_catalog
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
@@ -89,17 +90,21 @@ class ViewStats:
     assertions_validated: int = 0  # Assertions with passing TEST_RESULTs
 
 
+def _val_tier(key: str) -> tuple[str, str]:
+    """Look up a validation tier from the catalog, returning (color_key, description)."""
+    from elspais.html.theme import get_catalog
+
+    entry = get_catalog().by_key(key)
+    return (entry.color_key, entry.description)
+
+
+# Implements: REQ-p00006-A
 def compute_validation_color(node: GraphNode) -> tuple[str, str]:
     """Compute a validation quality color for a requirement's Active status badge.
 
     Inspects the node's pre-computed RollupMetrics to classify its
-    coverage/validation quality into a color tier:
-    - green: Full direct coverage, all assertions validated, no failures
-    - yellow-green: Full coverage including indirect, all validated, no failures
-    - yellow: Some coverage, no failures
-    - red: Has test failures
-    - orange: Anomalous (tests but no results, tests but no code, or no coverage)
-    - ("", ""): Non-Active status, or no assertions
+    coverage/validation quality into a color tier. Descriptions are sourced
+    from the LegendCatalog validation_tiers entries.
 
     Args:
         node: A GraphNode with pre-computed rollup_metrics.
@@ -121,18 +126,15 @@ def compute_validation_color(node: GraphNode) -> tuple[str, str]:
 
     # Red: any test failures take priority
     if rollup.has_failures:
-        return ("red", "Test failures detected")
+        return _val_tier("validation_tiers.failing")
 
     # Green: full direct coverage AND all assertions validated
     if rollup.coverage_pct == 100 and rollup.validated >= n:
-        return ("green", f"All {n} assertions covered and validated")
+        return _val_tier("validation_tiers.full-direct")
 
     # Yellow-green: full coverage with indirect AND all validated with indirect
     if rollup.indirect_coverage_pct == 100 and rollup.validated_with_indirect >= n:
-        return (
-            "yellow-green",
-            f"All {n} assertions validated (including indirect)",
-        )
+        return _val_tier("validation_tiers.full-indirect")
 
     # Orange: anomalous test/code gaps
     if rollup.direct_tested > 0:
@@ -141,21 +143,17 @@ def compute_validation_color(node: GraphNode) -> tuple[str, str]:
         has_code = any(c.kind == NodeKind.CODE for c in node.iter_children())
         # Tests exist but zero results (tests never run)
         if rollup.validated == 0 and rollup.validated_with_indirect == 0:
-            return ("orange", f"Tests exist but no results ({rollup.direct_tested}/{n} tested)")
+            return _val_tier("validation_tiers.anomalous")
         # Tests exist but no code implementation
         if not has_code:
-            return (
-                "orange",
-                f"Tests exist but no code implementation ({rollup.direct_tested}/{n} tested)",
-            )
+            return _val_tier("validation_tiers.anomalous")
 
     # Yellow: some coverage exists, no failures
     if rollup.coverage_pct > 0 or rollup.indirect_coverage_pct > 0:
-        v = rollup.validated or rollup.validated_with_indirect
-        return ("yellow", f"Partial: {v}/{n} validated, {rollup.coverage_pct:.0f}% covered")
+        return _val_tier("validation_tiers.partial")
 
     # Orange: assertions exist but zero coverage (anomalous)
-    return ("orange", f"No coverage ({n} assertions)")
+    return _val_tier("validation_tiers.anomalous")
 
 
 class HTMLGenerator:
@@ -206,7 +204,8 @@ class HTMLGenerator:
                 "Install with: pip install elspais[trace-view]"
             ) from err
 
-        # Apply git annotations to all nodes
+        # Annotation must happen AFTER graph construction, BEFORE output generation.
+        # Generators may add additional annotations specific to their output format.
         self._annotate_git_state()
 
         # Build data structures
@@ -247,6 +246,8 @@ class HTMLGenerator:
             status_data=status_data,
             version=self.version,
             base_path=self.base_path,
+            repo_name=Path(self.base_path).name if self.base_path else "elspais",
+            catalog=get_catalog(),
         )
 
         return html_content
@@ -260,10 +261,10 @@ class HTMLGenerator:
         from elspais.graph import NodeKind
         from elspais.graph.annotators import annotate_display_info, annotate_graph_git_state
 
-        # Apply git state annotations (shared with MCP and graph-json)
+        # Standard annotation sequence: git_state -> display_info.
+        # This order matters: display_info may depend on git state.
         annotate_graph_git_state(self.graph)
 
-        # Apply display info annotations (HTML-specific concern)
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             annotate_display_info(node)
 
@@ -910,13 +911,13 @@ class HTMLGenerator:
     def _get_pygments_css_dark(self) -> str:
         """Generate dark-theme Pygments CSS for syntax highlighting.
 
-        Returns CSS rules scoped under .dark-theme .highlight for the
+        Returns CSS rules scoped under .theme-dark .highlight for the
         file viewer panel when dark theme is active.
         Returns empty string if Pygments is not installed.
         """
         from elspais.html.highlighting import get_pygments_css
 
-        return get_pygments_css(style="monokai", scope=".dark-theme .highlight")
+        return get_pygments_css(style="monokai", scope=".theme-dark .highlight")
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""

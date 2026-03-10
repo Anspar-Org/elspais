@@ -381,6 +381,38 @@ pre_commit = true
 commit_msg = true
 
 #──────────────────────────────────────────────────────────────────────────────
+# CHANGELOG
+#──────────────────────────────────────────────────────────────────────────────
+
+[changelog]
+# Enforce changelog entries when Active requirement hashes change
+enforce = true
+
+# Author identity source: "gh" (GitHub CLI), "git" (git config)
+id_source = "gh"
+
+# Date format: "iso" (YYYY-MM-DD), "us" (MM/DD/YYYY), "eu" (DD/MM/YYYY)
+date_format = "iso"
+
+# Require a ticket or change-order reference in each entry
+require_change_order = false
+
+# Require a reason/description in each entry
+require_reason = true
+
+# Require author full name
+require_author_name = true
+
+# Require author identity (email or handle)
+require_author_id = true
+
+# Author ID format: "email" or "handle"
+author_id_format = "email"
+
+# Restrict allowed author IDs: "all" or a list of allowed values
+allowed_author_ids = "all"
+
+#──────────────────────────────────────────────────────────────────────────────
 # UNIFIED REFERENCE CONFIGURATION (v0.10.0+)
 # Used by: CodeParser, TestParser, JUnitXMLParser, PytestJSONParser
 #──────────────────────────────────────────────────────────────────────────────
@@ -394,6 +426,11 @@ case_sensitive = false
 
 # Whether the prefix (e.g., "REQ") is required (false = p00001 alone won't match)
 prefix_optional = false
+
+# Character for joining multiple assertion labels in compact syntax
+# REQ-p00001-A+B+C expands to REQ-p00001-A, REQ-p00001-B, REQ-p00001-C
+# Must NOT appear in the separators list. Set to "" to disable.
+multi_assertion_separator = "+"
 
 # Comment styles to recognize for reference extraction
 comment_styles = ["#", "//", "--"]

@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 
 
+# Implements: REQ-d00054-A
 def classname_to_module_path(classname: str) -> tuple[str, str | None]:
     """Convert a dotted classname to a module file path and optional class name.
 
@@ -59,6 +60,7 @@ def classname_to_module_path(classname: str) -> tuple[str, str | None]:
     return (module_path, class_name)
 
 
+# Implements: REQ-d00054-A
 def strip_parametrize_suffix(test_name: str) -> str:
     """Strip pytest parametrize suffix from test name.
 
@@ -80,6 +82,7 @@ def strip_parametrize_suffix(test_name: str) -> str:
     return re.sub(r"\[.*\]$", "", test_name)
 
 
+# Implements: REQ-d00054-A
 def build_test_id(
     module_path: str,
     function_name: str,
@@ -117,6 +120,7 @@ def build_test_id(
     return f"test:{module_path}::{clean_name}"
 
 
+# Implements: REQ-d00054-A
 def build_test_id_from_result(
     classname: str,
     test_name: str,
@@ -142,6 +146,7 @@ def build_test_id_from_result(
     return build_test_id(module_path, strip_parametrize_suffix(test_name), class_name)
 
 
+# Implements: REQ-d00054-A
 def build_test_id_from_nodeid(nodeid: str) -> str:
     """Build a canonical test ID from a pytest nodeid.
 
