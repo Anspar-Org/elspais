@@ -29,9 +29,10 @@ A. The tool SHALL provide command-line validation of requirement documents store
 B. The tool SHALL generate traceability matrices showing requirement relationships.
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
+
 D. This edit SHALL be reverted, eventually.
 
-*End* *Requirements Management Tool* | **Hash**: bf63eda5
+*End* *Requirements Management Tool* | **Hash**: 3cddd08e
 ---
 
 # REQ-p00002: Requirements Validation

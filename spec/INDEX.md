@@ -7,10 +7,10 @@
 
 | ID         | Title                                            | File                     | Hash     |
 | ---------- | ------------------------------------------------ | ------------------------ | -------- |
-| REQ-p00001 | Requirements Management Tool                     | prd-elspais.md           | bf63eda5 |
+| REQ-p00001 | Requirements Management Tool                     | prd-elspais.md           | 3cddd08e |
 | REQ-p00002 | Requirements Validation                          | prd-elspais.md           | e8f0e4eb |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-elspais.md           | b935bd53 |
-| REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | 846fefad |
+| REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | fa53cb96 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | 7964180f |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-elspais.md           | b3dd4d1a |
 | REQ-p00007 | Collaborative Review System                      | prd-elspais.md           | f275694a |
@@ -89,8 +89,10 @@
 | REQ-d00082 | Unified Reference Configuration              | dev-reference-config.md  | 89956cd7 |
 | REQ-d00083 | Validate Command                             | dev-cli-validate.md      | eddb3a52 |
 | REQ-d00084 | Trace Command                                | dev-cli-trace.md         | f8d407a5 |
-| REQ-d00085 | Unified Report Composition                   | dev-cli-report.md        | 29a31cac |
+| REQ-d00085 | Unified Report Composition                   | dev-cli-report.md        | 82d76f1a |
 | REQ-d00086 | Coverage Report Section                      | dev-cli-coverage.md      | 12e1ecaf |
+| REQ-d00124 | Graph Analysis Engine                        | dev-cli-analysis.md      | 26d62350 |
+| REQ-d00125 | Analysis CLI Command                         | dev-cli-analysis.md      | 3cd66dbe |
 
 ## User Journeys (JNY)
 

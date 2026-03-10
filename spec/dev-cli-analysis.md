@@ -26,7 +26,7 @@ G. The module SHALL rank actionable leaf nodes by summing the composite scores o
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
-*End* *Graph Analysis Engine* | **Hash**: 00000000
+*End* *Graph Analysis Engine* | **Hash**: 26d62350
 
 ---
 
@@ -58,4 +58,4 @@ H. The JSON output SHALL serialize the full `FoundationReport` structure.
 
 A CLI command provides immediate visibility into which requirements are most foundational, enabling project planning without requiring MCP or viewer integration.
 
-*End* *Analysis CLI Command* | **Hash**: 00000000
+*End* *Analysis CLI Command* | **Hash**: 3cd66dbe
