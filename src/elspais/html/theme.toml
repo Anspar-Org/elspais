@@ -1,0 +1,993 @@
+# Implements: REQ-p00006-A
+# theme.toml — Semantic color token map for the trace view UI.
+# Single source of truth for all UI colors. CSS partials use var(--token).
+# Adding a new theme = adding a [themes.<name>] section.
+
+# ---------------------------------------------------------------------------
+# Themes
+# ---------------------------------------------------------------------------
+
+[themes.light]
+label = "Light"
+icon = "&#9728;"
+
+[themes.light.tokens]
+# Structural
+body-bg = "#f8f9fa"
+body-text = "#333"
+panel-bg = "#ffffff"
+panel-border = "#e9ecef"
+surface-bg = "#ffffff"
+surface-hover-bg = "#f0f4ff"
+surface-focus-bg = "#ffffff"
+surface-focus-border = "#0d6efd"
+surface-focus-shadow = "rgba(13, 110, 253, 0.1)"
+muted-text = "#adb5bd"
+secondary-text = "#6c757d"
+primary-text = "#212529"
+border-color = "#e9ecef"
+border-light = "#dee2e6"
+input-bg = "#f8f9fa"
+input-border = "#dee2e6"
+input-text = "#495057"
+
+# Primary interaction
+primary = "#0d6efd"
+primary-hover = "#0b5ed7"
+primary-light-bg = "#e7f1ff"
+primary-light-text = "#0d6efd"
+primary-soft = "#f0f4ff"
+
+# Semantic
+success-bg = "#d1e7dd"
+success-text = "#0f5132"
+success-border = "#badbcc"
+warning-bg = "#fff3cd"
+warning-text = "#664d03"
+warning-border = "#ffc107"
+danger-bg = "#f8d7da"
+danger-text = "#842029"
+danger-border = "#dc3545"
+info-bg = "#cff4fc"
+info-text = "#055160"
+info-border = "#b6effb"
+
+# Level badges
+level-prd-bg = "#1b3a5c"
+level-prd-text = "#ffffff"
+level-ops-bg = "#fd7e14"
+level-ops-text = "#ffffff"
+level-dev-bg = "#20c997"
+level-dev-text = "#ffffff"
+
+# Status badges
+status-draft-bg = "#cfe2ff"
+status-draft-text = "#084298"
+status-active-bg = "#d1e7dd"
+status-active-text = "#0f5132"
+status-deprecated-bg = "#f8d7da"
+status-deprecated-text = "#842029"
+status-proposed-bg = "#fff3cd"
+status-proposed-text = "#664d03"
+
+# Validation tiers (active badge overlays)
+val-green-bg = "#198754"
+val-green-text = "#fff"
+val-yellow-green-bg = "#7bb661"
+val-yellow-green-text = "#1a3a0a"
+val-yellow-bg = "#ffc107"
+val-yellow-text = "#664d03"
+val-red-bg = "#dc3545"
+val-red-text = "#fff"
+val-orange-bg = "#fd7e14"
+val-orange-text = "#fff"
+
+# Tooltip
+tooltip-bg = "#212529"
+tooltip-text = "#f8f9fa"
+
+# Assertion buttons — implemented
+impl-yes-border = "#0d6efd"
+impl-yes-text = "#0d6efd"
+impl-yes-active-bg = "#0d6efd"
+impl-yes-active-text = "#ffffff"
+impl-yes-hover-bg = "#e7f1ff"
+impl-no-border = "#adb5bd"
+impl-no-text = "#adb5bd"
+impl-no-hover-bg = "#f8f9fa"
+
+# Assertion buttons — validation
+valid-pass-border = "#198754"
+valid-pass-text = "#198754"
+valid-pass-active-bg = "#198754"
+valid-pass-active-text = "#ffffff"
+valid-pass-hover-bg = "#d1e7dd"
+valid-partial-border = "#ffc107"
+valid-partial-text = "#92400e"
+valid-partial-active-bg = "#ffc107"
+valid-partial-active-text = "#1a1d21"
+valid-partial-hover-bg = "#fff3cd"
+valid-fail-border = "#dc3545"
+valid-fail-text = "#dc3545"
+valid-fail-active-bg = "#dc3545"
+valid-fail-active-text = "#ffffff"
+valid-fail-hover-bg = "#f8d7da"
+valid-unknown-border = "#6c757d"
+valid-unknown-text = "#6c757d"
+valid-unknown-active-bg = "#6c757d"
+valid-unknown-active-text = "#ffffff"
+valid-unknown-hover-bg = "#e9ecef"
+
+# Coverage icons
+coverage-none = "#adb5bd"
+coverage-partial = "#6c757d"
+coverage-full = "#212529"
+coverage-warning = "#ffc107"
+
+# Change indicator
+change-color = "#fd7e14"
+
+# Stat badges (header)
+stat-main-bg = "#6f42c1"
+stat-tests-bg = "#0dcaf0"
+stat-tests-text = "#212529"
+stat-results-bg = "#6c757d"
+stat-repo-bg = "#e83e8c"
+
+# Toast
+toast-success-bg = "#d1e7dd"
+toast-success-text = "#0f5132"
+toast-success-border = "#badbcc"
+toast-error-bg = "#f8d7da"
+toast-error-text = "#842029"
+toast-error-border = "#f5c2c7"
+toast-info-bg = "#cff4fc"
+toast-info-text = "#055160"
+toast-info-border = "#b6effb"
+
+# File viewer
+fv-on-disk-bg = "#d1fae5"
+fv-on-disk-text = "#065f46"
+fv-mutations-bg = "#fef3c7"
+fv-mutations-text = "#92400e"
+fv-highlight-bg = "#fff3cd"
+fv-highlight-hover = "#ffe69c"
+fv-line-num-text = "#adb5bd"
+fv-line-num-bg = "#f8f9fa"
+fv-line-num-border = "#e9ecef"
+fv-close-hover-text = "#dc3545"
+fv-close-hover-bg = "#f8d7da"
+fv-lang-bg = "#e9ecef"
+fv-lang-text = "#6c757d"
+fv-mode-toggle-bg = "#e9ecef"
+fv-mode-btn-active-bg = "#ffffff"
+fv-rendered-code-bg = "#f1f3f5"
+
+# Assertion panels and test items
+assertion-code-panel-bg = "#f0f4ff"
+assertion-code-panel-border = "#0d6efd"
+assertion-tests-panel-bg = "#f0f4f8"
+assertion-tests-panel-border = "#dee2e6"
+assertion-test-passed-text = "#198754"
+assertion-test-failed-text = "#dc3545"
+assertion-test-no-result-text = "#6c757d"
+assertion-test-link = "#0d6efd"
+assertion-test-link-hover = "#0b5ed7"
+assertion-result-file-link = "#6c757d"
+assertion-result-file-link-hover = "#0d6efd"
+
+# Test result rows (nav)
+result-passed-border = "#198754"
+result-passed-bg = "#d1e7dd"
+result-passed-text = "#0f5132"
+result-failed-border = "#dc3545"
+result-failed-bg = "#f8d7da"
+result-failed-text = "#842029"
+result-error-border = "#ffc107"
+result-error-bg = "#fff3cd"
+result-error-text = "#664d03"
+result-skipped-border = "#6c757d"
+result-skipped-bg = "#e2e3e5"
+result-skipped-text = "#41464b"
+
+# Nav tree
+nav-tree-test-bg = "rgba(13, 202, 240, 0.06)"
+nav-tree-test-hover-bg = "rgba(13, 202, 240, 0.12)"
+nav-tree-result-bg = "rgba(108, 117, 125, 0.04)"
+nav-tree-result-hover-bg = "rgba(108, 117, 125, 0.10)"
+
+# Divider
+divider-bg = "#e9ecef"
+divider-active = "#0d6efd"
+divider-dots = "#adb5bd"
+
+# Card stack
+card-stack-bg = "#f8f9fa"
+card-stack-header-bg = "#ffffff"
+card-stack-empty = "#adb5bd"
+card-section-label = "#6c757d"
+
+# Card
+card-bg = "#ffffff"
+card-border = "#e9ecef"
+card-focused-border = "#0d6efd"
+card-focused-shadow = "rgba(13,110,253,0.15)"
+card-header-bg = "#f8f9fa"
+card-header-hover-bg = "#e9ecef"
+card-id = "#0d6efd"
+card-title = "#212529"
+card-expand = "#adb5bd"
+card-close = "#adb5bd"
+card-close-hover = "#dc3545"
+card-meta-key = "#6c757d"
+card-meta-value = "#212529"
+
+# Card assertion
+card-assertion-bg = "#f8f9fa"
+card-assertion-label-bg = "#e7f1ff"
+card-assertion-label-text = "#0d6efd"
+card-assertion-text = "#495057"
+
+# Card parent link
+card-parent-bg = "#f0f4ff"
+card-parent-border = "#b6d4fe"
+card-parent-text = "#0d6efd"
+card-parent-hover-bg = "#d0e2ff"
+card-parent-kind = "#6c757d"
+
+# Card child link
+card-child-bg = "#f8f9fa"
+card-child-border = "#e9ecef"
+card-child-text = "#495057"
+card-child-hover-bg = "#e9ecef"
+card-child-hover-text = "#0d6efd"
+card-child-edge-kind = "#adb5bd"
+
+# Card buttons
+card-add-btn-border = "#dee2e6"
+card-add-btn-text = "#6c757d"
+card-add-btn-hover-border = "#0d6efd"
+card-add-btn-hover-text = "#0d6efd"
+card-add-btn-hover-bg = "#f0f4ff"
+
+# Kind toggle
+kind-toggle-border = "#dee2e6"
+kind-toggle-bg = "#f8f9fa"
+kind-toggle-text = "#495057"
+kind-toggle-hover-border = "#0d6efd"
+kind-toggle-hover-text = "#0d6efd"
+kind-toggle-hover-bg = "#e7f1ff"
+
+# Add rel form
+add-rel-bg = "#f8f9fa"
+add-rel-border = "#e9ecef"
+add-rel-label = "#6c757d"
+add-rel-add-bg = "#0d6efd"
+add-rel-add-hover = "#0b5ed7"
+add-rel-add-disabled = "#adb5bd"
+add-rel-cancel-text = "#6c757d"
+add-rel-cancel-border = "#dee2e6"
+add-rel-cancel-hover-bg = "#f8f9fa"
+add-rel-cancel-hover-border = "#adb5bd"
+
+# Journey
+journey-toolbar-bg = "#f8f9fa"
+journey-search-focus-border = "#4299e1"
+journey-search-focus-shadow = "rgba(66, 153, 225, 0.15)"
+journey-card-bg = "#ffffff"
+journey-card-border = "#e9ecef"
+journey-card-hover-border = "#4299e1"
+journey-id-bg = "#6c757d"
+journey-id-text = "#ffffff"
+journey-title = "#212529"
+journey-meta-bg = "#f8f9fa"
+journey-meta-label = "#6c757d"
+journey-meta-value = "#212529"
+journey-description = "#495057"
+journey-refs-label = "#6c757d"
+journey-ref-bg = "#e7f1ff"
+journey-ref-border = "#b6d4fe"
+journey-ref-text = "#0d6efd"
+journey-ref-hover-bg = "#0d6efd"
+journey-ref-hover-text = "#ffffff"
+journey-group-header-from = "#e9ecef"
+journey-group-header-to = "#f8f9fa"
+journey-group-header-hover-from = "#dee2e6"
+journey-group-header-hover-to = "#e9ecef"
+journey-group-count-bg = "#ffffff"
+journey-group-count-border = "#dee2e6"
+journey-compact-fade = "#ffffff"
+
+# Header
+header-bg = "#ffffff"
+header-border = "#e9ecef"
+header-title = "#212529"
+version-badge-bg = "#e9ecef"
+version-badge-text = "#6c757d"
+stat-sep = "#adb5bd"
+search-bg = "#f8f9fa"
+search-border = "#dee2e6"
+search-focus-bg = "#ffffff"
+search-focus-border = "#0d6efd"
+search-focus-shadow = "rgba(13, 110, 253, 0.1)"
+search-results-bg = "#ffffff"
+search-results-border = "#dee2e6"
+search-result-border = "#f1f3f4"
+search-result-hover = "#f0f4ff"
+search-result-id = "#0d6efd"
+search-result-title = "#495057"
+
+# Edit toggle
+edit-toggle-border = "#dee2e6"
+edit-toggle-bg = "#ffffff"
+edit-toggle-text = "#495057"
+edit-toggle-hover-border = "#adb5bd"
+edit-toggle-active-border = "#0d6efd"
+edit-toggle-active-bg = "#e7f1ff"
+edit-toggle-active-text = "#0d6efd"
+edit-toggle-indicator = "#adb5bd"
+edit-toggle-indicator-active = "#0d6efd"
+
+# Hamburger menu
+hamburger-bg = "#ffffff"
+hamburger-border = "#dee2e6"
+hamburger-shadow = "rgba(0,0,0,0.1)"
+hamburger-item-text = "#495057"
+hamburger-item-hover-bg = "#f0f4ff"
+hamburger-label = "#adb5bd"
+hamburger-divider = "#e9ecef"
+font-size-display = "#495057"
+
+# Theme button
+theme-btn-active-bg = "#e7f1ff"
+theme-btn-active-border = "#0d6efd"
+theme-btn-active-text = "#0d6efd"
+
+# Buttons
+btn-bg = "#ffffff"
+btn-border = "#dee2e6"
+btn-text = "#495057"
+btn-hover-bg = "#f8f9fa"
+btn-primary-bg = "#0d6efd"
+btn-primary-text = "#ffffff"
+btn-primary-border = "#0d6efd"
+btn-primary-hover = "#0b5ed7"
+btn-warning-bg = "#ffc107"
+btn-warning-text = "#212529"
+btn-warning-border = "#ffc107"
+btn-warning-hover = "#e0a800"
+btn-danger-text = "#dc3545"
+btn-danger-border = "#dc3545"
+btn-danger-hover-bg = "#dc3545"
+btn-danger-hover-text = "#ffffff"
+unsaved-badge-bg = "#dc3545"
+unsaved-badge-text = "#ffffff"
+
+# Edit mode
+edit-field-bg = "rgba(59, 130, 246, 0.06)"
+edit-field-hover-bg = "rgba(59, 130, 246, 0.12)"
+edit-field-focus-bg = "#ffffff"
+edit-field-focus-shadow = "rgba(13, 110, 253, 0.3)"
+edit-field-dirty-bg = "rgba(245, 158, 11, 0.12)"
+edit-field-dirty-dot = "#f59e0b"
+edit-select-bg = "rgba(59, 130, 246, 0.06)"
+edit-select-border = "rgba(59, 130, 246, 0.3)"
+edit-select-option-bg = "#ffffff"
+edit-select-option-text = "#212529"
+
+# Legend modal
+modal-bg = "#ffffff"
+modal-shadow = "rgba(0, 0, 0, 0.2)"
+modal-close = "#6c757d"
+modal-close-hover = "#333333"
+legend-section-title = "#495057"
+legend-section-border = "#e9ecef"
+
+# Req picker
+picker-input-border = "#dee2e6"
+picker-input-focus-border = "#0d6efd"
+picker-input-focus-shadow = "rgba(13, 110, 253, 0.15)"
+picker-placeholder = "#adb5bd"
+picker-dropdown-bg = "#ffffff"
+picker-dropdown-border = "#dee2e6"
+picker-item-hover = "#e7f1ff"
+picker-item-id = "#0d6efd"
+picker-item-title = "#495057"
+picker-level-prd-bg = "#cfe2ff"
+picker-level-prd-text = "#084298"
+picker-level-ops-bg = "#d1e7dd"
+picker-level-ops-text = "#0f5132"
+picker-level-dev-bg = "#fff3cd"
+picker-level-dev-text = "#664d03"
+picker-empty = "#adb5bd"
+picker-loading = "#6c757d"
+picker-selected-bg = "#e7f1ff"
+picker-selected-border = "#b6d4fe"
+picker-selected-id = "#0d6efd"
+picker-selected-title = "#495057"
+picker-clear = "#adb5bd"
+picker-clear-hover = "#dc3545"
+
+# Topic tag
+topic-tag = "#6c757d"
+
+# Delete buttons
+delete-btn = "#dc3545"
+delete-hover = "#dc3545"
+assertion-delete = "#6c757d"
+assertion-delete-hover = "#dc3545"
+
+# Journey card kind badge
+journey-kind-bg = "#6c757d"
+journey-kind-text = "#ffffff"
+journey-card-description = "#495057"
+
+# Edit pencil
+edit-pencil = "#0d6efd"
+
+# Assertion button base (uncolored state)
+assertion-btn-border = "#dee2e6"
+assertion-btn-text = "#6c757d"
+assertion-btn-hover-bg = "#f8f9fa"
+assertion-btn-hover-border = "#adb5bd"
+
+# Nav tree level (duplicated from stat badges for nav-specific context)
+nav-level-prd-bg = "#212529"
+nav-level-prd-text = "#ffffff"
+nav-level-ops-bg = "#fd7e14"
+nav-level-ops-text = "#ffffff"
+nav-level-dev-bg = "#20c997"
+nav-level-dev-text = "#ffffff"
+
+# ---------------------------------------------------------------------------
+# Dark theme
+# ---------------------------------------------------------------------------
+
+[themes.dark]
+label = "Dark"
+icon = "&#9790;"
+
+[themes.dark.tokens]
+# Structural
+body-bg = "#1a1d21"
+body-text = "#e9ecef"
+panel-bg = "#212529"
+panel-border = "#343a40"
+surface-bg = "#2b3035"
+surface-hover-bg = "#343a40"
+surface-focus-bg = "#343a40"
+surface-focus-border = "#0d6efd"
+surface-focus-shadow = "rgba(110, 168, 254, 0.15)"
+muted-text = "#6c757d"
+secondary-text = "#868e96"
+primary-text = "#e9ecef"
+border-color = "#343a40"
+border-light = "#495057"
+input-bg = "#2b3035"
+input-border = "#495057"
+input-text = "#e9ecef"
+
+# Primary interaction
+primary = "#6ea8fe"
+primary-hover = "#9ec5fe"
+primary-light-bg = "#1a2d42"
+primary-light-text = "#6ea8fe"
+primary-soft = "#1a2d42"
+
+# Semantic
+success-bg = "#1a3328"
+success-text = "#5cb85c"
+success-border = "#2d5a3e"
+warning-bg = "#3d3019"
+warning-text = "#f0c75e"
+warning-border = "#7c6a1e"
+danger-bg = "#3d1f24"
+danger-text = "#e77681"
+danger-border = "#5a2d33"
+info-bg = "#1a3040"
+info-text = "#6ea8fe"
+info-border = "#2d4a6e"
+
+# Level badges
+level-prd-bg = "#1b3a5c"
+level-prd-text = "#ffffff"
+level-ops-bg = "#fd7e14"
+level-ops-text = "#ffffff"
+level-dev-bg = "#20c997"
+level-dev-text = "#ffffff"
+
+# Status badges
+status-draft-bg = "#1a2d42"
+status-draft-text = "#6ea8fe"
+status-active-bg = "#1a3328"
+status-active-text = "#5cb85c"
+status-deprecated-bg = "#3d1f24"
+status-deprecated-text = "#e77681"
+status-proposed-bg = "#3d3019"
+status-proposed-text = "#f0c75e"
+
+# Validation tiers
+val-green-bg = "#146c43"
+val-green-text = "#d1e7dd"
+val-yellow-green-bg = "#4a7a2e"
+val-yellow-green-text = "#d4edbc"
+val-yellow-bg = "#997a00"
+val-yellow-text = "#fff3cd"
+val-red-bg = "#a52834"
+val-red-text = "#f8d7da"
+val-orange-bg = "#b35b0e"
+val-orange-text = "#ffe5d0"
+
+# Tooltip
+tooltip-bg = "#f8f9fa"
+tooltip-text = "#212529"
+
+# Assertion buttons — implemented
+impl-yes-border = "#2b5f96"
+impl-yes-text = "#6ea8fe"
+impl-yes-active-bg = "#2b5f96"
+impl-yes-active-text = "#e7f1ff"
+impl-yes-hover-bg = "#1a2d42"
+impl-no-border = "#495057"
+impl-no-text = "#6c757d"
+impl-no-hover-bg = "#343a40"
+
+# Assertion buttons — validation
+valid-pass-border = "#2d6a4f"
+valid-pass-text = "#5cb85c"
+valid-pass-active-bg = "#2d6a4f"
+valid-pass-active-text = "#d1e7dd"
+valid-pass-hover-bg = "#1a3328"
+valid-partial-border = "#7c6a1e"
+valid-partial-text = "#f0c75e"
+valid-partial-active-bg = "#7c6a1e"
+valid-partial-active-text = "#fef3c7"
+valid-partial-hover-bg = "#3d3019"
+valid-fail-border = "#842029"
+valid-fail-text = "#e77681"
+valid-fail-active-bg = "#842029"
+valid-fail-active-text = "#f8d7da"
+valid-fail-hover-bg = "#3d1f24"
+valid-unknown-border = "#495057"
+valid-unknown-text = "#868e96"
+valid-unknown-active-bg = "#495057"
+valid-unknown-active-text = "#e9ecef"
+valid-unknown-hover-bg = "#343a40"
+
+# Coverage icons
+coverage-none = "#6c757d"
+coverage-partial = "#868e96"
+coverage-full = "#e9ecef"
+coverage-warning = "#f0c75e"
+
+# Change indicator
+change-color = "#fd7e14"
+
+# Stat badges (header)
+stat-main-bg = "#6f42c1"
+stat-tests-bg = "#0dcaf0"
+stat-tests-text = "#212529"
+stat-results-bg = "#6c757d"
+stat-repo-bg = "#e83e8c"
+
+# Toast
+toast-success-bg = "#1a3328"
+toast-success-text = "#5cb85c"
+toast-success-border = "#2d5a3e"
+toast-error-bg = "#3d1f24"
+toast-error-text = "#e77681"
+toast-error-border = "#5a2d33"
+toast-info-bg = "#1a3040"
+toast-info-text = "#6ea8fe"
+toast-info-border = "#2d4a6e"
+
+# File viewer
+fv-on-disk-bg = "#064e3b"
+fv-on-disk-text = "#a7f3d0"
+fv-mutations-bg = "#78350f"
+fv-mutations-text = "#fde68a"
+fv-highlight-bg = "#3d3019"
+fv-highlight-hover = "#4a3a1f"
+fv-line-num-text = "#6c757d"
+fv-line-num-bg = "#2b3035"
+fv-line-num-border = "#343a40"
+fv-close-hover-text = "#e77681"
+fv-close-hover-bg = "#3d1f24"
+fv-lang-bg = "#343a40"
+fv-lang-text = "#adb5bd"
+fv-mode-toggle-bg = "#343a40"
+fv-mode-btn-active-bg = "#495057"
+fv-rendered-code-bg = "#343a40"
+
+# Assertion panels and test items
+assertion-code-panel-bg = "#1a2232"
+assertion-code-panel-border = "#2b5f96"
+assertion-tests-panel-bg = "#1a1d21"
+assertion-tests-panel-border = "#495057"
+assertion-test-passed-text = "#5cb85c"
+assertion-test-failed-text = "#e77681"
+assertion-test-no-result-text = "#868e96"
+assertion-test-link = "#6ea8fe"
+assertion-test-link-hover = "#9ec5fe"
+assertion-result-file-link = "#868e96"
+assertion-result-file-link-hover = "#6ea8fe"
+
+# Test result rows (nav)
+result-passed-border = "#198754"
+result-passed-bg = "#1a3328"
+result-passed-text = "#5cb85c"
+result-failed-border = "#dc3545"
+result-failed-bg = "#3d1f24"
+result-failed-text = "#e77681"
+result-error-border = "#ffc107"
+result-error-bg = "#3d3019"
+result-error-text = "#f0c75e"
+result-skipped-border = "#6c757d"
+result-skipped-bg = "#2b3035"
+result-skipped-text = "#868e96"
+
+# Nav tree
+nav-tree-test-bg = "rgba(13, 202, 240, 0.04)"
+nav-tree-test-hover-bg = "rgba(13, 202, 240, 0.10)"
+nav-tree-result-bg = "rgba(108, 117, 125, 0.03)"
+nav-tree-result-hover-bg = "rgba(108, 117, 125, 0.08)"
+
+# Divider
+divider-bg = "#343a40"
+divider-active = "#6ea8fe"
+divider-dots = "#495057"
+
+# Card stack
+card-stack-bg = "#1a1d21"
+card-stack-header-bg = "#212529"
+card-stack-empty = "#6c757d"
+card-section-label = "#868e96"
+
+# Card
+card-bg = "#212529"
+card-border = "#343a40"
+card-focused-border = "#6ea8fe"
+card-focused-shadow = "rgba(110,168,254,0.15)"
+card-header-bg = "#2b3035"
+card-header-hover-bg = "#343a40"
+card-id = "#6ea8fe"
+card-title = "#e9ecef"
+card-expand = "#adb5bd"
+card-close = "#adb5bd"
+card-close-hover = "#e77681"
+card-meta-key = "#adb5bd"
+card-meta-value = "#e9ecef"
+
+# Card assertion
+card-assertion-bg = "#2b3035"
+card-assertion-label-bg = "#1a2d42"
+card-assertion-label-text = "#6ea8fe"
+card-assertion-text = "#adb5bd"
+
+# Card parent link
+card-parent-bg = "#1a2d42"
+card-parent-border = "#2b5f96"
+card-parent-text = "#6ea8fe"
+card-parent-hover-bg = "#254a73"
+card-parent-kind = "#6c757d"
+
+# Card child link
+card-child-bg = "#2b3035"
+card-child-border = "#495057"
+card-child-text = "#adb5bd"
+card-child-hover-bg = "#343a40"
+card-child-hover-text = "#6ea8fe"
+card-child-edge-kind = "#6c757d"
+
+# Card buttons
+card-add-btn-border = "#495057"
+card-add-btn-text = "#adb5bd"
+card-add-btn-hover-border = "#6ea8fe"
+card-add-btn-hover-text = "#6ea8fe"
+card-add-btn-hover-bg = "#1a2d42"
+
+# Kind toggle
+kind-toggle-border = "#495057"
+kind-toggle-bg = "#343a40"
+kind-toggle-text = "#adb5bd"
+kind-toggle-hover-border = "#6ea8fe"
+kind-toggle-hover-text = "#6ea8fe"
+kind-toggle-hover-bg = "#1a2d42"
+
+# Add rel form
+add-rel-bg = "#2b3035"
+add-rel-border = "#343a40"
+add-rel-label = "#adb5bd"
+add-rel-add-bg = "#0d6efd"
+add-rel-add-hover = "#0b5ed7"
+add-rel-add-disabled = "#495057"
+add-rel-cancel-text = "#adb5bd"
+add-rel-cancel-border = "#495057"
+add-rel-cancel-hover-bg = "#343a40"
+add-rel-cancel-hover-border = "#6c757d"
+
+# Journey
+journey-toolbar-bg = "#2b3035"
+journey-search-focus-border = "#6ea8fe"
+journey-search-focus-shadow = "rgba(110, 168, 254, 0.15)"
+journey-card-bg = "#212529"
+journey-card-border = "#343a40"
+journey-card-hover-border = "#6ea8fe"
+journey-id-bg = "#495057"
+journey-id-text = "#e9ecef"
+journey-title = "#e9ecef"
+journey-meta-bg = "#2b3035"
+journey-meta-label = "#868e96"
+journey-meta-value = "#e9ecef"
+journey-description = "#adb5bd"
+journey-refs-label = "#868e96"
+journey-ref-bg = "#1a2d42"
+journey-ref-border = "#2b5f96"
+journey-ref-text = "#6ea8fe"
+journey-ref-hover-bg = "#0d6efd"
+journey-ref-hover-text = "#ffffff"
+journey-group-header-from = "#343a40"
+journey-group-header-to = "#2b3035"
+journey-group-header-hover-from = "#495057"
+journey-group-header-hover-to = "#343a40"
+journey-group-count-bg = "#2b3035"
+journey-group-count-border = "#495057"
+journey-compact-fade = "#212529"
+
+# Header
+header-bg = "#212529"
+header-border = "#343a40"
+header-title = "#f8f9fa"
+version-badge-bg = "#343a40"
+version-badge-text = "#adb5bd"
+stat-sep = "#495057"
+search-bg = "#2b3035"
+search-border = "#495057"
+search-focus-bg = "#343a40"
+search-focus-border = "#0d6efd"
+search-focus-shadow = "rgba(110, 168, 254, 0.15)"
+search-results-bg = "#2b3035"
+search-results-border = "#495057"
+search-result-border = "#343a40"
+search-result-hover = "#343a40"
+search-result-id = "#6ea8fe"
+search-result-title = "#adb5bd"
+
+# Edit toggle
+edit-toggle-border = "#495057"
+edit-toggle-bg = "#2b3035"
+edit-toggle-text = "#adb5bd"
+edit-toggle-hover-border = "#6c757d"
+edit-toggle-active-border = "#6ea8fe"
+edit-toggle-active-bg = "#1a2d42"
+edit-toggle-active-text = "#6ea8fe"
+edit-toggle-indicator = "#6c757d"
+edit-toggle-indicator-active = "#6ea8fe"
+
+# Hamburger menu
+hamburger-bg = "#2b3035"
+hamburger-border = "#495057"
+hamburger-shadow = "rgba(0,0,0,0.4)"
+hamburger-item-text = "#adb5bd"
+hamburger-item-hover-bg = "#343a40"
+hamburger-label = "#6c757d"
+hamburger-divider = "#495057"
+font-size-display = "#adb5bd"
+
+# Theme button
+theme-btn-active-bg = "#1a2d42"
+theme-btn-active-border = "#6ea8fe"
+theme-btn-active-text = "#6ea8fe"
+
+# Buttons
+btn-bg = "#2b3035"
+btn-border = "#495057"
+btn-text = "#adb5bd"
+btn-hover-bg = "#343a40"
+btn-primary-bg = "#0d6efd"
+btn-primary-text = "#ffffff"
+btn-primary-border = "#0d6efd"
+btn-primary-hover = "#0b5ed7"
+btn-warning-bg = "#ffc107"
+btn-warning-text = "#212529"
+btn-warning-border = "#ffc107"
+btn-warning-hover = "#e0a800"
+btn-danger-text = "#e77681"
+btn-danger-border = "#842029"
+btn-danger-hover-bg = "#842029"
+btn-danger-hover-text = "#f8d7da"
+unsaved-badge-bg = "#dc3545"
+unsaved-badge-text = "#ffffff"
+
+# Edit mode
+edit-field-bg = "rgba(110, 168, 254, 0.08)"
+edit-field-hover-bg = "rgba(110, 168, 254, 0.15)"
+edit-field-focus-bg = "#2b3035"
+edit-field-focus-shadow = "rgba(110, 168, 254, 0.3)"
+edit-field-dirty-bg = "rgba(240, 199, 94, 0.12)"
+edit-field-dirty-dot = "#f0c75e"
+edit-select-bg = "rgba(110, 168, 254, 0.08)"
+edit-select-border = "rgba(110, 168, 254, 0.3)"
+edit-select-option-bg = "#2b3035"
+edit-select-option-text = "#e9ecef"
+
+# Legend modal
+modal-bg = "#2b3035"
+modal-shadow = "rgba(0, 0, 0, 0.5)"
+modal-close = "#adb5bd"
+modal-close-hover = "#e9ecef"
+legend-section-title = "#adb5bd"
+legend-section-border = "#495057"
+
+# Req picker
+picker-input-border = "#495057"
+picker-input-focus-border = "#6ea8fe"
+picker-input-focus-shadow = "rgba(110, 168, 254, 0.15)"
+picker-placeholder = "#6c757d"
+picker-dropdown-bg = "#2b3035"
+picker-dropdown-border = "#495057"
+picker-item-hover = "#1a2d42"
+picker-item-id = "#6ea8fe"
+picker-item-title = "#adb5bd"
+picker-level-prd-bg = "#1a2d42"
+picker-level-prd-text = "#6ea8fe"
+picker-level-ops-bg = "#1a3328"
+picker-level-ops-text = "#5cb85c"
+picker-level-dev-bg = "#3d3019"
+picker-level-dev-text = "#f0c75e"
+picker-empty = "#6c757d"
+picker-loading = "#868e96"
+picker-selected-bg = "#1a2d42"
+picker-selected-border = "#2b5f96"
+picker-selected-id = "#6ea8fe"
+picker-selected-title = "#adb5bd"
+picker-clear = "#6c757d"
+picker-clear-hover = "#e77681"
+
+# Topic tag
+topic-tag = "#868e96"
+
+# Delete buttons
+delete-btn = "#e77681"
+delete-hover = "#e77681"
+assertion-delete = "#868e96"
+assertion-delete-hover = "#e77681"
+
+# Journey card kind badge
+journey-kind-bg = "#495057"
+journey-kind-text = "#e9ecef"
+journey-card-description = "#adb5bd"
+
+# Edit pencil
+edit-pencil = "#6ea8fe"
+
+# Assertion button base
+assertion-btn-border = "#495057"
+assertion-btn-text = "#868e96"
+assertion-btn-hover-bg = "#343a40"
+assertion-btn-hover-border = "#6c757d"
+
+# Nav tree level
+nav-level-prd-bg = "#1b3a5c"
+nav-level-prd-text = "#ffffff"
+nav-level-ops-bg = "#fd7e14"
+nav-level-ops-text = "#ffffff"
+nav-level-dev-bg = "#20c997"
+nav-level-dev-text = "#ffffff"
+
+
+# ---------------------------------------------------------------------------
+# Categorical entries — icons, badges, buttons, validation tiers
+# ---------------------------------------------------------------------------
+
+[icons.coverage.full]
+symbol = "&#x25CF;"
+css_class = "coverage-icon full"
+
+[icons.coverage.partial]
+symbol = "&#x25D2;"
+css_class = "coverage-icon partial"
+
+[icons.coverage.none]
+symbol = "&#x25CB;"
+css_class = "coverage-icon none"
+
+[icons.coverage.warning]
+symbol = "&#x26A0;"
+css_class = "warning-icon"
+
+[icons.change.changed]
+symbol = "&#x25C6;"
+css_class = "change-indicator"
+
+[badges.status.draft]
+css_class = "status-badge draft"
+
+[badges.status.active]
+css_class = "status-badge active"
+
+[badges.status.deprecated]
+css_class = "status-badge deprecated"
+
+[badges.status.proposed]
+css_class = "status-badge proposed"
+
+[badges.level.prd]
+css_class = "nav-tree-level prd"
+
+[badges.level.ops]
+css_class = "nav-tree-level ops"
+
+[badges.level.dev]
+css_class = "nav-tree-level dev"
+
+[badges.kind.code]
+symbol = "&#128196;"
+css_class = "nav-tree-kind-icon"
+
+[badges.kind.test]
+symbol = "&#128270;"
+css_class = "nav-tree-kind-icon test-icon"
+
+[badges.kind.result]
+css_class = "nav-tree-result-badge"
+
+[badges.kind.journey]
+symbol = "&#128506;"
+css_class = "nav-tree-kind-icon"
+
+[badges.edge.implements]
+css_class = "card-parent-kind"
+
+[badges.edge.refines]
+css_class = "card-parent-kind"
+
+[badges.result.passed]
+css_class = "nav-tree-result-badge passed"
+
+[badges.result.failed]
+css_class = "nav-tree-result-badge failed"
+
+[badges.result.error]
+css_class = "nav-tree-result-badge error"
+
+[badges.result.skipped]
+css_class = "nav-tree-result-badge skipped"
+
+[buttons.implemented.yes]
+css_class = "assertion-implemented-btn implemented-yes"
+
+[buttons.implemented.no]
+css_class = "assertion-implemented-btn implemented-no"
+
+[buttons.validation.pass]
+css_class = "assertion-validation-btn validation-pass"
+
+[buttons.validation.partial]
+css_class = "assertion-validation-btn validation-partial"
+
+[buttons.validation.fail]
+css_class = "assertion-validation-btn validation-fail"
+
+[buttons.validation.unknown]
+css_class = "assertion-validation-btn validation-unknown"
+
+[validation_tiers.full-direct]
+css_class = "val-green"
+color_key = "green"
+
+[validation_tiers.full-indirect]
+css_class = "val-yellow-green"
+color_key = "yellow-green"
+
+[validation_tiers.partial]
+css_class = "val-yellow"
+color_key = "yellow"
+
+[validation_tiers.failing]
+css_class = "val-red"
+color_key = "red"
+
+[validation_tiers.anomalous]
+css_class = "val-orange"
+color_key = "orange"
