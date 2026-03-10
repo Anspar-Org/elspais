@@ -190,7 +190,10 @@ function showBranchModal(reason, callback) {
 
     function closeModal() {
         var el = document.getElementById('branch-modal-overlay');
-        if (el) el.remove();
+        if (el) {
+            el.classList.remove('visible');
+            setTimeout(function() { el.remove(); }, 200);
+        }
     }
 
     function doCreate() {
@@ -218,6 +221,10 @@ function showBranchModal(reason, callback) {
                 createBtn.disabled = false;
                 createBtn.textContent = 'Create Branch';
             }
+        }).catch(function(err) {
+            console.error('Branch creation error:', err);
+            closeModal();
+            showToast('Branch may have been created — refresh to check', 'error');
         });
     }
 
