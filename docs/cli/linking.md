@@ -125,12 +125,7 @@ using the `+` separator:
 This expands to three separate references:
   `REQ-d00001-A`, `REQ-d00001-B`, `REQ-d00001-C`
 
-Works in all contexts: `Implements:`, `Refines:`, `Tests:`, and test function names.
-
-```python
-def test_REQ_d00001_A_B_C_full_auth():
-    ...
-```
+Works in all link comment contexts: `Implements:`, `Refines:`, `Tests:`.
 
 > **Configuration:** The multi-assertion separator defaults to `+` and can be
 > changed via `references.defaults.multi_assertion_separator` in `.elspais.toml`.
@@ -138,7 +133,7 @@ def test_REQ_d00001_A_B_C_full_auth():
 
 ## Indirect Coverage
 
-When a test imports and exercises a function that has an `Implements:` comment, coverage rolls up automatically:
+When a test validates a requirement that is implemented by code with an `Implements:` comment, coverage rolls up through the graph edges:
 
 ```python
 # src/auth.py
@@ -149,16 +144,15 @@ def hash_password(plain: str) -> str:
 
 ```python
 # tests/test_auth.py
-from auth import hash_password
-
+# Tests: REQ-d00001-A
 def test_hashing():
     result = hash_password("secret")
     assert result.startswith("$2b$")
 ```
 
-Even though `test_hashing` has no explicit requirement reference, elspais detects the import chain and creates indirect coverage for `REQ-d00001-A`. No action needed -- this happens during graph construction.
+Indirect coverage is tracked separately from direct coverage. Use `elspais viewer` to see the breakdown.
 
-Indirect coverage is tracked separately from direct coverage. Use `elspais trace --view` to see the breakdown.
+> **Note:** `elspais link suggest` can recommend which tests should be linked to which requirements by analyzing import chains, function names, and keyword overlap. These are suggestions only -- run `elspais link suggest` to see recommendations, then add explicit links where appropriate.
 
 ## When to Use Each Approach
 
@@ -190,7 +184,7 @@ When writing tests, include the requirement ID in the function
 name:  def test_REQ_xxx_Y_description():
 
 Use multi-assertion syntax for compact references:
-  # Implements: REQ-xxx-A-B-C
+  # Implements: REQ-xxx-A+B+C
 
 Test classes should include the requirement in their docstring:
   """Validates REQ-xxx-Y: brief description"""
