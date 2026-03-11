@@ -32,7 +32,7 @@ The command produces two ranked lists:
 
 | Option | Description |
 |--------|-------------|
-| `--top N` | Number of top results to show per section (default: 10) |
+| `-n, --top N` | Number of top results to show per section (default: 10) |
 | `--weights W1,W2,W3[,W4]` | Centrality, fan-in, neighborhood, uncovered weights (default: 0.3,0.2,0.2,0.3). With 3 values, neighborhood weight is 0. |
 | `--format` | Output format: `table`, `json` (default: table) |
 | `--show` | Which sections to show: `foundations`, `leaves`, `all` (default: all) |

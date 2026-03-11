@@ -71,8 +71,17 @@ Search requirements by ID, title, or content.
   Returns:
     List of matching requirement summaries with id, title, level, status.
 
+  Multi-term query syntax:
+    - Space-separated terms: AND by default
+    - `OR` keyword: match either side
+    - `"quoted phrases"`: exact phrase match
+    - `-term`: exclude results containing term
+    - `=term`: exact keyword match
+    - Parenthesized grouping: `(auth OR login) -deprecated`
+
   Examples:
     search("authentication")           # Find auth-related requirements
+    search("auth OR login")            # Find either term
     search("REQ-p", field="id")        # Find PRD-level by ID prefix
     search(".*security.*", regex=true) # Regex search in all fields
 
@@ -249,5 +258,6 @@ directly without creating intermediate data structures. This ensures:
 - Consistent results across all tools
 - Efficient memory usage
 
-All tools use the iterator-only API (`iter_children()`, `iter_parents()`,
-`nodes_by_kind()`) to prevent accidental list materialization on large graphs.
+All tools use the iterator-only API (`iter_children()`, `iter_parents()` on
+`GraphNode`, `nodes_by_kind()` on `TraceGraph`) to prevent accidental list
+materialization on large graphs.

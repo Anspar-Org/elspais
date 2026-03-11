@@ -49,11 +49,12 @@ Implement specific assertions, not the whole requirement:
 
 ```
 **Implements**: REQ-p00001-A    # Just assertion A
-**Implements**: REQ-p00001-A-B  # Assertions A and B
+**Implements**: REQ-p00001-A+B  # Assertions A and B
 ```
 
 This gives precise traceability coverage.
 
 ## Viewing the Hierarchy
 
-  $ elspais trace --view       # Interactive HTML tree view
+  $ elspais viewer             # Interactive HTML tree (live server)
+  $ elspais viewer --static    # Interactive HTML tree (static file)

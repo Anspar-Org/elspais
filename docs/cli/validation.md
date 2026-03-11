@@ -3,16 +3,16 @@
 ## Running Health Checks
 
   $ elspais health                     # Check all rules
-  $ elspais health -j                  # Output JSON for tooling
+  $ elspais health --format json       # Output JSON for tooling
   $ elspais health -v                  # Verbose output
 
 ## Command Options
 
-  `--config`       Run configuration checks only
   `--spec`         Run spec file checks only
   `--code`         Run code reference checks only
   `--tests`        Run test mapping checks only
-  `-j, --json`     Output as JSON
+  `--format {text,markdown,json,junit,sarif}`  Output format
+  `--lenient`      Allow warnings without affecting exit code
   `-v, --verbose`  Show additional details
 
 ## Auto-Fixing Issues
@@ -76,7 +76,7 @@ For expected issues, add inline suppression:
 
 For tooling and CI integration:
 
-  $ elspais health -j > health-report.json
+  $ elspais health --format json > health-report.json
 
 ## CI Integration
 

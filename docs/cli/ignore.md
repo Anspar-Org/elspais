@@ -6,7 +6,7 @@ The `[ignore]` section in `.elspais.toml` controls which files are skipped durin
 
 Patterns use Python's `fnmatch` module (similar to shell globs).
 
-**Important**: Patterns match from the START of the path, not anywhere. This differs from gitignore behavior.
+**Important**: Patterns are matched against three things in order: the file basename, each individual path component, and the full path. A pattern like `README.md` matches any file named `README.md` at any depth.
 
 ## Pattern Characters
 

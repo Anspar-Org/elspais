@@ -17,15 +17,15 @@ Use `-v` to see detected roots:
 
 ## Detecting Changes
 
-  $ elspais changed              # Show all spec changes
-  $ elspais changed -j           # Output as JSON
-  $ elspais changed -a           # Include non-spec files
+  $ elspais changed                    # Show all spec changes
+  $ elspais changed --format json     # Output as JSON
+  $ elspais changed -a                # Include non-spec files
   $ elspais changed --base-branch develop  # Compare to different branch
 
 ## Command Options
 
   `--base-branch BRANCH`  Base branch for comparison (default: main)
-  `-j, --json`            Output as JSON for tooling
+  `--format {text,json}`  Output format (default: text)
   `-a, --all`             Include all changed files (not just spec)
 
 ## What 'Changed' Detects
@@ -37,7 +37,7 @@ Use `-v` to see detected roots:
 
 ## In Trace View
 
-The interactive trace view (`elspais trace --view`) shows:
+The interactive viewer (`elspais viewer`) shows:
 
   **◆** Changed vs main branch (diamond indicator)
   Filter buttons: `[Uncommitted]` `[Changed vs Main]`

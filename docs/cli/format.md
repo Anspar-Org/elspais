@@ -39,8 +39,9 @@ B. The system SHALL NOT do something prohibited.
 ## Header Line Fields
 
   **Level**:      PRD, OPS, or DEV (determines hierarchy position)
-  **Status**:     Active, Draft, Deprecated, or Proposed
+  **Status**:     Active, Draft, Deprecated, or Proposed (configurable)
   **Implements**: Parent requirement ID(s), comma-separated
+                  Multi-assertion: REQ-p00001-A+B+C (uses + separator)
   **Refines**:    Parent ID when adding detail without claiming coverage
 
 ## Hash
