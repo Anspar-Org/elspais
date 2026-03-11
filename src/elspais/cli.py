@@ -1190,7 +1190,8 @@ def main(argv: list[str] | None = None) -> int:
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
 
-    # Store canonical_root on args for commands to use
+    # Store roots on args for commands to use
+    args.git_root = git_root
     args.canonical_root = canonical_root
 
     # Global --output: redirect stdout to file

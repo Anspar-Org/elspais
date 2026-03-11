@@ -19,6 +19,8 @@
 
 [ ] Chore: review specs for accuracy
 
+[ ] Design: does Addresses support REQ->JNY, JNY->REQ, or both?
+
 [ ] Feature: "More Help" mode, where the hover-help text shows in a fixed part of the header bar (so it doesn't obscure data being viewed), and is more descriptive.
 
 [ ] Feature: Need a way to change a REQ -> REQ link to a REQ -> Assertion link.

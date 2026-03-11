@@ -6,9 +6,14 @@ where columns are aligned, and _regenerate_index uses aligned tables.
 """
 
 import argparse
-from pathlib import Path
 
-from elspais.commands.index import _format_table, _make_relative, _regenerate_index
+from elspais.commands.index import (
+    _classify_node,
+    _format_table,
+    _regenerate_index,
+    _resolve_spec_dir_info,
+)
+from elspais.graph import NodeKind
 from tests.core.graph_test_helpers import (
     build_graph,
     make_journey,
@@ -31,9 +36,7 @@ class TestFormatTable:
         result = _format_table(headers, rows)
 
         header_line = result[0]
-        # "ID" should be padded to width of "REQ-p00001" (10 chars)
         assert "| ID         |" in header_line
-        # "Title" is already wider than "Short", so Title stays at 5
         assert "| Title |" in header_line
 
     def test_REQ_d00052_G_separator_dashes_match_column_widths(self):
@@ -44,9 +47,7 @@ class TestFormatTable:
         result = _format_table(headers, rows)
 
         separator = result[1]
-        # Column 0 width = max(len("ID"), len("REQ-p00001")) = 10
         assert "| " + "-" * 10 + " |" in separator or "----------" in separator
-        # Column 1 width = max(len("Name"), len("My Requirement")) = 14
         assert "-" * 14 in separator
 
     def test_REQ_d00052_G_row_cells_are_padded_to_column_width(self):
@@ -59,8 +60,6 @@ class TestFormatTable:
 
         result = _format_table(headers, rows)
 
-        # Column 1 width = max(len("Title"), len("Short"), len("A Much Longer Title Here")) = 24
-        # First data row "Short" should be padded to 24 chars
         row_line = result[2]
         assert "| Short                    |" in row_line
 
@@ -72,9 +71,6 @@ class TestFormatTable:
         result = _format_table(headers, rows)
 
         assert len(result) == 3
-        assert result[0].startswith("| ")
-        assert result[1].startswith("| ")
-        assert result[2].startswith("| ")
 
     def test_REQ_d00052_G_multiple_rows_produce_correct_line_count(self):
         """Table with N rows produces N+2 lines (header + separator + N rows)."""
@@ -83,7 +79,7 @@ class TestFormatTable:
 
         result = _format_table(headers, rows)
 
-        assert len(result) == 5  # 1 header + 1 separator + 3 data rows
+        assert len(result) == 5
 
     def test_REQ_d00052_G_pipes_aligned_across_all_lines(self):
         """All pipe characters are vertically aligned across header, separator, and rows."""
@@ -95,7 +91,6 @@ class TestFormatTable:
 
         result = _format_table(headers, rows)
 
-        # All lines should have the same length when columns are padded
         lengths = [len(line) for line in result]
         assert len(set(lengths)) == 1, f"Lines have different lengths: {lengths}"
 
@@ -106,7 +101,6 @@ class TestFormatTable:
 
         result = _format_table(headers, rows)
 
-        # Empty hash cell should be padded to width of "abcd1234" (8 chars)
         first_data = result[2]
         assert "|          |" in first_data or "| " + " " * 8 + " |" in first_data
 
@@ -117,7 +111,6 @@ class TestFormatTable:
 
         result = _format_table(headers, rows)
 
-        # "short" should be padded to len("Very Long Header") = 16
         data_line = result[2]
         assert "| short            |" in data_line
 
@@ -136,59 +129,67 @@ class TestFormatTable:
         assert result == expected
 
 
-class TestMakeRelative:
-    """Tests for _make_relative path resolution.
+class TestResolveSpecDirInfo:
+    """Tests for _resolve_spec_dir_info."""
 
-    Validates REQ-d00052-G: helper for making file paths relative to spec dirs.
-    """
-
-    def test_REQ_d00052_G_relative_to_first_matching_spec_dir(self, tmp_path):
-        """Path is made relative to the first matching spec directory."""
+    def test_with_config(self, tmp_path):
+        """Info uses project name and level config from .elspais.toml."""
+        (tmp_path / ".elspais.toml").write_text(
+            '[project]\nname = "my-project"\n\n'
+            "[patterns.types]\n"
+            'prd = { id = "p", name = "PRD", level = 1 }\n'
+            'dev = { id = "d", name = "DEV", level = 3 }\n'
+        )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        file_path = str(spec_dir / "prd-elspais.md")
 
-        result = _make_relative(file_path, [spec_dir])
+        info = _resolve_spec_dir_info(spec_dir)
 
-        assert result == "prd-elspais.md"
+        assert info.label == "my-project/spec"
+        assert info.level_order["prd"] == 1
+        assert info.level_order["dev"] == 3
+        assert info.level_names["prd"] == "PRD"
 
-    def test_REQ_d00052_G_relative_with_subdirectory(self, tmp_path):
-        """Path in a subdirectory of spec_dir returns relative path."""
-        spec_dir = tmp_path / "spec"
-        (spec_dir / "sub").mkdir(parents=True)
-        file_path = str(spec_dir / "sub" / "file.md")
-
-        result = _make_relative(file_path, [spec_dir])
-
-        assert result == "sub/file.md"
-
-    def test_REQ_d00052_G_no_matching_spec_dir_returns_full_path(self, tmp_path):
-        """When path doesn't match any spec_dir, full path is returned."""
+    def test_no_config_falls_back(self, tmp_path):
+        """Without .elspais.toml, falls back to empty level info."""
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        file_path = "/other/place/file.md"
 
-        result = _make_relative(file_path, [spec_dir])
+        info = _resolve_spec_dir_info(spec_dir)
 
-        assert result == "/other/place/file.md"
+        assert info.label == f"{tmp_path.name}/spec"
+        assert info.level_order == {}
+        assert info.level_names == {}
 
-    def test_REQ_d00052_G_empty_path_returns_empty(self):
-        """Empty file path returns empty string."""
-        result = _make_relative("", [Path("/spec")])
 
-        assert result == ""
+class TestClassifyNode:
+    """Tests for _classify_node."""
 
-    def test_REQ_d00052_G_multiple_spec_dirs_uses_first_match(self, tmp_path):
-        """With multiple spec_dirs, path is relative to the first match."""
-        dir_a = tmp_path / "a"
-        dir_b = tmp_path / "b"
-        dir_a.mkdir()
-        dir_b.mkdir()
-        file_path = str(dir_b / "file.md")
+    def test_matches_correct_spec_dir(self, tmp_path):
+        """Node is classified to the spec dir containing its source."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD", source_path=str(spec_dir / "file.md")),
+        )
+        node = next(graph.nodes_by_kind(NodeKind.REQUIREMENT))
 
-        result = _make_relative(file_path, [dir_a, dir_b])
+        result = _classify_node(node, [spec_dir])
 
-        assert result == "file.md"
+        assert result == spec_dir
+
+    def test_no_source_returns_none(self, tmp_path):
+        """Node with no source path returns None."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        graph = build_graph(
+            make_requirement("REQ-p00001", level="PRD", source_path=""),
+        )
+        node = next(graph.nodes_by_kind(NodeKind.REQUIREMENT))
+
+        result = _classify_node(node, [spec_dir])
+
+        assert result is None
 
 
 class TestRegenerateIndexAlignment:
@@ -198,234 +199,220 @@ class TestRegenerateIndexAlignment:
     with properly padded and aligned markdown tables.
     """
 
+    def _find_table_lines(self, content: str) -> list[str]:
+        """Extract all table lines from content."""
+        return [line for line in content.split("\n") if line.startswith("|")]
+
+    def _find_section_table(self, content: str, heading: str) -> list[str]:
+        """Extract table lines from a specific section."""
+        lines = content.split("\n")
+        in_section = False
+        table_lines = []
+        for line in lines:
+            if heading in line:
+                in_section = True
+                continue
+            if in_section and line.startswith("## "):
+                break
+            if in_section and line.startswith("|"):
+                table_lines.append(line)
+        return table_lines
+
     def test_REQ_d00052_G_regenerated_tables_have_aligned_columns(self, tmp_path):
         """Regenerated INDEX.md tables have aligned columns (all pipes line up)."""
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", title="Short"),
-            make_requirement("REQ-p00002", level="PRD", title="A Much Longer Requirement Title"),
-        )
-
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        args = argparse.Namespace()
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="Short",
+                source_path=str(spec_dir / "file.md"),
+            ),
+            make_requirement(
+                "REQ-p00002",
+                level="PRD",
+                title="A Much Longer Requirement Title",
+                source_path=str(spec_dir / "file.md"),
+            ),
+        )
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
-        # Find all table lines (lines starting with |)
-        table_lines = [line for line in content.split("\n") if line.startswith("|")]
+        table_lines = self._find_table_lines(content)
 
-        # All table lines within the same section should have equal length
-        assert len(table_lines) >= 3  # header + separator + at least 1 row
-        # All lines should be the same length (aligned pipes)
+        assert len(table_lines) >= 3
         lengths = {len(line) for line in table_lines}
         assert len(lengths) == 1, f"Table lines have unequal lengths: {lengths}"
 
-    def test_REQ_d00052_G_regenerated_header_is_padded(self, tmp_path):
-        """Regenerated INDEX.md header cells are padded to column widths."""
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", title="My Title"),
-        )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
-
-        _regenerate_index(graph, [spec_dir], args)
-
-        content = (spec_dir / "INDEX.md").read_text()
-        lines = content.split("\n")
-
-        # Find the header line for the PRD section
-        header_line = None
-        for line in lines:
-            if line.startswith("|") and "ID" in line and "Title" in line:
-                header_line = line
-                break
-
-        assert header_line is not None
-        # "ID" should be padded because "REQ-p00001" is wider
-        assert "| ID " in header_line
-        # The padding should make ID at least 10 chars wide
-        parts = header_line.split("|")
-        id_cell = parts[1]  # first cell after leading |
-        assert len(id_cell.strip()) >= 2  # "ID" exists
-        assert len(id_cell) > len(" ID ")  # padded beyond minimal
-
     def test_REQ_d00052_G_regenerated_separator_uses_dashes(self, tmp_path):
         """Regenerated INDEX.md separator row uses dashes matching column widths."""
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", title="Title"),
-        )
-
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        args = argparse.Namespace()
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="Title",
+                source_path=str(spec_dir / "file.md"),
+            ),
+        )
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
-        lines = content.split("\n")
-
-        # Find separator line (contains only |, -, and spaces)
         separator = None
-        for line in lines:
+        for line in content.split("\n"):
             if line.startswith("|") and set(line) <= {"|", "-", " "}:
                 separator = line
                 break
 
         assert separator is not None
-        # Separator should NOT be the old minimal format "|---|---|---|---|"
         assert "---|---" not in separator
 
     def test_REQ_d00052_G_jny_table_also_aligned(self, tmp_path):
         """JNY section table is also properly aligned with padded columns."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
         graph = build_graph(
-            make_requirement("REQ-p00012", level="PRD", title="Auth Feature"),
+            make_requirement(
+                "REQ-p00012",
+                level="PRD",
+                title="Auth Feature",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
             make_journey(
                 "JNY-Dev-01",
                 title="Developer Onboarding Workflow",
                 actor="Developer",
                 goal="Get started",
                 addresses=["REQ-p00012"],
+                source_path=str(spec_dir / "journeys.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
-        lines = content.split("\n")
+        jny_table = self._find_section_table(content, "## User Journeys")
 
-        # Find JNY section lines
-        in_jny = False
-        jny_table_lines = []
-        for line in lines:
-            if "## User Journeys (JNY)" in line:
-                in_jny = True
-                continue
-            if in_jny and line.startswith("|"):
-                jny_table_lines.append(line)
-            elif in_jny and line.startswith("##"):
-                break
-
-        assert len(jny_table_lines) >= 3  # header + separator + 1 row
-
-        # All JNY table lines should have equal length
-        lengths = {len(line) for line in jny_table_lines}
+        assert len(jny_table) >= 3
+        lengths = {len(line) for line in jny_table}
         assert len(lengths) == 1, f"JNY table lines have unequal lengths: {lengths}"
 
     def test_REQ_d00052_G_regenerated_content_still_has_correct_data(self, tmp_path):
         """Aligned tables still contain the correct requirement data."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
         graph = build_graph(
             make_requirement(
                 "REQ-p00001",
                 level="PRD",
                 title="Requirements Management Tool",
                 hash_value="bf63eda5",
+                source_path=str(spec_dir / "file.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
-        # Data is present regardless of padding
         assert "REQ-p00001" in content
         assert "Requirements Management Tool" in content
         assert "bf63eda5" in content
 
-    def test_REQ_d00052_G_multi_level_tables_each_aligned_independently(self, tmp_path):
-        """Each level section has independently aligned tables."""
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", title="PRD Req"),
-            make_requirement("REQ-o00050", level="OPS", title="A Longer OPS Requirement Title"),
-        )
-
+    def test_REQ_d00052_G_levels_sorted_by_dependency_order(self, tmp_path):
+        """Level sections appear in dependency order (PRD before DEV)."""
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        args = argparse.Namespace()
+        (tmp_path / ".elspais.toml").write_text(
+            '[project]\nname = "test"\n\n'
+            "[patterns.types]\n"
+            'PRD = { id = "p", name = "PRD", level = 1 }\n'
+            'DEV = { id = "d", name = "DEV", level = 3 }\n'
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-d00001",
+                level="DEV",
+                title="Dev Req",
+                source_path=str(spec_dir / "file.md"),
+            ),
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="PRD Req",
+                source_path=str(spec_dir / "file.md"),
+            ),
+        )
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         lines = content.split("\n")
+        h2_lines = [line for line in lines if line.startswith("## ")]
+        # PRD should come before DEV
+        prd_idx = next(i for i, ln in enumerate(h2_lines) if "PRD" in ln)
+        dev_idx = next(i for i, ln in enumerate(h2_lines) if "DEV" in ln)
+        assert prd_idx < dev_idx
 
-        # Find PRD section table lines
-        in_prd = False
-        prd_lines = []
-        in_ops = False
-        ops_lines = []
-        for line in lines:
-            if "## Product Requirements (PRD)" in line:
-                in_prd = True
-                in_ops = False
-                continue
-            if "## Operations Requirements (OPS)" in line:
-                in_ops = True
-                in_prd = False
-                continue
-            if line.startswith("##"):
-                in_prd = False
-                in_ops = False
-                continue
-            if in_prd and line.startswith("|"):
-                prd_lines.append(line)
-            if in_ops and line.startswith("|"):
-                ops_lines.append(line)
-
-        # PRD section lines aligned
-        if prd_lines:
-            prd_lengths = {len(line) for line in prd_lines}
-            assert len(prd_lengths) == 1, f"PRD lines unequal: {prd_lengths}"
-
-        # OPS section lines aligned
-        if ops_lines:
-            ops_lengths = {len(line) for line in ops_lines}
-            assert len(ops_lengths) == 1, f"OPS lines unequal: {ops_lengths}"
-
-        # PRD and OPS may have different widths (independent alignment)
-        # This is expected since they have different data
-
-    def test_REQ_d00052_G_jny_addresses_column_included_and_aligned(self, tmp_path):
-        """JNY table includes Addresses column with data aligned."""
+    def test_REQ_d00052_G_multi_dir_shows_subsections(self, tmp_path):
+        """Multiple spec dirs get ### subsections within a level."""
+        dir_a = tmp_path / "spec_a"
+        dir_b = tmp_path / "spec_b"
+        dir_a.mkdir()
+        dir_b.mkdir()
         graph = build_graph(
-            make_requirement("REQ-p00012", level="PRD", title="Auth"),
-            make_requirement("REQ-d00042", level="DEV", title="Login"),
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="From A",
+                source_path=str(dir_a / "file.md"),
+            ),
+            make_requirement(
+                "REQ-p00002",
+                level="PRD",
+                title="From B",
+                source_path=str(dir_b / "file.md"),
+            ),
+        )
+        args = argparse.Namespace(git_root=tmp_path)
+
+        _regenerate_index(graph, [dir_a, dir_b], args)
+
+        content = (dir_a / "INDEX.md").read_text()
+        h3_lines = [line for line in content.split("\n") if line.startswith("### ")]
+        assert len(h3_lines) == 2
+
+    def test_REQ_d00052_G_jny_table_has_no_addresses_column(self, tmp_path):
+        """JNY table does not include an Addresses column."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00012",
+                level="PRD",
+                title="Auth",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
             make_journey(
                 "JNY-Dev-01",
                 title="Multi Addr",
                 actor="Developer",
                 goal="Test",
-                addresses=["REQ-p00012", "REQ-d00042"],
+                addresses=["REQ-p00012"],
+                source_path=str(spec_dir / "journeys.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
-
-        # JNY header should include Addresses
-        jny_lines = [
-            line for line in content.split("\n") if line.startswith("|") and "Addresses" in line
-        ]
-        assert len(jny_lines) >= 1
-
-        # Find the JNY data row
-        jny_data_lines = [line for line in content.split("\n") if "JNY-Dev-01" in line]
-        assert len(jny_data_lines) == 1
-        jny_row = jny_data_lines[0]
-
-        # Both addresses present in the row
-        assert "REQ-d00042" in jny_row
-        assert "REQ-p00012" in jny_row
+        assert "Addresses" not in content

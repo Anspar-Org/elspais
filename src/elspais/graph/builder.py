@@ -1773,10 +1773,21 @@ class GraphBuilder:
         data = content.parsed_data
         journey_id = data["id"]
 
+        # Get source path from context if available
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else ""
+
+        source = SourceLocation(
+            path=source_path,
+            line=content.start_line,
+            end_line=content.end_line,
+        )
+
         node = GraphNode(
             id=journey_id,
             kind=NodeKind.USER_JOURNEY,
             label=data.get("title", ""),
+            source=source,
         )
         node._content = {
             "actor": data.get("actor"),

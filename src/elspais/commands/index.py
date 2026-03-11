@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,7 +20,6 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
 
 from elspais.graph import NodeKind
-from elspais.graph.relations import EdgeKind
 
 
 def run(args: argparse.Namespace) -> int:
@@ -36,10 +36,25 @@ def run(args: argparse.Namespace) -> int:
 
     scan_sponsors = mode == "combined"
 
+    # Include associated repo spec dirs so nodes classify correctly
+    if scan_sponsors:
+        from elspais.associates import get_associate_spec_directories
+
+        canonical_root = getattr(args, "canonical_root", None)
+        repo_root = getattr(args, "git_root", None)
+        sponsor_dirs, _ = get_associate_spec_directories(
+            config,
+            repo_root,
+            canonical_root=canonical_root,
+        )
+        all_spec_dirs = list(spec_dirs) + sponsor_dirs
+    else:
+        all_spec_dirs = list(spec_dirs)
+
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         config=config,
-        spec_dirs=spec_dirs if spec_dir else None,
+        spec_dirs=all_spec_dirs if spec_dir else None,
         config_path=config_path,
         scan_sponsors=scan_sponsors,
         canonical_root=canonical_root,
@@ -48,9 +63,9 @@ def run(args: argparse.Namespace) -> int:
     action = getattr(args, "index_action", None)
 
     if action == "validate":
-        return _validate_index(graph, spec_dirs, args)
+        return _validate_index(graph, all_spec_dirs, args)
     elif action == "regenerate":
-        return _regenerate_index(graph, spec_dirs, args)
+        return _regenerate_index(graph, all_spec_dirs, args)
     else:
         print("Usage: elspais index <validate|regenerate>", file=sys.stderr)
         return 1
@@ -144,89 +159,212 @@ def _format_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     return lines
 
 
-def _make_relative(file_path: str, spec_dirs: list[Path]) -> str:
-    """Make a file path relative to the first matching spec directory."""
-    if not file_path:
-        return ""
-    for spec_dir in spec_dirs:
+@dataclass
+class _SpecDirInfo:
+    """Resolved metadata for a spec directory."""
+
+    label: str  # e.g. "elspais/spec"
+    level_order: dict[str, int]  # e.g. {"PRD": 1, "OPS": 2, "DEV": 3}
+    level_names: dict[str, str]  # e.g. {"PRD": "Product", "OPS": "Operations"}
+
+
+def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
+    """Resolve label and level ordering for a spec directory.
+
+    Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
+    the project name and ``[patterns.types]`` level definitions.
+    """
+    from elspais.config import get_config
+
+    resolved = spec_dir.resolve()
+    current = resolved
+    while current != current.parent:
+        config_file = current / ".elspais.toml"
+        if config_file.exists():
+            cfg = get_config(config_file, current)
+            project_name = cfg.get("project", {}).get("name") or current.name
+            try:
+                spec_subpath = str(resolved.relative_to(current))
+            except ValueError:
+                spec_subpath = resolved.name
+            label = f"{project_name}/{spec_subpath}"
+
+            # Build level ordering from [patterns.types]
+            # Keys match node.level values (e.g. "prd", "ops", "dev")
+            types = cfg.get("patterns", {}).get("types", {})
+            level_order: dict[str, int] = {}
+            level_names: dict[str, str] = {}
+            for type_key, type_def in types.items():
+                level_num = type_def.get("level", 99)
+                display = type_def.get("name", type_key.upper())
+                level_order[type_key] = level_num
+                level_names[type_key] = display
+
+            return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
+        current = current.parent
+
+    # No config found — use directory names, no level ordering
+    return _SpecDirInfo(
+        label=f"{resolved.parent.name}/{resolved.name}",
+        level_order={},
+        level_names={},
+    )
+
+
+def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
+    """Return the most-specific spec directory that contains a node's source file.
+
+    Checks deepest paths first so ``spec/regulations/fda`` matches before ``spec``.
+    """
+    source = getattr(node, "source", None)
+    if not source or not source.path:
+        return None
+    source_path = Path(source.path).resolve()
+    # Sort deepest-first so nested dirs match before their parents
+    for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
+        resolved = spec_dir.resolve()
         try:
-            return str(Path(file_path).relative_to(spec_dir))
+            source_path.relative_to(resolved)
+            return spec_dir
         except ValueError:
-            pass
-    return str(file_path)
+            continue
+    return None
 
 
 def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
     """Regenerate INDEX.md from graph requirements."""
-    # Group by level
-    by_level: dict[str, list] = {"PRD": [], "OPS": [], "DEV": [], "other": []}
+    # Use git root (threaded from CLI) for relative paths
+    repo_root = getattr(args, "git_root", None)
+    if repo_root is None:
+        print("Cannot generate INDEX.md: not in a git repository.", file=sys.stderr)
+        return 1
 
+    # Group requirements by spec directory
+    from collections import defaultdict
+
+    reqs_by_dir: dict[Path | None, list] = defaultdict(list)
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        level = (node.level or "").upper()
-        if level in by_level:
-            by_level[level].append(node)
+        spec_dir = _classify_node(node, spec_dirs)
+        reqs_by_dir[spec_dir].append(node)
+
+    jnys_by_dir: dict[Path | None, list] = defaultdict(list)
+    for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
+        spec_dir = _classify_node(node, spec_dirs)
+        jnys_by_dir[spec_dir].append(node)
+
+    # Build ordered list of spec dirs that have content
+    active_dirs: list[Path] = []
+    for sd in spec_dirs:
+        if reqs_by_dir.get(sd) or jnys_by_dir.get(sd):
+            active_dirs.append(sd)
+    # Append None bucket for nodes with unknown source
+    if reqs_by_dir.get(None) or jnys_by_dir.get(None):
+        active_dirs.append(None)  # type: ignore[arg-type]
+
+    # Resolve info for each spec directory
+    dir_info: dict[Path | None, _SpecDirInfo] = {}
+    for sd in active_dirs:
+        if sd is None:
+            dir_info[None] = _SpecDirInfo(
+                label="Unknown Source",
+                level_order={},
+                level_names={},
+            )
         else:
-            by_level["other"].append(node)
+            dir_info[sd] = _resolve_spec_dir_info(sd)
+
+    # Build (level, spec_dir) -> [nodes] index
+    from collections import defaultdict as _defaultdict
+
+    reqs_by_level_dir: dict[str, dict[Path | None, list]] = _defaultdict(lambda: _defaultdict(list))
+    for sd in active_dirs:
+        for node in reqs_by_dir.get(sd, []):
+            level = node.level or ""
+            reqs_by_level_dir[level][sd].append(node)
+
+    # Collect all levels across all dirs, sorted by dependency order.
+    # Use the first dir's config for ordering (all dirs in same project
+    # share config; for multi-project the ordering is still reasonable).
+    first_info = (
+        dir_info[active_dirs[0]]
+        if active_dirs
+        else _SpecDirInfo(
+            label="",
+            level_order={},
+            level_names={},
+        )
+    )
+    all_levels = sorted(
+        reqs_by_level_dir.keys(),
+        key=lambda lv: first_info.level_order.get(lv, 99),
+    )
 
     # Generate markdown
     lines = [
-        "<!-- Auto-generated by: elspais index regenerate -->",
+        "<!-- Auto-generated by: elspais fix -->",
         "<!-- Do not edit manually; changes will be overwritten. -->",
+        "<!-- markdownlint-disable MD013 -->",
         "",
         "# Requirements Index",
         "",
     ]
 
-    level_names = {
-        "PRD": "Product Requirements (PRD)",
-        "OPS": "Operations Requirements (OPS)",
-        "DEV": "Development Requirements (DEV)",
-        "other": "Other Requirements",
-    }
+    req_count = 0
+    jny_count = 0
 
-    for level, title in level_names.items():
-        nodes = by_level[level]
-        if not nodes:
-            continue
-
-        lines.append(f"## {title}")
+    # Requirements: level is the outermost grouping
+    for level in all_levels:
+        level_display = first_info.level_names.get(level, level.upper())
+        lines.append(f"## {level_display}")
         lines.append("")
 
-        headers = ["ID", "Title", "File", "Hash"]
-        rows = []
-        for node in sorted(nodes, key=lambda n: n.id):
-            file_path = _make_relative(node.source.path if node.source else "", spec_dirs)
-            hash_val = node.hash or ""
-            rows.append([node.id, node.get_label(), str(file_path), hash_val])
+        dirs_with_level = [sd for sd in active_dirs if reqs_by_level_dir[level].get(sd)]
+        multi_dir = len(dirs_with_level) > 1
 
-        lines.extend(_format_table(headers, rows))
+        for sd in dirs_with_level:
+            info = dir_info[sd]
+            nodes = reqs_by_level_dir[level][sd]
+
+            if multi_dir:
+                lines.append(f"### {info.label}")
+                lines.append("")
+
+            headers = ["ID", "Title", "File", "Hash"]
+            rows = []
+            for node in sorted(nodes, key=lambda n: n.id):
+                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                hash_val = node.hash or ""
+                rows.append([node.id, node.get_label(), filename, hash_val])
+            lines.extend(_format_table(headers, rows))
+            lines.append("")
+            req_count += len(nodes)
+
+    # User Journeys: after all requirements
+    all_jnys = [(sd, jnys_by_dir.get(sd, [])) for sd in active_dirs if jnys_by_dir.get(sd)]
+    if all_jnys:
+        lines.append("## User Journeys")
         lines.append("")
 
-    # User Journeys section
-    journey_nodes = list(graph.nodes_by_kind(NodeKind.USER_JOURNEY))
-    if journey_nodes:
-        lines.append("## User Journeys (JNY)")
-        lines.append("")
+        multi_dir = len(all_jnys) > 1
+        for sd, jnys in all_jnys:
+            info = dir_info[sd]
+            if multi_dir:
+                lines.append(f"### {info.label}")
+                lines.append("")
 
-        headers = ["ID", "Title", "Actor", "File", "Addresses"]
-        rows = []
-        for node in sorted(journey_nodes, key=lambda n: n.id):
-            actor = node.get_field("actor") or ""
-            file_path = _make_relative(node.source.path if node.source else "", spec_dirs)
-            addresses = sorted(
-                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
-            )
-            addr_str = ", ".join(addresses)
-            rows.append([node.id, node.get_label(), actor, str(file_path), addr_str])
-
-        lines.extend(_format_table(headers, rows))
-        lines.append("")
+            headers = ["ID", "Title", "Actor", "File"]
+            rows = []
+            for node in sorted(jnys, key=lambda n: n.id):
+                actor = node.get_field("actor") or ""
+                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                rows.append([node.id, node.get_label(), actor, filename])
+            lines.extend(_format_table(headers, rows))
+            lines.append("")
+            jny_count += len(jnys)
 
     # Write to first spec dir
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
-    req_count = sum(len(nodes) for nodes in by_level.values())
-    jny_count = len(journey_nodes)
     print(f"Generated {output_path} ({req_count} requirements, {jny_count} journeys)")
     return 0
