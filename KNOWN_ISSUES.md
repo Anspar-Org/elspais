@@ -15,7 +15,7 @@
 
 [ ] Chore: start using Changelog in REQs
 
-[ ] Chore: review docs for accuracy
+[x] Chore: review docs for accuracy
 
 [ ] Chore: review specs for accuracy
 
