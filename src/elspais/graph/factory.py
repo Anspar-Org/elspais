@@ -8,12 +8,19 @@ implementing their own file reading logic.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path
 from typing import Any
 
 from elspais.associates import get_associate_spec_directories
-from elspais.config import get_code_directories, get_config, get_ignore_config, get_spec_directories
+from elspais.config import (
+    IgnoreConfig,
+    get_code_directories,
+    get_config,
+    get_ignore_config,
+    get_spec_directories,
+)
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers import ParserRegistry
@@ -55,6 +62,21 @@ DEFAULT_CODE_PATTERNS = [
 ]
 
 
+@dataclass
+class SpecDirConfig:
+    """Per-spec-directory scan configuration.
+
+    Bundles the parser registry with scan settings that may differ between
+    the main project and associated projects.
+    """
+
+    registry: ParserRegistry
+    file_patterns: list[str] = field(default_factory=lambda: ["*.md"])
+    skip_dirs: list[str] = field(default_factory=list)
+    skip_files: list[str] = field(default_factory=list)
+    ignore_config: IgnoreConfig | None = None
+
+
 def _find_repo_root(spec_dir: Path) -> Path | None:
     """Find the repository root containing .elspais.toml for a spec directory.
 
@@ -74,49 +96,52 @@ def _find_repo_root(spec_dir: Path) -> Path | None:
     return None
 
 
-def _create_registry_for_spec_dir(
+def _resolve_spec_dir_config(
     spec_dir: Path,
-    default_pattern_config: PatternConfig,
-    default_reference_resolver: ReferenceResolver,
-) -> ParserRegistry:
-    """Create a parser registry for a spec directory.
+) -> SpecDirConfig:
+    """Resolve the full scan configuration for a spec directory.
 
-    If the spec directory is in a different repo (has its own .elspais.toml),
-    loads that repo's config and creates a registry with its pattern config
-    and reference resolver. Otherwise uses the defaults.
+    Loads the .elspais.toml from the repo containing spec_dir and returns
+    a SpecDirConfig with the registry, file patterns, skip settings, and
+    ignore config from that project's configuration.
 
     Args:
         spec_dir: The spec directory path
-        default_pattern_config: The default pattern config from main repo
-        default_reference_resolver: The default reference resolver from main repo
 
     Returns:
-        ParserRegistry configured for this spec directory
+        SpecDirConfig with registry and scan settings for this spec directory
+
+    Raises:
+        FileNotFoundError: If no .elspais.toml is found above spec_dir.
+            Associated projects must have their own configuration.
     """
-    registry = ParserRegistry()
-
-    # Check if this spec dir is in a different repo with its own config
     repo_root = _find_repo_root(spec_dir)
-    if repo_root:
-        config_path = repo_root / ".elspais.toml"
-        if config_path.exists():
-            repo_config = get_config(config_path, repo_root)
-            patterns_dict = repo_config.get("patterns", {})
-            pattern_config = PatternConfig.from_dict(patterns_dict)
-            # Build reference resolver from this repo's config
-            reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
-            registry.register(RequirementParser(pattern_config))
-            registry.register(JourneyParser())
-            registry.register(CodeParser(pattern_config, reference_resolver))
-            registry.register(TestParser(pattern_config, reference_resolver))
-            return registry
+    if not repo_root:
+        raise FileNotFoundError(
+            f"No .elspais.toml found for spec directory: {spec_dir}. "
+            "Associated projects must have their own .elspais.toml configuration."
+        )
 
-    # Fall back to defaults
-    registry.register(RequirementParser(default_pattern_config))
+    config_path = repo_root / ".elspais.toml"
+    repo_config = get_config(config_path, repo_root)
+    patterns_dict = repo_config.get("patterns", {})
+    pattern_config = PatternConfig.from_dict(patterns_dict)
+    reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
+
+    registry = ParserRegistry()
+    registry.register(RequirementParser(pattern_config))
     registry.register(JourneyParser())
-    registry.register(CodeParser(default_pattern_config, default_reference_resolver))
-    registry.register(TestParser(default_pattern_config, default_reference_resolver))
-    return registry
+    registry.register(CodeParser(pattern_config, reference_resolver))
+    registry.register(TestParser(pattern_config, reference_resolver))
+
+    spec_config = repo_config.get("spec", {})
+    return SpecDirConfig(
+        registry=registry,
+        file_patterns=spec_config.get("patterns", ["*.md"]),
+        skip_dirs=spec_config.get("skip_dirs", []),
+        skip_files=spec_config.get("skip_files", []),
+        ignore_config=get_ignore_config(repo_config),
+    )
 
 
 # Implements: REQ-p00005-B
@@ -208,35 +233,25 @@ def build_graph(
         multi_assertion_separator=str(mas),
     )
 
-    # Get ignore configuration for filtering spec files
-    ignore_config = get_ignore_config(config)
-
-    # Get skip configuration (legacy, for backward compatibility)
-    spec_config = config.get("spec", {})
-    skip_dirs = spec_config.get("skip_dirs", [])
-    skip_files = spec_config.get("skip_files", [])
+    # Get ignore configuration for code/test scanning (main project only)
+    default_ignore_config = get_ignore_config(config)
 
     for spec_dir in spec_dirs:
-        # Create registry with appropriate pattern config for this spec dir
-        # (uses sponsor repo's config if applicable)
-        spec_registry = _create_registry_for_spec_dir(
-            spec_dir, default_pattern_config, default_reference_resolver
-        )
+        # Resolve full scan config for this spec dir from its own .elspais.toml
+        dir_config = _resolve_spec_dir_config(spec_dir)
 
-        # Get file patterns from config
-        file_patterns = spec_config.get("patterns", ["*.md"])
         domain_file = DomainFile(
             spec_dir,
-            patterns=file_patterns,
+            patterns=dir_config.file_patterns,
             recursive=True,
-            skip_dirs=skip_dirs,
-            skip_files=skip_files,
+            skip_dirs=dir_config.skip_dirs,
+            skip_files=dir_config.skip_files,
         )
 
-        for parsed_content in domain_file.deserialize(spec_registry):
+        for parsed_content in domain_file.deserialize(dir_config.registry):
             # Check if source should be ignored using [ignore].spec patterns
             source_path = parsed_content.source_context.metadata.get("path")
-            if source_path and ignore_config.should_ignore(source_path, scope="spec"):
+            if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
                 continue
             builder.add_parsed_content(parsed_content)
 
@@ -284,7 +299,7 @@ def build_graph(
                     # Check ignore only once per file
                     if resolved not in checked_files:
                         checked_files.add(resolved)
-                        if ignore_config.should_ignore(source_path, scope="code"):
+                        if default_ignore_config.should_ignore(source_path, scope="code"):
                             skip_files.add(resolved)
                     if resolved in skip_files:
                         continue

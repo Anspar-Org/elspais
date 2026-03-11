@@ -176,10 +176,12 @@ class HTMLGenerator:
         graph: TraceGraph,
         base_path: str = "",
         version: str | None = None,
+        repo_name: str | None = None,
     ) -> None:
         self.graph = graph
         self.base_path = base_path
         self.version = version if version is not None else __version__
+        self.repo_name = repo_name
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
@@ -246,7 +248,9 @@ class HTMLGenerator:
             status_data=status_data,
             version=self.version,
             base_path=self.base_path,
-            repo_name=Path(self.base_path).name if self.base_path else "elspais",
+            repo_name=(
+                self.repo_name or (Path(self.base_path).name if self.base_path else "elspais")
+            ),
             catalog=get_catalog(),
         )
 

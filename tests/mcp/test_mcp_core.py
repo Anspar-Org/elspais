@@ -454,15 +454,15 @@ class TestGetWorkspaceInfo:
         assert result["repo_path"] == str(tmp_path)
 
     def test_REQ_o00061_A_returns_project_name(self, tmp_path):
-        """REQ-o00061-A: Returns project name from directory if not in config."""
+        """REQ-o00061-A: Returns 'unknown' when no config project name set."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_workspace_info
 
         result = _get_workspace_info(tmp_path)
 
         assert "project_name" in result
-        # Falls back to directory name when no config
-        assert result["project_name"] == tmp_path.name
+        # Falls back to "unknown" when no config
+        assert result["project_name"] == "unknown"
 
     def test_REQ_o00061_A_returns_config_summary(self, tmp_path):
         """REQ-o00061-A: Returns configuration summary."""

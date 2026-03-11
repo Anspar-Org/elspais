@@ -19,6 +19,7 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
+from elspais.config import get_project_name
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.html.theme import get_catalog
@@ -148,7 +149,7 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
-                repo_name=_state["working_dir"].name,
+                repo_name=get_project_name(_state["config"]),
                 pygments_css=get_pygments_css(),
                 pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data

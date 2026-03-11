@@ -52,7 +52,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_canonical_root, find_config_file, get_config
+from elspais.config import find_canonical_root, find_config_file, get_config, get_project_name
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
     annotate_graph_git_state,
@@ -1096,9 +1096,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     REQ-o00061-A: Returns repository path, project name, and configuration summary.
     REQ-o00061-D: Reads configuration from unified config system.
     """
-    project_name = config.get("project", {}).get("name")
-    if not project_name:
-        project_name = working_dir.name
+    project_name = get_project_name(config)
 
     config_file = find_config_file(working_dir)
 
