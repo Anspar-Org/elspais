@@ -16,6 +16,7 @@ class TestTraceCommand:
     @pytest.fixture
     def temp_spec_dir(self, tmp_path: Path) -> Path:
         """Create a temporary spec directory with a requirement."""
+        (tmp_path / ".elspais.toml").write_text("")
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -120,6 +121,7 @@ class TestTraceReportPresets:
     @pytest.fixture
     def temp_spec_dir(self, tmp_path: Path) -> Path:
         """Create a temporary spec directory with requirements."""
+        (tmp_path / ".elspais.toml").write_text("")
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 

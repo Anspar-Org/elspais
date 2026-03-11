@@ -83,7 +83,7 @@ Configuration checks always run as part of the full health check. For focused co
 ========================================
 ```
 
-### JSON Output (`-j` or `--json`)
+### JSON Output (`--format json`)
 
 ```json
 {
@@ -245,7 +245,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 | `--code` | Run code reference checks only |
 | `--tests` | Run test mapping checks only |
 | `--format` | Output format: `text`, `markdown`, `json`, `junit`, `sarif` |
-| `-j`, `--json` | Output as JSON (alias for `--format json`) |
+| `--lenient` | Allow warnings without affecting exit code |
 | `-v`, `--verbose` | Show additional details |
 | `--skip-passing-details` | Hide details for passing checks (default) |
 | `--include-passing-details` | Show full details for passing checks |
@@ -309,7 +309,7 @@ elspais health --spec -v
 
 ```bash
 # Get failed checks in CI
-elspais health -j | jq '.checks | map(select(.passed == false))'
+elspais health --format json | jq '.checks | map(select(.passed == false))'
 ```
 
 ## Troubleshooting

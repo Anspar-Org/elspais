@@ -246,6 +246,18 @@ def find_canonical_root(start_path: Path | None = None) -> Path | None:
     return git_root
 
 
+def get_project_name(config: dict[str, Any] | None = None) -> str:
+    """Get the project name from config.
+
+    Returns config["project"]["name"] if set, otherwise "unknown".
+    """
+    if config:
+        name = config.get("project", {}).get("name")
+        if name:
+            return name
+    return "unknown"
+
+
 def find_config_file(start_path: Path) -> Path | None:
     """Find .elspais.toml configuration file.
 

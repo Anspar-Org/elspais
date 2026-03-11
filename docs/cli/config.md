@@ -22,7 +22,7 @@ Use `-v` to see which roots were detected:
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 
-No configuration is needed — worktree detection is automatic.
+No configuration is needed -- worktree detection is automatic.
 
 ## Local Overrides (.elspais.local.toml)
 
@@ -37,7 +37,7 @@ as `docker-compose.override.yml` or `.env.local`.
 paths = ["../sibling-repo"]
 ```
 
-**Load order:** defaults → `.elspais.toml` → `.elspais.local.toml` → env vars
+**Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml` -> env vars
 
 Each layer deep-merges over the previous one, so you only need to
 specify the keys you want to override. Environment variables always win.
@@ -111,102 +111,109 @@ Controls spec file discovery.
 [spec]
 directories = ["spec"]      # Directories to scan
 patterns = ["*.md"]         # File patterns to include
-skip_files = ["README.md"]  # Files to skip
-skip_dirs = ["archive"]     # Subdirectories to skip
-index_file = "INDEX.md"     # Index file name
-
-# Map file patterns to levels (optional)
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-```
-
-### [directories] Section
-
-Override directory paths.
-
-```toml
-[directories]
-spec = "spec"               # Spec directory (string or array)
-code = ["src", "lib"]       # Code directories for traceability
-docs = "docs"               # Documentation directory
-ignore = ["node_modules"]   # Directories to ignore globally
+skip_files = []             # Files to skip (legacy; prefer [ignore].spec)
+skip_dirs = []              # Subdirectories to skip (legacy; prefer [ignore].spec)
 ```
 
 ### [rules] Section
 
-Validation and hierarchy rules.
+Hierarchy relationship rules.
 
 ```toml
-[rules]
-strict_mode = false         # Strict implements semantics
-
-# Hierarchy relationship rules
 [rules.hierarchy]
 dev = ["ops", "prd"]        # DEV can implement OPS or PRD
 ops = ["prd"]               # OPS can implement PRD
 prd = []                    # PRD cannot implement anything
+```
 
-# Alternative syntax (human-readable)
-allowed = [
-    "dev -> ops, prd",
-    "ops -> prd"
-]
+### [ignore] Section
 
-allow_circular = false      # Allow circular dependencies
-allow_orphans = false       # Allow requirements with no parent
+Controls which files are skipped during scanning. Each scope applies
+to a specific scanning context. See `elspais docs ignore` for details.
 
-# Format validation rules
-[rules.format]
-require_hash = true         # Require hash footer
-require_rationale = false   # Require rationale section
-require_assertions = true   # Require assertions
-require_status = true       # Require status field
-allowed_statuses = [        # Valid status values
-    "Active",
-    "Draft",
-    "Deprecated",
-    "Superseded"
-]
+```toml
+[ignore]
+global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+spec = ["README.md", "INDEX.md"]
+code = ["*_test.py", "conftest.py", "test_*.py"]
+test = ["fixtures/**", "__snapshots__"]
+```
 
-# Content rule modules (advanced)
-[rules.content_rules]
-modules = []                # Module paths for custom rules
+### [testing] Section
+
+Configure test file scanning.
+
+```toml
+[testing]
+enabled = false                         # Enable test scanning
+test_dirs = ["tests"]                   # Directories to scan
+patterns = ["test_*.py", "*_test.py"]   # File patterns
+result_files = []                       # JUnit XML / pytest JSON paths
+reference_patterns = []                 # Additional reference patterns
+reference_keyword = "Validates"         # Default reference keyword
+```
+
+### [references] Section
+
+Configure how code/test references are parsed.
+
+```toml
+[references.defaults]
+separators = ["-", "_"]              # ID separators
+case_sensitive = false               # Case-sensitive matching
+prefix_optional = false              # Allow omitting prefix
+comment_styles = ["#", "//", "--"]   # Comment styles to scan
+multi_assertion_separator = "+"      # Separator for REQ-xxx-A+B+C syntax
+
+[references.defaults.keywords]
+implements = ["Implements", "IMPLEMENTS"]
+validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
+refines = ["Refines", "REFINES"]
+
+# Override settings for specific file patterns
+[[references.overrides]]
+match = "*.java"
+comment_styles = ["//"]
+keywords = { implements = ["@Implements"], validates = ["@Tests"] }
 ```
 
 ### [validation] Section
 
-Hash and validation settings.
-
 ```toml
 [validation]
-strict_hierarchy = true     # Strict hierarchy checking
-hash_algorithm = "sha256"   # Hash algorithm
-hash_length = 8             # Hash length in characters
+hash_mode = "normalized-text"   # Hash computation mode
 ```
 
-### [traceability] Section
+### [changelog] Section
 
-Code and test scanning for traceability reports.
+Controls changelog enforcement for Active requirements.
 
 ```toml
-[traceability]
-output_formats = ["markdown", "html"]   # Default output formats
-output_dir = "."                         # Output directory
+[changelog]
+enforce = true                 # Enable changelog enforcement
+require_present = false        # Require ## Changelog section exists
+id_source = "gh"               # Change order ID source
+date_format = "iso"            # Date format (iso = YYYY-MM-DD)
+require_change_order = false   # Require change order ID
+require_reason = true          # Require reason field
+require_author_name = true     # Require author name
+require_author_id = true       # Require author ID
+author_id_format = "email"     # Author ID format
+allowed_author_ids = "all"     # Allowed author IDs ("all" or list)
+```
 
-# Code files to scan for implementations
-scan_patterns = [
-    "database/**/*.sql",
-    "src/**/*.py",
-    "apps/**/*.dart",
-]
+### [keywords] Section
 
-# Test result file locations
-test_results = [
-    "test-results/*.xml",    # JUnit XML
-    "pytest-report.json",    # pytest JSON
-]
+```toml
+[keywords]
+min_length = 3    # Minimum keyword length for extraction
+```
+
+### [graph] Section
+
+```toml
+[graph]
+satellite_kinds = ["assertion", "result"]   # Kinds collapsed in graph views
 ```
 
 ### [associates] Section
@@ -243,41 +250,29 @@ path = "../core"            # Path to core repository
 
 ## Config Commands
 
-  $ elspais config show                # View all settings
+  $ elspais config show                   # View all settings
   $ elspais config show --section rules
-  $ elspais config show -j             # JSON output
+  $ elspais config show --format json     # JSON output
   $ elspais config get patterns.prefix
   $ elspais config set project.name "NewName"
-  $ elspais config set rules.strict_mode true
-  $ elspais config unset rules.strict_mode
-  $ elspais config add directories.code src/lib
-  $ elspais config remove directories.code src/lib
-  $ elspais config path                # Show file location
+  $ elspais config unset associated.prefix
+  $ elspais config add spec.directories src/spec
+  $ elspais config remove spec.directories src/spec
+  $ elspais config path                   # Show file location
 
 ## Environment Variable Overrides
 
 Any config key can be overridden via environment variables:
 
   ELSPAIS_PATTERNS_PREFIX=MYREQ elspais health
-  ELSPAIS_RULES_STRICT_MODE=true elspais health
+  ELSPAIS_TESTING_ENABLED=true elspais health
 
 **Conversion:**
   `ELSPAIS_PATTERNS_PREFIX` -> `patterns.prefix`
-  `ELSPAIS_RULES_STRICT_MODE` -> `rules.strict_mode`
+  `ELSPAIS_TESTING_ENABLED` -> `testing.enabled`
 
-Rule: Remove `ELSPAIS_`, lowercase, underscores become dots.
-
-## Skip Directories
-
-Exclude directories from scanning:
-
-```toml
-[spec]
-skip_dirs = ["archive", "drafts"]
-
-[directories]
-ignore = ["node_modules", ".git"]
-```
+Rule: Remove `ELSPAIS_`, lowercase, single underscores become dots.
+Use double underscore (`__`) for a literal underscore in key names.
 
 ## Multi-Repository Setup
 

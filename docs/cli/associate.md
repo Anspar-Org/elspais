@@ -47,7 +47,8 @@ Scans sibling directories for any repository with `project.type = "associated"` 
 
 ```bash
 elspais associate --list
-# callisto  CAL  /home/user/repos/callisto  OK
+# Name                 Prefix     Status       Path
+# callisto             CAL        OK           /home/user/repos/callisto
 ```
 
 ### Unlinking

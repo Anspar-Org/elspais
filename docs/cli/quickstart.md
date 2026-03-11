@@ -48,8 +48,9 @@ A. The system SHALL use bcrypt with cost factor 12.
 
 ## 5. Generate Traceability Report
 
-  $ elspais trace --view   # Interactive HTML tree
-  $ elspais trace --format html -o trace.html
+  $ elspais viewer                   # Interactive HTML tree (live server)
+  $ elspais viewer --static          # Interactive HTML tree (static file)
+  $ elspais trace --format html -o trace.html  # Basic HTML table
 
 ## Next Steps
 

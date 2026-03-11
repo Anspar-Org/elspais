@@ -4,9 +4,9 @@
 
 An assertion is a single, testable statement about system behavior.
 Each assertion:
-  - Uses **SHALL** or **SHALL NOT** (normative language)
-  - Is labeled A, B, C, etc.
-  - Can be independently verified by a test
+- Uses **SHALL** or **SHALL NOT** (normative language)
+- Is labeled A, B, C, etc.
+- Can be independently verified by a test
 
 ## Assertion Format
 
@@ -45,15 +45,20 @@ In implementing requirements:
 **Implements**: REQ-p00001-A
 ```
 
-In code comments:
+In code comments (multiple comment styles supported: `#`, `//`, `--`, `<!-- -->`, `/* */`):
 ```
 # Implements: REQ-p00001-A
+// Implements: REQ-p00001-A
 ```
 
-In tests:
+In tests (via function names or `Validates`/`Tests` comments):
 ```python
+def test_REQ_p00001_A_verify_auth():
+    ...
+
+# Validates: REQ-p00001-A
 def test_login():
-    """REQ-p00001-A: Verify email/password auth"""
+    ...
 ```
 
 ## Removed Assertions

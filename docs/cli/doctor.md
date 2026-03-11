@@ -5,7 +5,7 @@ Diagnose your elspais environment and installation.
 ## Usage
 
 ```
-elspais doctor [--json] [--verbose]
+elspais doctor [--format {text,json}] [--verbose]
 ```
 
 ## What it checks
@@ -31,7 +31,7 @@ elspais doctor [--json] [--verbose]
 
 | Flag | Description |
 |------|-------------|
-| `-j`, `--json` | Output results as JSON |
+| `--format {text,json}` | Output format (default: text) |
 | `-v`, `--verbose` | Show detailed information for each check |
 
 ## Examples
@@ -41,7 +41,7 @@ elspais doctor [--json] [--verbose]
 elspais doctor
 
 # JSON output for CI/scripting
-elspais doctor -j
+elspais doctor --format json
 
 # Detailed output
 elspais doctor -v

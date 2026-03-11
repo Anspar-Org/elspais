@@ -10,24 +10,37 @@ This answers: "How do we know this requirement is satisfied?"
 
 ## Generating Reports
 
-  $ elspais trace --view         # Interactive HTML tree
-  $ elspais trace --format html  # Basic HTML matrix
-  $ elspais trace --format csv   # Spreadsheet export
-  $ elspais trace --graph        # Full requirement->code->test graph
-  $ elspais trace --graph-json   # Export graph as JSON
+  $ elspais trace                    # Markdown table (default)
+  $ elspais trace --format html      # Basic HTML matrix
+  $ elspais trace --format csv       # Spreadsheet export
+  $ elspais trace --format json      # JSON structured output
+  $ elspais viewer                   # Interactive HTML tree (live server)
+  $ elspais viewer --static          # Interactive HTML tree (static file)
+  $ elspais graph                    # Export graph structure as JSON
 
-## Command Options
+## trace Command Options
 
-  `--format {markdown,html,csv,both}`  Output format
-  `--output PATH`           Output file path
-  `--view`                  Interactive HTML traceability tree
-  `--embed-content`         Embed full markdown in HTML (offline viewing)
-  `--graph`                 Use unified traceability graph
-  `--graph-json`            Output graph as JSON
-  `--report NAME`           Report preset (minimal, standard, full)
-  `--depth LEVEL`           Max depth (requirements, assertions, implementation, full)
-  `--mode {core,sponsor,combined}`  Report scope
-  `--sponsor NAME`          Sponsor name for filtered reports
+  `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
+  `--preset {minimal,standard,full}`        Column preset
+  `--body`                Show requirement body text
+  `--assertions`          Show individual assertions
+  `--tests`               Show test references
+  `--output PATH`         Output file path
+
+## viewer Command Options
+
+  `--static`              Generate static HTML file instead of live server
+  `--server`              Start server without opening browser
+  `--port PORT`           Server port (default: 5001)
+  `--embed-content`       Embed full markdown in HTML (offline viewing)
+  `--path DIR`            Path to repository root (default: auto-detect)
+
+## graph Command
+
+Export the full traceability graph as JSON:
+
+  $ elspais graph                    # Print to stdout
+  $ elspais graph -o graph.json      # Write to file
 
 ## Marking Code as Implementing
 
@@ -47,43 +60,35 @@ function hashPassword(plain) { ... }
 
 ## Marking Tests as Validating
 
-Reference requirement IDs in test docstrings or names:
+Reference requirement IDs in test function names:
 
 ```python
-def test_password_uses_bcrypt():
-    """REQ-d00001-A: Verify bcrypt with cost 12"""
+def test_REQ_d00001_A_bcrypt_cost():
     ...
 ```
 
-Or in test names:
+Or with comments:
 ```python
-def test_REQ_d00001_A_bcrypt_cost():
+# Tests: REQ-d00001-A
+def test_password_uses_bcrypt():
+    ...
 ```
 
 ## Coverage Indicators
 
-In trace view:
-  **○** None    - No code implements this assertion
-  **◐** Partial - Some assertions have implementations
-  **●** Full    - All assertions have implementations
-  **⚡** Failure - Test failures detected
-  **◆** Changed - Modified vs main branch
-
-## Depth Levels
-
-Control how much detail is shown:
-
-  `--depth 0` or `requirements`    Show only requirements
-  `--depth 1` or `assertions`      Include assertions
-  `--depth 2` or `implementation`  Include code references
-  `--depth full`                   Unlimited depth (tests, results)
+In the interactive viewer:
+  **None**    - No code implements this assertion
+  **Partial** - Some assertions have implementations
+  **Full**    - All assertions have implementations
+  **Failure** - Test failures detected
+  **Changed** - Modified vs main branch
 
 ## Understanding the Graph
 
-  $ elspais trace --graph-json > graph.json
+  $ elspais graph -o graph.json
 
 The graph shows:
-  - Requirements and their assertions
-  - Which code files implement which assertions
-  - Which tests validate which requirements
-  - Test pass/fail status from JUnit/pytest results
+- Requirements and their assertions
+- Which code files implement which assertions
+- Which tests validate which requirements
+- Test pass/fail status from JUnit/pytest results

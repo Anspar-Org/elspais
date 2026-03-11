@@ -259,12 +259,9 @@ def _ensure_changelog_section(
 
 
 def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
-    """Regenerate INDEX.md if it exists and is stale."""
-    import re
-
+    """Regenerate INDEX.md from current graph state."""
     from elspais.commands.index import _regenerate_index
     from elspais.config import get_config, get_spec_directories
-    from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
 
     spec_dir = getattr(args, "spec_dir", None)
@@ -274,39 +271,31 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
-    # Only fix if INDEX.md already exists
-    index_path = None
-    for sd in spec_dirs:
-        candidate = sd / "INDEX.md"
-        if candidate.exists():
-            index_path = candidate
-            break
-
-    if not index_path:
+    if not spec_dirs:
         return
+
+    if dry_run:
+        print("Would regenerate INDEX.md")
+        return
+
+    # Include associated repo spec dirs for combined mode
+    from elspais.associates import get_associate_spec_directories
+
+    repo_root = getattr(args, "git_root", None)
+    sponsor_dirs, _ = get_associate_spec_directories(
+        config,
+        repo_root,
+        canonical_root=canonical_root,
+    )
+    all_spec_dirs = list(spec_dirs) + sponsor_dirs
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         scan_code=False,
         scan_tests=False,
+        scan_sponsors=True,
         canonical_root=canonical_root,
     )
 
-    # Check if stale
-    content = index_path.read_text()
-    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
-    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
-    graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-    graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
-
-    if index_req_ids == graph_req_ids and index_jny_ids == graph_jny_ids:
-        return
-
-    if dry_run:
-        missing = graph_req_ids - index_req_ids
-        extra = index_req_ids - graph_req_ids
-        print(f"Would regenerate INDEX.md ({len(missing)} missing, {len(extra)} extra)")
-        return
-
-    _regenerate_index(graph, spec_dirs, args)
+    _regenerate_index(graph, all_spec_dirs, args)

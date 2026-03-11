@@ -23,106 +23,117 @@ class TestIndexRegenerateJNY:
     """
 
     def test_REQ_o00050_C_regenerate_includes_jny_section(self, tmp_path):
-        """Regenerated INDEX.md includes User Journeys (JNY) section."""
+        """Regenerated INDEX.md includes User Journeys subsection."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
         graph = build_graph(
-            make_requirement("REQ-p00012", level="PRD", title="Auth Feature"),
+            make_requirement(
+                "REQ-p00012",
+                level="PRD",
+                title="Auth Feature",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
             make_journey(
                 "JNY-Dev-01",
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
                 addresses=["REQ-p00012"],
+                source_path=str(spec_dir / "journeys.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         result = _regenerate_index(graph, [spec_dir], args)
 
         assert result == 0
         index_content = (spec_dir / "INDEX.md").read_text()
-        assert "## User Journeys (JNY)" in index_content
+        assert "## User Journeys" in index_content
 
-    def test_REQ_o00050_C_regenerate_jny_has_addresses_column(self, tmp_path):
-        """Regenerated INDEX.md JNY table includes Addresses column."""
+    def test_REQ_o00050_C_regenerate_jny_has_expected_columns(self, tmp_path):
+        """Regenerated INDEX.md JNY table includes ID, Title, Actor, File columns."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
         graph = build_graph(
-            make_requirement("REQ-p00012", level="PRD", title="Auth Feature"),
+            make_requirement(
+                "REQ-p00012",
+                level="PRD",
+                title="Auth Feature",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
             make_journey(
                 "JNY-Dev-01",
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
                 addresses=["REQ-p00012"],
+                source_path=str(spec_dir / "journeys.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
-        # Table header includes Addresses column (padded with alignment)
         header_lines = [
-            line
-            for line in index_content.split("\n")
-            if line.startswith("|") and "Addresses" in line
+            line for line in index_content.split("\n") if line.startswith("|") and "Actor" in line
         ]
         assert len(header_lines) >= 1
         header = header_lines[0]
-        # All expected column headers present
-        for col in ("ID", "Title", "Actor", "File", "Addresses"):
+        for col in ("ID", "Title", "Actor", "File"):
             assert col in header
-        # JNY row includes the addressed REQ
+        assert "Addresses" not in header
         assert "JNY-Dev-01" in index_content
-        assert "REQ-p00012" in index_content
 
-    def test_REQ_o00050_C_regenerate_jny_multiple_addresses(self, tmp_path):
-        """Regenerated INDEX.md shows multiple addresses comma-separated."""
+    def test_REQ_o00050_C_regenerate_jny_row_has_actor_and_file(self, tmp_path):
+        """Regenerated INDEX.md JNY row includes actor and file columns."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
         graph = build_graph(
-            make_requirement("REQ-p00012", level="PRD", title="Auth"),
-            make_requirement("REQ-d00042", level="DEV", title="Login"),
+            make_requirement(
+                "REQ-p00012",
+                level="PRD",
+                title="Auth",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
             make_journey(
                 "JNY-Dev-01",
                 title="Multi Addr",
                 actor="Developer",
                 goal="Test",
-                addresses=["REQ-p00012", "REQ-d00042"],
+                addresses=["REQ-p00012"],
+                source_path=str(spec_dir / "journeys.md"),
             ),
         )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        args = argparse.Namespace()
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
-        # Both addresses should appear in the row
-        # Find the JNY row
         jny_lines = [line for line in index_content.split("\n") if "JNY-Dev-01" in line]
         assert len(jny_lines) == 1
         jny_row = jny_lines[0]
-        assert "REQ-d00042" in jny_row
-        assert "REQ-p00012" in jny_row
+        assert "Developer" in jny_row
+        assert "journeys.md" in jny_row
 
     def test_REQ_o00050_C_regenerate_no_jny_skips_section(self, tmp_path):
         """Regenerated INDEX.md omits JNY section when no journeys exist."""
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", title="Some Req"),
-        )
-
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        args = argparse.Namespace()
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="Some Req",
+                source_path=str(spec_dir / "reqs.md"),
+            ),
+        )
+        args = argparse.Namespace(git_root=tmp_path)
 
         _regenerate_index(graph, [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
-        assert "## User Journeys (JNY)" not in index_content
+        assert "## User Journeys" not in index_content
 
 
 class TestIndexValidateJNY:
@@ -146,7 +157,6 @@ class TestIndexValidateJNY:
 
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        # Create INDEX.md with only requirements, no journeys
         (spec_dir / "INDEX.md").write_text(
             "# Requirements Index\n\n"
             "## Product Requirements (PRD)\n\n"
@@ -158,7 +168,6 @@ class TestIndexValidateJNY:
         args = argparse.Namespace()
         result = _validate_index(graph, [spec_dir], args)
 
-        # Should return 1 indicating issues found
         assert result == 1
 
     def test_REQ_o00050_C_validate_passes_with_all_jnys(self, tmp_path):
@@ -175,7 +184,6 @@ class TestIndexValidateJNY:
 
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        # Create INDEX.md with both requirements and journeys
         (spec_dir / "INDEX.md").write_text(
             "# Requirements Index\n\n"
             "## Product Requirements (PRD)\n\n"
@@ -183,8 +191,8 @@ class TestIndexValidateJNY:
             "|---|---|---|---|\n"
             "| REQ-p00001 | Req | spec/test.md | |\n\n"
             "## User Journeys (JNY)\n\n"
-            "| ID | Title | Actor | File | Addresses |\n"
-            "|---|---|---|---|---|\n"
+            "| ID | Title | Actor | File |\n"
+            "|---|---|---|---|\n"
             "| JNY-Dev-01 | Dev Workflow | Developer | spec/journeys.md | |\n"
         )
 
@@ -201,7 +209,6 @@ class TestIndexValidateJNY:
 
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-        # Create INDEX.md with a JNY that doesn't exist in the graph
         (spec_dir / "INDEX.md").write_text(
             "# Requirements Index\n\n"
             "## Product Requirements (PRD)\n\n"
@@ -209,13 +216,12 @@ class TestIndexValidateJNY:
             "|---|---|---|---|\n"
             "| REQ-p00001 | Req | spec/test.md | |\n\n"
             "## User Journeys (JNY)\n\n"
-            "| ID | Title | Actor | File | Addresses |\n"
-            "|---|---|---|---|---|\n"
+            "| ID | Title | Actor | File |\n"
+            "|---|---|---|---|\n"
             "| JNY-Ghost-01 | Ghost Journey | Ghost | spec/journeys.md | |\n"
         )
 
         args = argparse.Namespace()
         result = _validate_index(graph, [spec_dir], args)
 
-        # Should return 1 indicating issues found
         assert result == 1

@@ -407,7 +407,12 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
 
 
 # Implements: REQ-p00006-A
-def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str = "") -> str:
+def format_view(
+    graph: TraceGraph,
+    embed_content: bool = False,
+    base_path: str = "",
+    repo_name: str | None = None,
+) -> str:
     """Generate interactive HTML via HTMLGenerator."""
     try:
         from elspais.html import HTMLGenerator
@@ -416,7 +421,7 @@ def format_view(graph: TraceGraph, embed_content: bool = False, base_path: str =
             "HTMLGenerator requires the trace-view extra. "
             "Install with: pip install elspais[trace-view]"
         ) from err
-    generator = HTMLGenerator(graph, base_path=base_path)
+    generator = HTMLGenerator(graph, base_path=base_path, repo_name=repo_name)
     return generator.generate(embed_content=embed_content)
 
 

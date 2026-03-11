@@ -4,11 +4,7 @@
 
 <header class="header">
     <div class="header-left">
-        {% if mode == 'edit' %}
-        <h1 class="header-title">Trace Edit <span class="version-badge">v{{ version }}</span></h1>
-        {% else %}
-        <h1 class="header-title">Requirements Traceability <span class="version-badge">v{{ version }}</span></h1>
-        {% endif %}
+        <h1 class="header-title">Elspais <span class="version-badge">v{{ version }}</span> <span class="repo-name-badge">{{ repo_name }}</span></h1>
         <div class="header-stats" id="header-stats">
             <span class="stat-badge prd" id="stat-prd" onclick="toggleEditLevelFilter('levelPrd')" title="Click to hide PRD requirements">PRD: --</span>
             <span class="stat-badge ops" id="stat-ops" onclick="toggleEditLevelFilter('levelOps')" title="Click to hide OPS requirements">OPS: --</span>

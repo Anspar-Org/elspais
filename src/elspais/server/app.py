@@ -19,6 +19,7 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
+from elspais.config import get_project_name
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.html.theme import get_catalog
@@ -148,7 +149,7 @@ def create_app(
                 topics=topics,
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
-                repo_name=_state["working_dir"].name,
+                repo_name=get_project_name(_state["config"]),
                 pygments_css=get_pygments_css(),
                 pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data
@@ -629,53 +630,6 @@ def create_app(
     # ─────────────────────────────────────────────────────────────────
     # Server lifecycle endpoints
     # ─────────────────────────────────────────────────────────────────
-
-    # Heartbeat tracking: server shuts down if no browser pings within timeout.
-    # Only activates after the first heartbeat (so the server survives startup).
-    _heartbeat: dict[str, float] = {"last": 0.0, "active": False}
-    _HEARTBEAT_TIMEOUT = 30  # seconds without a ping before shutdown
-
-    @app.route("/api/heartbeat", methods=["POST"])
-    def api_heartbeat():
-        """POST /api/heartbeat - Browser keep-alive ping."""
-        import sys
-
-        _heartbeat["last"] = time.time()
-        if not _heartbeat["active"]:
-            _heartbeat["active"] = True
-            if app.config.get("ELSPAIS_DEBUG"):
-                print("[heartbeat] Browser connected — auto-shutdown enabled.", file=sys.stderr)
-            _start_heartbeat_monitor()
-        return jsonify({"ok": True})
-
-    def _start_heartbeat_monitor():
-        """Background thread that exits the server when heartbeats stop."""
-        import os
-        import sys
-        import threading
-
-        def _monitor():
-            while True:
-                time.sleep(5)
-                elapsed = time.time() - _heartbeat["last"]
-                if elapsed > _HEARTBEAT_TIMEOUT:
-                    if app.config.get("ELSPAIS_DEBUG"):
-                        print(
-                            f"\n[heartbeat] No browser ping for {int(elapsed)}s "
-                            f"(timeout: {_HEARTBEAT_TIMEOUT}s) — shutting down.",
-                            file=sys.stderr,
-                        )
-                    os._exit(0)
-                elif elapsed > _HEARTBEAT_TIMEOUT / 2:
-                    if app.config.get("ELSPAIS_DEBUG"):
-                        print(
-                            f"[heartbeat] No browser ping for {int(elapsed)}s "
-                            f"(shutdown in {_HEARTBEAT_TIMEOUT - int(elapsed)}s)",
-                            file=sys.stderr,
-                        )
-
-        t = threading.Thread(target=_monitor, daemon=True)
-        t.start()
 
     @app.route("/api/shutdown", methods=["POST"])
     def api_shutdown():

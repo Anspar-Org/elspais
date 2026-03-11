@@ -33,6 +33,15 @@ from elspais.commands import (
 )
 
 
+class _FriendlyParser(argparse.ArgumentParser):
+    """ArgumentParser that suggests 'help' on errors."""
+
+    def error(self, message: str) -> None:
+        print(f"elspais: {message}", file=sys.stderr)
+        print("Try 'elspais help' or 'elspais --help' for usage.", file=sys.stderr)
+        raise SystemExit(2)
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser.
 
@@ -52,7 +61,7 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="PATH",
     )
 
-    parser = argparse.ArgumentParser(
+    parser = _FriendlyParser(
         prog="elspais",
         description="Requirements validation and traceability tools (L-Space)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -115,6 +124,12 @@ For detailed command help: elspais <command> --help
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # help command (alias for --help)
+    subparsers.add_parser(
+        "help",
+        help="Show this help message",
+    )
 
     # health command
     health_parser = subparsers.add_parser(
@@ -1142,8 +1157,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    # Handle no command
-    if not args.command:
+    # Handle no command or "help" subcommand
+    if not args.command or args.command == "help":
         parser.print_help()
         completion.maybe_show_completion_hint()
         return 0
@@ -1175,7 +1190,8 @@ def main(argv: list[str] | None = None) -> int:
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
 
-    # Store canonical_root on args for commands to use
+    # Store roots on args for commands to use
+    args.git_root = git_root
     args.canonical_root = canonical_root
 
     # Global --output: redirect stdout to file

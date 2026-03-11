@@ -247,11 +247,14 @@ def _run_static(args: argparse.Namespace) -> int:
 
     try:
         from elspais.commands.trace import format_view
+        from elspais.config import get_config, get_project_name
 
+        config = get_config(start_path=repo_root, quiet=True)
         content = format_view(
             graph,
             getattr(args, "embed_content", False),
             base_path=str(repo_root),
+            repo_name=get_project_name(config),
         )
     except ImportError as e:
         print(f"Error: {e}", file=sys.stderr)
