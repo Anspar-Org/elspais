@@ -44,7 +44,7 @@ A. The system SHALL use TraceGraphBuilder to construct all TraceGraph instances.
 
 B. No module SHALL directly instantiate TraceGraph except TraceGraphBuilder.
 
-C. TraceGraphBuilder SHALL handle all relationship linking (implements, refines, addresses).
+C. TraceGraphBuilder SHALL handle all relationship linking (implements, refines, addresses, satisfies, instance).
 
 D. TraceGraphBuilder SHALL create assertion nodes as children of requirement nodes.
 
@@ -234,13 +234,13 @@ F. When a whole-requirement test has passing results, the annotator SHALL count 
 
 G. A leaf assertion SHALL be defined as any assertion that has no `Refines:` child pointing at it. Leaf assertions can occur at any level or place in the hierarchy.
 
-H. When a requirement declares `Satisfies: X`, per-instance coverage SHALL be computed as: (covered leaf assertions) / (total leaf assertions - N/A assertions). Coverage metrics SHALL be stored on the declaring requirement, keyed by template ID.
+H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template's REQ subtree with composite IDs (`declaring_id::original_id`), creating INSTANCE nodes linked to the declaring requirement via a SATISFIES edge. Coverage SHALL be computed through the standard coverage mechanism operating on the cloned nodes.
 
-I. 100% coverage of a template instance SHALL be achieved when every leaf assertion in the template (excluding N/A assertions) has at least one `Implements:` reference within the declaring requirement's subtree.
+I. 100% coverage of a template instance SHALL be achieved when every leaf assertion in the cloned template subtree (excluding N/A assertions) has at least one `Implements:` reference.
 
 J. A `Refines:` relationship SHALL NOT count as coverage in itself, but coverage of its child assertions SHALL propagate upward. An assertion with `Refines:` children SHALL have fractional coverage equal to the proportion of its covered leaf descendants.
 
-K. The system SHALL report coverage gaps when a `Satisfies:` declaration exists but the declaring requirement's subtree does not cover all leaf assertions in the template.
+K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
 ## Rationale
 
