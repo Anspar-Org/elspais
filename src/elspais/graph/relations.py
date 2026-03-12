@@ -25,6 +25,7 @@ class EdgeKind(Enum):
     - VALIDATES: Test validates requirement/assertion (coverage rollup)
     - ADDRESSES: Links to user journey (informational, no coverage)
     - CONTAINS: File structure containment (no coverage)
+    - SATISFIES: Requirement satisfies a cross-cutting requirement (coverage rollup)
     """
 
     IMPLEMENTS = "implements"
@@ -32,6 +33,8 @@ class EdgeKind(Enum):
     VALIDATES = "validates"
     ADDRESSES = "addresses"
     CONTAINS = "contains"
+    # Implements: REQ-d00069-G
+    SATISFIES = "satisfies"
 
     # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:
@@ -41,7 +44,7 @@ class EdgeKind(Enum):
             True if edges of this type should be included in coverage
             calculations, False otherwise.
         """
-        return self in (EdgeKind.IMPLEMENTS, EdgeKind.VALIDATES)
+        return self in (EdgeKind.IMPLEMENTS, EdgeKind.VALIDATES, EdgeKind.SATISFIES)
 
 
 # Implements: REQ-p00050-A
