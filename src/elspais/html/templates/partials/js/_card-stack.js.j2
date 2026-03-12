@@ -202,7 +202,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div>';
 
     // Parents section (relationship editor in edit mode)
-    html += '<div class="card-section"><div class="card-section-label">Implements / Refines</div>';
+    html += '<div class="card-section"><div class="card-section-label">Implements / Refines / Satisfies</div>';
     html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
         data.parents.forEach(function(p) {
@@ -215,7 +215,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '<button class="card-parent-kind-toggle edit-only" ' +
                 'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
                 'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
-                'title="Click to toggle implements/refines">' + edgeKindDisplay + '</button>';
+                'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
             html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
             html += '</a>';

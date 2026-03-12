@@ -269,7 +269,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     parents = []
     # Implements: REQ-d00069-G
     for edge in node.iter_incoming_edges():
-        if edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES):
+        if edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.INSTANCE):
             parent = edge.source
             if parent.kind == NodeKind.REQUIREMENT:
                 ref_id = parent.id
@@ -289,7 +289,13 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
     links = []
     for edge in node.iter_incoming_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.CONTAINS):
+        if edge.kind not in (
+            EK.IMPLEMENTS,
+            EK.REFINES,
+            EK.SATISFIES,
+            EK.INSTANCE,
+            EK.CONTAINS,
+        ):
             links.append(
                 {
                     "id": edge.source.id,
@@ -299,7 +305,13 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                 }
             )
     for edge in node.iter_outgoing_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.CONTAINS):
+        if edge.kind not in (
+            EK.IMPLEMENTS,
+            EK.REFINES,
+            EK.SATISFIES,
+            EK.INSTANCE,
+            EK.CONTAINS,
+        ):
             links.append(
                 {
                     "id": edge.target.id,
@@ -315,11 +327,15 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     # ── Kind-specific properties ──
     properties: dict[str, Any] = {}
     if kind == NodeKind.REQUIREMENT:
+        from elspais.graph.relations import Stereotype
+
+        stereotype = node.get_field("stereotype", Stereotype.CONCRETE)
         properties = {
             "level": node.get_field("level"),
             "status": node.get_field("status"),
             "hash": node.get_field("hash"),
             "body_text": node.get_field("body_text"),
+            "stereotype": stereotype.value if isinstance(stereotype, Stereotype) else stereotype,
         }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None

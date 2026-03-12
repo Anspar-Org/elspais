@@ -461,7 +461,9 @@ function onToggleEdgeKind(el) {
     var sourceId = el.dataset.source;
     var targetId = el.dataset.target;
     var currentKind = el.dataset.kind;
-    var newKind = currentKind === 'implements' ? 'refines' : 'implements';
+    var kinds = ['implements', 'refines', 'satisfies'];
+    var idx = kinds.indexOf(currentKind);
+    var newKind = kinds[(idx + 1) % kinds.length];
 
     mutate('/api/mutate/edge', {
         action: 'change_kind',
@@ -507,7 +509,7 @@ function onAddRelationship(nodeId, btn) {
     typeRow.innerHTML = '<label class="add-rel-label">Type:</label>';
     var typeSelect = document.createElement('select');
     typeSelect.className = 'add-rel-select';
-    typeSelect.innerHTML = '<option value="implements">Implements</option><option value="refines">Refines</option>';
+    typeSelect.innerHTML = '<option value="implements">Implements</option><option value="refines">Refines</option><option value="satisfies">Satisfies</option>';
     typeRow.appendChild(typeSelect);
     form.appendChild(typeRow);
 

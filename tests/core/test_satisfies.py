@@ -7,6 +7,7 @@ from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.mcp.server import _serialize_node_generic
 from elspais.utilities.patterns import PatternConfig
 from tests.core.graph_test_helpers import build_graph, make_code_ref, make_requirement
 
@@ -805,3 +806,65 @@ class TestFileBasedAttribution:
             f"Code ref to t2 template should be child of instance clone 2, "
             f"but parents are: {t2_parent_ids}"
         )
+
+
+class TestMCPStereotypeSerialization:
+    """Validates REQ-p00014-C: Stereotype field in MCP serialization.
+
+    The _serialize_node_generic() function should include the stereotype
+    value in the properties dict for REQUIREMENT nodes.
+    """
+
+    def test_REQ_p00014_C_serialized_stereotype_concrete(self):
+        """A simple requirement serializes with stereotype == 'concrete'."""
+        req = make_requirement("REQ-p00001", title="Basic Requirement")
+        graph = build_graph(req)
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+
+        result = _serialize_node_generic(node, graph)
+        assert result["properties"]["stereotype"] == "concrete"
+
+    def test_REQ_p00014_C_serialized_stereotype_template(self):
+        """A template requirement serializes with stereotype == 'template'."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        template_node = graph.find_by_id("REQ-p80001")
+        assert template_node is not None
+
+        result = _serialize_node_generic(template_node, graph)
+        assert result["properties"]["stereotype"] == "template"
+
+    def test_REQ_p00014_C_serialized_stereotype_instance(self):
+        """An instance clone serializes with stereotype == 'instance'."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        instance_node = graph.find_by_id("REQ-p00044::REQ-p80001")
+        assert instance_node is not None
+
+        result = _serialize_node_generic(instance_node, graph)
+        assert result["properties"]["stereotype"] == "instance"
