@@ -312,6 +312,42 @@ class TestTemplateCoverage:
         assert sat_cov["REQ-p80001"]["missing"] == []
 
 
+class TestChangeDetection:
+    """Template hash changes flag SATISFIES declarations.
+
+    Validates REQ-p00017: Change detection for SATISFIES edges.
+    """
+
+    def test_REQ_p00017_A_template_hash_change_flags_declaring_reqs(self):
+        """When template hash changes, declaring reqs should be flagged."""
+        from tests.core.graph_test_helpers import build_graph
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            hash_value="aabbccdd",  # Stale hash
+            assertions=[
+                {"label": "A", "text": "obligation"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+
+        graph = build_graph(template, declaring)
+
+        from elspais.commands.health import check_spec_hash_integrity
+
+        result = check_spec_hash_integrity(graph)
+
+        # Should have findings about the declaring req
+        assert any(
+            f.node_id == "REQ-p00044" and "REQ-p80001" in (f.related or []) for f in result.findings
+        )
+
+
 class TestNADeclarations:
     """N/A assertions exclude template assertions from coverage.
 

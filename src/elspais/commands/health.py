@@ -558,12 +558,14 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     )
 
 
+# Implements: REQ-p00017
 def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     """Check that stored requirement hashes match computed hashes."""
     from elspais.commands.validate import compute_hash_for_node
     from elspais.graph import NodeKind
 
     mismatches = []
+    findings: list[HealthFinding] = []
     checked = 0
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -574,6 +576,22 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
         computed = compute_hash_for_node(node, graph.hash_mode)
         if computed and stored != computed:
             mismatches.append({"id": node.id, "stored": stored, "computed": computed})
+            # Flag requirements that Satisfy this template for review
+            from elspais.graph.relations import EdgeKind
+
+            for edge in node.iter_outgoing_edges():
+                if edge.kind == EdgeKind.SATISFIES:
+                    findings.append(
+                        HealthFinding(
+                            message=(
+                                f"Template {node.id} content changed;"
+                                f" review {edge.target.id}"
+                                f" (Satisfies: {node.id})"
+                            ),
+                            node_id=edge.target.id,
+                            related=[node.id],
+                        )
+                    )
 
     if not checked:
         return HealthCheck(
@@ -596,6 +614,7 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
             category="spec",
             severity="warning",
             details={"mismatches": mismatches, "checked": checked},
+            findings=findings,
         )
 
     return HealthCheck(
