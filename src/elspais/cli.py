@@ -98,6 +98,13 @@ For detailed command help: elspais <command> --help
         version=f"elspais {__version__}",
     )
     parser.add_argument(
+        "-C",
+        "--directory",
+        type=Path,
+        help="Run as if started in this directory (like git -C)",
+        metavar="DIR",
+    )
+    parser.add_argument(
         "--config",
         type=Path,
         help="Path to configuration file",
@@ -147,6 +154,7 @@ Examples:
   elspais health --format junit  # Output JUnit XML for CI
   elspais health --format sarif  # Output SARIF for code scanning
   elspais health -v           # Verbose output with details
+  elspais health --status Active Draft  # Include Draft in coverage
   elspais health --include-passing-details  # Show details for passing checks
 
 Checks performed:
@@ -184,6 +192,12 @@ Checks performed:
         "--lenient",
         action="store_true",
         help="Allow warnings without affecting exit code",
+    )
+    health_parser.add_argument(
+        "--status",
+        nargs="+",
+        metavar="STATUS",
+        help="Statuses to include in coverage (default: Active). Example: --status Active Draft",
     )
     passing_group = health_parser.add_mutually_exclusive_group()
     passing_group.add_argument(
@@ -1119,9 +1133,33 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
+    import os
+
     # Implements: REQ-d00085-A+D
     # Detect multi-section composition before argparse
     from elspais.commands.report import COMPOSABLE_SECTIONS
+
+    # Extract -C/--directory before multi-section detection since global
+    # args precede subcommands in argv
+
+    start_dir = Path.cwd()
+    filtered_argv: list[str] = []
+    skip_next = False
+    for j, arg in enumerate(argv):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("-C", "--directory") and j + 1 < len(argv):
+            start_dir = Path(argv[j + 1]).resolve()
+            os.chdir(start_dir)
+            skip_next = True
+            continue
+        if arg.startswith("-C") and len(arg) > 2:
+            start_dir = Path(arg[2:]).resolve()
+            os.chdir(start_dir)
+            continue
+        filtered_argv.append(arg)
+    argv = filtered_argv
 
     sections: list[str] = []
     i = 0
@@ -1130,12 +1168,10 @@ def main(argv: list[str] | None = None) -> int:
         i += 1
 
     if len(sections) > 1:
-        import os
-
         from elspais.config import find_canonical_root, find_git_root
 
-        git_root = find_git_root(Path.cwd())
-        canonical_root = find_canonical_root(Path.cwd())
+        git_root = find_git_root(start_dir)
+        canonical_root = find_canonical_root(start_dir)
         if git_root and git_root != Path.cwd():
             os.chdir(git_root)
 
@@ -1165,11 +1201,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
-    import os
-
     from elspais.config import find_canonical_root, find_git_root
 
-    original_cwd = Path.cwd()
+    original_cwd = Path.cwd()  # Already changed by -C if provided
 
     # If --path is set on a command that supports it, use that as the root
     explicit_path = getattr(args, "path", None)
@@ -1189,6 +1223,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Canonical root (main repo): {canonical_root}", file=sys.stderr)
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
+
+    # Warn if --config points to a different directory than the working dir
+    config_path = getattr(args, "config", None)
+    if config_path and git_root:
+        config_dir = Path(config_path).resolve().parent
+        working_dir = git_root.resolve()
+        if config_dir != working_dir:
+            print(
+                f"INFO: Config file is from {config_dir} but working directory is {working_dir}. "
+                f"Use -C to change the working directory.",
+                file=sys.stderr,
+            )
 
     # Store roots on args for commands to use
     args.git_root = git_root

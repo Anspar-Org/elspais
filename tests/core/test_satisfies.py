@@ -97,6 +97,41 @@ class TestParserSatisfies:
         results = list(parser.claim_and_parse(lines, ctx))
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001-A"]
 
+    def test_satisfies_bold_markdown_syntax(self):
+        """Satisfies with **bold** markdown syntax should be parsed like Implements."""
+        text = (
+            "## REQ-p00043: Diary Mobile Application\n"
+            "\n"
+            "**Level**: PRD | **Status**: Draft | **Implements**: p00044-C\n"
+            "**Satisfies**: p80001\n"
+            "\n"
+            "*End* *Diary Mobile Application* | **Hash**: 00000000\n"
+        )
+        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
+        parser = _make_parser()
+        ctx = ParseContext(file_path="spec/test.md")
+        results = list(parser.claim_and_parse(lines, ctx))
+        assert len(results) == 1
+        assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
+
+    def test_satisfies_bold_syntax_separate_line(self):
+        """Satisfies with bold syntax on a separate line from Level/Status."""
+        text = (
+            "## REQ-p00043: Diary Mobile Application\n"
+            "\n"
+            "**Level**: PRD | **Status**: Draft | **Implements**: p00044-C\n"
+            "\n"
+            "**Satisfies**: p80001\n"
+            "\n"
+            "*End* *Diary Mobile Application* | **Hash**: 00000000\n"
+        )
+        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
+        parser = _make_parser()
+        ctx = ParseContext(file_path="spec/test.md")
+        results = list(parser.claim_and_parse(lines, ctx))
+        assert len(results) == 1
+        assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
+
     def test_REQ_d00069_H_no_satisfies(self):
         text = (
             "## REQ-p00001: Basic\n"

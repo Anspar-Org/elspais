@@ -123,7 +123,7 @@ F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, 
 
 G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
 
-*End* *Change Detection and Auditability* | **Hash**: 00000000
+*End* *Change Detection and Auditability* | **Hash**: 921396bb
 ---
 
 # REQ-p00005: Multi-Repository Requirements

@@ -246,7 +246,7 @@ K. The system SHALL report coverage gaps when a `Satisfies:` declaration exists 
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-*End* *Indirect Coverage Source* | **Hash**: 00000000
+*End* *Indirect Coverage Source* | **Hash**: 586121e4
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display

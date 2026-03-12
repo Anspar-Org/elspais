@@ -1026,13 +1026,32 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def _excluded_note(graph: TraceGraph) -> str:
+_ALL_STATUSES = {"Active", "Draft", "Deprecated", "Superseded", "Proposed"}
+
+
+def _resolve_exclude_status(args: argparse.Namespace) -> set[str]:
+    """Compute the set of statuses to exclude from coverage.
+
+    If --status is provided, include only those statuses (case-insensitive).
+    Otherwise, default to excluding Draft and Deprecated.
+    """
+    include_raw: list[str] | None = getattr(args, "status", None)
+    if not include_raw:
+        return {"Draft", "Deprecated"}
+    # Normalise to title-case for matching
+    included = {s.title() for s in include_raw}
+    return _ALL_STATUSES - included
+
+
+def _excluded_note(graph: TraceGraph, exclude_status: set[str] | None = None) -> str:
     """Build a note about excluded requirements."""
     from elspais.graph import NodeKind
 
+    if exclude_status is None:
+        exclude_status = {"Draft", "Deprecated"}
     counts: dict[str, int] = {}
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if n.status in ("Draft", "Deprecated"):
+        if n.status in exclude_status:
             counts[n.status] = counts.get(n.status, 0) + 1
     if not counts:
         return ""
@@ -1040,14 +1059,16 @@ def _excluded_note(graph: TraceGraph) -> str:
     return f" [{', '.join(parts)} excluded]"
 
 
-def check_code_coverage(graph: TraceGraph) -> HealthCheck:
+def check_code_coverage(graph: TraceGraph, exclude_status: set[str] | None = None) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
     from elspais.graph.annotators import count_with_code_refs
 
+    if exclude_status is None:
+        exclude_status = {"Draft", "Deprecated"}
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph, exclude_status={"Draft", "Deprecated"})
-    note = _excluded_note(graph)
+    coverage = count_with_code_refs(graph, exclude_status=exclude_status)
+    note = _excluded_note(graph, exclude_status)
 
     return HealthCheck(
         name="code.coverage",
@@ -1067,11 +1088,11 @@ def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def run_code_checks(graph: TraceGraph) -> list[HealthCheck]:
+def run_code_checks(graph: TraceGraph, exclude_status: set[str] | None = None) -> list[HealthCheck]:
     """Run all code reference health checks."""
     return [
         check_code_references_resolve(graph),
-        check_code_coverage(graph),
+        check_code_coverage(graph, exclude_status=exclude_status),
     ]
 
 
@@ -1218,33 +1239,33 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_test_coverage(graph: TraceGraph) -> HealthCheck:
-    """Check test coverage statistics (excludes Draft requirements)."""
+def check_test_coverage(graph: TraceGraph, exclude_status: set[str] | None = None) -> HealthCheck:
+    """Check test coverage statistics."""
     from elspais.graph import NodeKind
 
+    if exclude_status is None:
+        exclude_status = {"Draft", "Deprecated"}
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    # Exclude Draft and Deprecated from denominator
-    _exclude = {"Draft", "Deprecated"}
     req_count = sum(
-        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in _exclude
+        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in exclude_status
     )
 
     # Count requirements with at least one TEST child
     covered_reqs = set()
     for node in graph.nodes_by_kind(NodeKind.TEST):
         for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT and parent.status not in _exclude:
+            if parent.kind == NodeKind.REQUIREMENT and parent.status not in exclude_status:
                 covered_reqs.add(parent.id)
             elif parent.kind == NodeKind.ASSERTION:
                 for grandparent in parent.iter_parents():
                     if (
                         grandparent.kind == NodeKind.REQUIREMENT
-                        and grandparent.status not in _exclude
+                        and grandparent.status not in exclude_status
                     ):
                         covered_reqs.add(grandparent.id)
 
     coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
-    note = _excluded_note(graph)
+    note = _excluded_note(graph, exclude_status)
 
     return HealthCheck(
         name="tests.coverage",
@@ -1264,12 +1285,12 @@ def check_test_coverage(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def run_test_checks(graph: TraceGraph) -> list[HealthCheck]:
+def run_test_checks(graph: TraceGraph, exclude_status: set[str] | None = None) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
         check_test_references_resolve(graph),
         check_test_results(graph),
-        check_test_coverage(graph),
+        check_test_coverage(graph, exclude_status=exclude_status),
     ]
 
 
@@ -1305,9 +1326,10 @@ def render_section(
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
-        for check in run_code_checks(graph):
+        exclude_status = _resolve_exclude_status(args)
+        for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
-        for check in run_test_checks(graph):
+        for check in run_test_checks(graph, exclude_status=exclude_status):
             report.add(check)
 
     output = _format_report(report, args)
@@ -1407,13 +1429,14 @@ def run(args: argparse.Namespace) -> int:
             report.add(check)
 
     # Code checks
+    exclude_status = _resolve_exclude_status(args)
     if run_code and graph:
-        for check in run_code_checks(graph):
+        for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
 
     # Test checks
     if run_tests and graph:
-        for check in run_test_checks(graph):
+        for check in run_test_checks(graph, exclude_status=exclude_status):
             report.add(check)
 
     return _output_report(report, args)

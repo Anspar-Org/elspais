@@ -42,7 +42,9 @@ class RequirementParser:
     IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
     REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refines>[^|\n]+)")
     # Implements: REQ-d00069-H
-    SATISFIES_PATTERN = re.compile(r"^Satisfies:\s*(?P<satisfies>.+)$", re.MULTILINE)
+    SATISFIES_PATTERN = re.compile(
+        r"^(?:\*\*)?Satisfies(?:\*\*)?:\s*(?P<satisfies>.+)$", re.MULTILINE
+    )
     END_MARKER_PATTERN = re.compile(
         rf"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>{HASH_VALUE_PATTERN}))?",
         re.MULTILINE,

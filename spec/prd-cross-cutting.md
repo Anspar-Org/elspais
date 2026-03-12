@@ -20,7 +20,7 @@ B. `Satisfies:` SHALL be parsed as a new edge kind (SATISFIES) connecting the de
 
 C. The system SHALL attribute code-level `Implements:` references to template assertions to the correct declaring requirement by following the code's sibling `Implements:` edges up to the ancestor with the matching `Satisfies:` declaration.
 
-*End* *Satisfies Relationship* | **Hash**: 00000000
+*End* *Satisfies Relationship* | **Hash**: a5edc1b2
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
@@ -39,7 +39,7 @@ B. N/A assertions SHALL be treated the same as deprecated status: they SHALL NOT
 
 C. Any `Implements:` references to a N/A assertion SHALL NOT count toward coverage and SHALL produce errors.
 
-*End* *NOT APPLICABLE Status* | **Hash**: 00000000
+*End* *NOT APPLICABLE Status* | **Hash**: b026a15f
 ---
 
 ## Design Details
@@ -161,6 +161,7 @@ The health command reports template coverage gaps:
 REQ-p00045 (Other System): REQ-p80001 coverage gaps:
   REQ-o80001 (Authentication):
     + A: validate identity
+
     - B: two-factor for high-risk     <- missing
   REQ-o80002 (Record Integrity):
     + A: link records to signing events
