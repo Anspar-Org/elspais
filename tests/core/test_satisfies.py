@@ -205,7 +205,7 @@ class TestBuilderSatisfiesEdge:
     """
 
     def test_REQ_d00069_G_satisfies_creates_edge(self):
-        """A Satisfies: declaration creates a SATISFIES edge to the template."""
+        """A Satisfies: declaration creates a SATISFIES edge from declaring to clone."""
         from tests.core.graph_test_helpers import build_graph
 
         template = make_requirement(
@@ -223,15 +223,15 @@ class TestBuilderSatisfiesEdge:
         )
         graph = build_graph(template, declaring)
 
-        template_node = graph.find_by_id("REQ-p80001")
-        assert template_node is not None
+        declaring_node = graph.find_by_id("REQ-p00044")
+        assert declaring_node is not None
 
-        satisfies_edges = list(template_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        satisfies_edges = list(declaring_node.iter_edges_by_kind(EdgeKind.SATISFIES))
         assert len(satisfies_edges) == 1
-        assert satisfies_edges[0].target.id == "REQ-p00044"
+        assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
 
     def test_REQ_d00069_G_satisfies_assertion_target(self):
-        """Satisfies: REQ-p80001-A creates edge with assertion_targets."""
+        """Satisfies: REQ-p80001-A creates edge to cloned assertion subtree."""
         from tests.core.graph_test_helpers import build_graph
 
         template = make_requirement(
@@ -249,13 +249,14 @@ class TestBuilderSatisfiesEdge:
         )
         graph = build_graph(template, declaring)
 
-        template_node = graph.find_by_id("REQ-p80001")
-        satisfies_edges = list(template_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        declaring_node = graph.find_by_id("REQ-p00044")
+        satisfies_edges = list(declaring_node.iter_edges_by_kind(EdgeKind.SATISFIES))
         assert len(satisfies_edges) == 1
-        assert satisfies_edges[0].assertion_targets == ["A"]
+        # Assertion-level satisfies still clones the assertion's parent REQ
+        assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001-A"
 
     def test_REQ_d00069_G_multiple_satisfies(self):
-        """Multiple Satisfies: targets create separate edges."""
+        """Multiple Satisfies: targets create separate clone subtrees."""
         from tests.core.graph_test_helpers import build_graph
 
         t1 = make_requirement("REQ-p80001", title="Template 1")
@@ -267,10 +268,11 @@ class TestBuilderSatisfiesEdge:
         )
         graph = build_graph(t1, t2, declaring)
 
-        t1_node = graph.find_by_id("REQ-p80001")
-        t2_node = graph.find_by_id("REQ-p80010")
-        assert len(list(t1_node.iter_edges_by_kind(EdgeKind.SATISFIES))) == 1
-        assert len(list(t2_node.iter_edges_by_kind(EdgeKind.SATISFIES))) == 1
+        declaring_node = graph.find_by_id("REQ-p00044")
+        satisfies_edges = list(declaring_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        assert len(satisfies_edges) == 2
+        clone_ids = sorted(e.target.id for e in satisfies_edges)
+        assert clone_ids == ["REQ-p00044::REQ-p80001", "REQ-p00044::REQ-p80010"]
 
     def test_REQ_d00069_G_satisfies_broken_reference(self):
         """Satisfies: to nonexistent target records a broken reference."""
@@ -356,9 +358,215 @@ class TestGraphNodeStereotype:
         assert node.get_field("stereotype") == Stereotype.CONCRETE
 
 
-# NOTE: Tests for template coverage computation, N/A declarations,
-# health coverage gaps, and end-to-end satisfies pipeline were removed
-# as part of the template instantiation redesign (CUR-1082).
-# The old annotator-based approach (_compute_satisfies_coverage) has been
-# replaced by structural cloning in the builder. New tests will be added
-# when the template instantiation is implemented.
+class TestTemplateInstantiation:
+    """Validates REQ-p00014-B, REQ-p00014-C, REQ-d00069-H: Template subtree cloning.
+
+    When a requirement declares Satisfies: REQ-xxx, the builder should:
+    1. Mark the template and its descendants as TEMPLATE
+    2. Clone the template subtree with composite IDs (declaring_id::original_id)
+    3. Mark clones as INSTANCE with INSTANCE edges back to originals
+    4. Create SATISFIES edge from declaring req to cloned root
+    5. Preserve internal edges (REFINES) within the cloned subtree
+    """
+
+    def test_REQ_p00014_B_satisfies_clones_template_root(self):
+        """Satisfies: REQ-p80001 should create a cloned instance node."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        clone = graph.find_by_id("REQ-p00044::REQ-p80001")
+        assert clone is not None, "Cloned template root should exist in graph"
+        assert clone.get_field("stereotype") == Stereotype.INSTANCE
+
+    def test_REQ_p00014_B_satisfies_edge_from_declaring_to_clone(self):
+        """Declaring req should have outgoing SATISFIES edge to the cloned root."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        declaring_node = graph.find_by_id("REQ-p00044")
+        satisfies_edges = list(declaring_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        assert len(satisfies_edges) == 1
+        assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
+
+    def test_REQ_p00014_C_instance_edge_from_clone_to_original(self):
+        """Cloned root should have outgoing INSTANCE edge to original template."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        clone = graph.find_by_id("REQ-p00044::REQ-p80001")
+        instance_edges = list(clone.iter_edges_by_kind(EdgeKind.INSTANCE))
+        assert len(instance_edges) == 1
+        assert instance_edges[0].target.id == "REQ-p80001"
+
+    def test_REQ_p00014_B_cloned_assertions_exist(self):
+        """Template assertions should be cloned with composite IDs."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        clone_a = graph.find_by_id("REQ-p00044::REQ-p80001-A")
+        clone_b = graph.find_by_id("REQ-p00044::REQ-p80001-B")
+        assert clone_a is not None, "Cloned assertion A should exist"
+        assert clone_b is not None, "Cloned assertion B should exist"
+
+        # Cloned assertions should be children of the cloned root
+        clone_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        child_ids = {c.id for c in clone_root.iter_children()}
+        assert "REQ-p00044::REQ-p80001-A" in child_ids
+        assert "REQ-p00044::REQ-p80001-B" in child_ids
+
+    def test_REQ_p00014_B_template_marked_as_template(self):
+        """Original template and its assertions should be marked TEMPLATE."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        template_node = graph.find_by_id("REQ-p80001")
+        assert template_node.get_field("stereotype") == Stereotype.TEMPLATE
+
+        assertion_a = graph.find_by_id("REQ-p80001-A")
+        assert assertion_a.get_field("stereotype") == Stereotype.TEMPLATE
+
+    def test_REQ_p00014_B_cloned_subtree_preserves_refines(self):
+        """Cloned subtree should preserve REFINES edges between cloned nodes."""
+        template_root = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "root assertion"},
+            ],
+        )
+        template_child = make_requirement(
+            "REQ-o80001",
+            title="Signature Ops",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "child assertion"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template_root, template_child, declaring)
+
+        # Cloned child should exist
+        cloned_child = graph.find_by_id("REQ-p00044::REQ-o80001")
+        assert cloned_child is not None, "Cloned child REQ should exist"
+
+        # Cloned root should have outgoing REFINES edge to cloned child
+        # (builder resolves target.link(source, REFINES) -> parent has outgoing REFINES to child)
+        cloned_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        refines_edges = list(cloned_root.iter_edges_by_kind(EdgeKind.REFINES))
+        refines_targets = {e.target.id for e in refines_edges}
+        assert "REQ-p00044::REQ-o80001" in refines_targets
+
+    def test_REQ_p00014_B_multiple_satisfies_creates_separate_clones(self):
+        """Multiple Satisfies: targets create separate clone subtrees."""
+        t1 = make_requirement(
+            "REQ-p80001",
+            title="Template 1",
+            assertions=[{"label": "A", "text": "t1 obligation"}],
+        )
+        t2 = make_requirement(
+            "REQ-p80010",
+            title="Template 2",
+            assertions=[{"label": "A", "text": "t2 obligation"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001", "REQ-p80010"],
+        )
+        graph = build_graph(t1, t2, declaring)
+
+        clone1 = graph.find_by_id("REQ-p00044::REQ-p80001")
+        clone2 = graph.find_by_id("REQ-p00044::REQ-p80010")
+        assert clone1 is not None, "Clone of template 1 should exist"
+        assert clone2 is not None, "Clone of template 2 should exist"
+
+    def test_REQ_d00069_H_cloned_source_location_preserved(self):
+        """Cloned nodes should preserve the source location of the original."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            source_path="spec/template.md",
+            start_line=5,
+            end_line=20,
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        original = graph.find_by_id("REQ-p80001")
+        clone = graph.find_by_id("REQ-p00044::REQ-p80001")
+        assert clone is not None, "Cloned node should exist"
+        assert clone.source is not None, "Cloned node should have source location"
+        assert clone.source.path == original.source.path
+        assert clone.source.line == original.source.line

@@ -2,12 +2,13 @@
 
 All notable changes to elspais will be documented in this file.
 
-## [0.103.13] - 2026-03-12
+## [0.103.15] - 2026-03-12
 
 ### Added
 
 - **Stereotype enum** — `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) in `graph/relations.py` classifies nodes in the template-instance pattern (REQ-p00014-C)
 - **INSTANCE EdgeKind** — `EdgeKind.INSTANCE` for connecting cloned template nodes to their originals; does not contribute to coverage (REQ-p00014-C)
+- **Template instantiation** — `Satisfies: X` declarations now clone the template's REQ subtree with composite IDs (`declaring_id::original_id`), creating INSTANCE nodes with SATISFIES/INSTANCE edges; coverage computed through standard mechanism (REQ-p00014-B, REQ-d00069-H)
 
 ## [0.101.0] - 2026-03-09
 

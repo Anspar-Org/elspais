@@ -1649,6 +1649,8 @@ class GraphBuilder:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # Implements: REQ-p00014-B
+        self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
         # Detection: track orphan candidates and broken references
         self._orphan_candidates: set[str] = set()
         self._broken_references: list[BrokenReference] = []
@@ -1770,9 +1772,9 @@ class GraphBuilder:
         for refine_ref in data.get("refines", []):
             self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES))
 
-        # Implements: REQ-d00069-G
+        # Implements: REQ-p00014-B
         for sat_ref in data.get("satisfies", []):
-            self._pending_links.append((req_id, sat_ref, EdgeKind.SATISFIES))
+            self._satisfies_links.append((req_id, sat_ref))
 
     def _add_journey(self, content: ParsedContent) -> None:
         """Add a user journey node."""
@@ -2010,6 +2012,141 @@ class GraphBuilder:
 
         return result
 
+    # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
+    def _instantiate_satisfies_templates(self) -> None:
+        """Clone template subtrees for each Satisfies declaration.
+
+        Sub-pass 1: Mark template nodes as stereotype=TEMPLATE.
+        Sub-pass 2: Clone subtrees with composite IDs and INSTANCE edges.
+        """
+        if not self._satisfies_links:
+            return
+
+        # Collect all template roots first (a template may be referenced
+        # by multiple declaring reqs)
+        template_roots: dict[str, list[str]] = {}  # template_id -> [declaring_ids]
+        for declaring_id, template_id in self._satisfies_links:
+            # Handle assertion-level satisfies: strip assertion suffix to find root
+            # but keep the full ref for later use
+            template_roots.setdefault(template_id, []).append(declaring_id)
+
+        # Pre-resolve REFINES edges that target template nodes so walk()
+        # can traverse the full template subtree before cloning.
+        template_ids = set(template_roots.keys())
+        remaining_links: list[tuple[str, str, EdgeKind]] = []
+        for source_id, target_id, edge_kind in self._pending_links:
+            if edge_kind == EdgeKind.REFINES and target_id in template_ids:
+                source = self._nodes.get(source_id)
+                target = self._nodes.get(target_id)
+                if source and target:
+                    target.link(source, edge_kind)
+                    # Also resolve further REFINES links to these children
+                    template_ids.add(source_id)
+                else:
+                    remaining_links.append((source_id, target_id, edge_kind))
+            else:
+                remaining_links.append((source_id, target_id, edge_kind))
+        # Second pass for REFINES targeting newly added template members
+        final_links: list[tuple[str, str, EdgeKind]] = []
+        for source_id, target_id, edge_kind in remaining_links:
+            if edge_kind == EdgeKind.REFINES and target_id in template_ids:
+                source = self._nodes.get(source_id)
+                target = self._nodes.get(target_id)
+                if source and target:
+                    target.link(source, edge_kind)
+                    template_ids.add(source_id)
+                else:
+                    final_links.append((source_id, target_id, edge_kind))
+            else:
+                final_links.append((source_id, target_id, edge_kind))
+        self._pending_links = final_links
+
+        # Sub-pass 1: Mark templates
+        for template_id in template_roots:
+            template_node = self._nodes.get(template_id)
+            if not template_node:
+                # Broken reference — record it
+                for declaring_id in template_roots[template_id]:
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=declaring_id,
+                            target_id=template_id,
+                            edge_kind=EdgeKind.SATISFIES.value,
+                        )
+                    )
+                continue
+            # Mark template root and all descendants
+            for node in template_node.walk():
+                node.set_field("stereotype", Stereotype.TEMPLATE)
+
+        # Sub-pass 2: Clone & link
+        for declaring_id, template_id in self._satisfies_links:
+            template_node = self._nodes.get(template_id)
+            declaring_node = self._nodes.get(declaring_id)
+            if not template_node or not declaring_node:
+                continue
+
+            # Collect template subtree nodes (REQs and assertions only)
+            template_nodes: list[GraphNode] = []
+            for node in template_node.walk():
+                if node.kind in (NodeKind.REQUIREMENT, NodeKind.ASSERTION):
+                    template_nodes.append(node)
+
+            # Map original IDs to cloned nodes
+            clone_map: dict[str, GraphNode] = {}
+
+            for orig in template_nodes:
+                clone_id = f"{declaring_id}::{orig.id}"
+                clone = GraphNode(
+                    id=clone_id,
+                    kind=orig.kind,
+                    label=orig.get_label(),
+                    source=(
+                        SourceLocation(
+                            path=orig.source.path,
+                            line=orig.source.line,
+                            end_line=orig.source.end_line,
+                        )
+                        if orig.source
+                        else None
+                    ),
+                )
+                # Copy content fields and set INSTANCE stereotype
+                for key, value in orig.get_all_content().items():
+                    if key != "stereotype":
+                        clone.set_field(key, value)
+                clone.set_field("stereotype", Stereotype.INSTANCE)
+
+                self._nodes[clone_id] = clone
+                clone_map[orig.id] = clone
+
+                # INSTANCE edge from clone to original
+                clone.link(orig, EdgeKind.INSTANCE)
+
+            # Recreate internal edges in cloned subtree
+            for orig in template_nodes:
+                clone = clone_map.get(orig.id)
+                if not clone:
+                    continue
+                for edge in orig.iter_outgoing_edges():
+                    target_clone = clone_map.get(edge.target.id)
+                    if target_clone:
+                        clone.link(target_clone, edge.kind)
+
+            # Recreate parent-child relationships for assertions
+            for orig in template_nodes:
+                if orig.kind == NodeKind.ASSERTION:
+                    clone = clone_map[orig.id]
+                    for parent in orig.iter_parents():
+                        parent_clone = clone_map.get(parent.id)
+                        if parent_clone:
+                            parent_clone.add_child(clone)
+
+            # SATISFIES edge from declaring REQ to cloned root
+            cloned_root = clone_map.get(template_id)
+            if cloned_root:
+                declaring_node.link(cloned_root, EdgeKind.SATISFIES)
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -2019,6 +2156,9 @@ class GraphBuilder:
         Returns:
             Complete TraceGraph with detection data populated.
         """
+        # Phase 2: Instantiate templates before resolving links
+        self._instantiate_satisfies_templates()
+
         # Expand multi-assertion references before resolving
         expanded_links: list[tuple[str, str, EdgeKind]] = []
         for source_id, target_id, edge_kind in self._pending_links:

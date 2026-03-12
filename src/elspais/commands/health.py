@@ -577,21 +577,31 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
         if computed and stored != computed:
             mismatches.append({"id": node.id, "stored": stored, "computed": computed})
             # Flag requirements that Satisfy this template for review
+            # Instance clones have incoming INSTANCE edges from template
             from elspais.graph.relations import EdgeKind
 
-            for edge in node.iter_outgoing_edges():
-                if edge.kind == EdgeKind.SATISFIES:
-                    findings.append(
-                        HealthFinding(
-                            message=(
-                                f"Template {node.id} content changed;"
-                                f" review {edge.target.id}"
-                                f" (Satisfies: {node.id})"
-                            ),
-                            node_id=edge.target.id,
-                            related=[node.id],
-                        )
-                    )
+            for edge in node.iter_incoming_edges():
+                if edge.kind == EdgeKind.INSTANCE:
+                    # edge.source is the clone, find the declaring req
+                    # by looking for the clone's parent with SATISFIES edge
+                    clone = edge.source
+                    for parent in clone.iter_parents():
+                        for parent_edge in parent.iter_outgoing_edges():
+                            if (
+                                parent_edge.kind == EdgeKind.SATISFIES
+                                and parent_edge.target is clone
+                            ):
+                                findings.append(
+                                    HealthFinding(
+                                        message=(
+                                            f"Template {node.id} content changed;"
+                                            f" review {parent.id}"
+                                            f" (Satisfies: {node.id})"
+                                        ),
+                                        node_id=parent.id,
+                                        related=[node.id],
+                                    )
+                                )
 
     if not checked:
         return HealthCheck(
