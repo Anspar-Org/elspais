@@ -870,6 +870,66 @@ def check_spec_index_current(
     )
 
 
+# Implements: REQ-p00015-E
+def check_template_coverage(graph: TraceGraph) -> HealthCheck:
+    """Check template coverage for all requirements with SATISFIES declarations.
+
+    Reports gaps where a requirement declares Satisfies: but does not cover
+    all leaf assertions in the referenced template.
+    """
+    from elspais.graph import NodeKind
+
+    findings: list[HealthFinding] = []
+    checked = 0
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        sat_cov = node.get_metric("satisfies_coverage")
+        if not sat_cov:
+            continue
+
+        checked += 1
+        for template_id, metrics in sat_cov.items():
+            if metrics["missing"]:
+                findings.append(
+                    HealthFinding(
+                        message=(
+                            f"{node.id}: {template_id} coverage"
+                            f" {metrics['covered']}/{metrics['total']}"
+                            f" ({metrics['coverage_pct']:.0f}%)"
+                            f" — missing: {', '.join(metrics['missing'])}"
+                        ),
+                        node_id=node.id,
+                        related=[template_id] + metrics["missing"],
+                    )
+                )
+
+        # REQ-p00016-C: Report stray Implements: to N/A assertions as errors
+        na_errors = node.get_metric("satisfies_na_errors")
+        if na_errors:
+            for na_id in na_errors:
+                findings.append(
+                    HealthFinding(
+                        message=f"{node.id}: Implements: reference to N/A assertion {na_id}",
+                        node_id=node.id,
+                        related=[na_id],
+                    )
+                )
+
+    passed = len(findings) == 0
+    return HealthCheck(
+        name="spec.template_coverage",
+        passed=passed,
+        message=(
+            f"Template coverage: {checked} declarations checked, {len(findings)} gaps"
+            if checked > 0
+            else "No template coverage declarations found"
+        ),
+        category="spec",
+        severity="warning",
+        findings=findings,
+    )
+
+
 def run_spec_checks(
     graph: TraceGraph,
     config: ConfigLoader,
@@ -885,6 +945,7 @@ def run_spec_checks(
         check_spec_orphans(graph),
         check_spec_format_rules(graph, config),
         check_spec_hash_integrity(graph),
+        check_template_coverage(graph),
         check_spec_changelog_present(graph, config),
         check_spec_changelog_current(graph, config),
         check_spec_changelog_format(graph, config),

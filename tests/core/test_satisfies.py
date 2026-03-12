@@ -582,3 +582,80 @@ class TestNADeclarations:
         node = graph.find_by_id("REQ-p00044")
         sat_cov = node.get_metric("satisfies_coverage")
         assert sat_cov["REQ-p80001"]["coverage_pct"] == 100.0
+
+
+class TestHealthCoverageGaps:
+    """Health command reports template coverage gaps.
+
+    Validates REQ-p00015-E: Health reporting for template coverage.
+    """
+
+    def test_REQ_p00015_E_coverage_gap_reported(self):
+        """Incomplete template coverage produces a health finding."""
+        from tests.core.graph_test_helpers import build_graph
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "first"},
+                {"label": "B", "text": "second"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+
+        graph = build_graph(template, declaring)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        from elspais.commands.health import check_template_coverage
+
+        result = check_template_coverage(graph)
+
+        assert not result.passed
+        assert any("REQ-p00044" in f.message or f.node_id == "REQ-p00044" for f in result.findings)
+        assert any("REQ-p80001" in f.message for f in result.findings)
+
+    def test_REQ_p00015_E_full_coverage_passes(self):
+        """Complete template coverage produces a passing health check."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "only one"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/a.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        from elspais.commands.health import check_template_coverage
+
+        result = check_template_coverage(graph)
+        assert result.passed
