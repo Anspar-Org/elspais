@@ -3,11 +3,12 @@
 Covers: REQ-p00014, REQ-d00069-G, REQ-d00069-H, REQ-d00069-I
 """
 
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.patterns import PatternConfig
-from tests.core.graph_test_helpers import make_requirement
+from tests.core.graph_test_helpers import build_graph, make_requirement
 
 
 def _make_parser() -> RequirementParser:
@@ -320,6 +321,39 @@ class TestChangeDetection:
         assert any(
             f.node_id == "REQ-p00044" and "REQ-p80001" in (f.related or []) for f in result.findings
         )
+
+
+class TestGraphNodeStereotype:
+    """Validates REQ-p00014-C: GraphNode stereotype field.
+
+    The system SHALL classify nodes using a Stereotype field:
+    CONCRETE (default), TEMPLATE, or INSTANCE.
+    """
+
+    def test_REQ_p00014_C_default_stereotype_is_concrete(self):
+        """A newly created GraphNode should default to Stereotype.CONCRETE."""
+        node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
+        assert node.get_field("stereotype") == Stereotype.CONCRETE
+
+    def test_REQ_p00014_C_set_stereotype_template(self):
+        """Setting stereotype to TEMPLATE should persist via get_field."""
+        node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
+        node.set_field("stereotype", Stereotype.TEMPLATE)
+        assert node.get_field("stereotype") == Stereotype.TEMPLATE
+
+    def test_REQ_p00014_C_set_stereotype_instance(self):
+        """Setting stereotype to INSTANCE should persist via get_field."""
+        node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
+        node.set_field("stereotype", Stereotype.INSTANCE)
+        assert node.get_field("stereotype") == Stereotype.INSTANCE
+
+    def test_REQ_p00014_C_builder_sets_default_stereotype(self):
+        """GraphNodes built via GraphBuilder should have CONCRETE stereotype."""
+        req = make_requirement("REQ-p00001", title="Basic Requirement")
+        graph = build_graph(req)
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+        assert node.get_field("stereotype") == Stereotype.CONCRETE
 
 
 # NOTE: Tests for template coverage computation, N/A declarations,

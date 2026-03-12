@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -31,7 +32,9 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         "kind": node.kind.name,
         "label": node.get_label(),
         "uuid": node.uuid,
-        "content": node.get_all_content(),
+        "content": {
+            k: v.value if isinstance(v, Enum) else v for k, v in node.get_all_content().items()
+        },
     }
 
     # Include source location if present

@@ -92,9 +92,13 @@ class GraphNode:
     _content: dict[str, Any] = field(default_factory=dict, init=False)
     _metrics: dict[str, Any] = field(default_factory=dict, init=False)
 
+    # Implements: REQ-p00014-C
     def __post_init__(self, label: str) -> None:
-        """Initialize internal label from constructor parameter."""
+        """Initialize internal label and default stereotype."""
         self._label = label
+        from elspais.graph.relations import Stereotype
+
+        self._content.setdefault("stereotype", Stereotype.CONCRETE)
 
     def set_id(self, value: str) -> None:
         """Set the node's unique identifier.

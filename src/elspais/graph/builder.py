@@ -18,7 +18,7 @@ from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.graph.relations import EdgeKind
+from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.test_identity import build_test_id
 
 # Implements: REQ-d00071-C
@@ -1708,12 +1708,14 @@ class GraphBuilder:
             label=data.get("title", ""),
             source=source,
         )
+        # Implements: REQ-p00014-C
         node._content = {
             "level": data.get("level"),
             "status": data.get("status"),
             "hash": data.get("hash"),
             "body_text": data.get("body_text", ""),  # For hash computation
             "changelog": data.get("changelog", []),
+            "stereotype": Stereotype.CONCRETE,
         }
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
