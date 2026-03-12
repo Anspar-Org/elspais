@@ -218,3 +218,185 @@ class TestBuilderSatisfiesEdge:
 
         broken = graph.broken_references()
         assert any(br.target_id == "REQ-p99999" for br in broken)
+
+
+class TestTemplateCoverage:
+    """Per-instance template coverage computation.
+
+    Validates REQ-d00069-I: Template coverage computation.
+    """
+
+    def test_REQ_d00069_I_basic_template_coverage(self):
+        """Coverage computed for a simple template with 2 leaf assertions."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate identity"},
+                {"label": "B", "text": "two-factor auth"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Doc Mgmt",
+            satisfies=["REQ-p80001"],
+        )
+        dev_req = make_requirement(
+            "REQ-d00044",
+            title="Auth Module",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/auth.py",
+        )
+
+        graph = build_graph(template, declaring, dev_req, code)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert sat_cov is not None
+        assert "REQ-p80001" in sat_cov
+        assert sat_cov["REQ-p80001"]["total"] == 2
+        assert sat_cov["REQ-p80001"]["covered"] == 1
+        assert sat_cov["REQ-p80001"]["missing"] == ["REQ-p80001-B"]
+
+    def test_REQ_d00069_I_full_template_coverage(self):
+        """100% coverage when all leaf assertions are covered."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "first"},
+                {"label": "B", "text": "second"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code_a = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/a.py",
+        )
+        code_b = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-B"],
+            source_path="src/b.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code_a, code_b)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert sat_cov["REQ-p80001"]["coverage_pct"] == 100.0
+        assert sat_cov["REQ-p80001"]["missing"] == []
+
+    def test_REQ_d00069_I_hierarchical_template_coverage(self):
+        """Template with sub-requirements: leaf assertions are the leaves."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template_root = make_requirement(
+            "REQ-p80001",
+            title="Template Root",
+        )
+        template_child = make_requirement(
+            "REQ-o80001",
+            title="Auth Reqs",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "validate identity"},
+                {"label": "B", "text": "two-factor"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-o80001-A"],
+            source_path="src/auth.py",
+        )
+
+        graph = build_graph(
+            template_root,
+            template_child,
+            declaring,
+            dev,
+            code,
+        )
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert sat_cov is not None
+        assert "REQ-p80001" in sat_cov
+        assert sat_cov["REQ-p80001"]["total"] == 2
+        assert sat_cov["REQ-p80001"]["covered"] == 1
+
+    def test_REQ_d00069_I_satisfies_coverage_stored_as_metric(self):
+        """SATISFIES coverage is stored as a metric on the declaring node."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "only one"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/a.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert sat_cov["REQ-p80001"]["coverage_pct"] == 100.0

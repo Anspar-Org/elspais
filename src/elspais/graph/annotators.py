@@ -5,7 +5,7 @@
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
 # Implements: REQ-d00051-E, REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
-# Implements: REQ-d00069-B, REQ-d00069-D
+# Implements: REQ-d00069-B, REQ-d00069-D, REQ-d00069-I
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.
@@ -499,6 +499,157 @@ def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
     return counts
 
 
+def _collect_leaf_assertions(root_node: GraphNode, graph: TraceGraph) -> list[str]:
+    """Collect leaf assertion IDs from a template subtree.
+
+    Walks the template's subtree following REFINES edges downward from the root
+    and collects all ASSERTION children. Filters to leaves (assertions with no
+    REFINES children pointing at them).
+
+    Args:
+        root_node: The template root requirement node.
+        graph: The TraceGraph (unused but kept for consistency).
+
+    Returns:
+        Sorted list of leaf assertion IDs (e.g., ["REQ-p80001-A", "REQ-p80001-B"]).
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    # Collect all requirement nodes in template subtree via REFINES edges
+    template_reqs: list[GraphNode] = [root_node]
+    queue = [root_node]
+    while queue:
+        current = queue.pop(0)
+        for edge in current.iter_outgoing_edges():
+            if edge.kind == EdgeKind.REFINES and edge.target.kind == NodeKind.REQUIREMENT:
+                template_reqs.append(edge.target)
+                queue.append(edge.target)
+
+    # Collect all assertions from template requirements
+    all_assertion_ids: set[str] = set()
+    for req in template_reqs:
+        for child in req.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                all_assertion_ids.add(child.id)
+
+    # Leaf = no REFINES child pointing at it
+    refined_assertions: set[str] = set()
+    for req in template_reqs:
+        for child in req.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                for edge in child.iter_incoming_edges():
+                    if edge.kind == EdgeKind.REFINES:
+                        refined_assertions.add(child.id)
+                        break
+
+    return sorted(aid for aid in all_assertion_ids if aid not in refined_assertions)
+
+
+def _find_declaring_subtree_code_refs(declaring_node: GraphNode, graph: TraceGraph) -> set[str]:
+    """Find all template assertion IDs referenced by code in the declaring subtree.
+
+    Walks the declaring requirement's descendants (via IMPLEMENTS/REFINES edges)
+    and collects all template assertion IDs referenced by code's Implements: edges.
+
+    Args:
+        declaring_node: The declaring requirement node.
+        graph: The TraceGraph (unused but kept for consistency).
+
+    Returns:
+        Set of assertion IDs covered (e.g., {"REQ-p80001-A"}).
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    covered: set[str] = set()
+
+    # Collect descendant requirements
+    descendants: list[GraphNode] = [declaring_node]
+    queue = [declaring_node]
+    visited: set[str] = {declaring_node.id}
+    while queue:
+        current = queue.pop(0)
+        for edge in current.iter_outgoing_edges():
+            if edge.kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES):
+                child = edge.target
+                if child.kind == NodeKind.REQUIREMENT and child.id not in visited:
+                    visited.add(child.id)
+                    descendants.append(child)
+                    queue.append(child)
+
+    # For each descendant, find CODE children with assertion refs to template
+    for req in descendants:
+        for edge in req.iter_outgoing_edges():
+            if edge.kind.contributes_to_coverage() and edge.target.kind == NodeKind.CODE:
+                code_node = edge.target
+                # Check code's incoming IMPLEMENTS edges for assertion targets
+                for code_edge in code_node.iter_incoming_edges():
+                    if code_edge.kind == EdgeKind.IMPLEMENTS and code_edge.assertion_targets:
+                        parent_req = code_edge.source
+                        for label in code_edge.assertion_targets:
+                            covered.add(f"{parent_req.id}-{label}")
+
+    return covered
+
+
+def _compute_satisfies_coverage(graph: TraceGraph) -> None:
+    """Compute per-instance template coverage for all SATISFIES declarations.
+
+    For each requirement with SATISFIES edges, computes what fraction of the
+    template's leaf assertions are covered by Implements: references within
+    the declaring requirement's subtree.
+
+    Coverage is stored as a metric on the declaring node via
+    ``node.set_metric("satisfies_coverage", {...})``.
+
+    Args:
+        graph: The TraceGraph to annotate.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        satisfies_templates: list[tuple[GraphNode, list[str] | None]] = []
+
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.SATISFIES:
+                satisfies_templates.append((edge.source, edge.assertion_targets))
+
+        if not satisfies_templates:
+            continue
+
+        satisfies_coverage: dict[str, dict] = {}
+        covered_assertion_ids = _find_declaring_subtree_code_refs(node, graph)
+
+        for template_node, assertion_targets in satisfies_templates:
+            template_id = template_node.id
+
+            if assertion_targets:
+                leaf_ids = [f"{template_id}-{label}" for label in assertion_targets]
+            else:
+                leaf_ids = _collect_leaf_assertions(template_node, graph)
+
+            na_count = 0  # N/A handling added in Task 8
+            covered_ids = [aid for aid in leaf_ids if aid in covered_assertion_ids]
+            missing_ids = [aid for aid in leaf_ids if aid not in covered_assertion_ids]
+
+            total = len(leaf_ids)
+            covered_count = len(covered_ids)
+            denominator = total - na_count
+            coverage_pct = (covered_count / denominator * 100) if denominator > 0 else 0.0
+
+            satisfies_coverage[template_id] = {
+                "total": total,
+                "covered": covered_count,
+                "na": na_count,
+                "missing": missing_ids,
+                "coverage_pct": coverage_pct,
+            }
+
+        node.set_metric("satisfies_coverage", satisfies_coverage)
+
+
 def annotate_coverage(graph: TraceGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
@@ -694,6 +845,10 @@ def annotate_coverage(graph: TraceGraph) -> None:
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
         node.set_metric("coverage_pct", metrics.coverage_pct)
+
+    # Phase 2: Per-instance template coverage via SATISFIES edges
+    # Implements: REQ-d00069-I
+    _compute_satisfies_coverage(graph)
 
 
 # =============================================================================
