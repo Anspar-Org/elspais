@@ -37,6 +37,7 @@ Configuration checks always run as part of the full health check. For focused co
 | `spec.no_duplicates` | No duplicate requirement IDs |
 | `spec.implements_resolve` | All Implements: references resolve |
 | `spec.refines_resolve` | All Refines: references resolve |
+| `spec.template_coverage` | Template coverage gaps reported via `check_template_coverage()` |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.orphans` | No orphan requirements (non-PRD without parents) |
 

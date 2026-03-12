@@ -506,7 +506,7 @@ def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
     return counts
 
 
-def _collect_leaf_assertions(root_node: GraphNode, graph: TraceGraph) -> list[str]:
+def _collect_leaf_assertions(root_node: GraphNode) -> list[str]:
     """Collect leaf assertion IDs from a template subtree.
 
     Walks the template's subtree following REFINES edges downward from the root
@@ -515,19 +515,20 @@ def _collect_leaf_assertions(root_node: GraphNode, graph: TraceGraph) -> list[st
 
     Args:
         root_node: The template root requirement node.
-        graph: The TraceGraph (unused but kept for consistency).
 
     Returns:
         Sorted list of leaf assertion IDs (e.g., ["REQ-p80001-A", "REQ-p80001-B"]).
     """
+    from collections import deque
+
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
     # Collect all requirement nodes in template subtree via REFINES edges
     template_reqs: list[GraphNode] = [root_node]
-    queue = [root_node]
+    queue: deque[GraphNode] = deque([root_node])
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         for edge in current.iter_outgoing_edges():
             if edge.kind == EdgeKind.REFINES and edge.target.kind == NodeKind.REQUIREMENT:
                 template_reqs.append(edge.target)
@@ -553,7 +554,7 @@ def _collect_leaf_assertions(root_node: GraphNode, graph: TraceGraph) -> list[st
     return sorted(aid for aid in all_assertion_ids if aid not in refined_assertions)
 
 
-def _find_declaring_subtree_code_refs(declaring_node: GraphNode, graph: TraceGraph) -> set[str]:
+def _find_declaring_subtree_code_refs(declaring_node: GraphNode) -> set[str]:
     """Find all template assertion IDs referenced by code in the declaring subtree.
 
     Walks the declaring requirement's descendants (via IMPLEMENTS/REFINES edges)
@@ -561,11 +562,12 @@ def _find_declaring_subtree_code_refs(declaring_node: GraphNode, graph: TraceGra
 
     Args:
         declaring_node: The declaring requirement node.
-        graph: The TraceGraph (unused but kept for consistency).
 
     Returns:
         Set of assertion IDs covered (e.g., {"REQ-p80001-A"}).
     """
+    from collections import deque
+
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
@@ -573,10 +575,10 @@ def _find_declaring_subtree_code_refs(declaring_node: GraphNode, graph: TraceGra
 
     # Collect descendant requirements
     descendants: list[GraphNode] = [declaring_node]
-    queue = [declaring_node]
+    queue: deque[GraphNode] = deque([declaring_node])
     visited: set[str] = {declaring_node.id}
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         for edge in current.iter_outgoing_edges():
             if edge.kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES):
                 child = edge.target
@@ -627,7 +629,17 @@ def _compute_satisfies_coverage(graph: TraceGraph) -> None:
             continue
 
         satisfies_coverage: dict[str, dict] = {}
-        covered_assertion_ids = _find_declaring_subtree_code_refs(node, graph)
+        covered_assertion_ids = _find_declaring_subtree_code_refs(node)
+
+        # Detect N/A declarations in declaring requirement's assertions (once per node)
+        # Implements: REQ-p00016
+        na_assertion_ids: set[str] = set()
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                assertion_text = child.get_label() or ""
+                na_match = _NA_PATTERN.search(assertion_text)
+                if na_match:
+                    na_assertion_ids.add(na_match.group(1))
 
         for template_node, assertion_targets in satisfies_templates:
             template_id = template_node.id
@@ -635,18 +647,7 @@ def _compute_satisfies_coverage(graph: TraceGraph) -> None:
             if assertion_targets:
                 leaf_ids = [f"{template_id}-{label}" for label in assertion_targets]
             else:
-                leaf_ids = _collect_leaf_assertions(template_node, graph)
-
-            # Detect N/A declarations in declaring requirement's assertions
-            # Implements: REQ-p00016
-            na_assertion_ids: set[str] = set()
-            for child in node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    # Assertion text is stored as the node label
-                    assertion_text = child.get_label() or ""
-                    na_match = _NA_PATTERN.search(assertion_text)
-                    if na_match:
-                        na_assertion_ids.add(na_match.group(1))
+                leaf_ids = _collect_leaf_assertions(template_node)
 
             na_count = len([aid for aid in leaf_ids if aid in na_assertion_ids])
 
