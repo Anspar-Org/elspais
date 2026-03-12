@@ -35,11 +35,11 @@ class EdgeKind(Enum):
     INSTANCE = "instance"    # clone -> original template node
 ```
 
-Each cloned node has an INSTANCE edge to its template original, enabling bidirectional navigation between templates and their instances.
+Each cloned node has an INSTANCE edge to its template original, enabling bidirectional navigation between templates and their instances. INSTANCE edges do NOT contribute to coverage (`contributes_to_coverage() -> False`).
 
 ### EdgeKind: SATISFIES (existing)
 
-Connects the declaring requirement to the cloned template root. Already exists in the codebase.
+Connects the declaring requirement to the cloned template root. Already exists in the codebase. SATISFIES edges do NOT contribute to coverage — coverage flows through `Implements:` edges on cloned instance assertions, not through the structural SATISFIES link itself.
 
 ## Builder Phase Changes
 
