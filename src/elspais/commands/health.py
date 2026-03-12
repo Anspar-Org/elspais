@@ -558,7 +558,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     )
 
 
-# Implements: REQ-p00017
+# Implements: REQ-p00004
 def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     """Check that stored requirement hashes match computed hashes."""
     from elspais.commands.validate import compute_hash_for_node

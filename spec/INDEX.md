@@ -21,9 +21,8 @@
 | REQ-p00011 | Review Package Lifecycle                         | prd-elspais.md           | 0c09b663 |
 | REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
 | REQ-p00013 | Automated Testing                                | prd-elspais.md           | bedb66fd |
-| REQ-p00014 | Satisfies Relationship                           | prd-cross-cutting.md     | a5edc1b2 |
+| REQ-p00014 | Satisfies Relationship                           | prd-cross-cutting.md     | c3352c1a |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
-| REQ-p00044 | Document Management System                       | prd-cross-cutting.md     |          |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |
@@ -32,7 +31,7 @@
 
 | ID         | Title                               | File                     | Hash     |
 | ---------- | ----------------------------------- | ------------------------ | -------- |
-| REQ-o00050 | Graph Builder as Single Entry Point | 07-graph-architecture.md | cf6ace9c |
+| REQ-o00050 | Graph Builder as Single Entry Point | 07-graph-architecture.md | e3a0add2 |
 | REQ-o00051 | Composable Annotation Design        | 07-graph-architecture.md | c73a6e32 |
 | REQ-o00060 | MCP Core Query Tools                | 08-mcp-server.md         | 73c31134 |
 | REQ-o00061 | MCP Workspace Context Tools         | 08-mcp-server.md         | 0aa9dff4 |
@@ -77,7 +76,7 @@
 | REQ-d00066 | Test Coverage Tool Implementation            | 08-mcp-server.md         | 6ac6b51f |
 | REQ-d00067 | Uncovered Assertions Tool Implementation     | 08-mcp-server.md         | 7044d63d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation | 08-mcp-server.md         | c9d5ad87 |
-| REQ-d00069 | Indirect Coverage Source                     | 07-graph-architecture.md | 586121e4 |
+| REQ-d00069 | Indirect Coverage Source                     | 07-graph-architecture.md | 114709f5 |
 | REQ-d00070 | Indirect Coverage Toggle Display             | 07-graph-architecture.md | d483becb |
 | REQ-d00071 | Unified Root vs Orphan Classification        | 07-graph-architecture.md | 46d2a3e2 |
 | REQ-d00072 | Link Suggestion Core Engine                  | 07-graph-architecture.md | 2cd50cdc |

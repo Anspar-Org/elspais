@@ -54,7 +54,7 @@ E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reco
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
-*End* *Graph Builder as Single Entry Point* | **Hash**: cf6ace9c
+*End* *Graph Builder as Single Entry Point* | **Hash**: e3a0add2
 ---
 
 ## REQ-o00051: Composable Annotation Design
@@ -246,7 +246,7 @@ K. The system SHALL report coverage gaps on template instance nodes through the 
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-*End* *Indirect Coverage Source* | **Hash**: 586121e4
+*End* *Indirect Coverage Source* | **Hash**: 114709f5
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display

@@ -22,7 +22,7 @@ C. The system SHALL classify nodes using a `Stereotype` field: `CONCRETE` (defau
 
 D. The system SHALL attribute `Implements:` references to template assertions to the correct instance by finding a sibling `Implements:` reference to a CONCRETE node in the same source file, walking that node's ancestors to the first node with a `Satisfies:` declaration matching the template, and constructing the instance ID from the declaring node's ID and the referenced node's ID.
 
-*End* *Satisfies Relationship* | **Hash**: a5edc1b2
+*End* *Satisfies Relationship* | **Hash**: c3352c1a
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
@@ -70,8 +70,8 @@ No special ID prefix is required. Any requirement can serve as a template.
 
 A requirement declares template compliance using `Satisfies:` in its metadata:
 
-```markdown
-## REQ-p00044: Document Management System
+```text
+## REQ-pXXXXX: Document Management System
 
 **Level**: PRD | **Status**: Active | **Implements**: -
 
@@ -138,10 +138,12 @@ REQ-p00044 --SATISFIES--> REQ-p00044::REQ-p80001 (INSTANCE)
 
 When code references a template assertion, the system must determine which instance the reference belongs to:
 
-```python
-# document_mgmt/auth.py
-# Implements: REQ-d00044-A
-# Implements: REQ-o80001-A
+In file `document_mgmt/auth.py`, two comment annotations link the code
+to both a concrete assertion and a template assertion:
+
+```text
+Implements: REQ-d00044-A
+Implements: REQ-o80001-A
 ```
 
 Attribution:
