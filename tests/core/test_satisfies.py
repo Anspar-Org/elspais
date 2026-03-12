@@ -659,3 +659,106 @@ class TestHealthCoverageGaps:
 
         result = check_template_coverage(graph)
         assert result.passed
+
+
+class TestSatisfiesEndToEnd:
+    """Full pipeline: parse -> build -> annotate -> health.
+
+    Validates REQ-d00069-I: End-to-end template coverage.
+    """
+
+    def test_REQ_d00069_I_full_pipeline(self):
+        """End-to-end: template with hierarchy, satisfies, code refs, N/A, coverage."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        # Template tree:
+        #   REQ-p80001 (root)
+        #     REQ-o80001 (refines root, 2 assertions A,B)
+        #     REQ-o80002 (refines root, 2 assertions A,B)
+        template_root = make_requirement("REQ-p80001", title="Signature Std")
+        template_auth = make_requirement(
+            "REQ-o80001",
+            title="Authentication",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "validate identity"},
+                {"label": "B", "text": "two-factor"},
+            ],
+        )
+        template_integrity = make_requirement(
+            "REQ-o80002",
+            title="Record Integrity",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "link records"},
+                {"label": "B", "text": "tamper-evident"},
+            ],
+        )
+
+        # Declaring requirement - satisfies template, one assertion is N/A
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Doc Mgmt",
+            satisfies=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "manage documents"},
+                {"label": "B", "text": "REQ-o80002-B SHALL be NOT APPLICABLE"},
+            ],
+        )
+
+        # Dev implementation
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Doc Auth",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+
+        # Code covers 2 of 4 template assertions (minus 1 N/A = 2/3)
+        code1 = make_code_ref(
+            ["REQ-d00044", "REQ-o80001-A"],
+            source_path="src/auth.py",
+        )
+        code2 = make_code_ref(
+            ["REQ-d00044", "REQ-o80002-A"],
+            source_path="src/integrity.py",
+        )
+
+        graph = build_graph(
+            template_root,
+            template_auth,
+            template_integrity,
+            declaring,
+            dev,
+            code1,
+            code2,
+        )
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+
+        assert sat_cov is not None
+        assert "REQ-p80001" in sat_cov
+        cov = sat_cov["REQ-p80001"]
+        assert cov["total"] == 4
+        assert cov["na"] == 1
+        assert cov["covered"] == 2
+        # 2 / (4 - 1) = 66.7%
+        assert abs(cov["coverage_pct"] - 66.7) < 1.0
+        # REQ-o80001-B is missing (not covered, not N/A)
+        assert "REQ-o80001-B" in cov["missing"]
+        # REQ-o80002-B is NOT in missing (it's N/A)
+        assert "REQ-o80002-B" not in cov["missing"]
+
+        # Health check should report the gap
+        from elspais.commands.health import check_template_coverage
+
+        health = check_template_coverage(graph)
+        assert not health.passed
+        assert any("REQ-o80001-B" in f.message for f in health.findings)
