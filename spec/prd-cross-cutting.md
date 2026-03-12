@@ -97,7 +97,7 @@ class EdgeKind(Enum):
     INSTANCE = "instance"      # cloned node -> original template node
 ```
 
-`SATISFIES` connects the declaring requirement to the cloned template root. `INSTANCE` connects each cloned node to its original, enabling navigation from templates to their instances. Neither `SATISFIES` nor `INSTANCE` contributes to coverage (`contributes_to_coverage() -> False`) — coverage flows through `Implements:` edges on the cloned instance assertions.
+`SATISFIES` connects the declaring requirement to the cloned template root. `INSTANCE` connects each cloned node to its original, enabling navigation from templates to their instances. Neither `SATISFIES` nor `INSTANCE` contributes to coverage directly (`contributes_to_coverage() -> False`), but coverage propagates through them — like `REFINES`. This means a template with two instances, one fully implemented and one not, will show 50% coverage on the template node.
 
 ### 4. Stereotype Classification
 
