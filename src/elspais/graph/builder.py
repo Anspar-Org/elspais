@@ -1768,6 +1768,10 @@ class GraphBuilder:
         for refine_ref in data.get("refines", []):
             self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES))
 
+        # Implements: REQ-d00069-G
+        for sat_ref in data.get("satisfies", []):
+            self._pending_links.append((req_id, sat_ref, EdgeKind.SATISFIES))
+
     def _add_journey(self, content: ParsedContent) -> None:
         """Add a user journey node."""
         data = content.parsed_data

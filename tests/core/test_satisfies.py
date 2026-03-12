@@ -129,3 +129,92 @@ class TestHelperSatisfies:
     def test_REQ_d00069_G_make_requirement_without_satisfies(self):
         req = make_requirement("REQ-p00001", title="Basic")
         assert req.parsed_data["satisfies"] == []
+
+
+class TestBuilderSatisfiesEdge:
+    """GraphBuilder creates SATISFIES edges from parsed satisfies data.
+
+    Validates REQ-d00069-G: SATISFIES edge resolution.
+    """
+
+    def test_REQ_d00069_G_satisfies_creates_edge(self):
+        """A Satisfies: declaration creates a SATISFIES edge to the template."""
+        from tests.core.graph_test_helpers import build_graph
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        template_node = graph.find_by_id("REQ-p80001")
+        assert template_node is not None
+
+        satisfies_edges = list(template_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        assert len(satisfies_edges) == 1
+        assert satisfies_edges[0].target.id == "REQ-p00044"
+
+    def test_REQ_d00069_G_satisfies_assertion_target(self):
+        """Satisfies: REQ-p80001-A creates edge with assertion_targets."""
+        from tests.core.graph_test_helpers import build_graph
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "first obligation"},
+                {"label": "B", "text": "second obligation"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001-A"],
+        )
+        graph = build_graph(template, declaring)
+
+        template_node = graph.find_by_id("REQ-p80001")
+        satisfies_edges = list(template_node.iter_edges_by_kind(EdgeKind.SATISFIES))
+        assert len(satisfies_edges) == 1
+        assert satisfies_edges[0].assertion_targets == ["A"]
+
+    def test_REQ_d00069_G_multiple_satisfies(self):
+        """Multiple Satisfies: targets create separate edges."""
+        from tests.core.graph_test_helpers import build_graph
+
+        t1 = make_requirement("REQ-p80001", title="Template 1")
+        t2 = make_requirement("REQ-p80010", title="Template 2")
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001", "REQ-p80010"],
+        )
+        graph = build_graph(t1, t2, declaring)
+
+        t1_node = graph.find_by_id("REQ-p80001")
+        t2_node = graph.find_by_id("REQ-p80010")
+        assert len(list(t1_node.iter_edges_by_kind(EdgeKind.SATISFIES))) == 1
+        assert len(list(t2_node.iter_edges_by_kind(EdgeKind.SATISFIES))) == 1
+
+    def test_REQ_d00069_G_satisfies_broken_reference(self):
+        """Satisfies: to nonexistent target records a broken reference."""
+        from tests.core.graph_test_helpers import build_graph
+
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p99999"],
+        )
+        graph = build_graph(declaring)
+
+        broken = graph.broken_references()
+        assert any(br.target_id == "REQ-p99999" for br in broken)
