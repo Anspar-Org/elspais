@@ -67,6 +67,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
                 "implements": ["Implements", "IMPLEMENTS"],
                 "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
                 "refines": ["Refines", "REFINES"],
+                # Implements: REQ-d00069-H
+                "satisfies": ["Satisfies", "SATISFIES"],
             },
         },
         "overrides": [],
