@@ -9,6 +9,7 @@ traceability graph from parsed content.
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -20,6 +21,12 @@ from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.test_identity import build_test_id
+
+
+def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
+    """Yield node itself, then all its ancestors."""
+    return itertools.chain([node], node.ancestors())
+
 
 # Implements: REQ-d00071-C
 # Default satellite kinds: children of these types don't count as "meaningful"
@@ -2147,6 +2154,141 @@ class GraphBuilder:
             if cloned_root:
                 declaring_node.link(cloned_root, EdgeKind.SATISFIES)
 
+    # Implements: REQ-p00014-D
+    def _attribute_template_refs(
+        self,
+        links: list[tuple[str, str, EdgeKind]],
+    ) -> list[tuple[str, str, EdgeKind]]:
+        """Redirect Implements: refs targeting TEMPLATE nodes to instance clones.
+
+        For each link targeting a TEMPLATE node:
+        1. Find the template root (walk up REFINES edges)
+        2. Find sibling Implements: refs in the same source file targeting CONCRETE nodes
+        3. Walk each concrete target's ancestors to find a SATISFIES declaration
+           matching the template root
+        4. First match wins — redirect to instance clone ID
+
+        Returns:
+            Updated link list with template refs redirected.
+        """
+        if not self._satisfies_links:
+            return links
+
+        # Build file -> source_ids index from nodes
+        file_to_sources: dict[str, set[str]] = {}
+        for node_id, node in self._nodes.items():
+            if node.source:
+                file_to_sources.setdefault(node.source.path, set()).add(node_id)
+
+        # Build source_id -> file index from link source nodes
+        source_file_map: dict[str, str] = {}
+        for source_id, _, _ in links:
+            node = self._nodes.get(source_id)
+            if node and node.source:
+                source_file_map[source_id] = node.source.path
+
+        # Group links by source file
+        file_links: dict[str, list[int]] = {}  # file -> list of indices
+        for idx, (source_id, _, _) in enumerate(links):
+            file_path = source_file_map.get(source_id)
+            if file_path:
+                file_links.setdefault(file_path, []).append(idx)
+
+        # Find template root for a given node (walk up REFINES edges)
+        def find_template_root(node: GraphNode) -> GraphNode:
+            current = node
+            # Walk up through parents connected by REFINES
+            while True:
+                found_parent = False
+                for edge in current.iter_incoming_edges():
+                    if edge.kind == EdgeKind.REFINES:
+                        current = edge.source
+                        found_parent = True
+                        break
+                if not found_parent:
+                    break
+            return current
+
+        result = list(links)
+
+        for _file_path, indices in file_links.items():
+            # Separate template and concrete targets in this file
+            template_indices: list[int] = []
+            concrete_targets: list[str] = []
+
+            for idx in indices:
+                _, target_id, _ = result[idx]
+                target = self._nodes.get(target_id)
+                if target and target.get_field("stereotype") == Stereotype.TEMPLATE:
+                    template_indices.append(idx)
+                elif target and target.get_field("stereotype") != Stereotype.TEMPLATE:
+                    concrete_targets.append(target_id)
+
+            if not template_indices:
+                continue
+
+            for idx in template_indices:
+                source_id, target_id, edge_kind = result[idx]
+                target = self._nodes.get(target_id)
+                if not target:
+                    continue
+
+                # Find which template root this target belongs to
+                # For assertions, find parent REQ first, then walk up
+                if target.kind == NodeKind.ASSERTION:
+                    parent_reqs = [
+                        p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT
+                    ]
+                    template_root = find_template_root(parent_reqs[0]) if parent_reqs else target
+                else:
+                    template_root = find_template_root(target)
+
+                # Find attribution through concrete siblings
+                attributed = False
+                for concrete_id in concrete_targets:
+                    concrete = self._nodes.get(concrete_id)
+                    if not concrete:
+                        continue
+                    # Walk up concrete target and its ancestors to find SATISFIES
+                    # matching the template root
+                    for ancestor in _chain_self_and_ancestors(concrete):
+                        for edge in ancestor.iter_outgoing_edges():
+                            if edge.kind == EdgeKind.SATISFIES:
+                                # Check if this SATISFIES clone's INSTANCE edge
+                                # points to our template root
+                                clone = edge.target
+                                for inst_edge in clone.iter_outgoing_edges():
+                                    if (
+                                        inst_edge.kind == EdgeKind.INSTANCE
+                                        and inst_edge.target.id == template_root.id
+                                    ):
+                                        # Found it! Redirect to instance ID
+                                        instance_id = f"{ancestor.id}::{target_id}"
+                                        if self._nodes.get(instance_id):
+                                            result[idx] = (source_id, instance_id, edge_kind)
+                                            attributed = True
+                                            break
+                                if attributed:
+                                    break
+                        if attributed:
+                            break
+                    if attributed:
+                        break
+
+                if not attributed:
+                    # No attribution found — record as broken reference
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                        )
+                    )
+                    # Remove the link so it doesn't create an edge to the template
+                    result[idx] = (source_id, f"__unattributed__{target_id}", edge_kind)
+
+        return result
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -2164,6 +2306,10 @@ class GraphBuilder:
         for source_id, target_id, edge_kind in self._pending_links:
             for resolved_target in self._expand_multi_assertion(target_id):
                 expanded_links.append((source_id, resolved_target, edge_kind))
+
+        # Implements: REQ-p00014-D
+        # Phase 3: File-based attribution for template references
+        expanded_links = self._attribute_template_refs(expanded_links)
 
         # Resolve pending links
         for source_id, target_id, edge_kind in expanded_links:

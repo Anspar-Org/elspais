@@ -8,7 +8,7 @@ from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.patterns import PatternConfig
-from tests.core.graph_test_helpers import build_graph, make_requirement
+from tests.core.graph_test_helpers import build_graph, make_code_ref, make_requirement
 
 
 def _make_parser() -> RequirementParser:
@@ -570,3 +570,238 @@ class TestTemplateInstantiation:
         assert clone.source is not None, "Cloned node should have source location"
         assert clone.source.path == original.source.path
         assert clone.source.line == original.source.line
+
+
+class TestFileBasedAttribution:
+    """Validates REQ-p00014-D: File-based attribution algorithm.
+
+    When code has `# Implements: REQ-o80001-A` targeting a TEMPLATE assertion,
+    the builder should redirect it to the correct INSTANCE clone by looking at
+    other `Implements:` references in the same source file that target CONCRETE
+    nodes, walking up to find the declaring requirement with a Satisfies: match.
+    """
+
+    def test_REQ_p00014_D_template_ref_redirected_to_instance(self):
+        """Code ref to a template assertion in a file with a concrete sibling
+        should be redirected to the instance clone.
+
+        Setup:
+        - Template REQ-p80001 with child REQ-o80001 (refines) with assertion A
+        - Declaring REQ-p00044 with satisfies=["REQ-p80001"]
+        - Code ref line 1 in src/auth.py: implements REQ-p00044 (concrete)
+        - Code ref line 5 in src/auth.py: implements REQ-o80001-A (template)
+
+        After build, the code node for line 5 should be a child of the instance
+        clone REQ-p00044::REQ-o80001, NOT the template original REQ-o80001.
+        """
+        template_root = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[{"label": "A", "text": "root obligation"}],
+        )
+        template_child = make_requirement(
+            "REQ-o80001",
+            title="Signature Ops",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[{"label": "A", "text": "validate signer"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+
+        # Code refs in same file — concrete sibling + template target
+        code_concrete = make_code_ref(
+            implements=["REQ-p00044"],
+            source_path="src/auth.py",
+            start_line=1,
+        )
+        code_template = make_code_ref(
+            implements=["REQ-o80001-A"],
+            source_path="src/auth.py",
+            start_line=5,
+        )
+
+        graph = build_graph(
+            template_root,
+            template_child,
+            declaring,
+            code_concrete,
+            code_template,
+        )
+
+        # The instance clone of the child should exist
+        instance_child = graph.find_by_id("REQ-p00044::REQ-o80001")
+        assert instance_child is not None, "Instance clone REQ-p00044::REQ-o80001 should exist"
+
+        # The code node for line 5 should be a child of the instance clone,
+        # NOT the template original
+        code_node_id = "code:src/auth.py:5"
+        code_node = graph.find_by_id(code_node_id)
+        assert code_node is not None, f"Code node {code_node_id} should exist"
+
+        # Check parents: code node should be parented under the instance clone
+        parent_ids = {p.id for p in code_node.iter_parents()}
+        assert "REQ-p00044::REQ-o80001" in parent_ids, (
+            f"Code node should be child of instance clone, " f"but parents are: {parent_ids}"
+        )
+
+        # Template original should NOT have the code node as a child
+        template_original = graph.find_by_id("REQ-o80001")
+        template_child_ids = {c.id for c in template_original.iter_children()}
+        assert (
+            code_node_id not in template_child_ids
+        ), "Template original should NOT have the code node as a child"
+
+    def test_REQ_p00014_D_no_attribution_without_concrete_sibling(self):
+        """Code ref to a template assertion with NO concrete sibling in the
+        same file should not be linked to the template original.
+
+        Without a concrete sibling, the builder cannot determine which instance
+        to attribute the reference to. It should become a broken reference or
+        remain unlinked from the template.
+        """
+        template_root = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[{"label": "A", "text": "root obligation"}],
+        )
+        template_child = make_requirement(
+            "REQ-o80001",
+            title="Signature Ops",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[{"label": "A", "text": "validate signer"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+
+        # Only a template target — no concrete sibling in same file
+        code_orphan = make_code_ref(
+            implements=["REQ-o80001-A"],
+            source_path="src/orphan.py",
+            start_line=1,
+        )
+
+        graph = build_graph(
+            template_root,
+            template_child,
+            declaring,
+            code_orphan,
+        )
+
+        code_node_id = "code:src/orphan.py:1"
+
+        # Template original should NOT have the code node as a child
+        # (it's a TEMPLATE node — direct linking is forbidden)
+        template_original = graph.find_by_id("REQ-o80001")
+        template_child_ids = {c.id for c in template_original.iter_children()}
+        assert code_node_id not in template_child_ids, (
+            "Template original should NOT have code ref as child "
+            "when no concrete sibling exists for attribution"
+        )
+
+        # Should appear as a broken reference or warning
+        broken = graph.broken_references()
+        broken_target_ids = {br.target_id for br in broken}
+        # The ref to REQ-o80001-A should be broken (unresolvable without context)
+        assert "REQ-o80001-A" in broken_target_ids, (
+            f"Template ref without concrete sibling should be broken, "
+            f"but broken refs are: {broken_target_ids}"
+        )
+
+    def test_REQ_p00014_D_multiple_templates_attributed_independently(self):
+        """Multiple template refs in the same file should each be redirected
+        to the correct instance clone independently.
+
+        Setup:
+        - Two templates: REQ-p80001 (child REQ-o80001) and REQ-p80010 (child REQ-o80010)
+        - REQ-p00044 satisfies both
+        - Code refs in same file: concrete to REQ-p00044, template to both
+        """
+        t1_root = make_requirement(
+            "REQ-p80001",
+            title="Template 1",
+            assertions=[{"label": "A", "text": "t1 obligation"}],
+        )
+        t1_child = make_requirement(
+            "REQ-o80001",
+            title="Template 1 Ops",
+            level="OPS",
+            refines=["REQ-p80001"],
+            assertions=[{"label": "A", "text": "t1 child obligation"}],
+        )
+        t2_root = make_requirement(
+            "REQ-p80010",
+            title="Template 2",
+            assertions=[{"label": "A", "text": "t2 obligation"}],
+        )
+        t2_child = make_requirement(
+            "REQ-o80010",
+            title="Template 2 Ops",
+            level="OPS",
+            refines=["REQ-p80010"],
+            assertions=[{"label": "A", "text": "t2 child obligation"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001", "REQ-p80010"],
+        )
+
+        # All code refs in same file
+        code_concrete = make_code_ref(
+            implements=["REQ-p00044"],
+            source_path="src/multi.py",
+            start_line=1,
+        )
+        code_t1 = make_code_ref(
+            implements=["REQ-o80001-A"],
+            source_path="src/multi.py",
+            start_line=10,
+        )
+        code_t2 = make_code_ref(
+            implements=["REQ-o80010-A"],
+            source_path="src/multi.py",
+            start_line=20,
+        )
+
+        graph = build_graph(
+            t1_root,
+            t1_child,
+            t2_root,
+            t2_child,
+            declaring,
+            code_concrete,
+            code_t1,
+            code_t2,
+        )
+
+        # Both instance clones should exist
+        instance_1 = graph.find_by_id("REQ-p00044::REQ-o80001")
+        instance_2 = graph.find_by_id("REQ-p00044::REQ-o80010")
+        assert instance_1 is not None, "Instance clone for template 1 child should exist"
+        assert instance_2 is not None, "Instance clone for template 2 child should exist"
+
+        # Code node for t1 (line 10) should be child of instance clone 1
+        code_t1_node = graph.find_by_id("code:src/multi.py:10")
+        assert code_t1_node is not None
+        t1_parent_ids = {p.id for p in code_t1_node.iter_parents()}
+        assert "REQ-p00044::REQ-o80001" in t1_parent_ids, (
+            f"Code ref to t1 template should be child of instance clone 1, "
+            f"but parents are: {t1_parent_ids}"
+        )
+
+        # Code node for t2 (line 20) should be child of instance clone 2
+        code_t2_node = graph.find_by_id("code:src/multi.py:20")
+        assert code_t2_node is not None
+        t2_parent_ids = {p.id for p in code_t2_node.iter_parents()}
+        assert "REQ-p00044::REQ-o80010" in t2_parent_ids, (
+            f"Code ref to t2 template should be child of instance clone 2, "
+            f"but parents are: {t2_parent_ids}"
+        )
