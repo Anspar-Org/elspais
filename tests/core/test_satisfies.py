@@ -311,6 +311,152 @@ class TestTemplateCoverage:
         assert sat_cov["REQ-p80001"]["coverage_pct"] == 100.0
         assert sat_cov["REQ-p80001"]["missing"] == []
 
+
+class TestNADeclarations:
+    """N/A assertions exclude template assertions from coverage.
+
+    Validates REQ-p00016: N/A assertion handling.
+    """
+
+    def test_REQ_p00016_A_na_reduces_denominator(self):
+        """N/A assertion excluded from coverage target."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "required obligation"},
+                {"label": "B", "text": "another obligation"},
+                {"label": "C", "text": "optional obligation"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "own work"},
+                {"label": "B", "text": "REQ-p80001-C SHALL be NOT APPLICABLE"},
+            ],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code_a = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/a.py",
+        )
+        code_b = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-B"],
+            source_path="src/b.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code_a, code_b)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert sat_cov["REQ-p80001"]["total"] == 3
+        assert sat_cov["REQ-p80001"]["na"] == 1
+        assert sat_cov["REQ-p80001"]["covered"] == 2
+        # coverage = 2 / (3 - 1) = 100%
+        assert sat_cov["REQ-p80001"]["coverage_pct"] == 100.0
+
+    def test_REQ_p00016_B_na_assertion_not_in_missing(self):
+        """N/A assertions should not appear in missing list."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "required"},
+                {"label": "B", "text": "not applicable"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "REQ-p80001-B SHALL be NOT APPLICABLE"},
+            ],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-A"],
+            source_path="src/a.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        assert "REQ-p80001-B" not in sat_cov["REQ-p80001"]["missing"]
+
+    def test_REQ_p00016_C_implements_na_assertion_produces_error(self):
+        """Implements: reference to a N/A assertion produces error."""
+        from tests.core.graph_test_helpers import build_graph, make_code_ref
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Template",
+            assertions=[
+                {"label": "A", "text": "required"},
+                {"label": "B", "text": "not needed"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+            assertions=[
+                {"label": "A", "text": "REQ-p80001-B SHALL be NOT APPLICABLE"},
+            ],
+        )
+        dev = make_requirement(
+            "REQ-d00044",
+            title="Impl",
+            level="DEV",
+            implements=["REQ-p00044"],
+        )
+        # Code references the N/A assertion - this is an error
+        code = make_code_ref(
+            ["REQ-d00044", "REQ-p80001-B"],
+            source_path="src/bad.py",
+        )
+
+        graph = build_graph(template, declaring, dev, code)
+
+        from elspais.graph.annotators import annotate_coverage
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-p00044")
+        sat_cov = node.get_metric("satisfies_coverage")
+        # B is N/A - should NOT count as covered
+        assert sat_cov["REQ-p80001"]["covered"] == 0
+        # Should have an error recorded
+        na_errors = node.get_metric("satisfies_na_errors")
+        assert na_errors is not None
+        assert "REQ-p80001-B" in na_errors
+
     def test_REQ_d00069_I_hierarchical_template_coverage(self):
         """Template with sub-requirements: leaf assertions are the leaves."""
         from tests.core.graph_test_helpers import build_graph, make_code_ref

@@ -23,9 +23,16 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+# Implements: REQ-p00016
+_NA_PATTERN = re.compile(
+    r"([\w-]+-[A-Z0-9]+)\s+SHALL\s+be\s+NOT\s+APPLICABLE",
+    re.IGNORECASE,
+)
 
 if TYPE_CHECKING:
     from elspais.graph import NodeKind
@@ -630,9 +637,35 @@ def _compute_satisfies_coverage(graph: TraceGraph) -> None:
             else:
                 leaf_ids = _collect_leaf_assertions(template_node, graph)
 
-            na_count = 0  # N/A handling added in Task 8
-            covered_ids = [aid for aid in leaf_ids if aid in covered_assertion_ids]
-            missing_ids = [aid for aid in leaf_ids if aid not in covered_assertion_ids]
+            # Detect N/A declarations in declaring requirement's assertions
+            # Implements: REQ-p00016
+            na_assertion_ids: set[str] = set()
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    # Assertion text is stored as the node label
+                    assertion_text = child.get_label() or ""
+                    na_match = _NA_PATTERN.search(assertion_text)
+                    if na_match:
+                        na_assertion_ids.add(na_match.group(1))
+
+            na_count = len([aid for aid in leaf_ids if aid in na_assertion_ids])
+
+            # REQ-p00016-C: Implements: refs to N/A assertions don't count and produce errors
+            na_errors: list[str] = []
+            for aid in leaf_ids:
+                if aid in na_assertion_ids and aid in covered_assertion_ids:
+                    na_errors.append(aid)
+
+            covered_ids = [
+                aid
+                for aid in leaf_ids
+                if aid in covered_assertion_ids and aid not in na_assertion_ids
+            ]
+            missing_ids = [
+                aid
+                for aid in leaf_ids
+                if aid not in covered_assertion_ids and aid not in na_assertion_ids
+            ]
 
             total = len(leaf_ids)
             covered_count = len(covered_ids)
@@ -646,6 +679,10 @@ def _compute_satisfies_coverage(graph: TraceGraph) -> None:
                 "missing": missing_ids,
                 "coverage_pct": coverage_pct,
             }
+
+            if na_errors:
+                existing = node.get_metric("satisfies_na_errors") or []
+                node.set_metric("satisfies_na_errors", existing + na_errors)
 
         node.set_metric("satisfies_coverage", satisfies_coverage)
 
