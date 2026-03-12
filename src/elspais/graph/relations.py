@@ -3,6 +3,7 @@
 This module defines the typed edges between graph nodes:
 - EdgeKind: Enum of relationship types with semantic properties
 - Edge: A typed edge between two nodes
+- Stereotype: Node classification for template-instance pattern
 """
 
 from __future__ import annotations
@@ -13,6 +14,20 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
+
+
+# Implements: REQ-p00014-C
+class Stereotype(Enum):
+    """Classification of nodes in the template-instance pattern.
+
+    - CONCRETE: Default — normal requirement node
+    - TEMPLATE: Original node targeted by a Satisfies declaration
+    - INSTANCE: Cloned copy of a template node
+    """
+
+    CONCRETE = "concrete"
+    TEMPLATE = "template"
+    INSTANCE = "instance"
 
 
 # Implements: REQ-p00050-A
@@ -35,6 +50,8 @@ class EdgeKind(Enum):
     CONTAINS = "contains"
     # Implements: REQ-d00069-G
     SATISFIES = "satisfies"
+    # Implements: REQ-p00014-C
+    INSTANCE = "instance"
 
     # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:

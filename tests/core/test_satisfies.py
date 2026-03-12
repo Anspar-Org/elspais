@@ -5,7 +5,7 @@ Covers: REQ-p00014, REQ-d00069-G, REQ-d00069-H, REQ-d00069-I
 
 from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.graph.relations import EdgeKind
+from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.patterns import PatternConfig
 from tests.core.graph_test_helpers import make_requirement
 
@@ -42,6 +42,35 @@ class TestEdgeKindSatisfies:
     def test_REQ_d00069_G_refines_does_not_contribute(self):
         """Ensure REFINES still doesn't contribute (regression guard)."""
         assert EdgeKind.REFINES.contributes_to_coverage() is False
+
+    def test_REQ_p00014_C_instance_enum_value(self):
+        """EdgeKind.INSTANCE has value 'instance'."""
+        assert EdgeKind.INSTANCE.value == "instance"
+
+    def test_REQ_p00014_C_instance_does_not_contribute_to_coverage(self):
+        """INSTANCE edges do not contribute to coverage (like SATISFIES/REFINES)."""
+        assert EdgeKind.INSTANCE.contributes_to_coverage() is False
+
+
+class TestStereotypeEnum:
+    """Stereotype enum for node classification.
+
+    Validates REQ-p00014-C: Stereotype enum classification.
+    """
+
+    def test_REQ_p00014_C_stereotype_concrete_value(self):
+        assert Stereotype.CONCRETE.value == "concrete"
+
+    def test_REQ_p00014_C_stereotype_template_value(self):
+        assert Stereotype.TEMPLATE.value == "template"
+
+    def test_REQ_p00014_C_stereotype_instance_value(self):
+        assert Stereotype.INSTANCE.value == "instance"
+
+    def test_REQ_p00014_C_stereotype_default_is_concrete(self):
+        """CONCRETE is the default (first member) of the Stereotype enum."""
+        first_member = list(Stereotype)[0]
+        assert first_member is Stereotype.CONCRETE
 
 
 class TestParserSatisfies:

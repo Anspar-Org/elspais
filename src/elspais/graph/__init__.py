@@ -6,6 +6,7 @@ Exports:
 - GraphNode: Unified node representation
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
+- Stereotype: Node classification for template-instance pattern
 - BrokenReference: Reference to non-existent target (detection)
 - CoverageSource: Enum for coverage origin type
 - CoverageContribution: Single coverage claim on an assertion
@@ -22,7 +23,7 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
-from elspais.graph.relations import Edge, EdgeKind
+from elspais.graph.relations import Edge, EdgeKind, Stereotype
 
 __all__ = [
     "NodeKind",
@@ -30,6 +31,7 @@ __all__ = [
     "GraphNode",
     "Edge",
     "EdgeKind",
+    "Stereotype",
     "BrokenReference",
     "MutationEntry",
     "MutationLog",
