@@ -267,8 +267,9 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
 
     # ── Common: parents with edge_kind and assertion_targets ──
     parents = []
+    # Implements: REQ-d00069-G
     for edge in node.iter_incoming_edges():
-        if edge.kind in (EK.IMPLEMENTS, EK.REFINES):
+        if edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES):
             parent = edge.source
             if parent.kind == NodeKind.REQUIREMENT:
                 ref_id = parent.id
@@ -288,7 +289,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
     links = []
     for edge in node.iter_incoming_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.CONTAINS):
             links.append(
                 {
                     "id": edge.source.id,
@@ -298,7 +299,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                 }
             )
     for edge in node.iter_outgoing_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.CONTAINS):
             links.append(
                 {
                     "id": edge.target.id,
