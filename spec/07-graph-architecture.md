@@ -232,11 +232,21 @@ E. The coverage annotator SHALL emit INDIRECT contributions for all assertion la
 
 F. When a whole-requirement test has passing results, the annotator SHALL count all assertions as validated for indirect mode.
 
+G. A leaf assertion SHALL be defined as any assertion that has no `Refines:` child pointing at it. Leaf assertions can occur at any level or place in the hierarchy.
+
+H. When a requirement declares `Satisfies: X`, per-instance coverage SHALL be computed as: (covered leaf assertions) / (total leaf assertions - N/A assertions). Coverage metrics SHALL be stored on the declaring requirement, keyed by template ID.
+
+I. 100% coverage of a template instance SHALL be achieved when every leaf assertion in the template (excluding N/A assertions) has at least one `Implements:` reference within the declaring requirement's subtree.
+
+J. A `Refines:` relationship SHALL NOT count as coverage in itself, but coverage of its child assertions SHALL propagate upward. An assertion with `Refines:` children SHALL have fractional coverage equal to the proportion of its covered leaf descendants.
+
+K. The system SHALL report coverage gaps when a `Satisfies:` declaration exists but the declaring requirement's subtree does not cover all leaf assertions in the template.
+
 ## Rationale
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-*End* *Indirect Coverage Source* | **Hash**: 168446ae
+*End* *Indirect Coverage Source* | **Hash**: 00000000
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display

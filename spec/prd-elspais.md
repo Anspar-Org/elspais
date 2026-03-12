@@ -121,7 +121,9 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-*End* *Change Detection and Auditability* | **Hash**: fa53cb96
+G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
+
+*End* *Change Detection and Auditability* | **Hash**: 00000000
 ---
 
 # REQ-p00005: Multi-Repository Requirements
