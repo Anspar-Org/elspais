@@ -41,6 +41,8 @@ class RequirementParser:
     ALT_STATUS_PATTERN = re.compile(r"\*\*Status\*\*:\s*(?P<status>\w+)")
     IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
     REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refines>[^|\n]+)")
+    # Implements: REQ-d00069-H
+    SATISFIES_PATTERN = re.compile(r"^Satisfies:\s*(?P<satisfies>.+)$", re.MULTILINE)
     END_MARKER_PATTERN = re.compile(
         rf"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>{HASH_VALUE_PATTERN}))?",
         re.MULTILINE,
@@ -183,6 +185,7 @@ class RequirementParser:
             "status": "Unknown",
             "implements": [],
             "refines": [],
+            "satisfies": [],
             "assertions": [],
             "changelog": [],
             "hash": None,
@@ -220,6 +223,12 @@ class RequirementParser:
         refines_match = self.REFINES_PATTERN.search(text)
         if refines_match:
             data["refines"] = self._parse_refs(refines_match.group("refines"))
+
+        # Parse satisfies
+        # Implements: REQ-d00069-H
+        satisfies_match = self.SATISFIES_PATTERN.search(text)
+        if satisfies_match:
+            data["satisfies"] = self._parse_refs(satisfies_match.group("satisfies"))
 
         # Extract assertions
         data["assertions"] = self._extract_assertions(text, start_line)
@@ -449,6 +458,7 @@ class RequirementParser:
                 if not self.LEVEL_STATUS_PATTERN.search(ln)
                 and not self.ALT_STATUS_PATTERN.search(ln)
                 and not self.IMPLEMENTS_PATTERN.search(ln)
+                and not self.SATISFIES_PATTERN.search(ln)
             ]
 
         content = "\n".join(lines).strip()
