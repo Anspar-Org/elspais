@@ -7,6 +7,7 @@ from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind
 from elspais.utilities.patterns import PatternConfig
+from tests.core.graph_test_helpers import make_requirement
 
 
 def _make_parser() -> RequirementParser:
@@ -109,3 +110,22 @@ class TestParserSatisfies:
         ctx = ParseContext(file_path="spec/test.md")
         results = list(parser.claim_and_parse(lines, ctx))
         assert results[0].parsed_data["satisfies"] == []
+
+
+class TestHelperSatisfies:
+    """make_requirement helper supports satisfies parameter.
+
+    Validates REQ-d00069-G: SATISFIES edge infrastructure.
+    """
+
+    def test_REQ_d00069_G_make_requirement_with_satisfies(self):
+        req = make_requirement(
+            "REQ-p00044",
+            title="Doc Mgmt",
+            satisfies=["REQ-p80001"],
+        )
+        assert req.parsed_data["satisfies"] == ["REQ-p80001"]
+
+    def test_REQ_d00069_G_make_requirement_without_satisfies(self):
+        req = make_requirement("REQ-p00001", title="Basic")
+        assert req.parsed_data["satisfies"] == []

@@ -38,6 +38,7 @@ def make_requirement(
     status: str = "Active",
     implements: list[str] | None = None,
     refines: list[str] | None = None,
+    satisfies: list[str] | None = None,
     assertions: list[dict] | None = None,
     source_path: str = "spec/test.md",
     start_line: int = 1,
@@ -53,6 +54,7 @@ def make_requirement(
         status: Requirement status (Active, Deprecated, etc.)
         implements: List of IDs this requirement implements
         refines: List of IDs this requirement refines
+        satisfies: List of IDs this requirement satisfies (cross-cutting)
         assertions: List of assertion dicts with "label" and "text"
         source_path: Source file path
         start_line: Start line in source
@@ -80,6 +82,7 @@ def make_requirement(
             "status": status,
             "implements": implements or [],
             "refines": refines or [],
+            "satisfies": satisfies or [],
             "assertions": assertions or [],
             "hash": hash_value,
         },
