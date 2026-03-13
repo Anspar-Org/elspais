@@ -29,8 +29,52 @@ from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import IdPatternConfig, IdResolver, PatternConfig
 from elspais.utilities.reference_config import ReferenceResolver
+
+
+def _bridge_pattern_config(resolver: IdResolver) -> PatternConfig:
+    """Create a backward-compatible PatternConfig from an IdResolver.
+
+    Temporary bridge until all parsers migrate to IdResolver.
+    """
+    config = resolver.config
+    # Build old-style types dict
+    old_types = {}
+    for code, tdef in config.types.items():
+        letter = tdef.aliases.get("letter", code[0] if code else "")
+        old_types[code] = {"id": letter, "name": code.upper(), "level": tdef.level}
+
+    # Build old-style id_format
+    old_format = {
+        "style": config.component.style,
+        "digits": config.component.digits,
+        "leading_zeros": config.component.leading_zeros,
+    }
+    if config.component.pattern:
+        old_format["pattern"] = config.component.pattern
+
+    # Build old-style assertions
+    old_assertions = {
+        "label_style": config.assertions.label_style,
+        "max_count": config.assertions.max_count,
+        "zero_pad": config.assertions.zero_pad,
+    }
+
+    return PatternConfig(
+        id_template="{prefix}-{type}{id}",
+        prefix=config.namespace,
+        types=old_types,
+        id_format=old_format,
+        assertions=old_assertions,
+    )
+
+
+def _build_resolver(config: dict[str, Any]) -> IdResolver:
+    """Create IdResolver from a full config dict (reads project.namespace + id-patterns)."""
+    id_config = IdPatternConfig.from_dict(config)
+    return IdResolver(id_config)
+
 
 # Default file patterns for [directories].code scanning.
 # Covers all languages listed in the multi-language comment support table.
@@ -124,8 +168,8 @@ def _resolve_spec_dir_config(
 
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
-    patterns_dict = repo_config.get("patterns", {})
-    pattern_config = PatternConfig.from_dict(patterns_dict)
+    resolver = _build_resolver(repo_config)
+    pattern_config = _bridge_pattern_config(resolver)
     reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
     registry = ParserRegistry()
@@ -207,7 +251,8 @@ def build_graph(
                 print(f"Warning: {err}", file=sys.stderr)
 
     # 3. Create default pattern config and reference resolver
-    default_pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    default_resolver = _build_resolver(config)
+    default_pattern_config = _bridge_pattern_config(default_resolver)
     default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
     # Registry for code files (code parser only)
@@ -222,8 +267,7 @@ def build_graph(
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
     graph_config = config.get("graph", {})
     satellite_kinds = graph_config.get("satellite_kinds", None)
-    ref_defaults = config.get("references", {}).get("defaults", {})
-    mas = ref_defaults.get("multi_assertion_separator", "+")
+    mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
     builder = GraphBuilder(

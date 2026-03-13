@@ -130,7 +130,7 @@ class TestConfigChecks:
         """Test required fields check with complete config."""
         config = ConfigLoader.from_dict(
             {
-                "patterns": {"types": {"prd": {}}},
+                "id-patterns": {"types": {"prd": {"level": 1}}},
                 "spec": {"directories": ["spec"]},
                 "rules": {"hierarchy": {"prd": []}},
             }
@@ -151,7 +151,7 @@ class TestConfigChecks:
         """Test pattern tokens with valid template."""
         config = ConfigLoader.from_dict(
             {
-                "patterns": {"id_template": "{prefix}-{type}{id}"},
+                "id-patterns": {"canonical": "{namespace}-{type}{component}"},
             }
         )
 
@@ -162,7 +162,7 @@ class TestConfigChecks:
         """Test pattern tokens with invalid token."""
         config = ConfigLoader.from_dict(
             {
-                "patterns": {"id_template": "{prefix}-{invalid}{id}"},
+                "id-patterns": {"canonical": "{namespace}-{invalid}{component}"},
             }
         )
 
@@ -174,11 +174,11 @@ class TestConfigChecks:
         """Test hierarchy rules check with valid config."""
         config = ConfigLoader.from_dict(
             {
-                "patterns": {
+                "id-patterns": {
                     "types": {
-                        "prd": {"id": "p"},
-                        "ops": {"id": "o"},
-                        "dev": {"id": "d"},
+                        "prd": {"level": 1},
+                        "ops": {"level": 2},
+                        "dev": {"level": 3},
                     },
                 },
                 "rules": {

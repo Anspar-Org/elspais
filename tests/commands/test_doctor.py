@@ -184,9 +184,13 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
-            "[patterns.types.prd]\nlevel = 1\n"
-            '[spec]\ndirectories = ["spec"]\n'
+            '[project]\nnamespace = "REQ"\n\n'
+            "[id-patterns]\n"
+            'canonical = "{namespace}-{type}{component}"\n\n'
+            "[id-patterns.types.prd]\nlevel = 1\n\n"
+            "[id-patterns.component]\n"
+            'style = "numeric"\ndigits = 5\n\n'
+            '[spec]\ndirectories = ["spec"]\n\n'
             "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()

@@ -19,15 +19,22 @@ import tomlkit
 
 # Default configuration values
 DEFAULT_CONFIG: dict[str, Any] = {
-    "patterns": {
-        "id_template": "{prefix}-{type}{id}",
-        "prefix": "REQ",
+    "project": {
+        "namespace": "REQ",
+    },
+    "id-patterns": {
+        "canonical": "{namespace}-{type}{component}",
+        "aliases": {"short": "{type.letter}{component}"},
         "types": {
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
+            "prd": {"level": 1, "aliases": {"letter": "p"}},
+            "ops": {"level": 2, "aliases": {"letter": "o"}},
+            "dev": {"level": 3, "aliases": {"letter": "d"}},
         },
-        "id_format": {"style": "numeric", "digits": 5, "leading_zeros": True},
+        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+        "assertions": {
+            "label_style": "uppercase",
+            "max_count": 26,
+        },
     },
     "spec": {
         "directories": ["spec"],
@@ -62,7 +69,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "case_sensitive": False,
             "prefix_optional": False,
             "comment_styles": ["#", "//", "--"],
-            "multi_assertion_separator": "+",
             "keywords": {
                 "implements": ["Implements", "IMPLEMENTS"],
                 "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
