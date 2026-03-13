@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.0] - 2026-03-12
+
+### Added
+
+- **ID Pattern System** — New `IdPatternConfig`, `IdResolver`, `ParsedId`, `TypeDef`, `ComponentFormat`, `AssertionFormat` dataclasses replacing `PatternConfig`/`PatternValidator`/`normalize_req_id`. Supports named aliases, configurable output forms, template compilation with short-form parsing, component normalization, and multi-assertion expansion via a single `IdResolver` authority class.
+
 ## [0.103.17] - 2026-03-12
 
 ### Added
