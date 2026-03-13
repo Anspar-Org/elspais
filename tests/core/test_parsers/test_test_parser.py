@@ -98,20 +98,26 @@ class TestTestParserCustomConfig:
 
     def test_REQ_d00082_J_custom_prefix_spec(self):
         """REQ-d00082-J: Parser with custom prefix 'SPEC' instead of 'REQ'."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "SPEC",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "SPEC"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
-        parser = _TestParser(pattern_config=pattern_config)
+        parser = _TestParser(resolver=resolver)
         lines = [
             (1, "def test_SPEC_d00101_custom_spec():"),
             (2, "    assert True"),
@@ -125,22 +131,28 @@ class TestTestParserCustomConfig:
 
     def test_REQ_d00082_J_custom_comment_styles_with_resolver(self):
         """REQ-d00082-J: Parser uses custom comment styles from ReferenceResolver."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
         from elspais.utilities.reference_config import (
             ReferenceConfig,
             ReferenceResolver,
         )
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        id_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "REQ"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         # Custom config with only C-style block comments
@@ -152,8 +164,8 @@ class TestTestParserCustomConfig:
                 "validates": ["Tests", "Validates"],
             },
         )
-        resolver = ReferenceResolver(ref_config)
-        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        ref_resolver = ReferenceResolver(ref_config)
+        parser = _TestParser(resolver=id_resolver, reference_resolver=ref_resolver)
 
         lines = [
             (1, "def test_something():"),
@@ -166,24 +178,30 @@ class TestTestParserCustomConfig:
 
         # Note: block comment style matching is limited in inline context,
         # so verify parser instantiation works with the config
-        assert parser._pattern_config == pattern_config
-        assert parser._reference_resolver == resolver
+        assert parser._resolver == id_resolver
+        assert parser._reference_resolver == ref_resolver
 
     def test_REQ_d00082_J_validates_underscore_separators(self):
         """REQ-d00082-J: Parser accepts underscore separators in test names."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        id_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "REQ"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         # Config that accepts both - and _ as separators
@@ -191,8 +209,8 @@ class TestTestParserCustomConfig:
             separators=["-", "_"],
             case_sensitive=False,
         )
-        resolver = ReferenceResolver(ref_config)
-        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        ref_resolver = ReferenceResolver(ref_config)
+        parser = _TestParser(resolver=id_resolver, reference_resolver=ref_resolver)
 
         lines = [
             (1, "def test_REQ_d00082_J_custom_feature():"),

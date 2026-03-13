@@ -20,7 +20,7 @@ from elspais.utilities.reference_config import (
 from elspais.utilities.test_identity import build_test_id_from_result
 
 if TYPE_CHECKING:
-    from elspais.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import IdResolver
 
 
 # Implements: REQ-d00082-K
@@ -43,44 +43,48 @@ class JUnitXMLParser:
 
     def __init__(
         self,
-        pattern_config: PatternConfig | None = None,
+        resolver: IdResolver | None = None,
         reference_resolver: ReferenceResolver | None = None,
         base_path: Path | None = None,
     ) -> None:
         """Initialize JUnitXMLParser with optional configuration.
 
         Args:
-            pattern_config: Configuration for ID structure. If None, uses defaults.
+            resolver: IdResolver for ID structure. If None, uses defaults.
             reference_resolver: Resolver for file-specific reference config. If None,
                                uses default ReferenceConfig.
             base_path: Base path for resolving file-specific configs.
         """
-        self._pattern_config = pattern_config
+        self._resolver = resolver
         self._reference_resolver = reference_resolver
         self._base_path = base_path or Path(".")
 
-    def _get_pattern_config(self) -> PatternConfig:
-        """Get pattern config from instance or create default.
+    def _get_resolver(self) -> IdResolver:
+        """Get IdResolver from instance or create default.
 
         Returns:
-            PatternConfig to use for parsing.
+            IdResolver to use for parsing.
         """
-        if self._pattern_config is not None:
-            return self._pattern_config
+        if self._resolver is not None:
+            return self._resolver
 
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        return PatternConfig.from_dict(
+        config = IdPatternConfig.from_dict(
             {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
+                    "component": {"style": "numeric", "digits": 5},
                 },
-                "id_format": {"style": "numeric", "digits": 5},
             }
         )
+        return IdResolver(config)
 
     def _get_reference_config(self, source_file: str | None = None) -> ReferenceConfig:
         """Get reference config for the current file.
@@ -220,11 +224,11 @@ class JUnitXMLParser:
         Returns:
             List of normalized requirement IDs (using hyphens).
         """
-        pattern_config = self._get_pattern_config()
+        resolver = self._get_resolver()
         ref_config = self._get_reference_config(source_file)
 
         # Use shared extraction function
-        ids = extract_ids_from_text(text, pattern_config, ref_config)
+        ids = extract_ids_from_text(text, resolver, ref_config)
 
         # Normalize: replace underscores with hyphens
         normalized = []
@@ -252,18 +256,18 @@ class JUnitXMLParser:
 
 
 def create_parser(
-    pattern_config: PatternConfig | None = None,
+    resolver: IdResolver | None = None,
     reference_resolver: ReferenceResolver | None = None,
     base_path: Path | None = None,
 ) -> JUnitXMLParser:
     """Factory function to create a JUnitXMLParser.
 
     Args:
-        pattern_config: Optional configuration for ID structure.
+        resolver: Optional IdResolver for ID structure.
         reference_resolver: Optional resolver for file-specific configs.
         base_path: Optional base path for resolving file paths.
 
     Returns:
         New JUnitXMLParser instance.
     """
-    return JUnitXMLParser(pattern_config, reference_resolver, base_path)
+    return JUnitXMLParser(resolver, reference_resolver, base_path)

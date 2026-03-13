@@ -169,14 +169,13 @@ def _resolve_spec_dir_config(
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
     resolver = _build_resolver(repo_config)
-    pattern_config = _bridge_pattern_config(resolver)
     reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
     registry = ParserRegistry()
     registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
-    registry.register(CodeParser(pattern_config, reference_resolver))
-    registry.register(TestParser(pattern_config, reference_resolver))
+    registry.register(CodeParser(resolver, reference_resolver))
+    registry.register(TestParser(resolver, reference_resolver))
 
     spec_config = repo_config.get("spec", {})
     return SpecDirConfig(
@@ -250,18 +249,17 @@ def build_graph(
             for err in associate_errors:
                 print(f"Warning: {err}", file=sys.stderr)
 
-    # 3. Create default pattern config and reference resolver
+    # 3. Create default resolver and reference resolver
     default_resolver = _build_resolver(config)
-    default_pattern_config = _bridge_pattern_config(default_resolver)
     default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
     # Registry for code files (code parser only)
     code_registry = ParserRegistry()
-    code_registry.register(CodeParser(default_pattern_config, default_reference_resolver))
+    code_registry.register(CodeParser(default_resolver, default_reference_resolver))
 
     # Registry for test files (test parser only)
     test_registry = ParserRegistry()
-    test_registry.register(TestParser(default_pattern_config, default_reference_resolver))
+    test_registry.register(TestParser(default_resolver, default_reference_resolver))
 
     # 4. Build graph from all spec directories
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
@@ -379,7 +377,7 @@ def build_graph(
                 xml_registry = ParserRegistry()
                 xml_registry.register(
                     JUnitXMLParser(
-                        pattern_config=default_pattern_config,
+                        resolver=default_resolver,
                         reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
@@ -387,7 +385,7 @@ def build_graph(
                 json_registry = ParserRegistry()
                 json_registry.register(
                     PytestJSONParser(
-                        pattern_config=default_pattern_config,
+                        resolver=default_resolver,
                         reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )

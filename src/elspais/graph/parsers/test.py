@@ -22,7 +22,7 @@ from elspais.utilities.reference_config import (
 )
 
 if TYPE_CHECKING:
-    from elspais.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import IdResolver
 
 # Pattern for expected-broken-links marker
 _EXPECTED_BROKEN_LINKS_RE = re.compile(
@@ -54,56 +54,60 @@ class TestParser:
 
     def __init__(
         self,
-        pattern_config: PatternConfig | None = None,
+        resolver: IdResolver | None = None,
         reference_resolver: ReferenceResolver | None = None,
     ) -> None:
         """Initialize TestParser with optional configuration.
 
         Args:
-            pattern_config: Configuration for ID structure. If None, uses defaults.
+            resolver: IdResolver for ID structure. If None, uses defaults.
             reference_resolver: Resolver for file-specific reference config. If None,
                                uses default ReferenceConfig.
         """
-        self._pattern_config = pattern_config
+        self._resolver = resolver
         self._reference_resolver = reference_resolver
 
-    def _get_pattern_config(self, context: ParseContext) -> PatternConfig:
-        """Get pattern config from context or instance.
+    def _get_resolver(self, context: ParseContext) -> IdResolver:
+        """Get IdResolver from context or instance.
 
         Args:
-            context: Parse context that may contain pattern config.
+            context: Parse context that may contain resolver.
 
         Returns:
-            PatternConfig to use for parsing.
+            IdResolver to use for parsing.
         """
-        if self._pattern_config is not None:
-            return self._pattern_config
+        if self._resolver is not None:
+            return self._resolver
 
-        if "pattern_config" in context.config:
-            return context.config["pattern_config"]
+        if "resolver" in context.config:
+            return context.config["resolver"]
 
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        return PatternConfig.from_dict(
+        config = IdPatternConfig.from_dict(
             {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
+                    "component": {"style": "numeric", "digits": 5},
                 },
-                "id_format": {"style": "numeric", "digits": 5},
             }
         )
+        return IdResolver(config)
 
     def _get_reference_config(
-        self, context: ParseContext, pattern_config: PatternConfig
+        self,
+        context: ParseContext,
     ) -> ReferenceConfig:
         """Get reference config for the current file.
 
         Args:
             context: Parse context with file path.
-            pattern_config: Pattern config (unused but available for consistency).
 
         Returns:
             ReferenceConfig for this file.
@@ -123,32 +127,34 @@ class TestParser:
 
     # Implements: REQ-d00082-J
     def _build_test_name_pattern(
-        self, pattern_config: PatternConfig, ref_config: ReferenceConfig
+        self, resolver: IdResolver, ref_config: ReferenceConfig
     ) -> re.Pattern[str]:
         """Build pattern for matching REQ references in test function names.
 
         Test names use underscores: def test_foo_REQ_p00001_A
 
         Args:
-            pattern_config: Configuration for ID structure.
+            resolver: IdResolver for ID structure.
             ref_config: Configuration for reference matching.
 
         Returns:
             Compiled regex pattern for matching test name references.
         """
-        prefix = pattern_config.prefix
+        prefix = resolver.config.namespace
 
         # Get type codes
-        type_codes = pattern_config.get_all_type_ids()
+        from elspais.utilities.reference_config import _get_type_codes
+
+        type_codes = _get_type_codes(resolver)
         if type_codes:
             type_pattern = f"(?:{'|'.join(re.escape(t) for t in type_codes)})"
         else:
             type_pattern = r"[a-z]"
 
-        # Get ID format
-        id_format = pattern_config.id_format
-        style = id_format.get("style", "numeric")
-        digits = id_format.get("digits", 5)
+        # Get ID format from resolver config component
+        component = resolver.config.component
+        style = component.style
+        digits = component.digits
 
         if style == "numeric":
             id_number_pattern = rf"\d{{{digits}}}"
@@ -190,14 +196,14 @@ class TestParser:
         Yields:
             ParsedContent for each test reference.
         """
-        pattern_config = self._get_pattern_config(context)
-        ref_config = self._get_reference_config(context, pattern_config)
+        resolver = self._get_resolver(context)
+        ref_config = self._get_reference_config(context)
 
         # Build patterns dynamically based on config
-        test_name_pattern = self._build_test_name_pattern(pattern_config, ref_config)
-        comment_pattern = build_comment_pattern(pattern_config, ref_config, "validates")
+        test_name_pattern = self._build_test_name_pattern(resolver, ref_config)
+        comment_pattern = build_comment_pattern(resolver, ref_config, "validates")
         block_header_pattern = build_block_header_pattern(ref_config, "validates")
-        block_ref_pattern = build_block_ref_pattern(pattern_config, ref_config)
+        block_ref_pattern = build_block_ref_pattern(resolver, ref_config)
 
         # Detect expected-broken-links marker in file header
         expected_broken_count = 0
@@ -283,7 +289,7 @@ class TestParser:
                 cm = comment_pattern.search(text)
                 if cm:
                     refs_str = cm.group("refs")
-                    prefix = pattern_config.prefix
+                    prefix = resolver.config.namespace
                     for ref_match in re.finditer(
                         rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+",
                         refs_str,
@@ -308,7 +314,7 @@ class TestParser:
                 # Convert REQ_p00001 to REQ-p00001 and normalize prefix case
                 ref = name_match.group("ref").replace("_", "-")
                 # Ensure prefix is uppercase (e.g., req-d00001 -> REQ-d00001)
-                prefix = pattern_config.prefix
+                prefix = resolver.config.namespace
                 if ref.lower().startswith(prefix.lower() + "-"):
                     ref = prefix + ref[len(prefix) :]
                 validates.append(ref)
@@ -318,7 +324,7 @@ class TestParser:
             if comment_match:
                 refs_str = comment_match.group("refs")
                 # Extract individual REQ IDs from the refs string
-                prefix = pattern_config.prefix
+                prefix = resolver.config.namespace
                 for ref_match in re.finditer(
                     rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+", refs_str, re.IGNORECASE
                 ):

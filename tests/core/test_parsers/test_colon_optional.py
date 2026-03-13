@@ -10,7 +10,7 @@ the colon after keywords optional while still requiring whitespace.
 
 import pytest
 
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from elspais.utilities.reference_config import (
     ReferenceConfig,
     build_comment_pattern,
@@ -20,25 +20,30 @@ from elspais.utilities.reference_config import (
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
-# Standard HHT-like PatternConfig used across all tests
-_HHT_PATTERN_CONFIG = PatternConfig.from_dict(
+# Standard HHT-like IdResolver used across all tests
+_HHT_ID_CONFIG = IdPatternConfig.from_dict(
     {
-        "prefix": "REQ",
-        "types": {
-            "prd": {"id": "p", "name": "PRD"},
-            "ops": {"id": "o", "name": "OPS"},
-            "dev": {"id": "d", "name": "DEV"},
+        "project": {"namespace": "REQ"},
+        "id-patterns": {
+            "canonical": "{namespace}-{type.letter}{component}",
+            "aliases": {"short": "{type.letter}{component}"},
+            "types": {
+                "prd": {"level": 1, "aliases": {"letter": "p"}},
+                "ops": {"level": 2, "aliases": {"letter": "o"}},
+                "dev": {"level": 3, "aliases": {"letter": "d"}},
+            },
+            "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
         },
-        "id_format": {"style": "numeric", "digits": 5},
     }
 )
+_HHT_RESOLVER = IdResolver(_HHT_ID_CONFIG)
 
 _DEFAULT_REF_CONFIG = ReferenceConfig()
 
 
 @pytest.fixture
 def pattern_config():
-    return _HHT_PATTERN_CONFIG
+    return _HHT_RESOLVER
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.utilities.patterns import PatternConfig, PatternValidator
+from elspais.utilities.patterns import IdPatternConfig, IdResolver, PatternValidator
 
 # Level display names and sort order
 _LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
@@ -54,7 +54,7 @@ class MarkdownAssembler:
         title: str | None = None,
         overview: bool = False,
         max_depth: int | None = None,
-        pattern_config: PatternConfig | None = None,
+        resolver: IdResolver | None = None,
     ) -> None:
         self._graph = graph
         self._overview = overview
@@ -65,9 +65,14 @@ class MarkdownAssembler:
             self._title = "Product Requirements Overview"
         else:
             self._title = "Requirements Specification"
-        if pattern_config is None:
-            pattern_config = PatternConfig.from_dict({})
-        self._pattern_validator = PatternValidator(pattern_config)
+        if resolver is None:
+            config = IdPatternConfig.from_dict({})
+            resolver = IdResolver(config)
+        self._resolver = resolver
+        # Bridge to PatternValidator for associated-repo detection
+        from elspais.graph.factory import _bridge_pattern_config
+
+        self._pattern_validator = PatternValidator(_bridge_pattern_config(resolver))
 
     def assemble(self) -> str:
         """Assemble the complete Markdown document.

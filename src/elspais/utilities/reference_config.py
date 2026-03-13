@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import IdResolver
 
 
 @dataclass
@@ -335,41 +335,79 @@ class ReferenceResolver:
 # =============================================================================
 
 
+def _get_type_codes(resolver: IdResolver) -> list[str]:
+    """Get sorted unique type alias values from an IdResolver.
+
+    Args:
+        resolver: IdResolver instance.
+
+    Returns:
+        Sorted list of unique type code strings.
+    """
+    type_ids: set[str] = set()
+    for tdef in resolver.config.types.values():
+        for alias_val in tdef.aliases.values():
+            type_ids.add(alias_val)
+    # Also add type codes themselves if no aliases
+    for code, tdef in resolver.config.types.items():
+        if not tdef.aliases:
+            type_ids.add(code)
+    return sorted(type_ids)
+
+
+def _get_assertion_label(resolver: IdResolver) -> str:
+    """Build assertion label regex from an IdResolver's config.
+
+    Args:
+        resolver: IdResolver instance.
+
+    Returns:
+        Regex string for matching a single assertion label.
+    """
+    af = resolver.config.assertions
+    if af.label_style == "uppercase":
+        return "[A-Z]"
+    elif af.label_style == "numeric":
+        return r"\d+"
+    else:
+        return "[A-Za-z0-9]+"
+
+
 def build_id_pattern(
-    pattern_config: PatternConfig,
+    resolver: IdResolver,
     ref_config: ReferenceConfig,
     include_assertion: bool = True,
 ) -> re.Pattern[str]:
     """Build regex pattern for matching requirement IDs.
 
     Creates a pattern that matches requirement IDs based on the configured
-    PatternConfig (for ID structure) and ReferenceConfig (for separators, etc.)
+    IdResolver (for ID structure) and ReferenceConfig (for separators, etc.)
 
     Args:
-        pattern_config: Configuration for ID structure (prefix, types, format)
+        resolver: IdResolver for ID structure (namespace, types, format)
         ref_config: Configuration for reference matching (separators, case sensitivity)
         include_assertion: Whether to include optional assertion suffix
 
     Returns:
         Compiled regex pattern for matching requirement IDs
     """
-    # Get prefix from pattern_config
-    prefix = pattern_config.prefix
+    # Get prefix from resolver config
+    prefix = resolver.config.namespace
 
     # Build separator pattern from ref_config
     sep_pattern = _build_separator_pattern(ref_config.separators)
 
-    # Get type codes from pattern_config
-    type_codes = pattern_config.get_all_type_ids()
+    # Get type codes from resolver
+    type_codes = _get_type_codes(resolver)
     if type_codes:
         type_pattern = f"(?:{'|'.join(re.escape(t) for t in type_codes)})"
     else:
         type_pattern = r"[a-z]"  # Default: single lowercase letter
 
-    # Get ID format
-    id_format = pattern_config.id_format
-    style = id_format.get("style", "numeric")
-    digits = id_format.get("digits", 5)
+    # Get ID format from resolver config component
+    component = resolver.config.component
+    style = component.style
+    digits = component.digits
 
     if style == "numeric":
         id_number_pattern = rf"\d{{{digits}}}"
@@ -383,7 +421,7 @@ def build_id_pattern(
         # IMPORTANT: Add negative lookahead (?![a-z]) to prevent matching
         # lowercase letters that are part of longer words.
         # e.g., test_REQ_p00001_login should NOT capture "l" as assertion
-        assertion_label = pattern_config.get_assertion_label_pattern()
+        assertion_label = _get_assertion_label(resolver)
         if assertion_label:
             # Make assertion optional with separator, with negative lookahead
             assertion_pattern = rf"(?:{sep_pattern}(?P<assertion>{assertion_label})(?![a-z]))?"
@@ -409,7 +447,7 @@ def build_id_pattern(
 
 
 def build_comment_pattern(
-    pattern_config: PatternConfig,
+    resolver: IdResolver,
     ref_config: ReferenceConfig,
     keyword_type: str = "implements",
 ) -> re.Pattern[str]:
@@ -420,7 +458,7 @@ def build_comment_pattern(
     - // Validates: REQ-p00002, REQ-p00003
 
     Args:
-        pattern_config: Configuration for ID structure
+        resolver: IdResolver for ID structure
         ref_config: Configuration for comment styles and keywords
         keyword_type: Type of keyword to match ("implements", "validates", "refines")
 
@@ -435,7 +473,7 @@ def build_comment_pattern(
     keyword_pattern = "|".join(re.escape(k) for k in keywords)
 
     # Build ID pattern (simplified for comment matching - captures multiple)
-    prefix = pattern_config.prefix
+    prefix = resolver.config.namespace
     sep_pattern = _build_separator_pattern(ref_config.separators)
 
     # Pattern for a single ID (may include assertion)
@@ -491,7 +529,7 @@ def build_block_header_pattern(
 
 
 def build_block_ref_pattern(
-    pattern_config: PatternConfig,
+    resolver: IdResolver,
     ref_config: ReferenceConfig,
 ) -> re.Pattern[str]:
     """Build pattern for references within a block.
@@ -501,7 +539,7 @@ def build_block_ref_pattern(
     - //  REQ-p00002-A
 
     Args:
-        pattern_config: Configuration for ID structure
+        resolver: IdResolver for ID structure
         ref_config: Configuration for comment styles
 
     Returns:
@@ -511,7 +549,7 @@ def build_block_ref_pattern(
     comment_pattern = _build_comment_prefix_pattern(ref_config.comment_styles)
 
     # Build ID pattern
-    prefix = pattern_config.prefix
+    prefix = resolver.config.namespace
     sep_pattern = _build_separator_pattern(ref_config.separators)
 
     # Pattern for ID (may include assertion)
@@ -527,7 +565,7 @@ def build_block_ref_pattern(
 
 def extract_ids_from_text(
     text: str,
-    pattern_config: PatternConfig,
+    resolver: IdResolver,
     ref_config: ReferenceConfig,
 ) -> list[str]:
     """Extract all requirement/assertion IDs from text.
@@ -536,18 +574,18 @@ def extract_ids_from_text(
 
     Args:
         text: Text to search for IDs
-        pattern_config: Configuration for ID structure
+        resolver: IdResolver for ID structure
         ref_config: Configuration for reference matching
 
     Returns:
         List of extracted ID strings (normalized)
     """
-    pattern = build_id_pattern(pattern_config, ref_config, include_assertion=True)
+    pattern = build_id_pattern(resolver, ref_config, include_assertion=True)
 
     ids = []
     for match in pattern.finditer(text):
         match.group("full_id")
-        normalized = normalize_extracted_id(match, pattern_config, ref_config)
+        normalized = normalize_extracted_id(match, resolver, ref_config)
         if normalized:
             ids.append(normalized)
 
@@ -556,16 +594,16 @@ def extract_ids_from_text(
 
 def normalize_extracted_id(
     match: re.Match[str],
-    pattern_config: PatternConfig,
+    resolver: IdResolver,
     ref_config: ReferenceConfig,
 ) -> str:
     """Normalize extracted ID to canonical format.
 
-    Converts matched ID to the standard format defined by pattern_config.
+    Converts matched ID to the standard format defined by resolver config.
 
     Args:
         match: Regex match object with named groups
-        pattern_config: Configuration for ID structure
+        resolver: IdResolver for ID structure
         ref_config: Configuration for separators
 
     Returns:
@@ -579,8 +617,8 @@ def normalize_extracted_id(
         # If groups don't exist, return the full match
         return match.group(0)
 
-    # Build canonical ID using pattern_config
-    prefix = pattern_config.prefix
+    # Build canonical ID using resolver config
+    prefix = resolver.config.namespace
     canonical_sep = "-"  # Standard separator for canonical format
 
     # Base ID
