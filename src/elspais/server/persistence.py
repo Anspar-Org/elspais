@@ -36,7 +36,6 @@ from elspais.graph.relations import EdgeKind
 from elspais.utilities.spec_writer import (
     add_assertion_to_file,
     add_requirement_to_file,
-    change_reference_type,
     delete_assertion_from_file,
     delete_requirement_from_file,
     fix_reference_in_file,
@@ -331,29 +330,17 @@ def replay_mutations_to_disk(
             saved_count += 1
 
         elif op == "change_edge_kind":
-            # This changes IMPLEMENTS <-> REFINES; use change_reference_type
+            # Coalesce with add_edge/delete_edge: the live graph already
+            # reflects the new edge kind, so writing the full implements +
+            # refines lists will produce the correct result.  This avoids
+            # ordering conflicts when change_edge_kind and add_edge both
+            # affect the same requirement in a single save batch.
             source_id = entry.before_state.get("source_id") or entry.after_state.get(
                 "source_id", ""
             )
-            target_id = entry.before_state.get("target_id") or entry.after_state.get(
-                "target_id", ""
-            )
-            new_kind = entry.after_state.get("edge_kind", "")
-            file_path = _get_source_path(graph, source_id, repo_root)
-            if file_path is None:
-                skipped.append(f"change_edge_kind({source_id}): no source file")
-                continue
-            # Capitalize for spec_writer: "implements" -> "IMPLEMENTS"
-            new_type = new_kind.upper() if new_kind else "IMPLEMENTS"
-            result = change_reference_type(file_path, source_id, target_id, new_type)
-            if result.get("success"):
-                files_modified.add(str(file_path))
-                saved_count += 1
-            else:
-                errors.append(
-                    f"change_edge_kind({source_id}->{target_id}): "
-                    f"{result.get('error', 'unknown error')}"
-                )
+            if source_id:
+                edge_affected_reqs.add(source_id)
+            saved_count += 1
 
         elif op == "delete_assertion":
             assertion_id = entry.target_id
