@@ -780,6 +780,7 @@ class TraceGraph:
         was_root = node in self._roots
 
         # Record state before deletion
+        source_path = node.source.path if node.source else None
         entry = MutationEntry(
             operation="delete_requirement",
             target_id=node_id,
@@ -792,6 +793,7 @@ class TraceGraph:
                 "was_root": was_root,
                 "parent_ids": [p.id for p in node.iter_parents()],
                 "child_ids": [c.id for c in node.iter_children()],
+                "source_path": source_path,
             },
             after_state={},  # Node deleted
         )

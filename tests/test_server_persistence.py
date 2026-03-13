@@ -723,3 +723,459 @@ class TestAssertionTargetPersistence:
                 break
         else:
             raise AssertionError("No Implements line found in file")
+
+
+# ---------------------------------------------------------------------------
+# REFINES edge coalescing
+# ---------------------------------------------------------------------------
+
+SPEC_WITH_REFINES = """\
+## REQ-t00001: Test Requirement
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001 | **Refines**: REQ-p00002
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Test Requirement* | **Hash**: abcd1234
+---
+"""
+
+SPEC_WITHOUT_REFINES = """\
+## REQ-t00001: Test Requirement
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *Test Requirement* | **Hash**: abcd1234
+---
+"""
+
+
+def _build_refines_graph(
+    tmp_path: Path,
+    spec_content: str,
+    has_refines_edge: bool = False,
+) -> tuple[TraceGraph, Path]:
+    """Build a graph with optional REFINES edge for testing."""
+    spec_file = tmp_path / "test_spec.md"
+    spec_file.write_text(spec_content, encoding="utf-8")
+
+    graph = TraceGraph(repo_root=tmp_path)
+    rel_path = str(spec_file.relative_to(tmp_path))
+
+    prd1 = GraphNode(
+        id="REQ-p00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Product Req 1",
+        source=SourceLocation(path=rel_path, line=1),
+    )
+    prd1._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+
+    prd2 = GraphNode(
+        id="REQ-p00002",
+        kind=NodeKind.REQUIREMENT,
+        label="Product Req 2",
+        source=SourceLocation(path=rel_path, line=1),
+    )
+    prd2._content = {"level": "PRD", "status": "Active", "hash": "00000001"}
+
+    req = GraphNode(
+        id="REQ-t00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Test Requirement",
+        source=SourceLocation(path=rel_path, line=1),
+    )
+    req._content = {"level": "DEV", "status": "Active", "hash": "abcd1234", "body_text": ""}
+
+    a1 = GraphNode(
+        id="REQ-t00001-A",
+        kind=NodeKind.ASSERTION,
+        label="The system SHALL do something.",
+        source=SourceLocation(path=rel_path, line=7),
+    )
+    a1._content = {"label": "A"}
+    req.add_child(a1)
+
+    # IMPLEMENTS edge
+    prd1.link(req, EdgeKind.IMPLEMENTS)
+
+    # Optional REFINES edge
+    if has_refines_edge:
+        prd2.link(req, EdgeKind.REFINES)
+
+    graph._roots = [prd1, prd2]
+    graph._index = {
+        "REQ-p00001": prd1,
+        "REQ-p00002": prd2,
+        "REQ-t00001": req,
+        "REQ-t00001-A": a1,
+    }
+
+    return graph, spec_file
+
+
+class TestReplayRefinesEdge:
+    """Tests for REFINES edge coalescing in replay_mutations_to_disk."""
+
+    def test_add_refines_edge_persisted(self, tmp_path: Path):
+        """Adding a REFINES edge is persisted to the Refines field."""
+        graph, spec_file = _build_refines_graph(
+            tmp_path, SPEC_WITHOUT_REFINES, has_refines_edge=False
+        )
+
+        # Add REFINES edge via graph API
+        graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.REFINES)
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Refines**: REQ-p00002" in content
+        # Implements should still be there
+        assert "**Implements**: REQ-p00001" in content
+
+    def test_add_refines_edge_inserts_field_when_missing(self, tmp_path: Path):
+        """When **Refines** field doesn't exist, it is inserted into the metadata line."""
+        graph, spec_file = _build_refines_graph(
+            tmp_path, SPEC_WITHOUT_REFINES, has_refines_edge=False
+        )
+
+        graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.REFINES)
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        # Should have inserted | **Refines**: REQ-p00002 into metadata line
+        for line in content.splitlines():
+            if "**Level**:" in line:
+                assert "**Refines**: REQ-p00002" in line
+                assert "**Implements**: REQ-p00001" in line
+                break
+        else:
+            raise AssertionError("No metadata line found")
+
+    def test_delete_refines_edge_persisted(self, tmp_path: Path):
+        """Deleting a REFINES edge updates the Refines field to '-'."""
+        graph, spec_file = _build_refines_graph(tmp_path, SPEC_WITH_REFINES, has_refines_edge=True)
+
+        graph.delete_edge("REQ-t00001", "REQ-p00002")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Refines**: -" in content or "**Refines**:  -" in content
+        # Implements should be untouched
+        assert "**Implements**: REQ-p00001" in content
+
+    def test_refines_with_assertion_targets(self, tmp_path: Path):
+        """REFINES edge with assertion_targets produces qualified IDs."""
+        graph, spec_file = _build_refines_graph(
+            tmp_path, SPEC_WITHOUT_REFINES, has_refines_edge=False
+        )
+
+        graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.REFINES, assertion_targets=["A"])
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-p00002-A" in content
+
+    def test_mixed_implements_and_refines_mutations(self, tmp_path: Path):
+        """Both IMPLEMENTS and REFINES edge changes on same req coalesce correctly."""
+        graph, spec_file = _build_refines_graph(tmp_path, SPEC_WITH_REFINES, has_refines_edge=True)
+
+        # Add a third PRD and IMPLEMENTS edge
+        prd3 = GraphNode(
+            id="REQ-p00003",
+            kind=NodeKind.REQUIREMENT,
+            label="Product Req 3",
+        )
+        prd3._content = {"level": "PRD", "status": "Active", "hash": "00000002"}
+        graph._index["REQ-p00003"] = prd3
+        graph._roots.append(prd3)
+
+        graph.add_edge("REQ-t00001", "REQ-p00003", EdgeKind.IMPLEMENTS)
+        # Also delete the REFINES edge
+        graph.delete_edge("REQ-t00001", "REQ-p00002")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        # Implements should have both p00001 and p00003
+        assert "REQ-p00001" in content
+        assert "REQ-p00003" in content
+        # Refines should be empty now
+        assert "**Refines**: -" in content or "**Refines**:  -" in content
+
+
+# ---------------------------------------------------------------------------
+# delete_assertion replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayDeleteAssertion:
+    """Tests for replaying delete_assertion mutations to disk."""
+
+    def test_delete_assertion_removes_line(self, tmp_path: Path):
+        """delete_assertion mutation removes the assertion line from the spec file."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        # Delete assertion B (with compaction: no renames since it's the last)
+        graph.delete_assertion("REQ-t00001-B")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "A. The system SHALL do something." in content
+        assert "B. The system SHALL do another thing." not in content
+
+    def test_delete_assertion_with_compaction(self, tmp_path: Path):
+        """Deleting a middle assertion compacts subsequent labels."""
+        # Build a spec with 3 assertions
+        spec_3 = MINIMAL_SPEC.replace(
+            "B. The system SHALL do another thing.",
+            "B. The system SHALL do another thing.\nC. The system SHALL do a third thing.",
+        )
+        graph, spec_file = _build_graph_with_spec(tmp_path, spec_3)
+
+        # Add assertion C to the graph
+        assertion_c = GraphNode(
+            id="REQ-t00001-C",
+            kind=NodeKind.ASSERTION,
+            label="The system SHALL do a third thing.",
+            source=SourceLocation(path=str(spec_file.relative_to(tmp_path)), line=9),
+        )
+        assertion_c._content = {"label": "C"}
+        graph._index["REQ-t00001"].add_child(assertion_c)
+        graph._index["REQ-t00001-C"] = assertion_c
+
+        # Delete assertion A (should compact: B→A, C→B)
+        graph.delete_assertion("REQ-t00001-A")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "A. The system SHALL do another thing." in content
+        assert "B. The system SHALL do a third thing." in content
+        assert "C." not in content
+
+
+# ---------------------------------------------------------------------------
+# rename_assertion replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayRenameAssertion:
+    """Tests for replaying rename_assertion mutations to disk."""
+
+    def test_rename_assertion_changes_label(self, tmp_path: Path):
+        """rename_assertion mutation changes the assertion label in the spec file."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        graph.rename_assertion("REQ-t00001-A", "Z")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "Z. The system SHALL do something." in content
+        assert "A. The system SHALL do something." not in content
+        # B should be unchanged
+        assert "B. The system SHALL do another thing." in content
+
+
+# ---------------------------------------------------------------------------
+# fix_broken_reference replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayFixBrokenReference:
+    """Tests for replaying fix_broken_reference mutations to disk."""
+
+    def test_fix_broken_reference_updates_file(self, tmp_path: Path):
+        """fix_broken_reference redirects a reference in the spec file."""
+        # Use a spec that references a non-existent req
+        broken_spec = MINIMAL_SPEC.replace("REQ-p00001", "REQ-p99999")
+        spec_file = tmp_path / "test_spec.md"
+        spec_file.write_text(broken_spec, encoding="utf-8")
+
+        graph = TraceGraph(repo_root=tmp_path)
+        rel_path = str(spec_file.relative_to(tmp_path))
+
+        # Real target
+        prd = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Product Req",
+            source=SourceLocation(path=rel_path, line=1),
+        )
+        prd._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+
+        # Source with broken ref
+        req = GraphNode(
+            id="REQ-t00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Test Requirement",
+            source=SourceLocation(path=rel_path, line=1),
+        )
+        req._content = {"level": "DEV", "status": "Active", "hash": "abcd1234"}
+
+        graph._roots = [prd, req]
+        graph._index = {"REQ-p00001": prd, "REQ-t00001": req}
+
+        # Add a broken reference manually
+        from elspais.graph.builder import BrokenReference
+
+        graph._broken_references.append(
+            BrokenReference(
+                source_id="REQ-t00001",
+                target_id="REQ-p99999",
+                edge_kind="implements",
+            )
+        )
+
+        # Fix the broken reference
+        graph.fix_broken_reference("REQ-t00001", "REQ-p99999", "REQ-p00001")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-p00001" in content
+        assert "REQ-p99999" not in content
+
+
+# ---------------------------------------------------------------------------
+# rename_node replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayRenameNode:
+    """Tests for replaying rename_node mutations to disk."""
+
+    def test_rename_node_updates_header(self, tmp_path: Path):
+        """rename_node changes the requirement ID in the header."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        graph.rename_node("REQ-t00001", "REQ-t00099")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "## REQ-t00099:" in content
+        assert "REQ-t00001" not in content
+
+    def test_rename_node_updates_references_in_other_reqs(self, tmp_path: Path):
+        """rename_node also updates references in other requirements."""
+        graph, spec_file = _build_two_req_graph(tmp_path)
+
+        # Change the spec so REQ-t00002 implements REQ-t00001
+        content = spec_file.read_text(encoding="utf-8")
+        content = content.replace(
+            "**Implements**: REQ-p00002",
+            "**Implements**: REQ-t00001",
+        )
+        spec_file.write_text(content, encoding="utf-8")
+
+        # Add IMPLEMENTS edge: REQ-t00002 -> REQ-t00001
+        graph._index["REQ-t00001"].link(graph._index["REQ-t00002"], EdgeKind.IMPLEMENTS)
+
+        graph.rename_node("REQ-t00001", "REQ-t00099")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "## REQ-t00099:" in content
+        # The reference from REQ-t00002 should also be updated
+        assert "**Implements**: REQ-t00099" in content
+        assert "REQ-t00001" not in content
+
+
+# ---------------------------------------------------------------------------
+# add_requirement replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayAddRequirement:
+    """Tests for replaying add_requirement mutations to disk."""
+
+    def test_add_requirement_appends_to_parent_file(self, tmp_path: Path):
+        """add_requirement appends a requirement block to the parent's file."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        graph.add_requirement(
+            "REQ-t00002",
+            "New Requirement",
+            "DEV",
+            status="Draft",
+            parent_id="REQ-p00001",
+        )
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "## REQ-t00002: New Requirement" in content
+        assert "**Level**: DEV" in content
+        assert "**Implements**: REQ-p00001" in content
+        assert "*End* *New Requirement*" in content
+
+    def test_add_requirement_without_parent_skips(self, tmp_path: Path):
+        """add_requirement without parent_id is skipped (no target file)."""
+        graph, spec_file = _build_graph_with_spec(tmp_path, MINIMAL_SPEC)
+
+        graph.add_requirement("REQ-t00099", "Orphan Req", "DEV")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+        assert any("no target file" in s for s in result["skipped"])
+
+
+# ---------------------------------------------------------------------------
+# delete_requirement replay
+# ---------------------------------------------------------------------------
+
+
+class TestReplayDeleteRequirement:
+    """Tests for replaying delete_requirement mutations to disk."""
+
+    def test_delete_requirement_removes_block(self, tmp_path: Path):
+        """delete_requirement removes the entire requirement block from the file."""
+        graph, spec_file = _build_two_req_graph(tmp_path)
+
+        graph.delete_requirement("REQ-t00002")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-t00001" in content  # First req should remain
+        assert "REQ-t00002" not in content  # Second req should be gone
+        assert "Second Requirement" not in content
+
+    def test_delete_requirement_preserves_other_reqs(self, tmp_path: Path):
+        """Deleting one requirement doesn't affect others in the same file."""
+        graph, spec_file = _build_two_req_graph(tmp_path)
+
+        graph.delete_requirement("REQ-t00001")
+
+        result = replay_mutations_to_disk(graph, tmp_path)
+        assert result["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-t00002" in content
+        assert "Second Requirement" in content
+        assert "First Requirement" not in content

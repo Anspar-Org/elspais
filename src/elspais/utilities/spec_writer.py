@@ -12,12 +12,20 @@ Public API
 - ``update_hash_in_file``      — update hash in a requirement's End marker
 - ``add_status_to_file``       — add a missing Status field to metadata
 - ``modify_implements``        — change the Implements field of a requirement
+- ``modify_refines``           — change the Refines field of a requirement
 - ``modify_status``            — change the Status field of a requirement
 - ``modify_title``             — change the title of a requirement
 - ``modify_assertion_text``    — change an assertion's text in a requirement
 - ``add_assertion_to_file``    — add a new assertion to a requirement
+- ``delete_assertion_from_file`` — remove an assertion from a requirement
+- ``rename_assertion_in_file``  — rename an assertion label in a requirement
 - ``move_requirement``         — move a requirement between spec files
 - ``change_reference_type``    — change Implements/Refines in a spec file
+- ``fix_reference_in_file``    — redirect a broken reference to a new target
+- ``rename_requirement_id``    — rename a requirement ID in its header
+- ``rename_references_in_file`` — update all references to an old ID in a file
+- ``add_requirement_to_file``  — add a new requirement block to a spec file
+- ``delete_requirement_from_file`` — remove a requirement block from a spec file
 """
 
 from __future__ import annotations
@@ -245,6 +253,104 @@ def modify_implements(
         "success": True,
         "old_implements": old_implements,
         "new_implements": new_implements,
+        "dry_run": dry_run,
+    }
+
+
+def modify_refines(
+    file_path: Path,
+    req_id: str,
+    new_refines: list[str],
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Modify the Refines field of a requirement.
+
+    If the field does not exist yet and new_refines is non-empty, inserts
+    ``| **Refines**: ...`` into the metadata line.  If it exists and
+    new_refines is empty, sets the value to ``-``.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID to modify.
+        new_refines: New list of refines references (empty = set to "-").
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, old_refines, new_refines, error.
+    """
+    from elspais.graph.parsers.requirement import RequirementParser
+
+    content = file_path.read_text(encoding="utf-8")
+
+    # Find the requirement header (any markdown header level)
+    req_match = _find_req_header(content, req_id)
+
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    # Find the **Refines**: field after the header
+    start_pos = req_match.end()
+    search_region = content[start_pos : start_pos + 500]
+
+    refines_match = RequirementParser.REFINES_PATTERN.search(search_region)
+
+    if refines_match:
+        # Field exists — surgical replacement (same approach as modify_implements)
+        old_value = refines_match.group("refines").strip()
+        old_refines = [v.strip() for v in old_value.split(",")] if old_value != "-" else []
+
+        new_value = ", ".join(new_refines) if new_refines else "-"
+
+        abs_start = start_pos + refines_match.start("refines")
+        abs_end = start_pos + refines_match.end("refines")
+
+        if old_value == new_value:
+            return {
+                "success": True,
+                "old_refines": old_refines,
+                "new_refines": new_refines,
+                "no_change": True,
+                "dry_run": dry_run,
+            }
+
+        new_content = content[:abs_start] + new_value + content[abs_end:]
+    else:
+        # Field does not exist — need to insert it or treat as no-op
+        old_refines = []
+
+        if not new_refines:
+            return {
+                "success": True,
+                "old_refines": [],
+                "new_refines": [],
+                "no_change": True,
+                "dry_run": dry_run,
+            }
+
+        # Insert | **Refines**: value into the metadata line.
+        # Find the metadata line (the line containing **Level**: after the header).
+        meta_pattern = re.compile(r"^(\*\*Level\*\*:.+)$", re.MULTILINE)
+        meta_match = meta_pattern.search(search_region)
+        if not meta_match:
+            return {
+                "success": False,
+                "error": f"Could not find metadata line for {req_id} to insert **Refines**",
+            }
+
+        new_value = ", ".join(new_refines)
+        insert_text = f" | **Refines**: {new_value}"
+
+        # Insert at end of the metadata line
+        abs_insert = start_pos + meta_match.end(1)
+        new_content = content[:abs_insert] + insert_text + content[abs_insert:]
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "old_refines": old_refines,
+        "new_refines": new_refines,
         "dry_run": dry_run,
     }
 
@@ -583,6 +689,164 @@ def add_assertion_to_file(
     }
 
 
+def delete_assertion_from_file(
+    file_path: Path,
+    req_id: str,
+    label: str,
+    renames: list[dict[str, str]] | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Delete an assertion from a requirement's Assertions section.
+
+    Removes the assertion line for ``label`` (including multi-line
+    continuations).  When ``renames`` is provided, subsequent assertions
+    are relabeled to compact the sequence (e.g., after deleting B,
+    C→B, D→C).
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID containing the assertion.
+        label: Assertion label to delete (e.g., 'B').
+        renames: Optional list of ``{"old_label": "C", "new_label": "B"}``
+            dicts describing compaction renames to apply after deletion.
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, deleted_label, dry_run, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    req_match = _find_req_header(content, req_id)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    start_pos = req_match.end()
+    next_header = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
+    end_pos = next_header.start() if next_header else len(content)
+
+    block = content[start_pos:end_pos]
+
+    # Find the assertion line
+    assertion_pattern = re.compile(
+        rf"^(\s*{re.escape(label)}\.\s+.+)$",
+        re.MULTILINE,
+    )
+    assertion_match = assertion_pattern.search(block)
+    if not assertion_match:
+        return {"success": False, "error": f"Assertion {label} not found in {req_id}"}
+
+    # Calculate the full extent including continuation lines
+    line_start = assertion_match.start()
+    line_end = assertion_match.end()
+
+    remaining = block[line_end:]
+    for line in remaining.split("\n")[1:]:
+        if not line:
+            break
+        if re.match(r"^\s+\S", line):
+            line_end += 1 + len(line)
+        else:
+            break
+
+    # Include the preceding newline if present (to avoid blank line gaps)
+    abs_line_start = start_pos + line_start
+    abs_line_end = start_pos + line_end
+    if abs_line_start > 0 and content[abs_line_start - 1] == "\n":
+        abs_line_start -= 1
+
+    new_content = content[:abs_line_start] + content[abs_line_end:]
+
+    # Apply compaction renames if provided
+    if renames:
+        for rename in renames:
+            old_lbl = rename.get("old_label", "")
+            new_lbl = rename.get("new_label", "")
+            if old_lbl and new_lbl:
+                # Replace "{old_label}. " with "{new_label}. " within the req block
+                rename_pattern = re.compile(
+                    rf"^(\s*){re.escape(old_lbl)}(\.\s+)",
+                    re.MULTILINE,
+                )
+                new_content = rename_pattern.sub(rf"\g<1>{new_lbl}\2", new_content, count=1)
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "deleted_label": label,
+        "dry_run": dry_run,
+    }
+
+
+def rename_assertion_in_file(
+    file_path: Path,
+    req_id: str,
+    old_label: str,
+    new_label: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Rename an assertion label within a requirement block.
+
+    Changes ``{old_label}. text`` to ``{new_label}. text``.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID containing the assertion.
+        old_label: Current assertion label (e.g., 'A').
+        new_label: New assertion label (e.g., 'D').
+        dry_run: If True, don't actually modify the file.
+
+    Returns:
+        Dict with success, old_label, new_label, dry_run, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    req_match = _find_req_header(content, req_id)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    start_pos = req_match.end()
+    next_header = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
+    end_pos = next_header.start() if next_header else len(content)
+
+    block = content[start_pos:end_pos]
+
+    # Find the assertion line
+    assertion_pattern = re.compile(
+        rf"^(\s*){re.escape(old_label)}(\.\s+.+)$",
+        re.MULTILINE,
+    )
+    assertion_match = assertion_pattern.search(block)
+    if not assertion_match:
+        return {"success": False, "error": f"Assertion {old_label} not found in {req_id}"}
+
+    if old_label == new_label:
+        return {
+            "success": True,
+            "old_label": old_label,
+            "new_label": new_label,
+            "no_change": True,
+            "dry_run": dry_run,
+        }
+
+    # Replace just the label portion
+    abs_label_start = start_pos + assertion_match.start() + len(assertion_match.group(1))
+    abs_label_end = abs_label_start + len(old_label)
+
+    new_content = content[:abs_label_start] + new_label + content[abs_label_end:]
+
+    if not dry_run:
+        file_path.write_text(new_content, encoding="utf-8")
+
+    return {
+        "success": True,
+        "old_label": old_label,
+        "new_label": new_label,
+        "dry_run": dry_run,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Move requirement (consolidated from edit.py + server.py)
 # ---------------------------------------------------------------------------
@@ -782,3 +1046,217 @@ def add_changelog_entry(
 
     file_path.write_text(new_content, encoding="utf-8")
     return None
+
+
+def fix_reference_in_file(
+    file_path: Path,
+    req_id: str,
+    old_target_id: str,
+    new_target_id: str,
+) -> dict[str, Any]:
+    """Redirect a broken reference in a requirement's metadata.
+
+    Replaces ``old_target_id`` with ``new_target_id`` within the
+    ``**Implements**:`` or ``**Refines**:`` fields of the given
+    requirement block.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID containing the broken reference.
+        old_target_id: The current (broken) target ID.
+        new_target_id: The new target ID to point to.
+
+    Returns:
+        Dict with success, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    req_match = _find_req_header(content, req_id)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    start_pos = req_match.end()
+    next_header = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
+    end_pos = next_header.start() if next_header else len(content)
+
+    block = content[start_pos:end_pos]
+
+    if old_target_id not in block:
+        return {
+            "success": False,
+            "error": f"Reference to {old_target_id} not found in {req_id}",
+        }
+
+    new_block = block.replace(old_target_id, new_target_id)
+    new_content = content[:start_pos] + new_block + content[end_pos:]
+
+    file_path.write_text(new_content, encoding="utf-8")
+
+    return {"success": True}
+
+
+def rename_requirement_id(
+    file_path: Path,
+    old_id: str,
+    new_id: str,
+) -> dict[str, Any]:
+    """Rename a requirement ID in its header line.
+
+    Changes ``## OLD_ID: Title`` to ``## NEW_ID: Title``.
+
+    Args:
+        file_path: Path to the spec file.
+        old_id: Current requirement ID.
+        new_id: New requirement ID.
+
+    Returns:
+        Dict with success, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    # Match the heading with the ID as a captured group
+    pattern = re.compile(
+        rf"^(#+\s+)({re.escape(old_id)})(:\s*.+)$",
+        re.MULTILINE,
+    )
+    match = pattern.search(content)
+    if not match:
+        return {"success": False, "error": f"Requirement {old_id} not found in {file_path}"}
+
+    # Replace just the ID portion (group 2)
+    abs_start = match.start(2)
+    abs_end = match.end(2)
+
+    new_content = content[:abs_start] + new_id + content[abs_end:]
+
+    file_path.write_text(new_content, encoding="utf-8")
+
+    return {"success": True}
+
+
+def rename_references_in_file(
+    file_path: Path,
+    old_id: str,
+    new_id: str,
+) -> dict[str, Any]:
+    """Replace all references to an old requirement ID within a file.
+
+    Scans the ``**Implements**:``, ``**Refines**:``, and
+    ``**Satisfies**:`` fields for ``old_id`` and replaces with
+    ``new_id``.  Uses a global replace within those metadata values
+    since requirement IDs are fixed-width and don't appear as
+    substrings of each other.
+
+    Args:
+        file_path: Path to the spec file.
+        old_id: The old requirement ID to find.
+        new_id: The new requirement ID to substitute.
+
+    Returns:
+        Dict with success, count (number of replacements), error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    if old_id not in content:
+        return {"success": True, "count": 0, "no_change": True}
+
+    new_content = content.replace(old_id, new_id)
+    count = content.count(old_id)
+
+    file_path.write_text(new_content, encoding="utf-8")
+
+    return {"success": True, "count": count}
+
+
+def add_requirement_to_file(
+    file_path: Path,
+    req_id: str,
+    title: str,
+    level: str,
+    status: str = "Draft",
+    implements_list: list[str] | None = None,
+    hash_value: str = "00000000",
+) -> dict[str, Any]:
+    """Append a new requirement block to a spec file.
+
+    Creates a complete requirement block with metadata, empty
+    Assertions section, and End marker, then appends it to the file.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID (e.g., 'REQ-d00099').
+        title: Requirement title text.
+        level: Requirement level (e.g., 'DEV', 'OPS', 'PRD').
+        status: Requirement status (default 'Draft').
+        implements_list: Optional list of implements references.
+        hash_value: Initial hash value.
+
+    Returns:
+        Dict with success, error.
+    """
+    impl_str = ", ".join(implements_list) if implements_list else "-"
+
+    block = (
+        f"\n## {req_id}: {title}\n"
+        f"\n"
+        f"**Level**: {level} | **Status**: {status} | **Implements**: {impl_str}\n"
+        f"\n"
+        f"## Assertions\n"
+        f"\n"
+        f"*End* *{title}* | **Hash**: {hash_value}\n"
+        f"---\n"
+    )
+
+    if file_path.exists():
+        content = file_path.read_text(encoding="utf-8")
+        # Ensure a blank line before the new block
+        if content and not content.endswith("\n\n"):
+            if not content.endswith("\n"):
+                content += "\n"
+        new_content = content + block
+    else:
+        new_content = block.lstrip("\n")
+
+    file_path.write_text(new_content, encoding="utf-8")
+
+    return {"success": True}
+
+
+def delete_requirement_from_file(
+    file_path: Path,
+    req_id: str,
+) -> dict[str, Any]:
+    """Remove a requirement block from a spec file.
+
+    Finds the block from ``## REQ-xxx: Title`` through
+    ``*End* *Title* | **Hash**: ...`` (and optional ``---`` separator)
+    and removes it.
+
+    Args:
+        file_path: Path to the spec file.
+        req_id: Requirement ID to remove.
+
+    Returns:
+        Dict with success, error.
+    """
+    content = file_path.read_text(encoding="utf-8")
+
+    # Reuse the same pattern from move_requirement
+    req_pattern = re.compile(
+        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    req_match = req_pattern.search(content)
+    if not req_match:
+        return {"success": False, "error": f"Requirement {req_id} not found in {file_path}"}
+
+    # Remove the block
+    new_content = content[: req_match.start()] + content[req_match.end() :]
+
+    # Clean up multiple blank lines
+    new_content = BLANK_LINE_CLEANUP_RE.sub("\n\n", new_content)
+
+    file_path.write_text(new_content, encoding="utf-8")
+
+    return {"success": True}

@@ -2,10 +2,21 @@
 """Persistence layer — replay in-memory mutations to spec files on disk.
 
 Walks the graph's mutation log and calls the appropriate spec_writer
-function for each mutation entry. Edge mutations are coalesced: instead
-of replaying incremental add/delete operations, we read the *current*
-implements list from the live graph and write it once per affected
-requirement.
+function for each mutation entry.  Supports all mutation types:
+
+- **change_status**, **update_title** — surgical field replacement
+- **update_assertion**, **add_assertion** — assertion text changes
+- **delete_assertion**, **rename_assertion** — assertion structural changes
+- **add_edge**, **delete_edge** — coalesced: reads current implements/refines
+  lists from the live graph and writes once per affected requirement
+- **change_edge_kind** — Implements ↔ Refines conversion
+- **fix_broken_reference** — redirects a broken ref to a new target
+- **rename_node** — renames header + all references across spec files
+- **add_requirement** — appends a new requirement block to parent's file
+- **delete_requirement** — removes a requirement block from its source file
+
+Undo operations are correctly in-memory only; the disk always reflects
+the post-undo graph state.
 
 Public API
 ----------
@@ -24,11 +35,19 @@ from elspais.graph.GraphNode import NodeKind
 from elspais.graph.relations import EdgeKind
 from elspais.utilities.spec_writer import (
     add_assertion_to_file,
+    add_requirement_to_file,
     change_reference_type,
+    delete_assertion_from_file,
+    delete_requirement_from_file,
+    fix_reference_in_file,
     modify_assertion_text,
     modify_implements,
+    modify_refines,
     modify_status,
     modify_title,
+    rename_assertion_in_file,
+    rename_references_in_file,
+    rename_requirement_id,
 )
 
 
@@ -98,6 +117,33 @@ def _get_current_implements_list(graph: TraceGraph, req_id: str) -> list[str]:
     refs: set[str] = set()
     for edge in node.iter_incoming_edges():
         if edge.kind == EdgeKind.IMPLEMENTS and edge.source.kind == NodeKind.REQUIREMENT:
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    refs.add(f"{edge.source.id}-{label}")
+            else:
+                refs.add(edge.source.id)
+    return sorted(refs)
+
+
+def _get_current_refines_list(graph: TraceGraph, req_id: str) -> list[str]:
+    """Build the current refines list for a requirement from graph state.
+
+    Same as ``_get_current_implements_list`` but for REFINES edges.
+
+    Args:
+        graph: The traceability graph.
+        req_id: Requirement ID to inspect.
+
+    Returns:
+        Sorted deduplicated list of parent reference IDs connected via REFINES.
+    """
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return []
+
+    refs: set[str] = set()
+    for edge in node.iter_incoming_edges():
+        if edge.kind == EdgeKind.REFINES and edge.source.kind == NodeKind.REQUIREMENT:
             if edge.assertion_targets:
                 for label in edge.assertion_targets:
                     refs.add(f"{edge.source.id}-{label}")
@@ -309,25 +355,177 @@ def replay_mutations_to_disk(
                     f"{result.get('error', 'unknown error')}"
                 )
 
+        elif op == "delete_assertion":
+            assertion_id = entry.target_id
+            label = entry.before_state.get("label", "")
+            req_id = entry.before_state.get("parent_id", "")
+            renames = entry.before_state.get("renames")
+            if not req_id:
+                req_id, _ = _get_req_id_from_assertion_id(assertion_id)
+            file_path = _get_source_path(graph, req_id, repo_root)
+            if file_path is None:
+                skipped.append(f"delete_assertion({assertion_id}): no source file")
+                continue
+            result = delete_assertion_from_file(file_path, req_id, label, renames=renames)
+            if result.get("success"):
+                files_modified.add(str(file_path))
+                saved_count += 1
+            else:
+                errors.append(
+                    f"delete_assertion({assertion_id}): {result.get('error', 'unknown error')}"
+                )
+
+        elif op == "rename_assertion":
+            assertion_id = entry.target_id
+            old_label = entry.before_state.get("label", "")
+            new_label = entry.after_state.get("label", "")
+            req_id = entry.before_state.get("parent_id", "")
+            if not req_id:
+                req_id, _ = _get_req_id_from_assertion_id(assertion_id)
+            file_path = _get_source_path(graph, req_id, repo_root)
+            if file_path is None:
+                skipped.append(f"rename_assertion({assertion_id}): no source file")
+                continue
+            result = rename_assertion_in_file(file_path, req_id, old_label, new_label)
+            if result.get("success"):
+                files_modified.add(str(file_path))
+                saved_count += 1
+            elif result.get("no_change"):
+                saved_count += 1
+            else:
+                errors.append(
+                    f"rename_assertion({assertion_id}): {result.get('error', 'unknown error')}"
+                )
+
+        elif op == "fix_broken_reference":
+            source_id = entry.before_state.get("source_id", "")
+            old_target_id = entry.before_state.get("old_target_id", "")
+            new_target_id = entry.after_state.get("new_target_id", "")
+            file_path = _get_source_path(graph, source_id, repo_root)
+            if file_path is None:
+                skipped.append(f"fix_broken_reference({source_id}): no source file")
+                continue
+            result = fix_reference_in_file(file_path, source_id, old_target_id, new_target_id)
+            if result.get("success"):
+                files_modified.add(str(file_path))
+                saved_count += 1
+            else:
+                errors.append(
+                    f"fix_broken_reference({source_id}): {result.get('error', 'unknown error')}"
+                )
+
+        elif op == "rename_node":
+            old_id = entry.before_state.get("id", "")
+            new_id = entry.after_state.get("id", "")
+            # The node now has new_id in memory
+            file_path = _get_source_path(graph, new_id, repo_root)
+            if file_path is None:
+                skipped.append(f"rename_node({old_id}): no source file")
+                continue
+            # Rename the header in the source file
+            result = rename_requirement_id(file_path, old_id, new_id)
+            if result.get("success"):
+                files_modified.add(str(file_path))
+                saved_count += 1
+            else:
+                errors.append(f"rename_node({old_id}): {result.get('error', 'unknown error')}")
+                continue
+            # Update references in all spec files that point to old_id
+            # (including the source file itself, which may contain other
+            # reqs that reference the renamed ID)
+            seen_files: set[str] = set()
+            for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+                if node.source is None or not node.source.path:
+                    continue
+                ref_path = _get_source_path(graph, node.id, repo_root)
+                if ref_path is None or str(ref_path) in seen_files:
+                    continue
+                seen_files.add(str(ref_path))
+                ref_result = rename_references_in_file(ref_path, old_id, new_id)
+                if ref_result.get("success") and not ref_result.get("no_change"):
+                    files_modified.add(str(ref_path))
+
+        elif op == "add_requirement":
+            req_id = entry.after_state.get("id", "")
+            title = entry.after_state.get("title", "")
+            level = entry.after_state.get("level", "DEV")
+            status = entry.after_state.get("status", "Draft")
+            hash_value = entry.after_state.get("hash", "00000000")
+            parent_id = entry.after_state.get("parent_id")
+            # Determine target file: use parent's file if available
+            if parent_id:
+                file_path = _get_source_path(graph, parent_id, repo_root)
+            else:
+                file_path = None
+            if file_path is None:
+                skipped.append(
+                    f"add_requirement({req_id}): no target file "
+                    "(specify parent_id to use parent's file)"
+                )
+                continue
+            # Build implements list from parent linkage
+            implements = [parent_id] if parent_id else []
+            result = add_requirement_to_file(
+                file_path, req_id, title, level, status, implements, hash_value
+            )
+            if result.get("success"):
+                files_modified.add(str(file_path))
+                saved_count += 1
+            else:
+                errors.append(f"add_requirement({req_id}): {result.get('error', 'unknown error')}")
+
+        elif op == "delete_requirement":
+            node_id = entry.target_id
+            source_path = entry.before_state.get("source_path")
+            if not source_path:
+                skipped.append(f"delete_requirement({node_id}): no source file in mutation state")
+                continue
+            p = Path(source_path)
+            if not p.is_absolute():
+                p = repo_root / p
+            if not p.exists():
+                skipped.append(f"delete_requirement({node_id}): source file does not exist")
+                continue
+            result = delete_requirement_from_file(p, node_id)
+            if result.get("success"):
+                files_modified.add(str(p))
+                saved_count += 1
+            else:
+                errors.append(
+                    f"delete_requirement({node_id}): {result.get('error', 'unknown error')}"
+                )
+
         else:
-            # Operations that don't map to file changes (rename_node,
-            # add_requirement, delete_requirement, rename_assertion,
-            # delete_assertion, fix_broken_reference) are skipped because
-            # they require more complex file mutations not yet supported.
             skipped.append(f"{op}({entry.target_id}): not yet supported for disk persistence")
 
-    # Write coalesced edge mutations: full implements list per affected requirement
+    # Write coalesced edge mutations: full implements + refines list per affected requirement
     for req_id in edge_affected_reqs:
         file_path = _get_source_path(graph, req_id, repo_root)
         if file_path is None:
             skipped.append(f"edge_coalesce({req_id}): no source file")
             continue
+
+        # Coalesce IMPLEMENTS edges
         implements_list = _get_current_implements_list(graph, req_id)
         result = modify_implements(file_path, req_id, implements_list)
         if result.get("success"):
-            files_modified.add(str(file_path))
-        elif not result.get("no_change"):
-            errors.append(f"edge_coalesce({req_id}): {result.get('error', 'unknown error')}")
+            if not result.get("no_change"):
+                files_modified.add(str(file_path))
+        else:
+            errors.append(
+                f"edge_coalesce_implements({req_id}): {result.get('error', 'unknown error')}"
+            )
+
+        # Coalesce REFINES edges
+        refines_list = _get_current_refines_list(graph, req_id)
+        result = modify_refines(file_path, req_id, refines_list)
+        if result.get("success"):
+            if not result.get("no_change"):
+                files_modified.add(str(file_path))
+        else:
+            errors.append(
+                f"edge_coalesce_refines({req_id}): {result.get('error', 'unknown error')}"
+            )
 
     # Clear mutation log after successful save
     if not errors:
