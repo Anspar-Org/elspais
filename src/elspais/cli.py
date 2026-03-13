@@ -589,19 +589,15 @@ Quick Start (.elspais.toml):
   [spec]
   directories = ["spec"]         # Where requirement files live
 
-  [patterns]
-  prefix = "REQ"                 # Requirement ID prefix
-  separator = "-"                # ID separator (REQ-p00001)
-
-  [rules]
-  strict_mode = false            # Strict implements semantics
+  [id-patterns]
+  canonical = "{namespace}-{type.letter}{component}"
 
   [rules.hierarchy]
   allowed = ["dev -> ops, prd", "ops -> prd"]
 
 Common Commands:
   elspais config show            # View current config
-  elspais config get patterns.prefix
+  elspais config get project.namespace
   elspais config set project.name "MyApp"
   elspais config path            # Show config file location
 

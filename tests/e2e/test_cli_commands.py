@@ -126,8 +126,8 @@ class TestConfig:
         assert result.returncode == 0
         assert ".toml" in result.stdout
 
-    def test_REQ_p00013_B_config_get_prefix(self):
-        result = run_elspais("config", "get", "patterns.prefix")
+    def test_REQ_p00013_B_config_get_namespace(self):
+        result = run_elspais("config", "get", "project.namespace")
         assert result.returncode == 0
         assert "REQ" in result.stdout
 
