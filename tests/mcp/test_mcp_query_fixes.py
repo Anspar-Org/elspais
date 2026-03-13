@@ -91,50 +91,65 @@ class TestLevelNormalization:
 
     def test_resolve_level_maps_uppercase(self):
         """resolve_level() maps uppercase 'PRD' to 'prd'."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        config = PatternConfig.from_dict(
+        id_config = IdPatternConfig.from_dict(
             {
-                "types": {
-                    "prd": {"id": "p", "name": "PRD", "level": 1},
-                    "ops": {"id": "o", "name": "OPS", "level": 2},
-                    "dev": {"id": "d", "name": "DEV", "level": 3},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
                 },
             }
         )
-        assert config.resolve_level("PRD") == "prd"
-        assert config.resolve_level("OPS") == "ops"
-        assert config.resolve_level("DEV") == "dev"
+        resolver = IdResolver(id_config)
+        assert resolver.resolve_level("PRD") == "prd"
+        assert resolver.resolve_level("OPS") == "ops"
+        assert resolver.resolve_level("DEV") == "dev"
 
     def test_resolve_level_maps_mixed_case(self):
         """resolve_level() maps mixed case 'Dev' to 'dev'."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        config = PatternConfig.from_dict(
+        id_config = IdPatternConfig.from_dict(
             {
-                "types": {
-                    "prd": {"id": "p", "name": "PRD", "level": 1},
-                    "ops": {"id": "o", "name": "OPS", "level": 2},
-                    "dev": {"id": "d", "name": "DEV", "level": 3},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
                 },
             }
         )
-        assert config.resolve_level("Dev") == "dev"
-        assert config.resolve_level("Prd") == "prd"
+        resolver = IdResolver(id_config)
+        assert resolver.resolve_level("Dev") == "dev"
+        assert resolver.resolve_level("Prd") == "prd"
 
     def test_resolve_level_unknown_returns_none(self):
         """resolve_level() returns None for unrecognized levels."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        config = PatternConfig.from_dict(
+        id_config = IdPatternConfig.from_dict(
             {
-                "types": {
-                    "prd": {"id": "p", "name": "PRD", "level": 1},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    },
                 },
             }
         )
-        assert config.resolve_level("UNKNOWN") is None
-        assert config.resolve_level("xyz") is None
+        resolver = IdResolver(id_config)
+        assert resolver.resolve_level("UNKNOWN") is None
+        assert resolver.resolve_level("xyz") is None
 
     def test_parser_normalizes_level(self):
         """Parser stores canonical config type key, not raw text."""

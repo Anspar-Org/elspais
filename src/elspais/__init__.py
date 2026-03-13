@@ -19,9 +19,10 @@ except PackageNotFoundError:
 __author__ = "Anspar"
 __license__ = "MIT"
 
-from elspais.utilities.patterns import PatternValidator
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
 __all__ = [
     "__version__",
-    "PatternValidator",
+    "IdPatternConfig",
+    "IdResolver",
 ]

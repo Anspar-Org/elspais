@@ -29,45 +29,8 @@ from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
-from elspais.utilities.patterns import IdPatternConfig, IdResolver, PatternConfig
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from elspais.utilities.reference_config import ReferenceResolver
-
-
-def _bridge_pattern_config(resolver: IdResolver) -> PatternConfig:
-    """Create a backward-compatible PatternConfig from an IdResolver.
-
-    Temporary bridge until all parsers migrate to IdResolver.
-    """
-    config = resolver.config
-    # Build old-style types dict
-    old_types = {}
-    for code, tdef in config.types.items():
-        letter = tdef.aliases.get("letter", code[0] if code else "")
-        old_types[code] = {"id": letter, "name": code.upper(), "level": tdef.level}
-
-    # Build old-style id_format
-    old_format = {
-        "style": config.component.style,
-        "digits": config.component.digits,
-        "leading_zeros": config.component.leading_zeros,
-    }
-    if config.component.pattern:
-        old_format["pattern"] = config.component.pattern
-
-    # Build old-style assertions
-    old_assertions = {
-        "label_style": config.assertions.label_style,
-        "max_count": config.assertions.max_count,
-        "zero_pad": config.assertions.zero_pad,
-    }
-
-    return PatternConfig(
-        id_template="{prefix}-{type}{id}",
-        prefix=config.namespace,
-        types=old_types,
-        id_format=old_format,
-        assertions=old_assertions,
-    )
 
 
 def _build_resolver(config: dict[str, Any]) -> IdResolver:

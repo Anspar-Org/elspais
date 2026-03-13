@@ -260,7 +260,7 @@ def _make_overview_graph(base_dir: Path | None = None) -> TraceGraph:
     prd = graph.find_by_id("REQ-p00001")
     prd.add_child(ops)
 
-    # Associated-repo PRD (root, depth 0) — detected by PatternValidator
+    # Associated-repo PRD (root, depth 0) — detected by namespace pattern
     assoc = GraphNode(
         id="REQ-CAL-p00001",
         kind=NodeKind.REQUIREMENT,
