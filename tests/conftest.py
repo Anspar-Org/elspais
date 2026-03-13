@@ -76,6 +76,30 @@ def assertions_fixture() -> Path:
 
 
 @pytest.fixture
+def hht_resolver():
+    """Return an IdResolver configured for the standard HHT-like pattern."""
+    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+    config = IdPatternConfig.from_dict(
+        {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
+                "aliases": {"short": "{type.letter}{component}"},
+                "types": {
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase", "max_count": 26},
+            },
+        }
+    )
+    return IdResolver(config)
+
+
+@pytest.fixture
 def temp_project(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary project directory for testing."""
     project_dir = tmp_path / "test-project"
@@ -109,24 +133,21 @@ def sample_config_dict() -> dict:
         "project": {
             "name": "test-project",
             "type": "core",
+            "namespace": "REQ",
         },
         "directories": {
             "spec": "spec",
             "docs": "docs",
         },
-        "patterns": {
-            "id_template": "{prefix}-{type}{id}",
-            "prefix": "REQ",
+        "id-patterns": {
+            "canonical": "{namespace}-{type.letter}{component}",
+            "aliases": {"short": "{type.letter}{component}"},
             "types": {
-                "prd": {"id": "p", "level": 1},
-                "ops": {"id": "o", "level": 2},
-                "dev": {"id": "d", "level": 3},
+                "prd": {"level": 1, "aliases": {"letter": "p"}},
+                "ops": {"level": 2, "aliases": {"letter": "o"}},
+                "dev": {"level": 3, "aliases": {"letter": "d"}},
             },
-            "id_format": {
-                "style": "numeric",
-                "digits": 5,
-                "leading_zeros": True,
-            },
+            "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
         },
         "rules": {
             "hierarchy": {

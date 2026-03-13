@@ -139,18 +139,23 @@ class TestLevelNormalization:
     def test_parser_normalizes_level(self):
         """Parser stores canonical config type key, not raw text."""
         from elspais.graph.parsers.requirement import RequirementParser
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        config = PatternConfig.from_dict(
+        id_config = IdPatternConfig.from_dict(
             {
-                "types": {
-                    "prd": {"id": "p", "name": "PRD", "level": 1},
-                    "ops": {"id": "o", "name": "OPS", "level": 2},
-                    "dev": {"id": "d", "name": "DEV", "level": 3},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
                 },
             }
         )
-        parser = RequirementParser(config)
+        parser = RequirementParser(IdResolver(id_config))
 
         # Simulate parsing a requirement with uppercase level
         text = (

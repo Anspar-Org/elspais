@@ -8,23 +8,28 @@ from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.mcp.server import _serialize_node_generic
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from tests.core.graph_test_helpers import build_graph, make_code_ref, make_requirement
 
 
 def _make_parser() -> RequirementParser:
     """Create a parser with default pattern config."""
-    config = PatternConfig(
-        id_template="{prefix}-{type}{id}",
-        prefix="REQ",
-        types={
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
-        },
-        id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
+    config = IdPatternConfig.from_dict(
+        {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
+                "aliases": {"short": "{type.letter}{component}"},
+                "types": {
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+            },
+        }
     )
-    return RequirementParser(config)
+    return RequirementParser(IdResolver(config))
 
 
 class TestEdgeKindSatisfies:

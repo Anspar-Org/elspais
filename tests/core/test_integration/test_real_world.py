@@ -8,7 +8,7 @@ from elspais.config import load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.factory import _bridge_pattern_config, _build_resolver
+from elspais.graph.factory import _build_resolver
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
@@ -21,22 +21,21 @@ CONFIG_FILE = REPO_ROOT / ".elspais.toml"
 
 
 @pytest.fixture
-def pattern_config():
-    """Load pattern config from the real .elspais.toml."""
+def real_resolver():
+    """Load IdResolver from the real .elspais.toml."""
     if not CONFIG_FILE.exists():
         pytest.skip("No .elspais.toml found in repo root")
 
     config = load_config(CONFIG_FILE)
-    resolver = _build_resolver(config.get_raw())
-    return _bridge_pattern_config(resolver)
+    return _build_resolver(config.get_raw())
 
 
 @pytest.fixture
-def parser_registry(pattern_config):
+def parser_registry(real_resolver):
     """Create parser registry with all standard parsers."""
     registry = ParserRegistry()
     registry.register(CommentsParser())
-    registry.register(RequirementParser(pattern_config))
+    registry.register(RequirementParser(real_resolver))
     registry.register(RemainderParser())
     return registry
 

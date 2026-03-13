@@ -12,7 +12,7 @@ from typing import Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
-from elspais.utilities.patterns import PatternConfig, PatternValidator
+from elspais.utilities.patterns import IdResolver
 
 
 # Implements: REQ-p00002-A
@@ -55,14 +55,13 @@ class RequirementParser:
     # Values that mean "no references"
     NO_REFERENCE_VALUES = ["-", "null", "none", "x", "X", "N/A", "n/a"]
 
-    def __init__(self, pattern_config: PatternConfig) -> None:
-        """Initialize parser with pattern configuration.
+    def __init__(self, resolver: IdResolver) -> None:
+        """Initialize parser with ID resolver.
 
         Args:
-            pattern_config: Configuration for ID patterns.
+            resolver: IdResolver for ID parsing and validation.
         """
-        self.pattern_config = pattern_config
-        self.validator = PatternValidator(pattern_config)
+        self.resolver = resolver
 
     # Implements: REQ-p00002-A
     def claim_and_parse(
@@ -103,7 +102,7 @@ class RequirementParser:
                 req_id = header_match.group("id")
 
                 # Validate ID against configured pattern
-                if not self.validator.is_valid(req_id):
+                if not self.resolver.is_valid(req_id):
                     i += 1
                     continue
 
@@ -135,7 +134,7 @@ class RequirementParser:
 
                     # Check for next requirement header
                     next_match = self.HEADER_PATTERN.match(next_text)
-                    if next_match and self.validator.is_valid(next_match.group("id")):
+                    if next_match and self.resolver.is_valid(next_match.group("id")):
                         # Hit next requirement - don't include this line
                         req_lines.pop()
                         end_line = line_numbers[j - 1] if j > i + 1 else ln
@@ -203,7 +202,7 @@ class RequirementParser:
         if level_match:
             raw_level = level_match.group("level") or "Unknown"
             # Normalize level to canonical config type key
-            resolved = self.pattern_config.resolve_level(raw_level)
+            resolved = self.resolver.resolve_level(raw_level)
             data["level"] = resolved if resolved is not None else raw_level
             data["status"] = level_match.group("status") or "Unknown"
             if level_match.group("implements"):
@@ -262,17 +261,15 @@ class RequirementParser:
         if stripped in self.NO_REFERENCE_VALUES:
             return []
 
-        prefix = self.pattern_config.prefix
         parts = [p.strip() for p in refs_str.split(",")]
         result = []
 
         for p in parts:
             if not p or p in self.NO_REFERENCE_VALUES:
                 continue
-            # Normalize shorthand to full ID (e.g., "o00001" -> "REQ-o00001")
-            if not p.startswith(f"{prefix}-"):
-                p = f"{prefix}-{p}"
-            result.append(p)
+            # Normalize to canonical form (e.g., "o00001" -> "REQ-o00001")
+            canonical = self.resolver.to_canonical(p)
+            result.append(canonical if canonical else p)
 
         return result
 

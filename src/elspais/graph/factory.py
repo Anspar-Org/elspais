@@ -173,7 +173,7 @@ def _resolve_spec_dir_config(
     reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
     registry = ParserRegistry()
-    registry.register(RequirementParser(pattern_config))
+    registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
     registry.register(CodeParser(pattern_config, reference_resolver))
     registry.register(TestParser(pattern_config, reference_resolver))

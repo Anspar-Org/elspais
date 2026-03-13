@@ -23,7 +23,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "namespace": "REQ",
     },
     "id-patterns": {
-        "canonical": "{namespace}-{type}{component}",
+        "canonical": "{namespace}-{type.letter}{component}",
         "aliases": {"short": "{type.letter}{component}"},
         "types": {
             "prd": {"level": 1, "aliases": {"letter": "p"}},

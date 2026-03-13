@@ -100,26 +100,19 @@ The system SHALL timeout sessions after 30 minutes of inactivity.
         config_file = Path(tmpdir) / ".elspais.toml"
         config_file.write_text(
             """\
-[patterns]
-prefix = "REQ"
-id_template = "{prefix}-{type}{id}"
+[project]
+namespace = "REQ"
 
-[patterns.types.prd]
-id = "p"
-name = "PRD"
-level = 1
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types.ops]
-id = "o"
-name = "OPS"
-level = 2
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+ops = { level = 2, aliases = { letter = "o" } }
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.types.dev]
-id = "d"
-name = "DEV"
-level = 3
-
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
@@ -202,38 +195,31 @@ def authenticate():
         config_file = Path(tmpdir) / ".elspais.toml"
         config_file.write_text(
             """\
-[patterns]
-prefix = "REQ"
-id_template = "{prefix}-{type}{id}"
+[project]
+namespace = "REQ"
 
-[patterns.types.prd]
-id = "p"
-name = "PRD"
-level = 1
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types.ops]
-id = "o"
-name = "OPS"
-level = 2
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+ops = { level = 2, aliases = { letter = "o" } }
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.types.dev]
-id = "d"
-name = "DEV"
-level = 3
-
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
+
+[id-patterns.assertions]
+multi_separator = "+"
 
 [spec]
 directories = ["spec"]
 
 [directories]
 code = ["src"]
-
-[references.defaults]
-multi_assertion_separator = "+"
 """
         )
 

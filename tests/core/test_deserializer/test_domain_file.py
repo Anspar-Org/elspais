@@ -7,28 +7,13 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.utilities.patterns import PatternConfig
 
 
 @pytest.fixture
-def hht_config():
-    return PatternConfig(
-        id_template="{prefix}-{type}{id}",
-        prefix="REQ",
-        types={
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
-        },
-        id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
-    )
-
-
-@pytest.fixture
-def parser_registry(hht_config):
+def parser_registry(hht_resolver):
     registry = ParserRegistry()
     registry.register(CommentsParser())
-    registry.register(RequirementParser(hht_config))
+    registry.register(RequirementParser(hht_resolver))
     registry.register(RemainderParser())
     return registry
 

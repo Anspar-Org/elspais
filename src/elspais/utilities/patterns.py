@@ -169,8 +169,9 @@ class IdResolver:
         # type_alias_name is the TypeDef alias name used in the template (e.g., "letter")
         self._forms: list[tuple[str, re.Pattern, str | None]] = []
         # canonical
+        canonical_alias = self._extract_type_alias_name(config.canonical_template)
         canonical_re = self._compile_regex(config.canonical_template)
-        self._forms.append(("canonical", canonical_re, None))
+        self._forms.append(("canonical", canonical_re, canonical_alias))
         # aliases
         for form_name, form_template in config.aliases.items():
             type_alias_name = self._extract_type_alias_name(form_template)
