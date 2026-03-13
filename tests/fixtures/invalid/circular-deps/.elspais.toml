@@ -2,18 +2,19 @@
 [project]
 name = "circular-deps-test"
 type = "core"
+namespace = "REQ"
 
 [directories]
 spec = "spec"
 
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types]
-dev = { id = "d", level = 3 }
+[id-patterns.types]
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true

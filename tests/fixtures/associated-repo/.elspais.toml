@@ -4,6 +4,7 @@
 [project]
 name = "associated-callisto"
 type = "associated"
+namespace = "REQ"
 
 [associated]
 prefix = "CAL"
@@ -15,21 +16,21 @@ path = "../hht-like"
 [directories]
 spec = "spec"
 
-[patterns]
-id_template = "{prefix}-{associated}{type}{id}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+ops = { level = 2, aliases = { letter = "o" } }
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
+[id-patterns.associated]
 enabled = true
 position = "after_prefix"
 format = "uppercase"

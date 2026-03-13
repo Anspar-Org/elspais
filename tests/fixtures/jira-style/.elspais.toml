@@ -4,18 +4,18 @@
 [project]
 name = "jira-style-fixture"
 type = "core"
+namespace = "PROJ"
 
 [directories]
 spec = "requirements"
 
-[patterns]
-id_template = "{prefix}-{id}"
-prefix = "PROJ"
+[id-patterns]
+canonical = "{namespace}-{component}"
 
-[patterns.types]
-req = { id = "", name = "Requirement", level = 1 }
+[id-patterns.types]
+req = { level = 1 }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 0  # Variable length
 leading_zeros = false

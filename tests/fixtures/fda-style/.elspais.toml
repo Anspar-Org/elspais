@@ -8,16 +8,16 @@ type = "core"
 [directories]
 spec = "spec"
 
-[patterns]
-id_template = "{type}-{id}"
+[id-patterns]
+canonical = "{type}-{component}"
 
-[patterns.types]
-PRD = { id = "PRD", name = "Product Requirement", level = 1 }
-OPS = { id = "OPS", name = "Operations Requirement", level = 2 }
-DEV = { id = "DEV", name = "Development Requirement", level = 3 }
-TST = { id = "TST", name = "Test Requirement", level = 3 }
+[id-patterns.types]
+PRD = { level = 1 }
+OPS = { level = 2 }
+DEV = { level = 3 }
+TST = { level = 3 }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
