@@ -6,6 +6,7 @@
 [project]
 name = "elspais"
 version = "0.1.0"
+namespace = "REQ"
 
 [directories]
 spec = ["spec"]
@@ -14,30 +15,28 @@ code = ["src", ".github/workflows"]
 [spec]
 skip_dirs = ["roadmap"]
 
-[patterns]
-prefix = "REQ"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types]
-product = { id = "p", level = 1 }
-operations = { id = "o", level = 2 }
-development = { id = "d", level = 3 }
-integration = { id = "int-d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+operations = { level = 2, aliases = { letter = "o" } }
+development = { level = 3, aliases = { letter = "d" } }
+integration = { level = 3, aliases = { letter = "int-d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
+multi_separator = "+"
 
 [validation]
 hash_mode = "normalized-text"
-
-[references.defaults]
-multi_assertion_separator = "+"
 
 [testing]
 enabled = true

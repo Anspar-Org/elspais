@@ -8,11 +8,11 @@ from elspais.config import load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
+from elspais.graph.factory import _bridge_pattern_config, _build_resolver
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.utilities.patterns import PatternConfig
 
 # Get repo root (3 levels up from this test file)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
@@ -27,22 +27,8 @@ def pattern_config():
         pytest.skip("No .elspais.toml found in repo root")
 
     config = load_config(CONFIG_FILE)
-    patterns_data = config.get_raw().get("patterns", {})
-
-    # Filter out broken inline table entries (parsed as strings by simple parser)
-    # and keep only valid dict entries
-    types_data = patterns_data.get("types", {})
-    adapted_types = {}
-    for key, value in types_data.items():
-        if isinstance(value, dict):
-            # Add 'name' field if not present
-            if "name" not in value:
-                value = dict(value)  # Make a copy
-                value["name"] = key.upper()
-            adapted_types[key] = value
-    patterns_data["types"] = adapted_types
-
-    return PatternConfig.from_dict(patterns_data)
+    resolver = _build_resolver(config.get_raw())
+    return _bridge_pattern_config(resolver)
 
 
 @pytest.fixture
