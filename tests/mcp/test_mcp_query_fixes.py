@@ -174,11 +174,11 @@ class TestLevelNormalization:
         from elspais.graph.annotators import count_by_level
 
         config: dict[str, Any] = {
-            "patterns": {
+            "id-patterns": {
                 "types": {
-                    "prd": {"id": "p"},
-                    "ops": {"id": "o"},
-                    "dev": {"id": "d"},
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
                 },
             },
         }
@@ -210,11 +210,11 @@ class TestLevelNormalization:
         from elspais.graph.annotators import group_by_level
 
         config: dict[str, Any] = {
-            "patterns": {
+            "id-patterns": {
                 "types": {
-                    "prd": {"id": "p"},
-                    "ops": {"id": "o"},
-                    "dev": {"id": "d"},
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
                 },
             },
         }

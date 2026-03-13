@@ -337,15 +337,15 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
     from elspais.graph import NodeKind
 
     hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("patterns.types", {})
+    types = config.get("id-patterns.types", {})
     strict_hierarchy = config.get("validation.strict_hierarchy", False)
 
     # Parse hierarchy rules
     allowed_parents_map = _parse_hierarchy_rules(hierarchy)
 
-    # Build level lookup: type_id -> level_name (lowercase)
+    # Build level lookup from id-patterns types
     # Note: level_lookup reserved for future strict hierarchy validation
-    _ = {v["id"]: k for k, v in types.items()}
+    _ = {k: k for k in types}
 
     violations = []
 

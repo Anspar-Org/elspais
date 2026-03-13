@@ -15,7 +15,7 @@ from pathlib import Path
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.utilities.patterns import IdPatternConfig, IdResolver, PatternValidator
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
 # Level display names and sort order
 _LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
@@ -69,10 +69,6 @@ class MarkdownAssembler:
             config = IdPatternConfig.from_dict({})
             resolver = IdResolver(config)
         self._resolver = resolver
-        # Bridge to PatternValidator for associated-repo detection
-        from elspais.graph.factory import _bridge_pattern_config
-
-        self._pattern_validator = PatternValidator(_bridge_pattern_config(resolver))
 
     def assemble(self) -> str:
         """Assemble the complete Markdown document.
@@ -419,11 +415,18 @@ class MarkdownAssembler:
     def _is_associated_node(self, node: GraphNode) -> bool:
         """Check if a node belongs to an associated repository.
 
-        Uses PatternValidator.parse() to detect associated-repo IDs
-        (e.g., REQ-CAL-p00001 has parsed.associated == "CAL").
+        Detects associated-repo IDs by checking for an uppercase segment
+        after the namespace prefix (e.g., REQ-CAL-p00001 has "CAL" segment).
         """
-        parsed = self._pattern_validator.parse(node.id)
-        return parsed is not None and parsed.associated is not None
+        import re
+
+        namespace = self._resolver.config.namespace
+        prefix = f"{namespace}-"
+        if node.id.startswith(prefix):
+            after_prefix = node.id[len(prefix) :]
+            if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
+                return True
+        return False
 
     def _filter_by_depth(
         self,
@@ -432,7 +435,7 @@ class MarkdownAssembler:
     ) -> list[str]:
         """Filter files by max depth, excluding associated-repo files from filtering.
 
-        Associated-repo files (detected via PatternValidator) are always included.
+        Associated-repo files (detected via namespace pattern) are always included.
         Core files are included only if their minimum depth < max_depth.
         """
         result: list[str] = []

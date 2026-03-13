@@ -133,6 +133,7 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
 [project]
 name = "{associated_prefix.lower()}-project"
 type = "associated"
+namespace = "REQ"
 
 [associated]
 prefix = "{associated_prefix}"
@@ -147,24 +148,25 @@ spec = "spec"
 docs = "docs"
 code = ["src", "lib"]
 
-[patterns]
-id_template = "{{prefix}}-{{associated}}{{type}}{{id}}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{{namespace}}-{{type.letter}}{{component}}"
+aliases = {{ short = "{{type.letter}}{{component}}" }}
 
-[patterns.types]
-prd = {{ id = "p", name = "Product Requirement", level = 1 }}
-ops = {{ id = "o", name = "Operations Requirement", level = 2 }}
-dev = {{ id = "d", name = "Development Requirement", level = 3 }}
+[id-patterns.types]
+prd = {{ level = 1, aliases = {{ letter = "p" }} }}
+ops = {{ level = 2, aliases = {{ letter = "o" }} }}
+dev = {{ level = 3, aliases = {{ letter = "d" }} }}
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
+[id-patterns.associated]
 enabled = true
-length = 3
+position = "after_prefix"
 format = "uppercase"
+length = 3
 separator = "-"
 
 [rules.hierarchy]
@@ -189,33 +191,28 @@ require_assertions = true
 [project]
 name = "my-project"
 type = "core"
+namespace = "REQ"
 
 [directories]
 spec = "spec"
 docs = "docs"
 code = ["src", "apps", "packages"]
 
-[patterns]
-id_template = "{{prefix}}-{{type}}{{id}}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{{namespace}}-{{type.letter}}{{component}}"
+aliases = {{ short = "{{type.letter}}{{component}}" }}
 
-[patterns.types]
-prd = {{ id = "p", name = "Product Requirement", level = 1 }}
-ops = {{ id = "o", name = "Operations Requirement", level = 2 }}
-dev = {{ id = "d", name = "Development Requirement", level = 3 }}
+[id-patterns.types]
+prd = {{ level = 1, aliases = {{ letter = "p" }} }}
+ops = {{ level = 2, aliases = {{ letter = "o" }} }}
+dev = {{ level = 3, aliases = {{ letter = "d" }} }}
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
-enabled = true
-length = 3
-format = "uppercase"
-separator = "-"
-
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
 # max_count = 26           # Defaults to style maximum (26 for uppercase, 100 for numeric)
 # zero_pad = false         # For numeric styles: "01" vs "1"

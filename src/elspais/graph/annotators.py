@@ -235,7 +235,7 @@ def count_by_level(
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
     else:
         level_keys = ["PRD", "OPS", "DEV"]
 
@@ -271,7 +271,7 @@ def group_by_level(
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
     else:
         level_keys = ["PRD", "OPS", "DEV"]
 

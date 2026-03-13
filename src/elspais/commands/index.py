@@ -172,7 +172,7 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     """Resolve label and level ordering for a spec directory.
 
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
-    the project name and ``[patterns.types]`` level definitions.
+    the project name and ``[id-patterns].types`` level definitions.
     """
     from elspais.config import get_config
 
@@ -189,14 +189,14 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
                 spec_subpath = resolved.name
             label = f"{project_name}/{spec_subpath}"
 
-            # Build level ordering from [patterns.types]
+            # Build level ordering from [id-patterns.types]
             # Keys match node.level values (e.g. "prd", "ops", "dev")
-            types = cfg.get("patterns", {}).get("types", {})
+            types = cfg.get("id-patterns", {}).get("types", {})
             level_order: dict[str, int] = {}
             level_names: dict[str, str] = {}
             for type_key, type_def in types.items():
                 level_num = type_def.get("level", 99)
-                display = type_def.get("name", type_key.upper())
+                display = type_key.upper()
                 level_order[type_key] = level_num
                 level_names[type_key] = display
 

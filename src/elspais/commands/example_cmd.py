@@ -254,34 +254,34 @@ def show_id_patterns(args: argparse.Namespace) -> int:
     except Exception:
         # Use defaults if no config found
         config = {
-            "patterns": {
-                "prefix": "REQ",
-                "id_template": "{prefix}-{type}{id}",
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
                 "types": {
-                    "prd": {"id": "p", "name": "Product Requirement", "level": 1},
-                    "ops": {"id": "o", "name": "Operations Requirement", "level": 2},
-                    "dev": {"id": "d", "name": "Development Requirement", "level": 3},
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
                 },
-            }
+            },
         }
 
-    patterns = config.get("patterns", {})
-    prefix = patterns.get("prefix", "REQ")
-    id_template = patterns.get("id_template", "{prefix}-{type}{id}")
-    types = patterns.get("types", {})
+    namespace = config.get("project", {}).get("namespace", "REQ")
+    id_patterns = config.get("id-patterns", {})
+    canonical = id_patterns.get("canonical", "{namespace}-{type.letter}{component}")
+    types = id_patterns.get("types", {})
 
     # Format types section
     types_text = ""
     for type_key, type_info in types.items():
         if isinstance(type_info, dict):
-            type_id = type_info.get("id", type_key[0])
-            type_name = type_info.get("name", type_key.upper())
+            aliases = type_info.get("aliases", {})
+            type_letter = aliases.get("letter", type_key[0])
             type_level = type_info.get("level", "?")
-            types_text += f"  {type_key.upper()}: {type_id} = Level {type_level} ({type_name})\n"
+            types_text += f"  {type_key.upper()}: {type_letter} = Level {type_level}\n"
 
     output = ID_PATTERNS_TEMPLATE.format(
-        prefix=prefix,
-        id_template=id_template,
+        prefix=namespace,
+        id_template=canonical,
         types=types_text.strip() if types_text else "  (no types configured)",
     )
     print(output)

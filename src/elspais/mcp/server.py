@@ -1124,7 +1124,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         local_config_exists = local_path.is_file()
 
     config_summary = {
-        "prefix": config.get("patterns", {}).get("prefix", "REQ"),
+        "prefix": config.get("project", {}).get("namespace", "REQ"),
         "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
         "testing_enabled": config.get("testing", {}).get("enabled", False),
         "project_type": config.get("project", {}).get("type"),
@@ -1147,25 +1147,26 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
 def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Build ID pattern info from config."""
-    patterns = config.get("patterns", {})
-    prefix = patterns.get("prefix", "REQ")
-    template = patterns.get("id_template", "{prefix}-{type}{id}")
-    id_format = patterns.get("id_format", {})
-    types = patterns.get("types", {})
+    namespace = config.get("project", {}).get("namespace", "REQ")
+    id_patterns = config.get("id-patterns", {})
+    canonical = id_patterns.get("canonical", "{namespace}-{type.letter}{component}")
+    component = id_patterns.get("component", {})
+    types = id_patterns.get("types", {})
 
     # Synthesize example IDs for each type
-    digits = id_format.get("digits", 5)
-    leading_zeros = id_format.get("leading_zeros", True)
+    digits = component.get("digits", 5)
+    leading_zeros = component.get("leading_zeros", True)
     example_num = "0" * (digits - 1) + "1" if leading_zeros else "1"
     examples = {}
     for type_key, type_def in types.items():
-        type_id = type_def.get("id", type_key[0])
-        examples[type_key] = f"{prefix}-{type_id}{example_num}"
+        aliases = type_def.get("aliases", {})
+        type_letter = aliases.get("letter", type_key[0])
+        examples[type_key] = f"{namespace}-{type_letter}{example_num}"
 
     return {
-        "prefix": prefix,
-        "template": template,
-        "id_format": dict(id_format) if id_format else {},
+        "prefix": namespace,
+        "template": canonical,
+        "id_format": dict(component) if component else {},
         "types": {k: dict(v) for k, v in types.items()},
         "examples": examples,
     }
@@ -1173,33 +1174,33 @@ def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
 def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     """Build assertion format info from config."""
-    patterns = config.get("patterns", {})
-    assertions = patterns.get("assertions", {})
-    prefix = patterns.get("prefix", "REQ")
-    types = patterns.get("types", {})
+    namespace = config.get("project", {}).get("namespace", "REQ")
+    id_patterns = config.get("id-patterns", {})
+    assertions = id_patterns.get("assertions", {})
+    types = id_patterns.get("types", {})
 
     # Pick first type for the example
-    first_type_id = "p"
+    first_type_letter = "p"
     for _key, type_def in types.items():
-        first_type_id = type_def.get("id", "p")
+        aliases = type_def.get("aliases", {})
+        first_type_letter = aliases.get("letter", _key[0])
         break
 
-    digits = patterns.get("id_format", {}).get("digits", 5)
+    digits = id_patterns.get("component", {}).get("digits", 5)
     example_num = "0" * (digits - 1) + "1"
 
-    # Read multi-assertion separator from references config (default: "+")
-    refs = config.get("references", {}).get("defaults", {})
-    ma_sep = refs.get("multi_assertion_separator", "+")
+    # Read multi-assertion separator from id-patterns assertions (default: "+")
+    ma_sep = assertions.get("multi_separator", "+")
 
     return {
         "label_style": assertions.get("label_style", "uppercase"),
         "max_count": assertions.get("max_count", 26),
-        "example": f"{prefix}-{first_type_id}{example_num}-A",
+        "example": f"{namespace}-{first_type_letter}{example_num}-A",
         "multi_assertion_syntax": (
-            f"{prefix}-{first_type_id}{example_num}-A{ma_sep}B{ma_sep}C expands to "
-            f"{prefix}-{first_type_id}{example_num}-A, "
-            f"{prefix}-{first_type_id}{example_num}-B, "
-            f"{prefix}-{first_type_id}{example_num}-C"
+            f"{namespace}-{first_type_letter}{example_num}-A{ma_sep}B{ma_sep}C expands to "
+            f"{namespace}-{first_type_letter}{example_num}-A, "
+            f"{namespace}-{first_type_letter}{example_num}-B, "
+            f"{namespace}-{first_type_letter}{example_num}-C"
         ),
     }
 

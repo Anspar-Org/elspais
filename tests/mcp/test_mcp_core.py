@@ -487,9 +487,7 @@ class TestGetWorkspaceInfo:
 [project]
 name = "TestProject"
 type = "core"
-
-[patterns]
-prefix = "TST"
+namespace = "TST"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -559,21 +557,21 @@ prefix = "TST"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -618,21 +616,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -664,21 +662,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -699,7 +697,7 @@ reference_keyword = "Validates"
 
         id_patterns = result["id_patterns"]
         assert id_patterns["prefix"] == "TST"
-        assert id_patterns["template"] == "{prefix}-{type}{id}"
+        assert id_patterns["template"] == "{namespace}-{type.letter}{component}"
         assert "product" in id_patterns["types"]
         assert "development" in id_patterns["types"]
         assert "product" in id_patterns["examples"]
@@ -714,21 +712,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -760,21 +758,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -845,21 +843,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -895,21 +893,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
@@ -942,21 +940,21 @@ reference_keyword = "Validates"
         config_content = """
 [project]
 name = "TestProject"
+namespace = "TST"
 
-[patterns]
-prefix = "TST"
-id_template = "{prefix}-{type}{id}"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
 
-[patterns.types]
-product = { id = "p", level = 1 }
-development = { id = "d", level = 3 }
+[id-patterns.types]
+product = { level = 1, aliases = { letter = "p" } }
+development = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
 
