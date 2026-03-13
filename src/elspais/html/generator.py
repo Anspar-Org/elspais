@@ -177,11 +177,13 @@ class HTMLGenerator:
         base_path: str = "",
         version: str | None = None,
         repo_name: str | None = None,
+        namespace: str = "REQ",
     ) -> None:
         self.graph = graph
         self.base_path = base_path
         self.version = version if version is not None else __version__
         self.repo_name = repo_name
+        self.namespace = namespace
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
@@ -281,12 +283,18 @@ class HTMLGenerator:
         - Path outside the base_path (different repo)
         - Or marked with an associated field
         """
-        # Check if ID has associated prefix pattern (e.g., REQ-CAL-p00001)
-        # Associated IDs have format: PREFIX-ASSOC-type where ASSOC is 2-4 uppercase letters
+        # Check if ID has a different namespace than the core project.
+        # Associated IDs have a different prefix (e.g., REQ-CAL-p00001 when
+        # core namespace is "REQ"). Detect by checking if the ID starts with
+        # "{namespace}-" followed by an uppercase segment (the associate prefix).
         import re
 
-        if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
-            return True
+        core_prefix = f"{self.namespace}-"
+        if node.id.startswith(core_prefix):
+            after_prefix = node.id[len(core_prefix) :]
+            # Associated: namespace-ASSOC-type (ASSOC is 2+ uppercase letters)
+            if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
+                return True
 
         if not node.source:
             return False

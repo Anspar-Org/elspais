@@ -273,6 +273,7 @@ def build_graph(
         hash_mode=hash_mode,
         satellite_kinds=satellite_kinds,
         multi_assertion_separator=str(mas),
+        resolver=default_resolver,
     )
 
     # Get ignore configuration for code/test scanning (main project only)

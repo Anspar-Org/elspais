@@ -329,17 +329,17 @@ class TestGetReqLocationsFromGraph:
             assert isinstance(req_id, str)
             assert isinstance(path, str)
 
-    def test_extracts_req_suffix(self):
-        """Extracts just the suffix (e.g., 'd00001') from REQ IDs."""
+    def test_uses_full_canonical_id(self):
+        """Uses the full canonical ID (e.g., 'REQ-d00001') as keys."""
         repo_root = get_repo_root()
         if repo_root is None:
             pytest.skip("Not in a git repository")
 
         result = get_req_locations_from_graph(repo_root)
 
-        # If we have results, none should start with "REQ-"
+        # If we have results, keys should be full canonical IDs
         for req_id in result.keys():
-            assert not req_id.startswith("REQ-"), f"Expected suffix only, got: {req_id}"
+            assert req_id.startswith("REQ-"), f"Expected full canonical ID, got: {req_id}"
 
 
 class TestGetAuthorInfo:

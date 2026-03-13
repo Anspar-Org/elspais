@@ -112,7 +112,7 @@ class TestAnnotateGitState:
         )
         node.set_field("id", "REQ-p00001")
         git_info = GitChangeInfo(
-            committed_req_locations={"p00001": "spec/old.md"},
+            committed_req_locations={"REQ-p00001": "spec/old.md"},
         )
 
         annotate_git_state(node, git_info)
@@ -157,7 +157,7 @@ class TestAnnotateGitState:
             source=SourceLocation(path="spec/prd.md", line=5),
         )
         git_info = GitChangeInfo(
-            committed_req_locations={"p00001": "spec/old.md"},
+            committed_req_locations={"REQ-p00001": "spec/old.md"},
         )
 
         # Should not raise and should not annotate

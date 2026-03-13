@@ -14,6 +14,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -1634,6 +1635,7 @@ class GraphBuilder:
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
         multi_assertion_separator: str = "+",
+        resolver: Any | None = None,
     ) -> None:
         """Initialize the graph builder.
 
@@ -1646,10 +1648,14 @@ class GraphBuilder:
             multi_assertion_separator: Character joining multiple assertion
                 labels in compact references (e.g. "+" for REQ-x-A+B+C).
                 Empty string disables expansion.
+            resolver: IdResolver instance for multi-assertion expansion.
+                When provided, uses resolver.parse()/expand()/render_canonical()
+                instead of string splitting.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
         self._multi_assertion_separator = multi_assertion_separator
+        self._resolver = resolver
         if satellite_kinds is not None:
             self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
         else:
@@ -1987,13 +1993,23 @@ class GraphBuilder:
 
     # Implements: REQ-d00081-D+E+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:
-        """Expand multi-assertion reference using configured separator.
+        """Expand multi-assertion reference using IdResolver or configured separator.
 
         REQ-p00001-A+B+C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
 
-        The first assertion label is part of the base ID (normal separator).
-        Additional labels follow the multi-assertion separator.
+        When a resolver is available, delegates to resolver.parse()/expand()/
+        render_canonical(). Falls back to string splitting when no resolver
+        is set.
         """
+        # Use IdResolver when available
+        if self._resolver is not None:
+            parsed = self._resolver.parse(target_id)
+            if parsed is None or len(parsed.assertions) <= 1:
+                return [target_id]
+            expanded = self._resolver.expand(parsed)
+            return [self._resolver.render_canonical(e) for e in expanded]
+
+        # Fallback: string-based splitting
         sep = self._multi_assertion_separator
         if not sep or sep not in target_id:
             return [target_id]

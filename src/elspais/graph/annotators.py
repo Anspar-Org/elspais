@@ -83,21 +83,10 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
         # Check if file changed vs main branch
         is_branch_changed = file_path in git_info.branch_changed_files
 
-        # Check if requirement was moved
-        # Extract short ID from node ID (e.g., 'p00001' from 'REQ-p00001')
-        req_id = node.id
-        if "-" in req_id:
-            short_id = req_id.rsplit("-", 1)[-1]
-            # Handle assertion IDs like REQ-p00001-A
-            if len(short_id) == 1 and short_id.isalpha():
-                # This is an assertion, get the parent ID
-                parts = req_id.split("-")
-                if len(parts) >= 2:
-                    short_id = parts[-2]
-        else:
-            short_id = req_id
-
-        committed_path = git_info.committed_req_locations.get(short_id)
+        # Check if requirement was moved by comparing its current file path
+        # against the committed location. Uses the full canonical node ID as key,
+        # matching the format produced by _extract_req_locations_from_graph().
+        committed_path = git_info.committed_req_locations.get(node.id)
         if committed_path and committed_path != file_path:
             is_moved = True
 

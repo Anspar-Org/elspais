@@ -236,7 +236,7 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
         repo_root: Repository root for relativizing paths (uses graph.repo_root if None).
 
     Returns:
-        Dict mapping REQ ID (just the suffix, e.g., 'd00001') to relative file path.
+        Dict mapping full canonical REQ ID (e.g., 'REQ-d00001') to relative file path.
     """
     from elspais.graph.GraphNode import NodeKind
 
@@ -248,17 +248,10 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
 
     for node in graph.all_nodes():
         if node.kind == NodeKind.REQUIREMENT and node.source:
-            # Extract just the suffix (e.g., 'd00001' from 'REQ-d00001')
+            # Use the full canonical node ID as the key.
+            # This avoids hardcoded prefix stripping and works with any
+            # namespace/type pattern configured via [id-patterns].
             req_id = node.id
-            if req_id.startswith("REQ-"):
-                # Handle possible associated prefix like "REQ-CAL-d00001"
-                parts = req_id[4:].split("-")
-                if len(parts) >= 2 and len(parts[0]) > 1 and parts[0].isupper():
-                    # Has associated prefix (e.g., "CAL-d00001"), use last part
-                    req_id = parts[-1]
-                else:
-                    # No prefix, just use what's after "REQ-"
-                    req_id = parts[-1]
 
             # Get source path and make it relative if needed
             source_path = node.source.path
@@ -292,7 +285,7 @@ def get_req_locations_from_graph(
         scan_sponsors: Whether to include sponsor/associated repos.
 
     Returns:
-        Dict mapping REQ ID (e.g., 'd00001') to relative file path.
+        Dict mapping full canonical REQ ID (e.g., 'REQ-d00001') to relative file path.
     """
     from elspais.graph.factory import build_graph
 
