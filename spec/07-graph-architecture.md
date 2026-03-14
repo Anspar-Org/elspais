@@ -586,3 +586,30 @@ SourceLocation duplicates information now available through the graph structure 
 
 *End* *SourceLocation Removal and Consumer Migration* | **Hash**: 00000000
 ---
+
+## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+`TraceGraph.iter_roots()` SHALL accept an optional `NodeKind` filter, and `TraceGraph` SHALL provide `iter_by_kind()` for general kind-based index queries.
+
+## Assertions
+
+A. `iter_roots()` with no argument SHALL return the same nodes as current behavior (REQ and JOURNEY roots), excluding FILE nodes.
+
+B. `iter_roots(NodeKind.FILE)` SHALL return all FILE nodes from `_index`.
+
+C. `iter_roots(NodeKind.REQUIREMENT)` SHALL return only REQUIREMENT roots from `_roots`.
+
+D. `iter_roots(NodeKind.USER_JOURNEY)` SHALL return only USER_JOURNEY roots from `_roots`.
+
+E. `iter_by_kind(kind)` SHALL iterate all nodes of the given `NodeKind` from `_index`, equivalent to the existing `nodes_by_kind()` method.
+
+F. FILE nodes SHALL NOT appear in the default `iter_roots()` results (no argument).
+
+## Rationale
+
+Parameterized roots enable view-specific entry points into the graph: domain consumers iterate REQ/JOURNEY roots as before, while file-level consumers iterate FILE nodes. `iter_by_kind()` provides a naming-consistent alternative to `nodes_by_kind()` aligned with the iterator-only API convention.
+
+*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 00000000
+---

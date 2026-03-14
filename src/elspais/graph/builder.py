@@ -62,9 +62,29 @@ class TraceGraph:
     _mutation_log: MutationLog = field(default_factory=MutationLog, init=False)
     _deleted_nodes: list[GraphNode] = field(default_factory=list, init=False)
 
-    def iter_roots(self) -> Iterator[GraphNode]:
-        """Iterate root nodes."""
-        yield from self._roots
+    # Implements: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D, REQ-d00130-F
+    def iter_roots(self, kind: NodeKind | None = None) -> Iterator[GraphNode]:
+        """Iterate root nodes, optionally filtered by NodeKind.
+
+        Args:
+            kind: If None, returns REQ + JOURNEY roots (current behavior,
+                  excludes FILE nodes). If NodeKind.FILE, returns all FILE
+                  nodes from _index. Otherwise, filters _roots by the
+                  specified kind.
+
+        Yields:
+            GraphNode instances matching the filter criteria.
+        """
+        if kind is None:
+            yield from self._roots
+        elif kind == NodeKind.FILE:
+            for node in self._index.values():
+                if node.kind == NodeKind.FILE:
+                    yield node
+        else:
+            for node in self._roots:
+                if node.kind == kind:
+                    yield node
 
     def root_count(self) -> int:
         """Return number of root nodes."""
@@ -107,6 +127,23 @@ class TraceGraph:
 
     def nodes_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
         """Get all nodes of a specific kind.
+
+        Args:
+            kind: The NodeKind to filter by.
+
+        Yields:
+            GraphNode instances of the specified kind.
+        """
+        for node in self._index.values():
+            if node.kind == kind:
+                yield node
+
+    # Implements: REQ-d00130-E
+    def iter_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
+        """Iterate all nodes of a specific kind from the index.
+
+        Equivalent to nodes_by_kind() but named consistently with the
+        iterator-only API convention (iter_roots, iter_children, etc.).
 
         Args:
             kind: The NodeKind to filter by.
