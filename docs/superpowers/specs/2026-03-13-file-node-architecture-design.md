@@ -144,22 +144,20 @@ Returns `None` for virtual nodes and any node not reachable from a FILE.
 
 **Note on ResultFile:** Structured formats like JUnit XML and pytest JSON are fully consumed by their domain parser. RemainderParser is not applicable — there are no "unclaimed lines" in a structured format. These FILE nodes may have no REMAINDER children.
 
-### 1.6 Dual Parentage
+### 1.6 CONTAINS Edge Scope
 
-Content nodes may have parents from two orthogonal hierarchies:
+CONTAINS edges go only from FILE to **top-level** content nodes — nodes that exist independently in the file, not as internal parts of another node. Specifically:
 
-- **File hierarchy:** FILE → content node via CONTAINS edge
-- **Domain hierarchy:** REQUIREMENT → ASSERTION via STRUCTURES edge; REQUIREMENT → REQUIREMENT via IMPLEMENTS/REFINES
+- REQUIREMENT, USER_JOURNEY, file-level REMAINDER, CODE, TEST — these get CONTAINS edges from FILE.
+- ASSERTION, requirement-level REMAINDER sections — these do NOT get CONTAINS edges from FILE. They are reached through their parent REQUIREMENT via STRUCTURES edges.
 
-An ASSERTION node has exactly two parents: its FILE (via CONTAINS) and its REQUIREMENT (via STRUCTURES). These are not in conflict — they represent different relationships. Filtered traversal distinguishes them: `iter_parents(edge_kinds={CONTAINS})` yields the FILE; `iter_parents(edge_kinds={STRUCTURES})` yields the REQUIREMENT.
+This avoids redundant paths. An ASSERTION's file is always its REQUIREMENT's file — there is no need for a separate CONTAINS edge to express that.
 
 **REMAINDER nodes** exist at two levels with different parent relationships:
 - **File-level REMAINDER:** connected to FILE via CONTAINS. Represents unclaimed lines between domain blocks.
-- **Requirement-level REMAINDER:** connected to REQUIREMENT via STRUCTURES. Represents non-normative sections (Rationale, Notes, etc.) within a requirement. These also have a CONTAINS edge from the FILE (since their text is physically in the file).
+- **Requirement-level REMAINDER:** connected to REQUIREMENT via STRUCTURES. Represents non-normative sections (Rationale, Notes, etc.) within a requirement.
 
-Both use `NodeKind.REMAINDER`. The builder distinguishes them by context: content parsed inside a requirement block gets STRUCTURES to the requirement; content parsed outside gets only CONTAINS to the file.
-
-**Impact on unfiltered traversal:** With dual parentage, unfiltered `walk()` and `depth` cross between hierarchies. Consumers should use filtered traversal (`walk(edge_kinds=...)`) to stay within a single view. Unfiltered traversal remains available but is not recommended for most use cases.
+Both use `NodeKind.REMAINDER`. The builder distinguishes them by context: content parsed inside a requirement block gets STRUCTURES to the requirement; content parsed outside gets CONTAINS to the file.
 
 ## 2. Build Pipeline
 
@@ -190,7 +188,6 @@ factory.py:
         create CONTAINS edge from FILE to content node (with line range, render_order)
         for domain-internal children (e.g. ASSERTIONs within REQ):
           create STRUCTURES edge from parent to child
-          create CONTAINS edge from FILE to child (with line range)
         queue domain edges (IMPLEMENTS, REFINES, etc.) in pending_links
   builder.build() --> TraceGraph
     (satisfies instantiation creates DEFINES edges from declaring FILE to INSTANCE nodes)
@@ -203,7 +200,7 @@ factory.py:
 - `GraphBuilder.add_parsed_content()` receives a FILE node reference along with parsed content.
 - `RemainderParser` is mandatory for text-based files — always registered, always runs as catch-all. Skipped for structured formats (RESULT).
 - `render_order` is assigned sequentially from natural file order at parse time (0.0, 1.0, 2.0, ...).
-- ASSERTION and REMAINDER-section children of REQUIREMENTs get both STRUCTURES edges (domain) and CONTAINS edges from the FILE (physical).
+- ASSERTION and REMAINDER-section children of REQUIREMENTs get STRUCTURES edges from the REQUIREMENT (domain-internal). They do NOT get direct CONTAINS edges from the FILE — they are reached through their parent REQUIREMENT.
 - Cloned INSTANCE subtrees use STRUCTURES edges internally, mirroring the original structure.
 
 ### 2.3 Satisfies / Template Instantiation
@@ -300,10 +297,7 @@ The requirement hash must not change when assertions are reordered:
 
 This ensures assertion reordering does not trigger change-detection review, while assertion text edits still do.
 
-**Migration impact:** This changes the hash computation algorithm. All existing requirement hashes will change on the first run after this change is deployed. Mitigation options:
-- A `hash_version` field in config to support both old and new algorithms during transition.
-- A one-time re-hash migration pass that updates all `*End*` markers with new hashes.
-- Accept the one-time change-detection noise and document it in release notes.
+**Migration impact:** This changes the hash computation algorithm. Existing hashes will change on first run. No mitigation needed — no project using elspais (other than elspais itself) currently has Active requirements.
 
 ## 5. Rendering & Serialization
 
