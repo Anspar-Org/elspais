@@ -422,7 +422,7 @@ class GraphNode:
                 yield node
                 queue.extend(node.iter_parents(edge_kinds))
 
-    # Implements: REQ-d00127-D
+    # Implements: REQ-d00127-D, REQ-d00128-L
     def file_node(self) -> GraphNode | None:
         """Walk incoming edges upward to find the nearest FILE ancestor.
 
@@ -432,11 +432,17 @@ class GraphNode:
         - ASSERTION or REMAINDER section: two hops -- incoming
           STRUCTURES edge to REQUIREMENT, then incoming CONTAINS
           edge to FILE.
-        - INSTANCE node: returns None (no CONTAINS edge).
+        - INSTANCE node: returns None (no CONTAINS edge). To find
+          the original file, navigate via INSTANCE edge to the
+          original node, then call file_node() on it.
 
         Returns:
             The nearest FILE ancestor, or None if not found.
         """
+        # INSTANCE nodes are virtual -- they have no physical file
+        stereotype = self.get_field("stereotype")
+        if stereotype is not None and getattr(stereotype, "value", None) == "instance":
+            return None
         visited: set[str] = set()
         queue: deque[GraphNode] = deque(self._parents)
         while queue:

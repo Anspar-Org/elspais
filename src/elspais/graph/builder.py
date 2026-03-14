@@ -2285,6 +2285,12 @@ class GraphBuilder:
             if cloned_root:
                 declaring_node.link(cloned_root, EdgeKind.SATISFIES)
 
+            # Implements: REQ-d00128-J -- DEFINES edges from declaring FILE to INSTANCE nodes
+            declaring_file = declaring_node.file_node()
+            if declaring_file:
+                for clone in clone_map.values():
+                    declaring_file.link(clone, EdgeKind.DEFINES)
+
     # Implements: REQ-p00014-D
     def _attribute_template_refs(
         self,

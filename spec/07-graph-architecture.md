@@ -551,9 +551,15 @@ H. RemainderParser SHALL NOT be registered for RESULT file types.
 
 I. FILE nodes SHALL be additive: existing graph behavior (traceability, coverage, root/orphan detection) SHALL remain unaffected.
 
+J. Template instantiation (`_instantiate_satisfies_templates()`) SHALL create DEFINES edges from the declaring requirement's FILE node to each INSTANCE node in the cloned subtree.
+
+K. INSTANCE nodes SHALL NOT have CONTAINS edges. They are virtual nodes not physically present in any file.
+
+L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating file, navigate via the INSTANCE edge to the original node and call `file_node()` on it.
+
 ## Rationale
 
-FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files.
+FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
 
 *End* *FILE Node Creation in Build Pipeline* | **Hash**: 00000000
 ---

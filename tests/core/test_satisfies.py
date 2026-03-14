@@ -872,3 +872,173 @@ class TestMCPStereotypeSerialization:
 
         result = _serialize_node_generic(instance_node, graph)
         assert result["properties"]["stereotype"] == "instance"
+
+
+class TestSatisfiesFileNodeEdges:
+    """DEFINES edges from declaring FILE to INSTANCE nodes.
+
+    Validates REQ-d00128-J: Template instantiation creates DEFINES edges.
+    Validates REQ-d00128-K: INSTANCE nodes have no CONTAINS edges.
+    Validates REQ-d00128-L: file_node() returns None for INSTANCE nodes.
+    """
+
+    def test_REQ_d00128_J_defines_edge_from_file_to_instance_root(self):
+        """Declaring FILE node has DEFINES edge to cloned root INSTANCE node."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        declaring_node = graph.find_by_id("REQ-p00044")
+        file_node = declaring_node.file_node()
+        assert file_node is not None, "Declaring req must have a FILE parent"
+
+        clone_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        assert clone_root is not None
+
+        # FILE node should have DEFINES edge to clone root
+        defines_targets = {e.target.id for e in file_node.iter_edges_by_kind(EdgeKind.DEFINES)}
+        assert clone_root.id in defines_targets, (
+            f"FILE should have DEFINES edge to instance root; " f"got targets: {defines_targets}"
+        )
+
+    def test_REQ_d00128_J_defines_edge_from_file_to_instance_assertions(self):
+        """Declaring FILE node has DEFINES edges to cloned assertion INSTANCE nodes."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+                {"label": "B", "text": "two-factor for high-risk"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        declaring_node = graph.find_by_id("REQ-p00044")
+        file_node = declaring_node.file_node()
+        assert file_node is not None
+
+        defines_targets = {e.target.id for e in file_node.iter_edges_by_kind(EdgeKind.DEFINES)}
+        assert "REQ-p00044::REQ-p80001" in defines_targets
+        assert "REQ-p00044::REQ-p80001-A" in defines_targets
+        assert "REQ-p00044::REQ-p80001-B" in defines_targets
+
+    def test_REQ_d00128_J_defines_edge_multiple_satisfies(self):
+        """Each declaring FILE gets DEFINES edges to its own INSTANCE nodes."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[{"label": "A", "text": "validate signer identity"}],
+        )
+        declaring1 = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+            source_path="spec/doc-mgmt.md",
+        )
+        declaring2 = make_requirement(
+            "REQ-p00045",
+            title="User Management",
+            satisfies=["REQ-p80001"],
+            source_path="spec/user-mgmt.md",
+        )
+        graph = build_graph(template, declaring1, declaring2)
+
+        # File for declaring1 should define declaring1's instances
+        decl1 = graph.find_by_id("REQ-p00044")
+        file1 = decl1.file_node()
+        defines1 = {e.target.id for e in file1.iter_edges_by_kind(EdgeKind.DEFINES)}
+        assert "REQ-p00044::REQ-p80001" in defines1
+        assert "REQ-p00044::REQ-p80001-A" in defines1
+
+        # File for declaring2 should define declaring2's instances
+        decl2 = graph.find_by_id("REQ-p00045")
+        file2 = decl2.file_node()
+        defines2 = {e.target.id for e in file2.iter_edges_by_kind(EdgeKind.DEFINES)}
+        assert "REQ-p00045::REQ-p80001" in defines2
+        assert "REQ-p00045::REQ-p80001-A" in defines2
+
+    def test_REQ_d00128_K_instance_nodes_no_contains_edges(self):
+        """INSTANCE nodes have no incoming CONTAINS edges."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        clone_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        clone_a = graph.find_by_id("REQ-p00044::REQ-p80001-A")
+
+        for node in [clone_root, clone_a]:
+            contains_edges = [e for e in node.iter_incoming_edges() if e.kind == EdgeKind.CONTAINS]
+            assert len(contains_edges) == 0, (
+                f"INSTANCE node {node.id} should have no CONTAINS edges, "
+                f"got {len(contains_edges)}"
+            )
+
+    def test_REQ_d00128_L_file_node_returns_none_for_instance(self):
+        """file_node() returns None for INSTANCE nodes."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        clone_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        clone_a = graph.find_by_id("REQ-p00044::REQ-p80001-A")
+
+        assert clone_root.file_node() is None, "file_node() should return None for INSTANCE root"
+        assert clone_a.file_node() is None, "file_node() should return None for INSTANCE assertion"
+
+    def test_REQ_d00128_L_instance_original_has_file_node(self):
+        """Original template node still has a FILE via file_node()."""
+        template = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            assertions=[
+                {"label": "A", "text": "validate signer identity"},
+            ],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(template, declaring)
+
+        # Navigate from INSTANCE to original via INSTANCE edge
+        clone_root = graph.find_by_id("REQ-p00044::REQ-p80001")
+        instance_edges = list(clone_root.iter_edges_by_kind(EdgeKind.INSTANCE))
+        assert len(instance_edges) == 1
+        original = instance_edges[0].target
+        assert original.file_node() is not None, "Original template node should have a FILE parent"
