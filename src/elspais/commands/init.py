@@ -235,6 +235,17 @@ require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
+# Status role classification (determines behavior in metrics/viewer)
+# active: committed, normative — counted in all metrics
+# provisional: in-progress toward active — excluded from coverage, in analysis
+# aspirational: future/planning — excluded from coverage and analysis
+# retired: concluded — excluded from everything, hidden by default in viewer
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future"]
+retired = ["Deprecated", "Superseded"]
+
 # Associate repositories for combined validation (uncomment to enable)
 # Relative paths resolve from canonical repo root (worktree-safe).
 # [associates]

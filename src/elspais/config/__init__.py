@@ -871,6 +871,17 @@ __all__ = [
     "DEFAULT_CONFIG",
     "parse_toml",
     "parse_toml_document",
+    "get_status_roles",
     "_try_parse_numeric",
     "_try_parse_env_value",
 ]
+
+
+def get_status_roles(config: dict[str, Any]):
+    """Get StatusRolesConfig from configuration dictionary."""
+    from elspais.config.status_roles import StatusRolesConfig
+
+    roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+    if roles_data:
+        return StatusRolesConfig.from_dict(roles_data)
+    return StatusRolesConfig.default()
