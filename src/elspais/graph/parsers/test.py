@@ -234,6 +234,8 @@ class TestParser:
 
         # Context at each line
         line_context: dict[int, tuple[str | None, str | None, int]] = {}
+        # All discovered test functions: (func_line, func_name, class_name, ln_of_def)
+        all_test_funcs: list[tuple[int, str, str | None]] = []
 
         for ln, text in lines:
             # Track triple-quoted strings — toggle on odd occurrences of """ or '''
@@ -270,6 +272,7 @@ class TestParser:
                 current_func_indent = indent
                 current_func_line = ln
                 seen_def = True
+                all_test_funcs.append((ln, current_func, current_class))
 
             # If a non-indented line that's not blank/comment, might exit class
             stripped = text.strip()
@@ -302,6 +305,7 @@ class TestParser:
                             file_default_validates.append(ref)
 
         # Second pass: extract references with context
+        emitted_func_lines: set[int] = set()  # Track which functions got emitted
         i = 0
         while i < len(lines):
             ln, text = lines[i]
@@ -344,6 +348,8 @@ class TestParser:
                 }
                 if expected_broken_count > 0:
                     parsed_data["expected_broken_count"] = expected_broken_count
+                if func_line:
+                    emitted_func_lines.add(func_line)
                 yield ParsedContent(
                     content_type="test_ref",
                     start_line=ln,
@@ -379,6 +385,8 @@ class TestParser:
                         break
 
                 if refs:
+                    if func_line:
+                        emitted_func_lines.add(func_line)
                     yield ParsedContent(
                         content_type="test_ref",
                         start_line=start_ln,
@@ -395,3 +403,23 @@ class TestParser:
                 continue
 
             i += 1
+
+        # Third pass: emit unlinked test functions (no requirement references)
+        # so they appear in the graph for result linking and traceability gaps
+        for func_line, func_name, class_name in all_test_funcs:
+            if func_line not in emitted_func_lines:
+                # Inherit file-level validates if present
+                validates = list(file_default_validates)
+                yield ParsedContent(
+                    content_type="test_ref",
+                    start_line=func_line,
+                    end_line=func_line,
+                    raw_text="",
+                    parsed_data={
+                        "validates": validates,
+                        "function_name": func_name,
+                        "class_name": class_name,
+                        "function_line": func_line,
+                        "file_default_validates": file_default_validates,
+                    },
+                )

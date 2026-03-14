@@ -44,7 +44,8 @@ class TestTestParserBasic:
         assert len(results) == 1
         assert "REQ-p00001" in results[0].parsed_data["validates"]
 
-    def test_no_test_refs_returns_empty(self):
+    def test_no_test_refs_emits_unlinked_test(self):
+        """Test functions without requirement refs still emit as unlinked tests."""
         parser = _TestParser()
         lines = [
             (1, "def test_unrelated():"),
@@ -54,7 +55,9 @@ class TestTestParserBasic:
 
         results = list(parser.claim_and_parse(lines, ctx))
 
-        assert len(results) == 0
+        assert len(results) == 1
+        assert results[0].parsed_data["function_name"] == "test_unrelated"
+        assert results[0].parsed_data["validates"] == []
 
     def test_REQ_d00066_D_validates_assertion_level_reference(self):
         """REQ-d00066-D: Test names with assertion labels are validated."""
