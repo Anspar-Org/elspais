@@ -566,7 +566,20 @@ def _refresh_graph(
         Tuple of (result dict, new TraceGraph).
     """
     # Build fresh graph
-    new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+    try:
+        new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+    except (ValueError, Exception) as e:
+        error_msg = str(e)
+        if ".elspais.toml" in error_msg:
+            # Config parse error — return a descriptive error, not a stack trace
+            from elspais.graph.builder import TraceGraph
+
+            return {
+                "success": False,
+                "message": f"CONFIG ERROR: {error_msg}",
+                "node_count": 0,
+            }, TraceGraph()
+        raise
 
     return {
         "success": True,
@@ -3655,7 +3668,13 @@ def create_server(
 
     # Build initial graph if not provided
     if graph is None:
-        graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+        try:
+            graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+        except ValueError as e:
+            import sys
+
+            print(f"CONFIG ERROR: {e}", file=sys.stderr)
+            graph = TraceGraph()
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)

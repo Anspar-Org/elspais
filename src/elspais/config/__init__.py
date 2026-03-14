@@ -465,8 +465,6 @@ def get_config(
     Returns:
         Configuration dictionary (defaults if not found)
     """
-    import sys
-
     if start_path is None:
         start_path = Path.cwd()
 
@@ -477,10 +475,15 @@ def get_config(
         try:
             return load_config(resolved_path).get_raw()
         except Exception as e:
-            if not quiet:
-                print(f"Warning: Error loading config from {resolved_path}: {e}", file=sys.stderr)
+            # A config file that exists but can't be parsed is always an error.
+            # Silently falling back to defaults would hide the problem and cause
+            # hard-to-diagnose issues (e.g. skip_dirs not working).
+            raise ValueError(
+                f"Failed to parse config file {resolved_path}: {e}\n"
+                "Fix the syntax error in your .elspais.toml file."
+            ) from e
 
-    # Return defaults
+    # Return defaults (no config file found)
     return dict(DEFAULT_CONFIG)
 
 
