@@ -398,7 +398,7 @@ E. `Edge` dataclass SHALL have a `metadata: dict[str, Any]` field defaulting to 
 
 FILE nodes are the foundation for representing source files as first-class graph participants. The new edge kinds (STRUCTURES, DEFINES, YIELDS) enable domain-internal hierarchy, virtual node provenance, and test-result linking. Edge metadata carries mutable annotations (line ranges, render order) without affecting edge identity.
 
-*End* *FILE Node Data Model* | **Hash**: 00000000
+*End* *FILE Node Data Model* | **Hash**: 664d3990
 ---
 
 ## Architecture Diagram
@@ -561,7 +561,7 @@ L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating f
 
 FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
 
-*End* *FILE Node Creation in Build Pipeline* | **Hash**: 00000000
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: 166358a3
 ---
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
@@ -590,7 +590,7 @@ G. External output (CLI text, MCP JSON responses, HTML, PDF) SHALL produce ident
 
 SourceLocation duplicates information now available through the graph structure itself. FILE nodes carry path and repo identity; content nodes carry line numbers as fields. Removing SourceLocation eliminates redundancy and ensures all file identity flows through the graph's edge structure.
 
-*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 00000000
+*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 8bd81196
 ---
 
 ## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
@@ -617,7 +617,7 @@ F. FILE nodes SHALL NOT appear in the default `iter_roots()` results (no argumen
 
 Parameterized roots enable view-specific entry points into the graph: domain consumers iterate REQ/JOURNEY roots as before, while file-level consumers iterate FILE nodes. `iter_by_kind()` provides a naming-consistent alternative to `nodes_by_kind()` aligned with the iterator-only API convention.
 
-*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 00000000
+*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: f56f8527
 ---
 
 ## REQ-d00131: Render Protocol for Graph Nodes
@@ -652,7 +652,7 @@ J. Requirement hash computation SHALL use order-independent assertion hashing: c
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent assertion hashing ensures that assertion reordering does not trigger false change-detection flags.
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: 00000000
+*End* *Render Protocol for Graph Nodes* | **Hash**: cc025b1a
 ---
 
 ## REQ-d00132: Render-Based Save Operation
@@ -679,7 +679,7 @@ F. The render-based save SHALL derive implements and refines reference lists fro
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
-*End* *Render-Based Save Operation* | **Hash**: 00000000
+*End* *Render-Based Save Operation* | **Hash**: 7043f7af
 ---
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
@@ -706,5 +706,5 @@ F. The scenario test SHALL exercise undo operations at various points and verify
 
 A single large scenario test that exercises the full mutation API in a realistic sequence provides confidence that mutation operations compose correctly and that the render-save-reload pipeline is faithful. This complements the existing per-mutation-type unit tests with a holistic integration test.
 
-*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 00000000
+*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 4772cbb4
 ---

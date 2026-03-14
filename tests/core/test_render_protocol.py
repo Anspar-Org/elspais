@@ -1,4 +1,5 @@
 # Implements: REQ-d00131
+# elspais: expected-broken-links 1
 """Tests for the render protocol (Task 1 of FILENODE3).
 
 Validates REQ-d00131-A: Each NodeKind has a render() function dispatched by kind

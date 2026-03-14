@@ -348,8 +348,8 @@ for fixture_dir in "${FIXTURE_DIRS[@]}"; do
     if [ -d "$REPO_ROOT/$fixture_dir" ]; then
         echo "  Validating $fixture_dir..."
         if ! (cd "$REPO_ROOT/$fixture_dir" && elspais health 2>&1); then
-            # Some fixtures have intentional errors, so just warn
-            echo -e "${YELLOW}  Warning: validation issues in $fixture_dir${NC}"
+            VALIDATION_FAILED=true
+            echo -e "${RED}  Validation failed in $fixture_dir${NC}"
         else
             echo -e "${GREEN}  $fixture_dir OK${NC}"
         fi

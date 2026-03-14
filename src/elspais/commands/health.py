@@ -1480,8 +1480,19 @@ def _print_text_report(
         # Category header
         passed = sum(1 for c in checks if c.passed)
         total = len(checks)
-        status = "✓" if passed == total else "✗"
-        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed)")
+        has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        has_warnings = any(not c.passed and c.severity == "warning" for c in checks)
+        if passed == total:
+            status = "✓"
+        elif has_errors:
+            status = "✗"
+        else:
+            status = "⚠"
+        warn_suffix = ""
+        if has_warnings and not has_errors:
+            warn_count = sum(1 for c in checks if not c.passed and c.severity == "warning")
+            warn_suffix = f", {warn_count} warnings"
+        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{warn_suffix})")
         print("-" * 40)
 
         for check in checks:
@@ -1546,7 +1557,13 @@ def _render_markdown(
 
         passed = sum(1 for c in checks if c.passed)
         total = len(checks)
-        status = "pass" if passed == total else "FAIL"
+        has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        if passed == total:
+            status = "pass"
+        elif has_errors:
+            status = "FAIL"
+        else:
+            status = "WARN"
         lines.append(f"## {category.upper()} ({passed}/{total} {status})")
         lines.append("")
         lines.append("| Check | Status | Message |")

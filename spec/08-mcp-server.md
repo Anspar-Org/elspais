@@ -752,7 +752,7 @@ F. MCP serialization of requirement and assertion nodes SHALL produce identical 
 
 FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
 
-*End* *MCP FILE Node Integration* | **Hash**: ________
+*End* *MCP FILE Node Integration* | **Hash**: 4a81d28c
 
 ---
 
