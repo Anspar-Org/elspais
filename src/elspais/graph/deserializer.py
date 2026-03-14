@@ -113,17 +113,22 @@ class DomainFile:
             return True
 
         # Check if any parent directory matches skip_dirs
-        # Get path relative to base to check directory names
+        # Supports both single-segment ("roadmap") and multi-segment
+        # ("regulations/fda") entries.
         try:
             rel_path = file_path.relative_to(self.path)
-            # Check each part of the relative path (excluding the file name)
-            for part in rel_path.parts[:-1]:
-                if part in self.skip_dirs:
-                    return True
         except ValueError:
-            # file_path is not relative to self.path, check absolute path parts
-            for part in file_path.parts:
-                if part in self.skip_dirs:
+            rel_path = file_path
+
+        # Parent directory path (excluding the file name)
+        rel_dir = str(Path(*rel_path.parts[:-1])) if len(rel_path.parts) > 1 else ""
+        for skip in self.skip_dirs:
+            # Single-segment: match any component. Multi-segment: prefix match.
+            if "/" in skip or "\\" in skip:
+                if rel_dir == skip or rel_dir.startswith(skip + "/"):
+                    return True
+            else:
+                if skip in rel_path.parts[:-1]:
                     return True
 
         return False
