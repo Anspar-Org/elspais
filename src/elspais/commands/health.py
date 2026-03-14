@@ -414,13 +414,20 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
     )
 
 
-def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
+def check_spec_orphans(graph: TraceGraph, allow_orphans: bool = False) -> HealthCheck:
     """Check for orphaned nodes across all kinds.
 
     Uses graph.orphaned_nodes() which returns all parentless nodes
     that have no meaningful (non-satellite) children.
     Skips nodes whose broken references are all expected (expected-broken-links).
     """
+    if allow_orphans:
+        return HealthCheck(
+            name="spec.orphans",
+            passed=True,
+            message="Orphan check skipped (allow_orphans=true)",
+            category="spec",
+        )
     by_kind: dict[str, list[dict]] = {}
 
     for node in graph.orphaned_nodes():
@@ -892,7 +899,7 @@ def run_spec_checks(
         check_spec_implements_resolve(graph),
         check_spec_refines_resolve(graph),
         check_spec_hierarchy_levels(graph, config),
-        check_spec_orphans(graph),
+        check_spec_orphans(graph, allow_orphans=config.get("rules.hierarchy.allow_orphans", False)),
         check_spec_format_rules(graph, config),
         check_spec_hash_integrity(graph),
         check_spec_changelog_present(graph, config),
