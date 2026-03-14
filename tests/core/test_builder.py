@@ -308,7 +308,11 @@ class TestBuilderContentTypes:
 
         result = graph.find_by_id("orphan-result")
         assert result is not None
-        assert result.parent_count() == 0
+        # FILE parent exists from build_graph, but no domain parent (TEST via YIELDS)
+        from elspais.graph.GraphNode import NodeKind as NK
+
+        domain_parents = [p for p in result.iter_parents() if p.kind != NK.FILE]
+        assert len(domain_parents) == 0
 
 
 class TestTestToRequirementLinking:
@@ -1044,8 +1048,12 @@ class TestAddressesEdges:
         jny_node = graph.find_by_id("JNY-Dev-02")
         assert jny_node is not None
 
-        # Should have no incoming edges since target doesn't exist
-        assert jny_node.parent_count() == 0
+        # Should have no domain incoming edges since target doesn't exist
+        # (FILE parent exists from build_graph)
+        from elspais.graph.GraphNode import NodeKind as NK
+
+        domain_parents = [p for p in jny_node.iter_parents() if p.kind != NK.FILE]
+        assert len(domain_parents) == 0
 
         # Should have a broken reference recorded
         assert graph.has_broken_references()

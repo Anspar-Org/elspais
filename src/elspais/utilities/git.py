@@ -246,15 +246,19 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
     if repo_root is None:
         repo_root = getattr(graph, "repo_root", None)
 
+    # Implements: REQ-d00129-D
     for node in graph.all_nodes():
-        if node.kind == NodeKind.REQUIREMENT and node.source:
+        if node.kind == NodeKind.REQUIREMENT:
+            fn = node.file_node()
+            if not fn:
+                continue
             # Use the full canonical node ID as the key.
             # This avoids hardcoded prefix stripping and works with any
             # namespace/type pattern configured via [id-patterns].
             req_id = node.id
 
-            # Get source path and make it relative if needed
-            source_path = node.source.path
+            # Get source path from FILE node and make it relative if needed
+            source_path = fn.get_field("relative_path") or ""
             if repo_root:
                 try:
                     # If path is absolute, make it relative to repo_root

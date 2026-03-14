@@ -64,8 +64,10 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Get file path relative to repo
-    file_path = node.source.path if node.source else ""
+    # Implements: REQ-d00129-D
+    # Get file path relative to repo via FILE parent node
+    fn = node.file_node()
+    file_path = fn.get_field("relative_path") if fn else ""
 
     # Default all git states to False
     is_uncommitted = False
@@ -125,8 +127,10 @@ def annotate_display_info(node: GraphNode) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Get file path relative to repo
-    file_path = node.source.path if node.source else ""
+    # Implements: REQ-d00129-D
+    # Get file path relative to repo via FILE parent node
+    fn = node.file_node()
+    file_path = fn.get_field("relative_path") if fn else ""
 
     # Roadmap detection from path
     is_roadmap = "roadmap" in file_path.lower()
@@ -346,9 +350,12 @@ def collect_topics(graph: TraceGraph) -> list[str]:
     from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
+    # Implements: REQ-d00129-D
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.source and node.source.path:
-            stem = Path(node.source.path).stem
+        fn = node.file_node()
+        rel_path = fn.get_field("relative_path") if fn else None
+        if rel_path:
+            stem = Path(rel_path).stem
             topic = stem.split("-", 1)[1] if "-" in stem else stem
             all_topics.add(topic)
     return sorted(all_topics)

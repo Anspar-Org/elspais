@@ -24,7 +24,7 @@ from elspais.commands.health import (
 from elspais.config import ConfigLoader, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 
 
 def _load_config(config_path: Path) -> ConfigLoader:
@@ -77,14 +77,12 @@ class TestCheckSpecNoDuplicatesFindings:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
             label="First Copy",
-            source=SourceLocation(path="spec/file_a.md", line=1),
         )
         node_a.set_field("source_file", "spec/file_a.md")
         node_b = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
             label="Second Copy",
-            source=SourceLocation(path="spec/file_b.md", line=1),
         )
         node_b.set_field("source_file", "spec/file_b.md")
         # Store under different keys so both survive in the index
@@ -113,7 +111,6 @@ class TestCheckSpecImplementsResolveFindings:
             id="REQ-d00001",
             kind=NodeKind.REQUIREMENT,
             label="Dev Requirement",
-            source=SourceLocation(path="spec/reqs.md", line=1),
         )
         node.set_field("level", "DEV")
         node.set_field("status", "Active")
@@ -142,7 +139,6 @@ class TestCheckSpecRefinesResolveFindings:
             id="REQ-d00002",
             kind=NodeKind.REQUIREMENT,
             label="Dev Refines",
-            source=SourceLocation(path="spec/reqs.md", line=1),
         )
         node.set_field("level", "DEV")
         node.set_field("status", "Active")

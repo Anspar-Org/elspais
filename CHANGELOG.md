@@ -2,6 +2,19 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.4] - 2026-03-13
+
+### Removed
+
+- **BREAKING: `SourceLocation` class deleted** -- File paths now accessed via `node.file_node().get_field("relative_path")` instead of `node.source.path` (REQ-d00129-A)
+- **BREAKING: `GraphNode.source` field deleted** -- Line numbers now accessed via `node.get_field("parse_line")` and `node.get_field("parse_end_line")` (REQ-d00129-B, REQ-d00129-C)
+
+### Changed
+
+- **Consumer migration** -- All ~15 consumers (annotators, serializers, commands, MCP server, HTML/PDF generators, test-code linker, link suggester) migrated to use `file_node()` for file paths and `get_field("parse_line")` for line numbers (REQ-d00129-D, REQ-d00129-E, REQ-d00129-F)
+- **`GraphNode.depth` excludes FILE parents** -- FILE nodes (structural containment) no longer count toward domain hierarchy depth
+- **`_collect_source_files`** -- HTML generator now resolves relative paths from repo_root when collecting source files
+
 ## [0.104.3] - 2026-03-13
 
 ### Added

@@ -65,10 +65,14 @@ def _get_source_path(graph: TraceGraph, node_id: str, repo_root: Path) -> Path |
     Returns:
         Absolute Path to the spec file, or None.
     """
+    # Implements: REQ-d00129-D
     node = graph.find_by_id(node_id)
-    if node is None or node.source is None:
+    if node is None:
         return None
-    source_path = node.source.path
+    _fn = node.file_node()
+    if _fn is None:
+        return None
+    source_path = _fn.get_field("relative_path")
     if not source_path:
         return None
     p = Path(source_path)
@@ -172,10 +176,14 @@ def check_for_external_changes(
     changed: list[str] = []
     seen: set[str] = set()
 
+    # Implements: REQ-d00129-D
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.source is None or not node.source.path:
+        _fn = node.file_node()
+        if _fn is None:
             continue
-        rel_path = node.source.path
+        rel_path = _fn.get_field("relative_path") or ""
+        if not rel_path:
+            continue
         if rel_path in seen:
             continue
         seen.add(rel_path)
@@ -422,7 +430,8 @@ def replay_mutations_to_disk(
             # reqs that reference the renamed ID)
             seen_files: set[str] = set()
             for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-                if node.source is None or not node.source.path:
+                _fn = node.file_node()
+                if _fn is None or not _fn.get_field("relative_path"):
                     continue
                 ref_path = _get_source_path(graph, node.id, repo_root)
                 if ref_path is None or str(ref_path) in seen_files:

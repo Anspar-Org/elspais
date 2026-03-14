@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.link_suggest import (
     CONFIDENCE_HIGH,
     CONFIDENCE_MEDIUM,
@@ -78,13 +78,15 @@ def _add_code(
     parent: GraphNode | None = None,
 ) -> GraphNode:
     """Add a CODE node, optionally linked to a parent requirement."""
+    from tests.core.graph_test_helpers import wire_file_parent as _wfp
+
     node = GraphNode(
         code_id,
         NodeKind.CODE,
         label=func_name,
-        source=SourceLocation(path=path, line=line),
     )
     node.set_field("function_name", func_name)
+    _wfp(node, path, line=line, graph=graph)
     graph._index[code_id] = node
     if parent is not None:
         parent.link(node, EdgeKind.CONTAINS)
@@ -100,13 +102,15 @@ def _add_test(
     parent: GraphNode | None = None,
 ) -> GraphNode:
     """Add a TEST node, optionally linked to a parent."""
+    from tests.core.graph_test_helpers import wire_file_parent as _wfp
+
     node = GraphNode(
         test_id,
         NodeKind.TEST,
         label=func_name,
-        source=SourceLocation(path=path, line=line),
     )
     node.set_field("function_name", func_name)
+    _wfp(node, path, line=line, graph=graph)
     graph._index[test_id] = node
     if parent is not None:
         parent.link(node, EdgeKind.VALIDATES)

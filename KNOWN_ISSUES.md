@@ -1,21 +1,6 @@
 # Known Issues
 
-[x] CLI: Why does --help work, but help does does not
-
-[x] CLI: when given bad arg, give a more readable error message. Perhaps just clearly suggest 'help'
-
-[x] Chore: remove non-REQ files from spec/ directory.
-- docs/superpowers/specs/2026-03-09-graph-analysis-design.md
-- add spec/plans/ to gitignore
-
-[x] Chore: remove all extraneous docs/ files and dirs
-- docs/plans/*
-- docs/superpowers/*
-- add those to gitignore
-
 [ ] Chore: start using Changelog in REQs
-
-[x] Chore: review docs for accuracy
 
 [ ] Chore: review specs for accuracy
 
@@ -27,7 +12,17 @@
 
 [ ] Feature: drag handles in the hierarchy, to move requirements to be children of other requirements.
 
-[ ] Project: Spec file naming convention
-Rename spec/ files more sensibly  and consistently
-Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
-Maybe a tool to help with renumber REQs (it will have to check all code, test, doc, etc files and make approte replacements.
+[ ] Project: In elspais repo, udpdate spec file naming convention
+- Rename spec/ files more sensibly  and consistently
+- Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
+- Maybe a tool to help with renumber REQs (it will have to check all code, test, doc, etc files and make approte replacements.
+
+## 8. Deferred Features
+
+The following are enabled by this architecture but deferred to future plans:
+
+- **Assertion reordering** with automatic label recomputation and reference updating
+- **Drag-and-drop reordering** in the UI (render_order mutation)
+- **File rename** as a graph mutation (update FILE node path, persist)
+- **Move requirement between files** as a graph mutation (change CONTAINS edge from one FILE to another)
+- **Dart/Flutter parser support** (function detection strategy, result parser)

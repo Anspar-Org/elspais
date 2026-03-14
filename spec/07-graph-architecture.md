@@ -557,3 +557,32 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 *End* *FILE Node Creation in Build Pipeline* | **Hash**: 00000000
 ---
+
+## REQ-d00129: SourceLocation Removal and Consumer Migration
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+The `SourceLocation` class and `GraphNode.source` field SHALL be removed. All consumers SHALL migrate to use `file_node()` for file paths and `get_field("parse_line")` / `get_field("parse_end_line")` for line numbers.
+
+## Assertions
+
+A. `SourceLocation` class SHALL NOT exist in the codebase. Importing it SHALL raise `ImportError`.
+
+B. `GraphNode` SHALL NOT have a `source` field. Accessing `node.source` on any `GraphNode` instance SHALL raise `AttributeError`.
+
+C. Content nodes SHALL store `parse_line` (int) and `parse_end_line` (int or None) as fields accessible via `get_field()`.
+
+D. All consumers that previously read `node.source.path` SHALL use `node.file_node().get_field("relative_path")` (with None-guard for unlinked/INSTANCE nodes).
+
+E. All consumers that previously read `node.source.line` SHALL use `node.get_field("parse_line")`.
+
+F. All consumers that previously read `node.source.repo` SHALL use `node.file_node().get_field("repo")` (with None-guard).
+
+G. External output (CLI text, MCP JSON responses, HTML, PDF) SHALL produce identical file paths and line numbers as before the migration.
+
+## Rationale
+
+SourceLocation duplicates information now available through the graph structure itself. FILE nodes carry path and repo identity; content nodes carry line numbers as fields. Removing SourceLocation eliminates redundancy and ensures all file identity flows through the graph's edge structure.
+
+*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 00000000
+---

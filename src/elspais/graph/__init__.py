@@ -3,7 +3,6 @@
 Exports:
 - NodeKind: Enum of node types
 - FileType: Enum of source file classifications
-- SourceLocation: Portable file location reference
 - GraphNode: Unified node representation
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
@@ -21,7 +20,6 @@ from elspais.graph.GraphNode import (
     FileType,
     GraphNode,
     NodeKind,
-    SourceLocation,
 )
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -30,7 +28,6 @@ from elspais.graph.relations import Edge, EdgeKind, Stereotype
 __all__ = [
     "FileType",
     "NodeKind",
-    "SourceLocation",
     "GraphNode",
     "Edge",
     "EdgeKind",

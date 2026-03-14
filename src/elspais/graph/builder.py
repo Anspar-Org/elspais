@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
@@ -780,7 +780,8 @@ class TraceGraph:
         was_root = node in self._roots
 
         # Record state before deletion
-        source_path = node.source.path if node.source else None
+        _fn = node.file_node()
+        source_path = _fn.get_field("relative_path") if _fn else None
         entry = MutationEntry(
             operation="delete_requirement",
             target_id=node_id,
@@ -1769,24 +1770,15 @@ class GraphBuilder:
         data = content.parsed_data
         req_id = data["id"]
 
-        # Get source path from context if available
-        source_ctx = getattr(content, "source_context", None)
-        source_path = source_ctx.source_id if source_ctx else ""
-
+        # Implements: REQ-d00129-A, REQ-d00129-B
         # Create requirement node
-        source = SourceLocation(
-            path=source_path,
-            line=content.start_line,
-            end_line=content.end_line,
-        )
-
         node = GraphNode(
             id=req_id,
             kind=NodeKind.REQUIREMENT,
             label=data.get("title", ""),
-            source=source,
         )
         # Implements: REQ-p00014-C
+        # Implements: REQ-d00129-C
         node._content = {
             "level": data.get("level"),
             "status": data.get("status"),
@@ -1794,6 +1786,8 @@ class GraphBuilder:
             "body_text": data.get("body_text", ""),  # For hash computation
             "changelog": data.get("changelog", []),
             "stereotype": Stereotype.CONCRETE,
+            "parse_line": content.start_line,
+            "parse_end_line": content.end_line,
         }
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
@@ -1810,9 +1804,12 @@ class GraphBuilder:
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
                 label=assertion["text"],
-                source=SourceLocation(path=source_path, line=assertion_line),
             )
-            assertion_node._content = {"label": assertion["label"]}
+            assertion_node._content = {
+                "label": assertion["label"],
+                "parse_line": assertion_line,
+                "parse_end_line": None,
+            }
             self._nodes[assertion_id] = assertion_node
             children_with_lines.append((assertion_line, assertion_node))
 
@@ -1826,12 +1823,13 @@ class GraphBuilder:
                 id=section_id,
                 kind=NodeKind.REMAINDER,
                 label=section["heading"],
-                source=SourceLocation(path=source_path, line=section_line),
             )
             section_node._content = {
                 "heading": section["heading"],
                 "text": section["content"],
                 "order": idx,
+                "parse_line": section_line,
+                "parse_end_line": None,
             }
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
@@ -1857,26 +1855,17 @@ class GraphBuilder:
         data = content.parsed_data
         journey_id = data["id"]
 
-        # Get source path from context if available
-        source_ctx = getattr(content, "source_context", None)
-        source_path = source_ctx.source_id if source_ctx else ""
-
-        source = SourceLocation(
-            path=source_path,
-            line=content.start_line,
-            end_line=content.end_line,
-        )
-
         node = GraphNode(
             id=journey_id,
             kind=NodeKind.USER_JOURNEY,
             label=data.get("title", ""),
-            source=source,
         )
         node._content = {
             "actor": data.get("actor"),
             "goal": data.get("goal"),
             "body": content.raw_text,
+            "parse_line": content.start_line,
+            "parse_end_line": content.end_line,
         }
         self._nodes[journey_id] = node
         # Implements: REQ-d00071-D
@@ -1916,12 +1905,10 @@ class GraphBuilder:
                     id=code_id,
                     kind=NodeKind.CODE,
                     label=label,
-                    source=SourceLocation(
-                        path=source_id,
-                        line=content.start_line,
-                        end_line=content.end_line,
-                    ),
                 )
+                # Implements: REQ-d00129-C
+                node.set_field("parse_line", content.start_line)
+                node.set_field("parse_end_line", content.end_line)
                 # Store function context for TEST→CODE linking
                 if func_name:
                     node.set_field("function_name", func_name)
@@ -1967,12 +1954,10 @@ class GraphBuilder:
                 id=test_id,
                 kind=NodeKind.TEST,
                 label=label,
-                source=SourceLocation(
-                    path=source_id,
-                    line=source_line,
-                    end_line=content.end_line,
-                ),
             )
+            # Implements: REQ-d00129-C
+            node.set_field("parse_line", source_line)
+            node.set_field("parse_end_line", content.end_line)
             expected_broken = data.get("expected_broken_count", 0)
             if expected_broken > 0:
                 node.set_metric("_expected_broken_count", expected_broken)
@@ -1995,9 +1980,6 @@ class GraphBuilder:
         data = content.parsed_data
         result_id = data["id"]
         test_id = data.get("test_id")  # e.g., "test:path::Class::func"
-        source_ctx = getattr(content, "source_context", None)
-        source_path = source_ctx.source_id if source_ctx else ""
-
         # Create a readable label from test name and class
         test_name = data.get("name", "")
         classname = data.get("classname", "")
@@ -2010,11 +1992,6 @@ class GraphBuilder:
             id=result_id,
             kind=NodeKind.TEST_RESULT,
             label=label,
-            source=SourceLocation(
-                path=source_path,
-                line=content.start_line,
-                end_line=content.end_line,
-            ),
         )
         node._content = {
             "status": data.get("status"),
@@ -2023,6 +2000,8 @@ class GraphBuilder:
             "name": test_name,
             "classname": classname,
             "message": data.get("message"),
+            "parse_line": content.start_line,
+            "parse_end_line": content.end_line,
         }
         self._nodes[result_id] = node
         self._orphan_candidates.add(result_id)
@@ -2046,13 +2025,12 @@ class GraphBuilder:
             id=remainder_id,
             kind=NodeKind.REMAINDER,
             label=text[:50] + "..." if len(text) > 50 else text,
-            source=SourceLocation(
-                path=source_path,
-                line=content.start_line,
-                end_line=content.end_line,
-            ),
         )
-        node._content = {"text": text}
+        node._content = {
+            "text": text,
+            "parse_line": content.start_line,
+            "parse_end_line": content.end_line,
+        }
         self._nodes[remainder_id] = node
 
     # Implements: REQ-d00128-D
@@ -2217,21 +2195,17 @@ class GraphBuilder:
                     id=clone_id,
                     kind=orig.kind,
                     label=orig.get_label(),
-                    source=(
-                        SourceLocation(
-                            path=orig.source.path,
-                            line=orig.source.line,
-                            end_line=orig.source.end_line,
-                        )
-                        if orig.source
-                        else None
-                    ),
                 )
                 # Copy content fields and set INSTANCE stereotype
                 for key, value in orig.get_all_content().items():
                     if key != "stereotype":
                         clone.set_field(key, value)
                 clone.set_field("stereotype", Stereotype.INSTANCE)
+                # Implements: REQ-d00129-C -- copy parse_line fields from original
+                if orig.get_field("parse_line") is not None:
+                    clone.set_field("parse_line", orig.get_field("parse_line"))
+                if orig.get_field("parse_end_line") is not None:
+                    clone.set_field("parse_end_line", orig.get_field("parse_end_line"))
 
                 self._nodes[clone_id] = clone
                 clone_map[orig.id] = clone
@@ -2283,18 +2257,25 @@ class GraphBuilder:
         if not self._satisfies_links:
             return links
 
-        # Build file -> source_ids index from nodes
+        # Implements: REQ-d00129-D -- Build file -> source_ids index from nodes
         file_to_sources: dict[str, set[str]] = {}
         for node_id, node in self._nodes.items():
-            if node.source:
-                file_to_sources.setdefault(node.source.path, set()).add(node_id)
+            fn = node.file_node()
+            if fn:
+                rp = fn.get_field("relative_path") or ""
+                if rp:
+                    file_to_sources.setdefault(rp, set()).add(node_id)
 
         # Build source_id -> file index from link source nodes
         source_file_map: dict[str, str] = {}
         for source_id, _, _ in links:
             node = self._nodes.get(source_id)
-            if node and node.source:
-                source_file_map[source_id] = node.source.path
+            if node:
+                fn = node.file_node()
+                if fn:
+                    rp = fn.get_field("relative_path") or ""
+                    if rp:
+                        source_file_map[source_id] = rp
 
         # Group links by source file
         file_links: dict[str, list[int]] = {}  # file -> list of indices

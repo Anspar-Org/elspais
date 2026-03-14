@@ -14,7 +14,7 @@ REQUIREMENT <- (IMPLEMENTS) <- CODE <- (VALIDATES) <- TEST <- (CONTAINS) <- TEST
 
 from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
@@ -515,7 +515,6 @@ class TestTransitiveCoverageThroughCode:
         code = GraphNode(
             id="code:src/auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=10),
         )
         code.set_field("function_name", "authenticate")
         graph._index[code.id] = code
@@ -525,7 +524,6 @@ class TestTransitiveCoverageThroughCode:
         test = GraphNode(
             id="test:tests/test_auth.py::test_authenticate",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=5),
         )
         graph._index[test.id] = test
         code.link(test, EdgeKind.VALIDATES)
@@ -609,7 +607,6 @@ class TestTransitiveCoverageThroughCode:
         direct_test = GraphNode(
             id="test:tests/test_auth.py::test_auth_direct",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=20),
         )
         graph._index[direct_test.id] = direct_test
         req.link(direct_test, EdgeKind.VALIDATES, assertion_targets=["A"])
@@ -653,7 +650,6 @@ class TestTransitiveCoverageThroughCode:
         code = GraphNode(
             id="code:src/mod.py:5",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/mod.py", line=5),
         )
         graph._index[code.id] = code
         # REFINES, not IMPLEMENTS -- should not count
@@ -662,7 +658,6 @@ class TestTransitiveCoverageThroughCode:
         test = GraphNode(
             id="test:tests/test_mod.py::test_func",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_mod.py", line=1),
         )
         graph._index[test.id] = test
         code.link(test, EdgeKind.VALIDATES)
@@ -705,7 +700,6 @@ class TestTransitiveCoverageThroughCode:
             code = GraphNode(
                 id=f"code:src/mod{i}.py:1",
                 kind=NodeKind.CODE,
-                source=SourceLocation(path=f"src/mod{i}.py", line=1),
             )
             graph._index[code.id] = code
             req.link(code, EdgeKind.IMPLEMENTS)
@@ -713,7 +707,6 @@ class TestTransitiveCoverageThroughCode:
             test = GraphNode(
                 id=f"test:tests/test_mod{i}.py::test_func",
                 kind=NodeKind.TEST,
-                source=SourceLocation(path=f"tests/test_mod{i}.py", line=1),
             )
             graph._index[test.id] = test
             code.link(test, EdgeKind.VALIDATES)

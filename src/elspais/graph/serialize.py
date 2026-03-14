@@ -37,15 +37,19 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         },
     }
 
-    # Include source location if present
-    if node.source:
+    # Implements: REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
+    # Include source location from FILE parent and parse_line fields
+    _fn = node.file_node()
+    _parse_line = node.get_field("parse_line")
+    if _fn or _parse_line is not None:
         result["source"] = {
-            "path": node.source.path,
-            "line": node.source.line,
-            "end_line": node.source.end_line,
+            "path": _fn.get_field("relative_path") if _fn else None,
+            "line": _parse_line,
+            "end_line": node.get_field("parse_end_line"),
         }
-        if node.source.repo:
-            result["source"]["repo"] = node.source.repo
+        _repo = _fn.get_field("repo") if _fn else None
+        if _repo:
+            result["source"]["repo"] = _repo
 
     # Include child IDs
     children = list(node.iter_children())
@@ -192,8 +196,9 @@ def to_csv(graph: TraceGraph) -> str:
     requirements.sort(key=lambda n: n.id)
 
     for node in requirements:
-        file_path = node.source.path if node.source else ""
-        line = node.source.line if node.source else ""
+        _fn = node.file_node()
+        file_path = _fn.get_field("relative_path") if _fn else ""
+        line = node.get_field("parse_line") or ""
 
         # Get implements from incoming edges (what this node implements)
         implements = []

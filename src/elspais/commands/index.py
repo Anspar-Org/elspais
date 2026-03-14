@@ -216,10 +216,12 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
 
     Checks deepest paths first so ``spec/regulations/fda`` matches before ``spec``.
     """
-    source = getattr(node, "source", None)
-    if not source or not source.path:
+    # Implements: REQ-d00129-D
+    fn = node.file_node() if hasattr(node, "file_node") else None
+    rp = fn.get_field("relative_path") if fn else None
+    if not rp:
         return None
-    source_path = Path(source.path).resolve()
+    source_path = Path(rp).resolve()
     # Sort deepest-first so nested dirs match before their parents
     for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
         resolved = spec_dir.resolve()
@@ -332,7 +334,9 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
             headers = ["ID", "Title", "File", "Hash"]
             rows = []
             for node in sorted(nodes, key=lambda n: n.id):
-                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                filename = Path(_rp).name if _rp else ""
                 hash_val = node.hash or ""
                 rows.append([node.id, node.get_label(), filename, hash_val])
             lines.extend(_format_table(headers, rows))
@@ -356,7 +360,9 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
             rows = []
             for node in sorted(jnys, key=lambda n: n.id):
                 actor = node.get_field("actor") or ""
-                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                filename = Path(_rp).name if _rp else ""
                 rows.append([node.id, node.get_label(), actor, filename])
             lines.extend(_format_table(headers, rows))
             lines.append("")

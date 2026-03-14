@@ -573,9 +573,8 @@ class TestTemplateInstantiation:
         original = graph.find_by_id("REQ-p80001")
         clone = graph.find_by_id("REQ-p00044::REQ-p80001")
         assert clone is not None, "Cloned node should exist"
-        assert clone.source is not None, "Cloned node should have source location"
-        assert clone.source.path == original.source.path
-        assert clone.source.line == original.source.line
+        # After SourceLocation removal, cloned nodes copy parse_line fields
+        assert clone.get_field("parse_line") == original.get_field("parse_line")
 
 
 class TestFileBasedAttribution:

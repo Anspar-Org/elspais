@@ -17,7 +17,6 @@ import pytest
 
 from elspais.graph import EdgeKind, GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import SourceLocation
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -76,13 +75,20 @@ def assertion_map_graph():
     req_node.link(assertion_c, EdgeKind.STRUCTURES)
 
     # -- Pattern 2: ASSERTION->TEST edge (assertion_a -> test_node) --
+    from tests.core.graph_test_helpers import wire_file_parent
+
     test_node = GraphNode(
         id="test:test_encryption.py::test_data_encrypted",
         kind=NodeKind.TEST,
         label="test_data_encrypted",
-        source=SourceLocation(path="tests/test_encryption.py", line=10),
     )
-    test_node._content = {"file": "tests/test_encryption.py", "name": "test_data_encrypted"}
+    test_node._content = {
+        "file": "tests/test_encryption.py",
+        "name": "test_data_encrypted",
+        "parse_line": 10,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node, "tests/test_encryption.py", line=10, graph=graph)
     assertion_a.link(test_node, EdgeKind.VALIDATES)
 
     result_node = GraphNode(
@@ -98,9 +104,14 @@ def assertion_map_graph():
         id="test:test_tls.py::test_tls_version",
         kind=NodeKind.TEST,
         label="test_tls_version",
-        source=SourceLocation(path="tests/test_tls.py", line=25),
     )
-    test_node2._content = {"file": "tests/test_tls.py", "name": "test_tls_version"}
+    test_node2._content = {
+        "file": "tests/test_tls.py",
+        "name": "test_tls_version",
+        "parse_line": 25,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node2, "tests/test_tls.py", line=25, graph=graph)
     req_node.link(test_node2, EdgeKind.VALIDATES, assertion_targets=["B"])
 
     result_node2 = GraphNode(
@@ -116,9 +127,14 @@ def assertion_map_graph():
         id="test:test_security.py::test_full_security_suite",
         kind=NodeKind.TEST,
         label="test_full_security_suite",
-        source=SourceLocation(path="tests/test_security.py", line=42),
     )
-    test_node3._content = {"file": "tests/test_security.py", "name": "test_full_security_suite"}
+    test_node3._content = {
+        "file": "tests/test_security.py",
+        "name": "test_full_security_suite",
+        "parse_line": 42,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node3, "tests/test_security.py", line=42, graph=graph)
     req_node.link(test_node3, EdgeKind.VALIDATES)
 
     result_node3 = GraphNode(

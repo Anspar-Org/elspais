@@ -11,7 +11,7 @@ import pytest
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.html.generator import HTMLGenerator
 
 # Fixture root for hht-like tests
@@ -34,17 +34,25 @@ def hht_graph():
 @pytest.fixture
 def empty_graph():
     """Create a graph with a node whose source file does not exist."""
+    from tests.core.graph_test_helpers import wire_file_parent
+
     node = GraphNode(
         id="REQ-x00001",
         kind=NodeKind.REQUIREMENT,
         label="Ghost Requirement",
-        source=SourceLocation(path="/nonexistent/path/ghost.md", line=1),
     )
-    node._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    node._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
 
     graph = TraceGraph(repo_root=Path("/nonexistent"))
+    wire_file_parent(node, "/nonexistent/path/ghost.md", line=1, graph=graph)
     graph._roots = [node]
-    graph._index = {"REQ-x00001": node}
+    graph._index = {**graph._index, "REQ-x00001": node}
     return graph
 
 
@@ -149,17 +157,25 @@ class TestCollectSourceFilesLanguageDetection:
         # Create a graph with a real Python file as source
         py_file = Path(__file__)  # This test file itself is Python
 
+        from tests.core.graph_test_helpers import wire_file_parent
+
         node = GraphNode(
             id="REQ-t00001",
             kind=NodeKind.REQUIREMENT,
             label="Python Source Test",
-            source=SourceLocation(path=str(py_file), line=1),
         )
-        node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
+        node._content = {
+            "level": "DEV",
+            "status": "Active",
+            "hash": "00000000",
+            "parse_line": 1,
+            "parse_end_line": None,
+        }
 
         graph = TraceGraph(repo_root=py_file.parent)
+        wire_file_parent(node, str(py_file), line=1, graph=graph)
         graph._roots = [node]
-        graph._index = {"REQ-t00001": node}
+        graph._index = {**graph._index, "REQ-t00001": node}
 
         generator = HTMLGenerator(graph)
         result = generator._collect_source_files()
@@ -182,7 +198,6 @@ class TestCollectSourceFilesBinarySkip:
                 id="REQ-b00001",
                 kind=NodeKind.REQUIREMENT,
                 label="Binary Source",
-                source=SourceLocation(path=binary_path, line=1),
             )
             node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
 
@@ -213,7 +228,6 @@ class TestCollectSourceFilesSizeLimit:
                 id="REQ-l00001",
                 kind=NodeKind.REQUIREMENT,
                 label="Large Source",
-                source=SourceLocation(path=large_path, line=1),
             )
             node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
 

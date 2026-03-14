@@ -4,7 +4,6 @@
 
 This module provides the core data structures for Architecture 3.0:
 - NodeKind: Enum of node types
-- SourceLocation: Portable file location reference
 - GraphNode: Unified node with typed content and edge management
 """
 
@@ -14,7 +13,6 @@ from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import InitVar, dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -52,30 +50,6 @@ class FileType(Enum):
 
 
 @dataclass
-class SourceLocation:
-    """Portable reference to a location in a file.
-
-    Paths are stored relative to the repository root, enabling
-    consistent references across different working directories.
-    """
-
-    path: str  # Relative to repo root
-    line: int  # 1-based line number
-    end_line: int | None = None
-    repo: str | None = None  # For multi-repo: "CAL", None = core
-
-    def absolute(self, repo_root: Path) -> Path:
-        """Resolve to absolute path."""
-        return repo_root / self.path
-
-    def __str__(self) -> str:
-        """Return string representation for display."""
-        if self.repo:
-            return f"{self.repo}:{self.path}:{self.line}"
-        return f"{self.path}:{self.line}"
-
-
-@dataclass
 class GraphNode:
     """A node in the traceability graph.
 
@@ -86,10 +60,13 @@ class GraphNode:
     All parent-child relationships are created via link() with a typed
     EdgeKind. Use unlink() to sever all edges between two nodes.
 
+    File path is accessed via ``file_node().get_field("relative_path")``.
+    Line numbers are accessed via ``get_field("parse_line")`` and
+    ``get_field("parse_end_line")``.
+
     Attributes:
         id: Unique identifier for this node (mutable via set_id()).
         kind: The type of node (requirement, assertion, etc.).
-        source: Where this node is defined in source files.
         uuid: Stable 32-char hex string for GUI/DOM referencing.
 
     Use get_label()/set_label() for label access.
@@ -99,7 +76,6 @@ class GraphNode:
     id: str
     kind: NodeKind
     label: InitVar[str] = ""  # Constructor parameter, stored in _label
-    source: SourceLocation | None = None
     uuid: str = field(default_factory=lambda: uuid4().hex)
 
     # Label stored internally - use get_label()/set_label() or label property
@@ -366,10 +342,13 @@ class GraphNode:
         """Calculate depth from root (0 for roots).
 
         For DAG structures, returns minimum depth (shortest path to root).
+        FILE parents are excluded since they represent structural
+        containment, not domain hierarchy.
         """
-        if not self._parents:
+        domain_parents = [p for p in self._parents if p.kind != NodeKind.FILE]
+        if not domain_parents:
             return 0
-        return 1 + min(p.depth for p in self._parents)
+        return 1 + min(p.depth for p in domain_parents)
 
     # Implements: REQ-d00127-C
     def walk(

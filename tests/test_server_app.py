@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.graph import GraphNode, NodeKind, SourceLocation
+from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
@@ -812,7 +812,6 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_associated_repo_absolute_path(self, tmp_path):
         """Files from associated repos outside main repo can be loaded via absolute path."""
-        from elspais.graph.GraphNode import SourceLocation
 
         # Simulate main repo at tmp_path/main and associate at tmp_path/assoc
         main_repo = tmp_path / "main"
@@ -840,7 +839,6 @@ class TestGetFileContent:
             id="REQ-A-p00001",
             kind=NodeKind.REQUIREMENT,
             label="Test Requirement",
-            source=SourceLocation(path=str(spec_file), line=1),
         )
         node._content = {"level": "PRD", "status": "Active"}
         graph._index[node.id] = node
@@ -1370,51 +1368,59 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     spec_file = tmp_path / "test_spec.md"
     spec_file.write_text(spec_content, encoding="utf-8")
 
+    from elspais.graph.GraphNode import FileType
+
     graph = TraceGraph(repo_root=tmp_path)
     rel_path = str(spec_file.relative_to(tmp_path))
 
-    prd = GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Requirement",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    prd._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
+
+    prd = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Requirement")
+    prd._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(prd, EdgeKind.CONTAINS)
 
     req = GraphNode(
         id="REQ-t00001",
         kind=NodeKind.REQUIREMENT,
         label="Test Requirement" if not two_reqs else "First Requirement",
-        source=SourceLocation(path=rel_path, line=1),
     )
     req._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "abcd1234",
         "body_text": "",
+        "parse_line": 1,
+        "parse_end_line": None,
     }
+    file_node.link(req, EdgeKind.CONTAINS)
 
     a1 = GraphNode(
-        id="REQ-t00001-A",
-        kind=NodeKind.ASSERTION,
-        label="The system SHALL do something.",
-        source=SourceLocation(path=rel_path, line=7),
+        id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="The system SHALL do something."
     )
-    a1._content = {"label": "A"}
+    a1._content = {"label": "A", "parse_line": 7, "parse_end_line": None}
     req.link(a1, EdgeKind.STRUCTURES)
 
     a2 = GraphNode(
-        id="REQ-t00001-B",
-        kind=NodeKind.ASSERTION,
-        label="The system SHALL do another thing.",
-        source=SourceLocation(path=rel_path, line=8),
+        id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="The system SHALL do another thing."
     )
-    a2._content = {"label": "B"}
+    a2._content = {"label": "B", "parse_line": 8, "parse_end_line": None}
     req.link(a2, EdgeKind.STRUCTURES)
 
     prd.link(req, EdgeKind.IMPLEMENTS)
 
     index = {
+        f"file:{rel_path}": file_node,
         "REQ-p00001": prd,
         "REQ-t00001": req,
         "REQ-t00001-A": a1,
@@ -1422,25 +1428,20 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     }
 
     if two_reqs:
-        req2 = GraphNode(
-            id="REQ-t00002",
-            kind=NodeKind.REQUIREMENT,
-            label="Second Requirement",
-            source=SourceLocation(path=rel_path, line=13),
-        )
+        req2 = GraphNode(id="REQ-t00002", kind=NodeKind.REQUIREMENT, label="Second Requirement")
         req2._content = {
             "level": "DEV",
             "status": "Active",
             "hash": "efgh5678",
             "body_text": "",
+            "parse_line": 13,
+            "parse_end_line": None,
         }
+        file_node.link(req2, EdgeKind.CONTAINS)
         r2a = GraphNode(
-            id="REQ-t00002-A",
-            kind=NodeKind.ASSERTION,
-            label="The second system SHALL work.",
-            source=SourceLocation(path=rel_path, line=19),
+            id="REQ-t00002-A", kind=NodeKind.ASSERTION, label="The second system SHALL work."
         )
-        r2a._content = {"label": "A"}
+        r2a._content = {"label": "A", "parse_line": 19, "parse_end_line": None}
         req2.link(r2a, EdgeKind.STRUCTURES)
         prd.link(req2, EdgeKind.IMPLEMENTS)
         index["REQ-t00002"] = req2
@@ -1489,12 +1490,11 @@ class TestMutateSaveRoundTrip:
         client = app.test_client()
 
         # Add a second PRD node directly on the graph (same Python object)
-        rel_path = str(spec_file.relative_to(graph.repo_root))
+        str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
             label="Second PRD",
-            source=SourceLocation(path=rel_path, line=1),
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
         graph._index["REQ-p00002"] = prd2
@@ -1607,12 +1607,11 @@ class TestMutateSaveRoundTrip:
         client = app.test_client()
 
         # Add a second PRD target directly on the graph
-        rel_path = str(spec_file.relative_to(graph.repo_root))
+        str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
             label="PRD 2",
-            source=SourceLocation(path=rel_path, line=1),
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
         graph._index["REQ-p00002"] = prd2
@@ -1883,12 +1882,11 @@ class TestMutateSaveRoundTrip:
         client = app.test_client()
 
         # Add a second PRD target
-        rel_path = str(spec_file.relative_to(graph.repo_root))
+        str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
             label="PRD 2",
-            source=SourceLocation(path=rel_path, line=1),
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
         graph._index["REQ-p00002"] = prd2

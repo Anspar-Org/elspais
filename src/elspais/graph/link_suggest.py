@@ -145,9 +145,10 @@ def _find_unlinked_tests(
     for node in graph.nodes_by_kind(NodeKind.TEST):
         # Filter by file path if specified
         if file_path:
-            if not node.source:
+            _fn = node.file_node()
+            if not _fn:
                 continue
-            node_path = _normalize_path(node.source.path)
+            node_path = _normalize_path(_fn.get_field("relative_path") or "")
             filter_path = _normalize_path(file_path)
             if filter_path not in node_path and node_path not in filter_path:
                 continue
@@ -211,10 +212,11 @@ def _heuristic_import_chain(
 
     Score: 0.9 (high confidence — explicit import chain).
     """
-    if not test_node.source:
+    _fn = test_node.file_node()
+    if not _fn:
         return []
 
-    test_path = _normalize_path(test_node.source.path)
+    test_path = _normalize_path(_fn.get_field("relative_path") or "")
     abs_path = repo_root / test_path
     if not abs_path.is_file():
         return []
@@ -279,7 +281,8 @@ def _heuristic_function_name(
     if not candidates:
         return []
 
-    test_path = _normalize_path(test_node.source.path) if test_node.source else ""
+    _tfn = test_node.file_node()
+    test_path = _normalize_path(_tfn.get_field("relative_path") or "") if _tfn else ""
 
     suggestions: list[LinkSuggestion] = []
     seen_reqs: set[str] = set()
@@ -326,10 +329,11 @@ def _heuristic_file_proximity(
 
     Score: 0.6 (weaker signal — same directory doesn't guarantee relationship).
     """
-    if not test_node.source:
+    _fn = test_node.file_node()
+    if not _fn:
         return []
 
-    test_path = _normalize_path(test_node.source.path)
+    test_path = _normalize_path(_fn.get_field("relative_path") or "")
 
     # Map test path to likely source directory
     # Common patterns: tests/test_foo.py -> src/elspais/foo.py
@@ -342,9 +346,10 @@ def _heuristic_file_proximity(
     seen_reqs: set[str] = set()
 
     for code_node in graph.nodes_by_kind(NodeKind.CODE):
-        if not code_node.source:
+        _cfn = code_node.file_node()
+        if not _cfn:
             continue
-        code_path = _normalize_path(code_node.source.path)
+        code_path = _normalize_path(_cfn.get_field("relative_path") or "")
 
         # Check if code file is in one of the inferred source directories
         matches = any(code_path.startswith(sd) for sd in source_dirs)
@@ -460,7 +465,8 @@ def _heuristic_keyword_overlap(
     if not test_keywords:
         return []
 
-    test_path = _normalize_path(test_node.source.path) if test_node.source else ""
+    _tfn = test_node.file_node()
+    test_path = _normalize_path(_tfn.get_field("relative_path") or "") if _tfn else ""
 
     suggestions: list[LinkSuggestion] = []
 

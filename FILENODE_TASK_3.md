@@ -59,4 +59,4 @@ Create FILE nodes for every scanned file in factory.py before parsing. Wire CONT
 - [x] All tests pass (2528 passed)
 - [x] Docs updated (CHANGELOG.md, CLAUDE.md)
 - [x] Version bumped (0.104.3)
-- [ ] Committed
+- [x] Committed (95a9235)

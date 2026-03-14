@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from elspais.graph import GraphNode, NodeKind, SourceLocation
+from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.relations import EdgeKind
 from elspais.server.persistence import (
@@ -87,51 +87,68 @@ def _build_graph_with_spec(
     spec_file.write_text(spec_content, encoding="utf-8")
 
     # Build graph with nodes that reference the spec file
+    from elspais.graph.GraphNode import FileType
+
     graph = TraceGraph(repo_root=tmp_path)
 
     # Use relative path for source location (relative to repo_root)
     rel_path = str(spec_file.relative_to(tmp_path))
+
+    # Create FILE node for the spec file
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label=spec_filename)
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
 
     # PRD root node (needed so REQ-t00001 can implement it)
     prd_node = GraphNode(
         id="REQ-p00001",
         kind=NodeKind.REQUIREMENT,
         label="Product Requirement",
-        source=SourceLocation(path=rel_path, line=1),
     )
-    prd_node._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    prd_node._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(prd_node, EdgeKind.CONTAINS)
 
     # Main requirement node
     req_node = GraphNode(
         id="REQ-t00001",
         kind=NodeKind.REQUIREMENT,
         label="Test Requirement",
-        source=SourceLocation(path=rel_path, line=1),
     )
     req_node._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "abcd1234",
         "body_text": "",
+        "parse_line": 1,
+        "parse_end_line": None,
     }
+
+    # Wire CONTAINS edges from FILE to content nodes
+    file_node.link(req_node, EdgeKind.CONTAINS)
 
     # Assertions
     assertion_a = GraphNode(
         id="REQ-t00001-A",
         kind=NodeKind.ASSERTION,
         label="The system SHALL do something.",
-        source=SourceLocation(path=rel_path, line=7),
     )
-    assertion_a._content = {"label": "A"}
+    assertion_a._content = {"label": "A", "parse_line": 7, "parse_end_line": None}
     req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-t00001-B",
         kind=NodeKind.ASSERTION,
         label="The system SHALL do another thing.",
-        source=SourceLocation(path=rel_path, line=8),
     )
-    assertion_b._content = {"label": "B"}
+    assertion_b._content = {"label": "B", "parse_line": 8, "parse_end_line": None}
     req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Link: REQ-t00001 implements REQ-p00001
@@ -140,6 +157,7 @@ def _build_graph_with_spec(
     # Build graph index
     graph._roots = [prd_node]
     graph._index = {
+        f"file:{rel_path}": file_node,
         "REQ-p00001": prd_node,
         "REQ-t00001": req_node,
         "REQ-t00001-A": assertion_a,
@@ -151,80 +169,91 @@ def _build_graph_with_spec(
 
 def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
     """Build a graph with two requirements from TWO_REQ_SPEC."""
+    from elspais.graph.GraphNode import FileType
+
     spec_file = tmp_path / "two_reqs.md"
     spec_file.write_text(TWO_REQ_SPEC, encoding="utf-8")
 
     graph = TraceGraph(repo_root=tmp_path)
     rel_path = str(spec_file.relative_to(tmp_path))
 
-    # PRD root nodes
-    prd1 = GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Req 1",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    prd1._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="two_reqs.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
 
-    prd2 = GraphNode(
-        id="REQ-p00002",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Req 2",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    prd2._content = {"level": "PRD", "status": "Active", "hash": "00000001"}
+    # PRD root nodes
+    prd1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Req 1")
+    prd1._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+
+    prd2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT, label="Product Req 2")
+    prd2._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000001",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
 
     # First requirement
-    req1 = GraphNode(
-        id="REQ-t00001",
-        kind=NodeKind.REQUIREMENT,
-        label="First Requirement",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    req1._content = {"level": "DEV", "status": "Active", "hash": "aaaa1111", "body_text": ""}
+    req1 = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="First Requirement")
+    req1._content = {
+        "level": "DEV",
+        "status": "Active",
+        "hash": "aaaa1111",
+        "body_text": "",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(req1, EdgeKind.CONTAINS)
 
     a1 = GraphNode(
-        id="REQ-t00001-A",
-        kind=NodeKind.ASSERTION,
-        label="The system SHALL do the first thing.",
-        source=SourceLocation(path=rel_path, line=7),
+        id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="The system SHALL do the first thing."
     )
-    a1._content = {"label": "A"}
+    a1._content = {"label": "A", "parse_line": 7, "parse_end_line": None}
     req1.link(a1, EdgeKind.STRUCTURES)
 
     b1 = GraphNode(
-        id="REQ-t00001-B",
-        kind=NodeKind.ASSERTION,
-        label="The system SHALL do the second thing.",
-        source=SourceLocation(path=rel_path, line=8),
+        id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="The system SHALL do the second thing."
     )
-    b1._content = {"label": "B"}
+    b1._content = {"label": "B", "parse_line": 8, "parse_end_line": None}
     req1.link(b1, EdgeKind.STRUCTURES)
 
     prd1.link(req1, EdgeKind.IMPLEMENTS)
 
     # Second requirement
-    req2 = GraphNode(
-        id="REQ-t00002",
-        kind=NodeKind.REQUIREMENT,
-        label="Second Requirement",
-        source=SourceLocation(path=rel_path, line=13),
-    )
-    req2._content = {"level": "DEV", "status": "Draft", "hash": "bbbb2222", "body_text": ""}
+    req2 = GraphNode(id="REQ-t00002", kind=NodeKind.REQUIREMENT, label="Second Requirement")
+    req2._content = {
+        "level": "DEV",
+        "status": "Draft",
+        "hash": "bbbb2222",
+        "body_text": "",
+        "parse_line": 13,
+        "parse_end_line": None,
+    }
+    file_node.link(req2, EdgeKind.CONTAINS)
 
     a2 = GraphNode(
         id="REQ-t00002-A",
         kind=NodeKind.ASSERTION,
         label="The system SHALL handle the second requirement.",
-        source=SourceLocation(path=rel_path, line=19),
     )
-    a2._content = {"label": "A"}
+    a2._content = {"label": "A", "parse_line": 19, "parse_end_line": None}
     req2.link(a2, EdgeKind.STRUCTURES)
 
     prd2.link(req2, EdgeKind.IMPLEMENTS)
 
     graph._roots = [prd1, prd2]
     graph._index = {
+        f"file:{rel_path}": file_node,
         "REQ-p00001": prd1,
         "REQ-p00002": prd2,
         "REQ-t00001": req1,
@@ -762,43 +791,54 @@ def _build_refines_graph(
     has_refines_edge: bool = False,
 ) -> tuple[TraceGraph, Path]:
     """Build a graph with optional REFINES edge for testing."""
+    from elspais.graph.GraphNode import FileType
+
     spec_file = tmp_path / "test_spec.md"
     spec_file.write_text(spec_content, encoding="utf-8")
 
     graph = TraceGraph(repo_root=tmp_path)
     rel_path = str(spec_file.relative_to(tmp_path))
 
-    prd1 = GraphNode(
-        id="REQ-p00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Req 1",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    prd1._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
 
-    prd2 = GraphNode(
-        id="REQ-p00002",
-        kind=NodeKind.REQUIREMENT,
-        label="Product Req 2",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    prd2._content = {"level": "PRD", "status": "Active", "hash": "00000001"}
+    prd1 = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Req 1")
+    prd1._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
 
-    req = GraphNode(
-        id="REQ-t00001",
-        kind=NodeKind.REQUIREMENT,
-        label="Test Requirement",
-        source=SourceLocation(path=rel_path, line=1),
-    )
-    req._content = {"level": "DEV", "status": "Active", "hash": "abcd1234", "body_text": ""}
+    prd2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT, label="Product Req 2")
+    prd2._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000001",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+
+    req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test Requirement")
+    req._content = {
+        "level": "DEV",
+        "status": "Active",
+        "hash": "abcd1234",
+        "body_text": "",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(req, EdgeKind.CONTAINS)
 
     a1 = GraphNode(
-        id="REQ-t00001-A",
-        kind=NodeKind.ASSERTION,
-        label="The system SHALL do something.",
-        source=SourceLocation(path=rel_path, line=7),
+        id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="The system SHALL do something."
     )
-    a1._content = {"label": "A"}
+    a1._content = {"label": "A", "parse_line": 7, "parse_end_line": None}
     req.link(a1, EdgeKind.STRUCTURES)
 
     # IMPLEMENTS edge
@@ -810,6 +850,7 @@ def _build_refines_graph(
 
     graph._roots = [prd1, prd2]
     graph._index = {
+        f"file:{rel_path}": file_node,
         "REQ-p00001": prd1,
         "REQ-p00002": prd2,
         "REQ-t00001": req,
@@ -953,7 +994,6 @@ class TestReplayDeleteAssertion:
             id="REQ-t00001-C",
             kind=NodeKind.ASSERTION,
             label="The system SHALL do a third thing.",
-            source=SourceLocation(path=str(spec_file.relative_to(tmp_path)), line=9),
         )
         assertion_c._content = {"label": "C"}
         graph._index["REQ-t00001"].link(assertion_c, EdgeKind.STRUCTURES)
@@ -1010,29 +1050,41 @@ class TestReplayFixBrokenReference:
         spec_file = tmp_path / "test_spec.md"
         spec_file.write_text(broken_spec, encoding="utf-8")
 
+        from elspais.graph.GraphNode import FileType
+
         graph = TraceGraph(repo_root=tmp_path)
         rel_path = str(spec_file.relative_to(tmp_path))
 
+        # Create FILE node
+        file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+        file_node.set_field("file_type", FileType.SPEC)
+        file_node.set_field("relative_path", rel_path)
+        file_node.set_field("absolute_path", str(spec_file))
+        file_node.set_field("repo", None)
+
         # Real target
-        prd = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-            label="Product Req",
-            source=SourceLocation(path=rel_path, line=1),
-        )
-        prd._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+        prd = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Req")
+        prd._content = {
+            "level": "PRD",
+            "status": "Active",
+            "hash": "00000000",
+            "parse_line": 1,
+            "parse_end_line": None,
+        }
 
         # Source with broken ref
-        req = GraphNode(
-            id="REQ-t00001",
-            kind=NodeKind.REQUIREMENT,
-            label="Test Requirement",
-            source=SourceLocation(path=rel_path, line=1),
-        )
-        req._content = {"level": "DEV", "status": "Active", "hash": "abcd1234"}
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test Requirement")
+        req._content = {
+            "level": "DEV",
+            "status": "Active",
+            "hash": "abcd1234",
+            "parse_line": 1,
+            "parse_end_line": None,
+        }
+        file_node.link(req, EdgeKind.CONTAINS)
 
         graph._roots = [prd, req]
-        graph._index = {"REQ-p00001": prd, "REQ-t00001": req}
+        graph._index = {f"file:{rel_path}": file_node, "REQ-p00001": prd, "REQ-t00001": req}
 
         # Add a broken reference manually
         from elspais.graph.builder import BrokenReference

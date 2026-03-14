@@ -19,7 +19,23 @@ from tests.core.graph_test_helpers import make_requirement
 @pytest.fixture
 def sample_graph():
     """Create a sample graph for testing."""
+    from elspais.graph.GraphNode import FileType
+
     builder = GraphBuilder(repo_root=Path("/test/repo"))
+
+    # Create FILE nodes
+    file_nodes = {}
+    for source_path in ["spec/prd.md", "spec/ops.md", "spec/dev.md"]:
+        from elspais.graph import GraphNode as GN
+        from elspais.graph.GraphNode import NodeKind as NK
+
+        fn = GN(id=f"file:{source_path}", kind=NK.FILE, label=source_path.split("/")[-1])
+        fn.set_field("file_type", FileType.SPEC)
+        fn.set_field("relative_path", source_path)
+        fn.set_field("absolute_path", f"/test/repo/{source_path}")
+        fn.set_field("repo", None)
+        file_nodes[source_path] = fn
+        builder.register_file_node(fn)
 
     # PRD with assertions
     builder.add_parsed_content(
@@ -33,7 +49,8 @@ def sample_graph():
             end_line=20,
             hash_value="abc12345",
             assertions=[{"label": "A", "text": "First assertion"}],
-        )
+        ),
+        file_node=file_nodes["spec/prd.md"],
     )
 
     # OPS implements PRD
@@ -48,7 +65,8 @@ def sample_graph():
             end_line=15,
             hash_value="def67890",
             implements=["REQ-p00001"],
-        )
+        ),
+        file_node=file_nodes["spec/ops.md"],
     )
 
     # DEV implements OPS
@@ -63,7 +81,8 @@ def sample_graph():
             end_line=10,
             hash_value="ghi13579",
             implements=["REQ-o00001"],
-        )
+        ),
+        file_node=file_nodes["spec/dev.md"],
     )
 
     return builder.build()
@@ -139,14 +158,14 @@ class TestSerializeGraph:
         result = serialize_graph(sample_graph)
 
         assert "nodes" in result
-        assert len(result["nodes"]) == 4  # 3 reqs + 1 assertion
+        assert len(result["nodes"]) == 7  # 3 reqs + 1 assertion + 3 FILE nodes
 
     def test_serialize_graph_includes_metadata(self, sample_graph):
         """Includes graph metadata."""
         result = serialize_graph(sample_graph)
 
         assert "metadata" in result
-        assert result["metadata"]["node_count"] == 4
+        assert result["metadata"]["node_count"] == 7  # 3 reqs + 1 assertion + 3 FILE nodes
         assert result["metadata"]["root_count"] == 1
 
     def test_serialize_graph_includes_roots(self, sample_graph):

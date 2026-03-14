@@ -76,14 +76,15 @@ from elspais.mcp.search import matches_node, parse_query, score_node
 def _relative_source_path(node: Any, graph: TraceGraph) -> str:
     """Return the node's source file path, relative to repo root.
 
-    Some parsers (notably CodeRefParser) store absolute paths in
-    ``node.source.path``.  The REST layer and UI expect repo-relative
-    paths so that ``/api/file-content?path=…`` can safely join them
-    with the working directory.  This helper normalises the value.
+    Implements: REQ-d00129-D
+    Navigates to the FILE parent node to get the repo-relative path.
+    Some parsers (notably CodeRefParser) may store absolute paths;
+    this helper normalises the value.
     """
-    if not node.source:
+    fn = node.file_node()
+    if not fn:
         return ""
-    raw = node.source.path
+    raw = fn.get_field("relative_path") or ""
     if not raw:
         return ""
     p = Path(raw)
@@ -163,14 +164,14 @@ def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
                     "status": child.get_field("status", "unknown"),
                     "duration": child.get_field("duration", 0.0),
                     "file": _relative_source_path(child, graph),
-                    "line": child.source.line if child.source else 0,
+                    "line": child.get_field("parse_line") or 0,
                 }
             )
     return {
         "id": test_node.id,
         "label": test_node.get_label(),
         "file": _relative_source_path(test_node, graph),
-        "line": test_node.source.line if test_node.source else 0,
+        "line": test_node.get_field("parse_line") or 0,
         "name": test_node.get_field("name", ""),
         "results": results,
     }
@@ -187,7 +188,7 @@ def _serialize_code_info(code_node: Any, graph: TraceGraph) -> dict[str, Any]:
         "id": code_node.id,
         "label": code_node.get_label(),
         "file": _relative_source_path(code_node, graph),
-        "line": code_node.source.line if code_node.source else 0,
+        "line": code_node.get_field("parse_line") or 0,
     }
 
 
@@ -242,7 +243,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "id": child.id,
                     "label": child.get_field("label"),
                     "text": child.get_label(),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
         elif child.kind == NodeKind.REMAINDER:
@@ -252,7 +253,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "id": child.id,
                     "heading": child.get_field("heading"),
                     "text": child.get_field("text"),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
         else:
@@ -261,7 +262,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "kind": child.kind.value,
                     "id": child.id,
                     "title": child.get_label(),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
 
@@ -385,9 +386,9 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
             "path": (
                 _relative_source_path(node, graph)
                 if graph
-                else (node.source.path if node.source else None)
+                else (node.file_node().get_field("relative_path") if node.file_node() else None)
             ),
-            "line": node.source.line if node.source else None,
+            "line": node.get_field("parse_line"),
         },
         "keywords": keywords,
         "parents": parents,
@@ -527,10 +528,13 @@ def _add_changelog_for_active_mutations(
 
     for req_id in active_ids:
         node = graph.find_by_id(req_id)
-        if node is None or node.source is None:
+        if node is None:
+            continue
+        _fn = node.file_node()
+        if _fn is None:
             continue
         computed = compute_hash_for_node(node, graph.hash_mode)
-        file_path = repo_root / node.source.path
+        file_path = repo_root / _fn.get_field("relative_path")
         entry = {
             "date": date.today().isoformat(),
             "hash": computed or node.hash or "________",
@@ -2013,8 +2017,10 @@ def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
                 "kind": node.kind.value,
                 "label": node.get_label(),
             }
-            if node.source:
-                entry["source"] = f"{node.source.path}:{node.source.line}"
+            _fn = node.file_node()
+            _line = node.get_field("parse_line")
+            if _fn and _line is not None:
+                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
         entry["kind"] = node.kind.value
         orphans.append(entry)
 

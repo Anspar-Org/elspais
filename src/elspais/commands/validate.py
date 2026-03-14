@@ -103,8 +103,8 @@ def run(args: argparse.Namespace) -> int:
                 "level": node.get_field("level", ""),
                 "status": node.get_field("status", ""),
                 "hash": node.get_field("hash", ""),
-                "file": node.source.path if node.source else "",
-                "line": node.source.line if node.source else 0,
+                "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
+                "line": node.get_field("parse_line") or 0,
                 "assertions": assertions,
             }
         print(json.dumps(export_dict, indent=2))
@@ -217,7 +217,11 @@ def run(args: argparse.Namespace) -> int:
                     "fixable": True,
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
-                    "file": str(repo_root / node.source.path) if node.source else None,
+                    "file": (
+                        str(repo_root / node.file_node().get_field("relative_path"))
+                        if node.file_node()
+                        else None
+                    ),
                 }
                 errors.append(issue)
                 if issue["file"]:
@@ -232,7 +236,11 @@ def run(args: argparse.Namespace) -> int:
                     "fixable": True,
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
-                    "file": str(repo_root / node.source.path) if node.source else None,
+                    "file": (
+                        str(repo_root / node.file_node().get_field("relative_path"))
+                        if node.file_node()
+                        else None
+                    ),
                 }
                 errors.append(issue)
                 if issue["file"]:
@@ -250,9 +258,13 @@ def run(args: argparse.Namespace) -> int:
     # Check assertion line spacing per source file
     checked_files: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if not node.source or not node.source.path:
+        # Implements: REQ-d00129-D
+        _fn = node.file_node()
+        if not _fn:
             continue
-        file_path = node.source.path
+        file_path = _fn.get_field("relative_path") or ""
+        if not file_path:
+            continue
         if file_path in checked_files:
             continue
         checked_files.add(file_path)

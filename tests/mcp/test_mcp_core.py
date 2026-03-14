@@ -1118,8 +1118,8 @@ class TestRoundTripFidelity:
     @pytest.fixture
     def rich_graph(self):
         """Graph with source locations on assertions and sections."""
-        from elspais.graph.GraphNode import SourceLocation
         from elspais.graph.relations import EdgeKind
+        from tests.core.graph_test_helpers import wire_file_parent
 
         graph = TraceGraph(repo_root=Path("/test/repo"))
 
@@ -1128,45 +1128,46 @@ class TestRoundTripFidelity:
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
             label="Platform Security",
-            source=SourceLocation(path="spec/prd.md", line=10, end_line=30),
         )
         prd_node._content = {
             "level": "PRD",
             "status": "Active",
             "hash": "abc12345",
             "body_text": "Some body text",
+            "parse_line": 10,
+            "parse_end_line": 30,
         }
+        wire_file_parent(prd_node, "spec/prd.md", line=10, graph=graph)
 
-        # Assertion A with source location
+        # Assertion A with parse_line
         assertion_a = GraphNode(
             id="REQ-p00001-A",
             kind=NodeKind.ASSERTION,
             label="SHALL encrypt all data at rest",
-            source=SourceLocation(path="spec/prd.md", line=20),
         )
-        assertion_a._content = {"label": "A"}
+        assertion_a._content = {"label": "A", "parse_line": 20, "parse_end_line": None}
 
-        # Section (REMAINDER) with source location - comes BEFORE assertions
+        # Section (REMAINDER) with parse_line - comes BEFORE assertions
         section_node = GraphNode(
             id="REQ-p00001:section:0",
             kind=NodeKind.REMAINDER,
             label="Rationale",
-            source=SourceLocation(path="spec/prd.md", line=14),
         )
         section_node._content = {
             "heading": "Rationale",
             "text": "This is why we need security.",
             "order": 0,
+            "parse_line": 14,
+            "parse_end_line": None,
         }
 
-        # Assertion B with source location
+        # Assertion B with parse_line
         assertion_b = GraphNode(
             id="REQ-p00001-B",
             kind=NodeKind.ASSERTION,
             label="SHALL use TLS 1.3",
-            source=SourceLocation(path="spec/prd.md", line=21),
         )
-        assertion_b._content = {"label": "B"}
+        assertion_b._content = {"label": "B", "parse_line": 21, "parse_end_line": None}
 
         # Add children in document order (section at line 14, then assertions at 20, 21)
         prd_node.link(section_node, EdgeKind.STRUCTURES)
@@ -1178,13 +1179,15 @@ class TestRoundTripFidelity:
             id="REQ-o00001",
             kind=NodeKind.REQUIREMENT,
             label="Database Encryption",
-            source=SourceLocation(path="spec/ops.md", line=1),
         )
         ops_node._content = {
             "level": "OPS",
             "status": "Active",
             "hash": "def67890",
+            "parse_line": 1,
+            "parse_end_line": None,
         }
+        wire_file_parent(ops_node, "spec/ops.md", line=1, graph=graph)
 
         # Link: OPS implements PRD
         prd_node.link(ops_node, EdgeKind.IMPLEMENTS)
@@ -1194,13 +1197,15 @@ class TestRoundTripFidelity:
             id="REQ-d00001",
             kind=NodeKind.REQUIREMENT,
             label="AES-256 Implementation",
-            source=SourceLocation(path="spec/dev.md", line=1),
         )
         dev_node._content = {
             "level": "DEV",
             "status": "Draft",
             "hash": "ghi11111",
+            "parse_line": 1,
+            "parse_end_line": None,
         }
+        wire_file_parent(dev_node, "spec/dev.md", line=1, graph=graph)
 
         # Link: DEV refines OPS
         ops_node.link(dev_node, EdgeKind.REFINES)
@@ -1318,7 +1323,7 @@ class TestGetProjectSummaryChanges:
         pytest.importorskip("mcp")
         from unittest.mock import patch
 
-        from elspais.graph.GraphNode import SourceLocation
+        from elspais.graph.GraphNode import FileType
         from elspais.mcp.server import _get_project_summary
         from elspais.utilities.git import GitChangeInfo
 
@@ -1329,7 +1334,13 @@ class TestGetProjectSummaryChanges:
         ]:
             node = sample_graph.find_by_id(node_id)
             if node:
-                node.source = SourceLocation(path=path, line=1)
+                fn = GraphNode(id=f"file:{path}", kind=NodeKind.FILE, label=path)
+                fn.set_field("relative_path", path)
+                fn.set_field("file_type", FileType.SPEC)
+                fn.set_field("repo", None)
+                fn.link(node, EdgeKind.CONTAINS)
+                sample_graph._index[fn.id] = fn
+                node.set_field("parse_line", 1)
 
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},
@@ -1356,7 +1367,7 @@ class TestGetChangedRequirements:
         pytest.importorskip("mcp")
         from unittest.mock import patch
 
-        from elspais.graph.GraphNode import SourceLocation
+        from elspais.graph.GraphNode import FileType
         from elspais.mcp.server import _get_changed_requirements
         from elspais.utilities.git import GitChangeInfo
 
@@ -1367,7 +1378,13 @@ class TestGetChangedRequirements:
         ]:
             node = sample_graph.find_by_id(node_id)
             if node:
-                node.source = SourceLocation(path=path, line=1)
+                fn = GraphNode(id=f"file:{path}", kind=NodeKind.FILE, label=path)
+                fn.set_field("relative_path", path)
+                fn.set_field("file_type", FileType.SPEC)
+                fn.set_field("repo", None)
+                fn.link(node, EdgeKind.CONTAINS)
+                sample_graph._index[fn.id] = fn
+                node.set_field("parse_line", 1)
 
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},

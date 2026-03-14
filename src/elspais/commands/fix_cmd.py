@@ -114,12 +114,13 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     status = (node.status or "").lower()
     is_active = status == "active"
 
-    source = node.source
-    if source is None:
+    # Implements: REQ-d00129-D
+    _fn = node.file_node()
+    if _fn is None:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
         return 1
 
-    file_path = repo_root / source.path
+    file_path = repo_root / _fn.get_field("relative_path")
 
     # If hash is current, check for missing Changelog section on Active reqs
     if stored == computed:

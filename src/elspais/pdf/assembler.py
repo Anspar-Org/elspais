@@ -311,13 +311,16 @@ class MarkdownAssembler:
             Dict mapping file path → list of requirement nodes (document order).
         """
         groups: dict[str, list[GraphNode]] = defaultdict(list)
+        # Implements: REQ-d00129-D, REQ-d00129-E
         for node in self._graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            if node.source and node.source.path:
-                groups[node.source.path].append(node)
+            _fn = node.file_node()
+            _rp = _fn.get_field("relative_path") if _fn else None
+            if _rp:
+                groups[_rp].append(node)
 
         # Sort nodes within each file by source line (document order)
         for path in groups:
-            groups[path].sort(key=lambda n: n.source.line if n.source else 0)
+            groups[path].sort(key=lambda n: n.get_field("parse_line") or 0)
 
         return dict(groups)
 
@@ -393,8 +396,12 @@ class MarkdownAssembler:
     def _node_depth(node: GraphNode) -> int:
         """Compute the graph depth of a node via BFS on parents.
 
-        Depth 0 = root node (no parents).
+        Depth 0 = root node (no domain parents).
+        FILE parents are excluded from depth calculation since they
+        represent structural containment, not domain hierarchy.
         """
+        from elspais.graph.GraphNode import NodeKind
+
         depth = 0
         visited: set[str] = {node.id}
         frontier = [node]
@@ -402,7 +409,7 @@ class MarkdownAssembler:
             next_frontier: list[GraphNode] = []
             for n in frontier:
                 for parent in n.iter_parents():
-                    if parent.id not in visited:
+                    if parent.id not in visited and parent.kind != NodeKind.FILE:
                         visited.add(parent.id)
                         next_frontier.append(parent)
             if next_frontier:

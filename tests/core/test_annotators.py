@@ -18,9 +18,13 @@ from elspais.graph.annotators import (
     count_implementation_files,
     get_implementation_status,
 )
-from elspais.graph.GraphNode import GraphNode, SourceLocation
+from elspais.graph.GraphNode import GraphNode
 from elspais.utilities.git import GitChangeInfo
-from tests.core.graph_test_helpers import build_graph, make_requirement
+from tests.core.graph_test_helpers import (
+    build_graph,
+    make_requirement,
+    wire_file_parent,
+)
 
 
 class TestAnnotateGitState:
@@ -31,7 +35,6 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd.md", line=1),
         )
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},
@@ -59,8 +62,8 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd.md", line=1),
         )
+        wire_file_parent(node, "spec/prd.md", line=1)
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},
         )
@@ -76,8 +79,8 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/new.md", line=1),
         )
+        wire_file_parent(node, "spec/new.md", line=1)
         git_info = GitChangeInfo(
             untracked_files={"spec/new.md"},
         )
@@ -93,8 +96,8 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd.md", line=1),
         )
+        wire_file_parent(node, "spec/prd.md", line=1)
         git_info = GitChangeInfo(
             branch_changed_files={"spec/prd.md"},
         )
@@ -108,7 +111,6 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/new.md", line=1),
         )
         node.set_field("id", "REQ-p00001")
         git_info = GitChangeInfo(
@@ -124,7 +126,6 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd.md", line=1),
         )
 
         annotate_git_state(node, None)
@@ -154,7 +155,6 @@ class TestAnnotateGitState:
         node = GraphNode(
             id="REQ-p00001-A",
             kind=NodeKind.ASSERTION,
-            source=SourceLocation(path="spec/prd.md", line=5),
         )
         git_info = GitChangeInfo(
             committed_req_locations={"REQ-p00001": "spec/old.md"},
@@ -174,7 +174,6 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/roadmap/future.md", line=1),
         )
         node.set_field("repo_prefix", "CAL")
 
@@ -199,8 +198,8 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/roadmap/future.md", line=1),
         )
+        wire_file_parent(node, "spec/roadmap/future.md", line=1)
 
         annotate_display_info(node)
 
@@ -211,7 +210,6 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd.md", line=1),
         )
 
         annotate_display_info(node)
@@ -237,8 +235,8 @@ class TestAnnotateDisplayInfo:
         node = GraphNode(
             id="REQ-p00001",
             kind=NodeKind.REQUIREMENT,
-            source=SourceLocation(path="spec/prd-authentication.md", line=1),
         )
+        wire_file_parent(node, "spec/prd-authentication.md", line=1)
 
         annotate_display_info(node)
 

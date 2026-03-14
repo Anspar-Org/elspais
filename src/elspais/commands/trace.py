@@ -148,7 +148,7 @@ def _get_node_data(node, graph: TraceGraph) -> dict:
         "status": node.status or "",
         "implements": impl_ids,
         "hash": node.hash or "",
-        "file": node.source.path if node.source else "",
+        "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
         "body": node.get_field("body", "") or "",
         "assertions": assertions,
         "code_refs": code_refs,
@@ -387,9 +387,11 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
         node_dict: dict = {}
         for col in preset.columns:
             if col == "file":
+                # Implements: REQ-d00129-D, REQ-d00129-E
+                _fn = node.file_node()
                 node_dict["source"] = {
-                    "path": node.source.path if node.source else None,
-                    "line": node.source.line if node.source else None,
+                    "path": _fn.get_field("relative_path") if _fn else None,
+                    "line": node.get_field("parse_line"),
                 }
             else:
                 node_dict[col] = data.get(col)

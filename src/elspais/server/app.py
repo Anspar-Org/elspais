@@ -291,8 +291,10 @@ def create_app(
             rp = node.get_metric("repo_prefix", "")
             if rp and rp != "CORE":
                 return True
-            # Definitive: source location from a different repo
-            if node.source and node.source.repo:
+            # Implements: REQ-d00129-F
+            # Definitive: FILE node from a different repo
+            _fn = node.file_node()
+            if _fn and _fn.get_field("repo"):
                 return True
             # Explicit field marker
             return bool(node.get_field("associated", False))
@@ -303,9 +305,11 @@ def create_app(
             rp = node.get_metric("repo_prefix", "")
             if rp and rp != "CORE":
                 return rp
-            # Check source location repo marker
-            if node.source and node.source.repo:
-                return node.source.repo
+            # Implements: REQ-d00129-F
+            # Check FILE node repo marker
+            _fn = node.file_node()
+            if _fn and _fn.get_field("repo"):
+                return _fn.get_field("repo")
             # Extract from ID pattern (e.g., REQ-CAL-d00001 → CAL)
             m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
             if m:
@@ -377,8 +381,9 @@ def create_app(
 
         # Add USER_JOURNEY nodes as root-level rows
         for node in g.nodes_by_kind(NodeKind.USER_JOURNEY):
-            source_file = node.source.path if node.source else ""
-            source_line = node.source.line if node.source else 0
+            _fn = node.file_node()
+            source_file = _fn.get_field("relative_path") if _fn else ""
+            source_line = node.get_field("parse_line") or 0
             rows.append(
                 {
                     "id": node.id,
@@ -464,15 +469,18 @@ def create_app(
             if not node_id:
                 continue
             node = g.find_by_id(node_id)
-            if node and node.source and node.source.path:
-                source_path = Path(node.source.path)
-                node_path = (
-                    source_path
-                    if source_path.is_absolute()
-                    else (_state["working_dir"] / source_path)
-                ).resolve()
-                if node_path == abs_path:
-                    affected_node_ids.add(node_id)
+            if node:
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                if _rp:
+                    source_path = Path(_rp)
+                    node_path = (
+                        source_path
+                        if source_path.is_absolute()
+                        else (_state["working_dir"] / source_path)
+                    ).resolve()
+                    if node_path == abs_path:
+                        affected_node_ids.add(node_id)
 
         return jsonify(
             {
