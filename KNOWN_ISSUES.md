@@ -17,6 +17,8 @@
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
 - Maybe a tool to help with renumber REQs (it will have to check all code, test, doc, etc files and make approte replacements.
 
+[ ] Is is possible to override a .toml config value from the command line?
+
 ## 8. Deferred Features
 
 The following are enabled by this architecture but deferred to future plans:

@@ -681,3 +681,30 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 
 *End* *Render-Based Save Operation* | **Hash**: 00000000
 ---
+
+## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-d00132
+
+The system SHALL pass a comprehensive end-to-end scenario test that exercises all mutation types through the Flask API layer, saves to disk, reloads, and verifies round-trip fidelity.
+
+## Assertions
+
+A. The scenario test SHALL exercise at least 50 mutation operations across all mutation types (status, title, assertion CRUD, edge CRUD, requirement CRUD, undo) in a single deterministic run.
+
+B. The scenario test SHALL build a starting fixture with at least 6 requirements across all three levels (PRD, OPS, DEV) with proper hierarchy and assertions.
+
+C. The scenario test SHALL verify intermediate graph state at multiple checkpoints during the mutation sequence, not just at the end.
+
+D. The scenario test SHALL save to disk via the Flask API, then reload from saved files and verify that the reloaded graph matches expected state for all surviving requirements, assertions, and edges.
+
+E. The scenario test SHALL perform a second round of mutations after reload and verify a second save-reload cycle produces correct results.
+
+F. The scenario test SHALL exercise undo operations at various points and verify that undone mutations are properly reverted in the final saved state.
+
+## Rationale
+
+A single large scenario test that exercises the full mutation API in a realistic sequence provides confidence that mutation operations compose correctly and that the render-save-reload pipeline is faithful. This complements the existing per-mutation-type unit tests with a holistic integration test.
+
+*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 00000000
+---
