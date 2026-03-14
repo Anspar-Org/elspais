@@ -254,6 +254,7 @@ class HTMLGenerator:
                 self.repo_name or (Path(self.base_path).name if self.base_path else "elspais")
             ),
             catalog=get_catalog(),
+            default_hidden_statuses=[],
         )
 
         return html_content

@@ -181,7 +181,7 @@ function renderNavTree() {
     const hasTextFilter = editState.textMatchIds !== null;
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
         af.uncommitted || af.changed || af.main || af.leaf ||
-        af.deprecated || af.roadmap ||
+        af.hiddenStatuses.size > 0 ||
         hiddenRepos.length > 0 ||
         editState.filterStatus !== '' || editState.filterCoverage !== '' ||
         hasTextFilter;
@@ -224,10 +224,8 @@ function renderNavTree() {
             if (af.main && !r.is_associated) continue;
             // Leaf only
             if (af.leaf && !r.is_leaf) continue;
-            // Hide Deprecated (when active, hide items with Deprecated status)
-            if (af.deprecated && r.status && r.status.toLowerCase() === 'deprecated') continue;
-            // Hide Roadmap (when active, hide items with Roadmap/Planned status)
-            if (af.roadmap && r.status && (r.status.toLowerCase() === 'roadmap' || r.status.toLowerCase() === 'planned')) continue;
+            // Hide statuses (dynamic, role-based)
+            if (af.hiddenStatuses.size > 0 && r.status && af.hiddenStatuses.has(r.status.toLowerCase())) continue;
             // Status dropdown
             if (editState.filterStatus && r.status !== editState.filterStatus) continue;
             // Coverage dropdown
@@ -427,8 +425,6 @@ function toggleEditFilter(key) {
     // Update checkbox state for toggles
     var checkMap = {
         leaf: 'edit-toggle-leaf',
-        deprecated: 'edit-toggle-deprecated',
-        roadmap: 'edit-toggle-roadmap',
     };
     if (checkMap[key]) {
         var cb = document.getElementById(checkMap[key]);
@@ -451,6 +447,17 @@ function toggleRepoFilter(repoCode) {
     var badge = document.getElementById('stat-repo-' + repoCode);
     if (badge) badge.classList.toggle('dimmed', idx < 0);
     applyEditFilters();
+}
+
+function toggleStatusFilter(status) {
+    var key = status.toLowerCase();
+    if (editState.activeFilters.hiddenStatuses.has(key)) {
+        editState.activeFilters.hiddenStatuses.delete(key);
+    } else {
+        editState.activeFilters.hiddenStatuses.add(key);
+    }
+    renderNavTree();
+    saveState();
 }
 
 function applyEditFilters() {
@@ -503,11 +510,13 @@ function onTreeTextFilter() {
 
 function clearEditFilters() {
     // Reset all filter state
+    var defaultHidden = {{ default_hidden_statuses | map('lower') | list | tojson }};
     editState.activeFilters = {
         levelPrd: false, levelOps: false, levelDev: false,
         uncommitted: false, changed: false, main: false, leaf: false,
-        deprecated: false, roadmap: false,
-        hiddenRepos: []
+        hideFiltered: false,
+        hiddenRepos: [],
+        hiddenStatuses: new Set(defaultHidden)
     };
     editState.filterStatus = '';
     editState.filterCoverage = '';
@@ -528,10 +537,11 @@ function clearEditFilters() {
     if (covSel) covSel.value = '';
     var leafCb = document.getElementById('edit-toggle-leaf');
     if (leafCb) leafCb.checked = false;
-    var deprecatedCb = document.getElementById('edit-toggle-deprecated');
-    if (deprecatedCb) deprecatedCb.checked = false;
-    var roadmapCb = document.getElementById('edit-toggle-roadmap');
-    if (roadmapCb) roadmapCb.checked = false;
+    // Reset status filter checkboxes to their default state
+    document.querySelectorAll('[id^="edit-toggle-status-"]').forEach(function(cb) {
+        var statusKey = cb.id.replace('edit-toggle-status-', '');
+        cb.checked = defaultHidden.indexOf(statusKey) >= 0;
+    });
     renderNavTree();
     saveState();
 }

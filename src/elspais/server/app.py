@@ -19,7 +19,7 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
-from elspais.config import get_project_name
+from elspais.config import get_project_name, get_status_roles
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.html.theme import get_catalog
@@ -139,6 +139,8 @@ def create_app(
             stats.journey_count = len(journeys)
             statuses = sorted(gen._collect_unique_values("status"))
             topics = sorted(gen._collect_unique_values("topic"))
+            roles = get_status_roles(_state["config"])
+            default_hidden = roles.default_hidden_statuses()
 
             return render_template(
                 "trace_unified.html.j2",
@@ -147,6 +149,7 @@ def create_app(
                 journeys=journeys,
                 statuses=statuses,
                 topics=topics,
+                default_hidden_statuses=sorted(default_hidden),
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
                 repo_name=get_project_name(_state["config"]),

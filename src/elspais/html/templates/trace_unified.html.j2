@@ -172,10 +172,9 @@ const editState = {
         changed: false,
         main: false,
         leaf: false,
-        deprecated: false,
-        roadmap: false,
         hideFiltered: false,
-        hiddenRepos: []
+        hiddenRepos: [],
+        hiddenStatuses: new Set({{ default_hidden_statuses | map('lower') | list | tojson }})
     },
     knownRepos: [],
     filterStatus: '',
@@ -360,6 +359,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Restore nav tree filters
         if (saved.activeFilters) {
             Object.assign(editState.activeFilters, saved.activeFilters);
+            // Restore hiddenStatuses as a Set (saved as array in cookie)
+            var defaultHiddenStatuses = {{ default_hidden_statuses | map('lower') | list | tojson }};
+            if (Array.isArray(editState.activeFilters.hiddenStatuses)) {
+                editState.activeFilters.hiddenStatuses = new Set(editState.activeFilters.hiddenStatuses);
+            } else if (!(editState.activeFilters.hiddenStatuses instanceof Set)) {
+                editState.activeFilters.hiddenStatuses = new Set(defaultHiddenStatuses);
+            }
             // Update header stat badge dimmed state (null-guard for elements)
             var statPrd = document.getElementById('stat-prd');
             var statOps = document.getElementById('stat-ops');
@@ -381,10 +387,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update checkboxes (null-guard)
             var leafCb = document.getElementById('edit-toggle-leaf');
             if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
-            var deprecatedCb = document.getElementById('edit-toggle-deprecated');
-            if (deprecatedCb) deprecatedCb.checked = !!editState.activeFilters.deprecated;
-            var roadmapCb = document.getElementById('edit-toggle-roadmap');
-            if (roadmapCb) roadmapCb.checked = !!editState.activeFilters.roadmap;
+            // Sync status filter checkboxes with restored hiddenStatuses
+            document.querySelectorAll('[id^="edit-toggle-status-"]').forEach(function(cb) {
+                var statusKey = cb.id.replace('edit-toggle-status-', '');
+                cb.checked = editState.activeFilters.hiddenStatuses.has(statusKey);
+            });
             var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
             if (hideFilteredCb) hideFilteredCb.checked = !!editState.activeFilters.hideFiltered;
         }

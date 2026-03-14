@@ -4,7 +4,7 @@
 
 const COOKIE_NAME = 'elspais_trace_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 10;  // v10: remove codeRefs + indirectCoverage filters
+const COOKIE_VERSION = 11;  // v11: dynamic status filters replace deprecated/roadmap toggles
 
 function saveState() {
     const stateToSave = {
@@ -14,7 +14,9 @@ function saveState() {
         activeNavTab: editState.activeNavTab,
         collapsedTreeNodes: Array.from(editState.collapsedTreeNodes),
         collapsedCards: [],
-        activeFilters: editState.activeFilters,
+        activeFilters: Object.assign({}, editState.activeFilters, {
+            hiddenStatuses: Array.from(editState.activeFilters.hiddenStatuses)
+        }),
         filterStatus: editState.filterStatus,
         filterCoverage: editState.filterCoverage,
         fontSize: editState.fontSize,
