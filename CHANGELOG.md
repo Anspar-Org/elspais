@@ -2,6 +2,16 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.10] - 2026-03-14
+
+### Added
+
+- **Comprehensive mutation round-trip scenario test** -- E2E test exercising 70+ mutations across all types (status, title, assertion CRUD, edge CRUD, requirement CRUD, undo) through the Flask API layer, with intermediate checkpoints, save-reload verification, and a second mutation round proving saved state is mutable (REQ-d00134-A through REQ-d00134-F)
+
+### Fixed
+
+- **Scenario test `.elspais.toml`** -- `build_graph` reload in scenario test now creates a `.elspais.toml` config file so `_find_repo_root` can locate the spec directory
+
 ## [0.104.9] - 2026-03-13
 
 ### Added
