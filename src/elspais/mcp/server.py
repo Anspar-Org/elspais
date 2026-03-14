@@ -4124,7 +4124,8 @@ def create_server(
                 Required when mutations affect Active requirements
                 (when changelog enforcement is enabled).
         """
-        from elspais.server.persistence import replay_mutations_to_disk
+        # Implements: REQ-d00132-A, REQ-d00132-B
+        from elspais.graph.render import render_save
 
         graph = _state["graph"]
         if graph is None:
@@ -4152,7 +4153,7 @@ def create_server(
 
             create_safety_branch(_state["working_dir"], "save-mutations")
 
-        result = replay_mutations_to_disk(graph, _state["working_dir"])
+        result = render_save(graph, _state["working_dir"])
 
         # Add changelog entries for Active requirements after save
         if result.get("success") and changelog_enforce and message:

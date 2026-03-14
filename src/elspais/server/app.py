@@ -659,12 +659,12 @@ def create_app(
     @app.route("/api/save", methods=["POST"])
     def api_save():
         """POST /api/save - Persist mutations to spec files on disk."""
-        from elspais.server.persistence import replay_mutations_to_disk
+        # Implements: REQ-d00132-A
+        from elspais.graph.render import render_save
 
-        result = replay_mutations_to_disk(
+        result = render_save(
             _state["graph"],
             _state["working_dir"],
-            build_time=_state.get("build_time"),
         )
         status_code = 200 if result.get("success") else 409
         # Update build_time after successful save

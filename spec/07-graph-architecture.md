@@ -648,3 +648,30 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 
 *End* *Render Protocol for Graph Nodes* | **Hash**: 00000000
 ---
+
+## REQ-d00132: Render-Based Save Operation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+`save_mutations()` SHALL write dirty FILE nodes to disk by rendering their CONTAINS children. `persistence.py` is replaced entirely by render-based serialization.
+
+## Assertions
+
+A. `save_mutations()` SHALL identify dirty FILE nodes by walking the mutation log to find which FILE nodes contain mutated content nodes, then render each dirty FILE node to produce the file content and write it to disk.
+
+B. Safety branches SHALL be created before writing when `save_branch=True`, using the existing `create_safety_branch()` mechanism.
+
+C. After saving, the graph SHALL be rebuilt from disk and compared to the pre-save in-memory graph as a consistency check. This check SHALL be on by default and skippable via configuration.
+
+D. `persistence.py` SHALL be deleted and replaced entirely by the render-based save mechanism.
+
+E. The mutation log and undo system SHALL continue to work unchanged. The mutation log SHALL be cleared after a successful save.
+
+F. The render-based save SHALL derive implements and refines reference lists from the live graph edges rather than stored fields, ensuring edge mutations are correctly reflected in the output.
+
+## Rationale
+
+Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
+
+*End* *Render-Based Save Operation* | **Hash**: 00000000
+---

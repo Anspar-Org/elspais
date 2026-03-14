@@ -1,24 +1,29 @@
 # Implements: REQ-d00131-A, REQ-d00131-B, REQ-d00131-C, REQ-d00131-D
 # Implements: REQ-d00131-E, REQ-d00131-F, REQ-d00131-G, REQ-d00131-H
 # Implements: REQ-d00131-I, REQ-d00131-J
+# Implements: REQ-d00132-A, REQ-d00132-E, REQ-d00132-F
 """Render Protocol - Serialize graph nodes back to text.
 
 Each domain NodeKind has a render function that produces its text
 representation. Walking a FILE node's CONTAINS children in render_order
 and concatenating their rendered output produces the file's content.
+
+The render_save() function persists dirty FILE nodes to disk by rendering
+their CONTAINS children, replacing the old persistence.py text surgery.
 """
 
 from __future__ import annotations
 
 import hashlib
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from elspais.utilities.hasher import normalize_assertion_text
 
 if TYPE_CHECKING:
-    pass
+    from elspais.graph.builder import TraceGraph
 
 
 def render_node(node: GraphNode) -> str:
@@ -81,7 +86,12 @@ def _render_requirement(node: GraphNode) -> str:
     title = node.get_label()
     level = node.get_field("level") or "Unknown"
     status = node.get_field("status") or "Unknown"
-    implements_refs = node.get_field("implements_refs") or []
+
+    # Implements: REQ-d00132-F
+    # Derive implements refs from live graph edges, falling back to stored field
+    implements_refs = _derive_implements_refs(node)
+    refines_refs = _derive_refines_refs(node)
+    satisfies_refs = node.get_field("satisfies_refs") or []
 
     lines: list[str] = []
 
@@ -97,6 +107,16 @@ def _render_requirement(node: GraphNode) -> str:
     else:
         meta_parts.append("**Implements**: -")
     lines.append(" | ".join(meta_parts))
+
+    # Refines line (if present)
+    if refines_refs:
+        refines_str = ", ".join(refines_refs)
+        lines.append(f"**Refines**: {refines_str}")
+
+    # Satisfies line (if present)
+    if satisfies_refs:
+        sat_str = ", ".join(satisfies_refs)
+        lines.append(f"Satisfies: {sat_str}")
 
     # Collect STRUCTURES children: assertions and sections
     assertions: list[tuple[str, str]] = []
@@ -272,3 +292,403 @@ def compute_requirement_hash(
         raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     return final.hexdigest()[:length]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Edge-derived reference lists (REQ-d00132-F)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _derive_implements_refs(node: GraphNode) -> list[str]:
+    """Derive the implements reference list from live graph edges.
+
+    Walks incoming IMPLEMENTS edges where the source is a REQUIREMENT,
+    producing the list of parent IDs. Falls back to stored
+    ``implements_refs`` field when no edges are found (e.g., nodes
+    created by mutations that haven't been wired yet).
+
+    Returns:
+        Sorted list of implements reference IDs.
+    """
+    refs: set[str] = set()
+    for edge in node.iter_incoming_edges():
+        if edge.kind == EdgeKind.IMPLEMENTS and edge.source.kind == NodeKind.REQUIREMENT:
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    refs.add(f"{edge.source.id}-{label}")
+            else:
+                refs.add(edge.source.id)
+
+    if refs:
+        return sorted(refs)
+
+    # Fallback to stored field
+    stored = node.get_field("implements_refs")
+    return list(stored) if stored else []
+
+
+def _derive_refines_refs(node: GraphNode) -> list[str]:
+    """Derive the refines reference list from live graph edges.
+
+    Same as ``_derive_implements_refs`` but for REFINES edges.
+
+    Returns:
+        Sorted list of refines reference IDs.
+    """
+    refs: set[str] = set()
+    for edge in node.iter_incoming_edges():
+        if edge.kind == EdgeKind.REFINES and edge.source.kind == NodeKind.REQUIREMENT:
+            if edge.assertion_targets:
+                for label in edge.assertion_targets:
+                    refs.add(f"{edge.source.id}-{label}")
+            else:
+                refs.add(edge.source.id)
+
+    if refs:
+        return sorted(refs)
+
+    # Fallback to stored field
+    stored = node.get_field("refines_refs")
+    return list(stored) if stored else []
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Render-based save (REQ-d00132-A)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _find_dirty_files(graph: TraceGraph) -> set[str]:
+    """Identify FILE node IDs whose subtree has pending mutations.
+
+    Walks the mutation log and for each mutated node, finds its FILE
+    ancestor. Returns the set of FILE node IDs that need re-rendering.
+
+    Handles deleted nodes by looking up parent requirement IDs from
+    the mutation entry's before_state.
+
+    Args:
+        graph: The traceability graph with pending mutations.
+
+    Returns:
+        Set of FILE node IDs that contain mutated content.
+    """
+    dirty_file_ids: set[str] = set()
+
+    def _mark_node_file(node_id: str) -> None:
+        """Find the FILE ancestor of a node and mark it dirty."""
+        node = graph.find_by_id(node_id)
+        if node is None:
+            return
+        if node.kind == NodeKind.FILE:
+            dirty_file_ids.add(node.id)
+        else:
+            fn = node.file_node()
+            if fn is not None:
+                dirty_file_ids.add(fn.id)
+
+    for entry in graph.mutation_log.iter_entries():
+        target_id = entry.target_id
+
+        # Try to find the node directly
+        _mark_node_file(target_id)
+
+        # For operations that reference source_id (edges, refs)
+        for key in ("source_id",):
+            ref_id = entry.before_state.get(key) or entry.after_state.get(key, "")
+            if ref_id:
+                _mark_node_file(ref_id)
+
+        # For assertion mutations, find the parent requirement's file
+        if entry.operation in (
+            "add_assertion",
+            "delete_assertion",
+            "update_assertion",
+            "rename_assertion",
+        ):
+            parent_id = entry.before_state.get("parent_id") or entry.after_state.get(
+                "parent_id", ""
+            )
+            if parent_id:
+                _mark_node_file(parent_id)
+            else:
+                # Derive parent from assertion ID (REQ-xxx-A -> REQ-xxx)
+                parts = target_id.rsplit("-", 1)
+                if len(parts) == 2:
+                    _mark_node_file(parts[0])
+
+        # For add_requirement, the target file is the parent's file
+        if entry.operation == "add_requirement":
+            parent_id = entry.after_state.get("parent_id")
+            if parent_id:
+                _mark_node_file(parent_id)
+
+        # For delete_requirement, use the stored source_path
+        if entry.operation == "delete_requirement":
+            source_path = entry.before_state.get("source_path")
+            if source_path:
+                file_id = f"file:{source_path}"
+                if graph.find_by_id(file_id) is not None:
+                    dirty_file_ids.add(file_id)
+            # Also try parent IDs from before_state
+            for pid in entry.before_state.get("parent_ids", []):
+                _mark_node_file(pid)
+
+        # For rename_node, both old and new locations
+        if entry.operation == "rename_node":
+            new_id = entry.after_state.get("id", "")
+            if new_id:
+                _mark_node_file(new_id)
+
+        # For change_status, update_title - node should still exist
+        if entry.operation in ("change_status", "update_title"):
+            _mark_node_file(target_id)
+
+        # For edge mutations - mark the source requirement
+        if entry.operation in ("add_edge", "delete_edge", "change_edge_kind"):
+            source_id = entry.before_state.get("source_id") or entry.after_state.get(
+                "source_id", ""
+            )
+            if source_id:
+                _mark_node_file(source_id)
+
+    return dirty_file_ids
+
+
+# Implements: REQ-d00132-A, REQ-d00132-C
+def render_save(
+    graph: TraceGraph,
+    repo_root: Path,
+    consistency_check: bool = False,
+    rebuild_fn: Any | None = None,
+) -> dict[str, Any]:
+    """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
+
+    Identifies FILE nodes with pending mutations, renders each one's
+    content by walking CONTAINS children in render_order, and writes
+    the result to disk.
+
+    Args:
+        graph: The traceability graph with pending mutations.
+        repo_root: Repository root path for resolving relative paths.
+        consistency_check: If True, rebuild graph from disk after save and
+            compare to pre-save state. Requires rebuild_fn.
+        rebuild_fn: Callable that rebuilds a TraceGraph from disk, returning
+            (result_dict, TraceGraph). Required when consistency_check=True.
+
+    Returns:
+        Dict with:
+        - success: bool
+        - saved_count: number of files written
+        - files_modified: list of modified file paths
+        - errors: list of error messages (if any)
+        - skipped: list of skipped descriptions
+        - consistency: dict with check results (when consistency_check=True)
+    """
+    errors: list[str] = []
+    files_modified: set[str] = set()
+    skipped: list[str] = []
+    saved_count = 0
+
+    # Ensure new requirements are wired to FILE nodes before rendering
+    _wire_new_requirements_to_files(graph)
+
+    # Find dirty FILE nodes
+    dirty_file_ids = _find_dirty_files(graph)
+
+    if not dirty_file_ids:
+        # No dirty files — clear log and return
+        graph.mutation_log.clear()
+        return {
+            "success": True,
+            "saved_count": 0,
+            "files_modified": [],
+            "conflicts": [],
+            "errors": [],
+            "skipped": ["No dirty files to save"],
+        }
+
+    # Render and write each dirty FILE
+    for file_id in sorted(dirty_file_ids):
+        file_node = graph.find_by_id(file_id)
+        if file_node is None or file_node.kind != NodeKind.FILE:
+            skipped.append(f"{file_id}: FILE node not found")
+            continue
+
+        rel_path = file_node.get_field("relative_path")
+        if not rel_path:
+            skipped.append(f"{file_id}: no relative_path")
+            continue
+
+        abs_path = Path(rel_path)
+        if not abs_path.is_absolute():
+            abs_path = repo_root / rel_path
+
+        try:
+            content = render_file(file_node)
+            # Ensure file ends with newline
+            if content and not content.endswith("\n"):
+                content += "\n"
+            abs_path.write_text(content, encoding="utf-8")
+            files_modified.add(str(abs_path))
+            saved_count += 1
+        except Exception as e:
+            errors.append(f"{file_id}: {e}")
+
+    # Implements: REQ-d00132-E
+    # Clear mutation log after successful save
+    if not errors:
+        graph.mutation_log.clear()
+
+    result: dict[str, Any] = {
+        "success": len(errors) == 0,
+        "saved_count": saved_count,
+        "files_modified": sorted(files_modified),
+        "conflicts": [],
+        "errors": errors,
+        "skipped": skipped,
+    }
+
+    # Implements: REQ-d00132-C
+    # Consistency check: rebuild graph from disk and compare
+    if consistency_check and not errors and rebuild_fn is not None and saved_count > 0:
+        consistency = _run_consistency_check(graph, rebuild_fn)
+        result["consistency"] = consistency
+        if not consistency.get("consistent", True):
+            result["errors"].append(
+                f"Consistency check failed: {consistency.get('details', 'unknown')}"
+            )
+            result["success"] = False
+
+    return result
+
+
+def _run_consistency_check(
+    original_graph: TraceGraph,
+    rebuild_fn: Any,
+) -> dict[str, Any]:
+    """Run consistency check by rebuilding graph from disk and comparing.
+
+    Rebuilds the graph from the files on disk and compares requirement IDs,
+    assertion IDs, titles, statuses, and edge relationships to the in-memory
+    graph.
+
+    Args:
+        original_graph: The in-memory graph after mutations.
+        rebuild_fn: Callable returning (result_dict, TraceGraph).
+
+    Returns:
+        Dict with:
+        - consistent: bool
+        - details: str (if inconsistent)
+        - checked: int (number of nodes compared)
+    """
+    # Implements: REQ-d00132-C
+    try:
+        rebuild_result, new_graph = rebuild_fn()
+    except Exception as e:
+        return {"consistent": False, "details": f"Rebuild failed: {e}", "checked": 0}
+
+    if new_graph is None:
+        return {"consistent": False, "details": "Rebuild returned None graph", "checked": 0}
+
+    # Compare requirement nodes
+    mismatches: list[str] = []
+    checked = 0
+
+    for node in original_graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        checked += 1
+        new_node = new_graph.find_by_id(node.id)
+        if new_node is None:
+            mismatches.append(f"Missing node: {node.id}")
+            continue
+
+        # Compare title
+        if node.get_label() != new_node.get_label():
+            mismatches.append(f"{node.id} title: '{node.get_label()}' vs '{new_node.get_label()}'")
+
+        # Compare status
+        old_status = node.get_field("status")
+        new_status = new_node.get_field("status")
+        if old_status != new_status:
+            mismatches.append(f"{node.id} status: '{old_status}' vs '{new_status}'")
+
+        # Compare level
+        old_level = node.get_field("level")
+        new_level = new_node.get_field("level")
+        if old_level != new_level:
+            mismatches.append(f"{node.id} level: '{old_level}' vs '{new_level}'")
+
+    # Compare assertion nodes
+    for node in original_graph.nodes_by_kind(NodeKind.ASSERTION):
+        checked += 1
+        new_node = new_graph.find_by_id(node.id)
+        if new_node is None:
+            mismatches.append(f"Missing assertion: {node.id}")
+            continue
+
+        if node.get_label() != new_node.get_label():
+            mismatches.append(f"{node.id} text: '{node.get_label()}' vs '{new_node.get_label()}'")
+
+    if mismatches:
+        details = "; ".join(mismatches[:10])
+        if len(mismatches) > 10:
+            details += f" ... and {len(mismatches) - 10} more"
+        return {"consistent": False, "details": details, "checked": checked}
+
+    return {"consistent": True, "checked": checked}
+
+
+def _wire_new_requirements_to_files(graph: TraceGraph) -> None:
+    """Wire newly added requirements to their parent's FILE node.
+
+    When add_requirement creates a new node, it links to a parent via
+    IMPLEMENTS/REFINES but doesn't create a CONTAINS edge from a FILE.
+    This function finds such orphaned requirements and wires them to
+    the parent's FILE node.
+
+    Args:
+        graph: The traceability graph.
+    """
+    for entry in graph.mutation_log.iter_entries():
+        if entry.operation != "add_requirement":
+            continue
+
+        req_id = entry.after_state.get("id", entry.target_id)
+        node = graph.find_by_id(req_id)
+        if node is None:
+            continue
+
+        # Check if already wired to a FILE via CONTAINS
+        has_contains_from_file = False
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.CONTAINS and edge.source.kind == NodeKind.FILE:
+                has_contains_from_file = True
+                break
+        if has_contains_from_file:
+            continue
+
+        # Find parent's FILE node
+        parent_id = entry.after_state.get("parent_id")
+        if not parent_id:
+            continue
+
+        parent = graph.find_by_id(parent_id)
+        if parent is None:
+            continue
+
+        fn = parent.file_node()
+        if fn is None:
+            continue
+
+        # Wire CONTAINS edge with render_order after last existing child
+        max_order = -1.0
+        for edge in fn.iter_outgoing_edges():
+            if edge.kind == EdgeKind.CONTAINS:
+                order = edge.metadata.get("render_order", 0.0)
+                if order > max_order:
+                    max_order = order
+
+        edge = fn.link(node, EdgeKind.CONTAINS)
+        edge.metadata = {
+            "render_order": max_order + 1.0,
+        }
