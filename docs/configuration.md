@@ -241,6 +241,18 @@ require_status = true
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
+# Status role classification — determines behavior in metrics and viewer
+# Each role controls how requirements with that status are treated:
+#   active:       Counted in coverage and analysis, shown in viewer
+#   provisional:  Excluded from coverage, included in analysis, shown in viewer
+#   aspirational: Excluded from coverage and analysis, shown in viewer
+#   retired:      Excluded from everything, hidden by default in viewer
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future"]
+retired = ["Deprecated", "Superseded"]
+
 # Assertion format rules (new in v0.9.0)
 # Require ## Assertions section in requirements
 require_assertions = true
