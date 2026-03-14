@@ -224,24 +224,33 @@ def count_by_level(
     graph: TraceGraph,
     config: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, int]]:
-    """Count requirements by level, with and without deprecated.
+    """Count requirements by level, with and without excluded statuses.
 
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
+                config["patterns"]["types"] and status roles from
+                config["rules"]["format"]["status_roles"].
 
     Returns:
-        Dict with 'active' (excludes Deprecated) and 'all' (includes Deprecated) counts
-        by level.
+        Dict with 'active' (excludes analysis-excluded statuses) and 'all'
+        (includes all) counts by level.
     """
+    from elspais.config.status_roles import StatusRolesConfig
     from elspais.graph import NodeKind
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
         level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
+        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        roles = (
+            StatusRolesConfig.from_dict(status_roles_data)
+            if status_roles_data
+            else StatusRolesConfig.default()
+        )
     else:
         level_keys = ["PRD", "OPS", "DEV"]
+        roles = StatusRolesConfig.default()
 
     counts: dict[str, dict[str, int]] = {
         "active": dict.fromkeys(level_keys, 0),
@@ -252,7 +261,7 @@ def count_by_level(
         status = node.get_field("status", "Active")
         if level:
             counts["all"][level] = counts["all"].get(level, 0) + 1
-            if status != "Deprecated":
+            if not roles.is_excluded_from_analysis(status):
                 counts["active"][level] = counts["active"].get(level, 0) + 1
     return counts
 
@@ -291,17 +300,33 @@ def group_by_level(
     return groups
 
 
-def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
+def count_by_repo(
+    graph: TraceGraph,
+    config: dict[str, Any] | None = None,
+) -> dict[str, dict[str, int]]:
     """Count requirements by repo prefix (CORE, CAL, TTN, etc.).
 
     Args:
         graph: The TraceGraph to aggregate.
+        config: Optional config dict. If provided, derives status roles from
+                config["rules"]["format"]["status_roles"].
 
     Returns:
         Dict mapping repo prefix to {'active': count, 'all': count}.
         CORE is used for core repo requirements (no prefix).
     """
+    from elspais.config.status_roles import StatusRolesConfig
     from elspais.graph import NodeKind
+
+    if config is not None:
+        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        roles = (
+            StatusRolesConfig.from_dict(status_roles_data)
+            if status_roles_data
+            else StatusRolesConfig.default()
+        )
+    else:
+        roles = StatusRolesConfig.default()
 
     repo_counts: dict[str, dict[str, int]] = {}
 
@@ -314,7 +339,7 @@ def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
             repo_counts[prefix] = {"active": 0, "all": 0}
 
         repo_counts[prefix]["all"] += 1
-        if status != "Deprecated":
+        if not roles.is_excluded_from_analysis(status):
             repo_counts[prefix]["active"] += 1
 
     return repo_counts

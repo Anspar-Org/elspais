@@ -315,6 +315,7 @@ def analyze_foundations(
     include_kinds: set[NodeKind] | None = None,
     weights: tuple[float, ...] = (0.3, 0.2, 0.2, 0.3),
     top_n: int = 10,
+    config: dict | None = None,
 ) -> FoundationReport:
     """Full foundation analysis combining all metrics.
 
@@ -324,8 +325,21 @@ def analyze_foundations(
     Descendant counts are computed internally alongside the other metrics.
     Coverage is read via node.get_metric("coverage_pct", 0).
     """
+    from elspais.config.status_roles import StatusRolesConfig
+
     if include_kinds is None:
         include_kinds = set(_DEFAULT_KINDS)
+
+    # Build status roles from config
+    if config is not None:
+        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        roles = (
+            StatusRolesConfig.from_dict(status_roles_data)
+            if status_roles_data
+            else StatusRolesConfig.default()
+        )
+    else:
+        roles = StatusRolesConfig.default()
 
     # Precompute included nodes once
     included = _collect_included(graph, include_kinds)
@@ -342,9 +356,9 @@ def analyze_foundations(
     req_nodes: dict[str, GraphNode] = {}
     for nid, node in included.items():
         if node.kind == NodeKind.REQUIREMENT:
-            # Skip deprecated/rejected requirements
-            status = (node.status or "").lower()
-            if status in ("deprecated", "rejected"):
+            # Skip requirements excluded from analysis (aspirational, retired)
+            status = node.status or ""
+            if roles.is_excluded_from_analysis(status):
                 continue
             req_nodes[nid] = node
             uncovered[nid] = _count_uncovered_descendants(graph, nid, included_set)
