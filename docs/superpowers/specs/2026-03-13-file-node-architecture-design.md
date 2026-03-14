@@ -36,26 +36,74 @@ A `FILE` node represents a single source file on disk.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `file_type` | str | One of: `SpecFile`, `JourneyFile`, `CodeFile`, `TestFile`, `ResultFile` |
+| `file_type` | FileType enum | One of: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT` |
 | `absolute_path` | str | Full filesystem path at parse time |
 | `relative_path` | str | Repo-relative path (used for IDs, display) |
 | `repo` | str or None | Repository identifier (`None` for core project, string for associates) |
 | `git_branch` | str or None | Branch name at parse time |
 | `git_commit` | str or None | Commit hash at parse time |
 
-### 1.2 New Edge Kinds
+`FileType` is an enum (like `NodeKind`, `EdgeKind`) rather than a string, for type safety and consistency.
 
-**`CONTAINS`** — from FILE node to a content node. Indicates the node's text is physically present in this file at the specified lines.
+### 1.2 Edge Kinds: New and Changed
 
-Edge metadata:
+#### Edge Direction Convention
+
+Edges have a consistent directional pattern based on their semantic category:
+
+- **Structural edges** point downward (parent → child): CONTAINS, STRUCTURES, DEFINES, YIELDS
+- **Traceability edges** point upward (child → parent): IMPLEMENTS, REFINES, VALIDATES, SATISFIES
+
+The edge kind name reads as subject-verb-object where the source node is the subject: "FILE contains REQUIREMENT", "CODE implements ASSERTION", "TEST yields TEST_RESULT."
+
+#### New Edge Kinds
+
+**`CONTAINS`** — from FILE node to a content node (downward). Indicates the node's text is physically present in this file at the specified lines.
+
+Edge metadata (stored in `Edge.metadata` dict):
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `start_line` | int | 1-based line number (snapshot from parse time) |
 | `end_line` | int or None | End line (snapshot from parse time) |
-| `render_order` | float or int | Canonical ordering for rendering; mutable |
+| `render_order` | float | Canonical ordering for rendering; mutable. Float to allow insertion between existing items (e.g., 1.5 between 1.0 and 2.0). |
 
-**`DEFINES`** — from FILE node to an INSTANCE node. Indicates this file (via its declaring requirement's `Satisfies:` clause) caused the INSTANCE node to exist. The INSTANCE node's content was cloned from a template, not physically present in this file.
+**`DEFINES`** — from FILE node to an INSTANCE node (downward). Indicates this file (via its declaring requirement's `Satisfies:` clause) caused the INSTANCE node to exist. The INSTANCE node's content was cloned from a template, not physically present in this file.
+
+**`STRUCTURES`** — domain-internal hierarchy edge (downward). Connects a node to its structural children:
+- REQUIREMENT → ASSERTION (the requirement declares this assertion)
+- REQUIREMENT → REMAINDER section (non-normative content within the requirement)
+
+This is distinct from CONTAINS (physical file containment) and from traceability edges like IMPLEMENTS/REFINES. A REQUIREMENT's ASSERTION children are connected via STRUCTURES, not CONTAINS — because the assertion is structurally part of the requirement, not independently contained by the file.
+
+STRUCTURES does not contribute to coverage. It represents structural containment, not traceability.
+
+**`YIELDS`** — from TEST node to TEST_RESULT node (downward). A test yields its execution results. Replaces the current misuse of `CONTAINS` for the TEST_RESULT → TEST relationship (which was also in the wrong direction).
+
+YIELDS does not contribute to coverage. Coverage flows through VALIDATES (TEST → REQUIREMENT).
+
+#### Changed Edge Kinds
+
+The existing `CONTAINS` edge between TEST_RESULT and TEST is replaced by `YIELDS` (TEST → TEST_RESULT), correcting both the edge kind name and the direction.
+
+#### Edge Metadata
+
+The `Edge` dataclass gains a `metadata: dict[str, Any]` field (default empty dict) to carry edge-specific data like line ranges and render_order. Metadata is NOT part of edge identity — `Edge.__eq__` and `__hash__` continue to compare only `source.id`, `target.id`, `kind`, and `assertion_targets`. Metadata is mutable annotation (e.g., `render_order` changes during mutations).
+
+#### Complete Edge Kind Reference
+
+| EdgeKind | Direction | From | To | Coverage | Description |
+|----------|-----------|------|----|----------|-------------|
+| CONTAINS | downward | FILE | content node | no | Physical file containment |
+| STRUCTURES | downward | REQUIREMENT | ASSERTION, REMAINDER section | no | Domain-internal hierarchy |
+| DEFINES | downward | FILE | INSTANCE | no | Virtual node provenance |
+| YIELDS | downward | TEST | TEST_RESULT | no | Test execution results |
+| IMPLEMENTS | upward | CODE, REQUIREMENT | REQUIREMENT, ASSERTION | yes | Traceability link |
+| REFINES | upward | REQUIREMENT | REQUIREMENT, ASSERTION | yes | Refinement link |
+| VALIDATES | upward | TEST | REQUIREMENT, ASSERTION | yes | Test coverage link |
+| SATISFIES | upward | REQUIREMENT | REQUIREMENT (template) | no | Template compliance |
+| INSTANCE | upward | INSTANCE | original node | no | Clone-to-original link |
+| ADDRESSES | upward | REQUIREMENT | USER_JOURNEY | no | Journey coverage |
 
 ### 1.3 Eliminate Edge-less Parent-Child Links
 
@@ -63,7 +111,11 @@ Currently `GraphNode` has two relationship mechanisms:
 - `add_child()` — creates `_children`/`_parents` links with no Edge object
 - `link()` — creates Edge objects AND `_children`/`_parents` links
 
-The edge-less `add_child()` is eliminated. All relationships use `link()` with a typed `EdgeKind`. The `_children`/`_parents` lists become derived from edges.
+The edge-less `add_child()` is eliminated. All relationships use `link()` with a typed `EdgeKind`.
+
+The `_children`/`_parents` lists are retained as caches for O(1) access, automatically maintained by `link()` (which already does this). The only change is removing the separate `add_child()` entry point. Undo operations that currently call `add_child()` migrate to `link()` with the appropriate edge kind.
+
+`remove_child()` is renamed to `unlink()` for symmetry with `link()`. It retains its current behavior: severs all edges between two nodes and removes cache entries.
 
 This enables filtered traversal on all relationships universally.
 
@@ -73,17 +125,41 @@ The `SourceLocation` class and `GraphNode.source` field are removed. Replaced by
 - **File path:** navigate to FILE parent via CONTAINS edge
 - **Line numbers:** stored as fields on the content node (`parse_line`, `parse_end_line`) — these are snapshots from parse time
 
-A convenience method `GraphNode.file_node()` navigates up via CONTAINS edge to find the FILE parent. Returns `None` for INSTANCE nodes (which have DEFINES edges instead) and other virtual nodes.
+A convenience method `GraphNode.file_node()` walks up the graph via incoming edges to find the nearest ancestor with `kind == NodeKind.FILE`. The traversal path depends on the node's position:
+- **Top-level content node** (REQUIREMENT, file-level REMAINDER): one hop via incoming CONTAINS edge to FILE.
+- **ASSERTION or REMAINDER section**: two hops — incoming STRUCTURES edge to REQUIREMENT, then incoming CONTAINS edge to FILE.
+- **INSTANCE node**: returns `None` (no CONTAINS edge). Use DEFINES edge or navigate via INSTANCE edge to original, then to FILE.
+
+Returns `None` for virtual nodes and any node not reachable from a FILE.
 
 ### 1.5 File Type to Parser Mapping
 
-| file_type | Domain Parser | Notes |
-|-----------|--------------|-------|
-| `SpecFile` | RequirementParser | REQ + ASSERTION + REMAINDER |
-| `JourneyFile` | JourneyParser | USER_JOURNEY + REMAINDER |
-| `CodeFile` | CodeParser | CODE + REMAINDER |
-| `TestFile` | TestParser | TEST + REMAINDER |
-| `ResultFile` | JUnitXMLParser / PytestJSONParser / (future: DartResultParser) | TEST_RESULT; REMAINDER may not apply to structured formats |
+| FileType | Domain Parser | Notes |
+|----------|--------------|-------|
+| `SPEC` | RequirementParser | REQ + ASSERTION + REMAINDER |
+| `JOURNEY` | JourneyParser | USER_JOURNEY + REMAINDER |
+| `CODE` | CodeParser | CODE + REMAINDER |
+| `TEST` | TestParser | TEST + REMAINDER |
+| `RESULT` | JUnitXMLParser / PytestJSONParser / (future: DartResultParser) | TEST_RESULT only; RemainderParser skipped for structured formats |
+
+**Note on ResultFile:** Structured formats like JUnit XML and pytest JSON are fully consumed by their domain parser. RemainderParser is not applicable — there are no "unclaimed lines" in a structured format. These FILE nodes may have no REMAINDER children.
+
+### 1.6 Dual Parentage
+
+Content nodes may have parents from two orthogonal hierarchies:
+
+- **File hierarchy:** FILE → content node via CONTAINS edge
+- **Domain hierarchy:** REQUIREMENT → ASSERTION via STRUCTURES edge; REQUIREMENT → REQUIREMENT via IMPLEMENTS/REFINES
+
+An ASSERTION node has exactly two parents: its FILE (via CONTAINS) and its REQUIREMENT (via STRUCTURES). These are not in conflict — they represent different relationships. Filtered traversal distinguishes them: `iter_parents(edge_kinds={CONTAINS})` yields the FILE; `iter_parents(edge_kinds={STRUCTURES})` yields the REQUIREMENT.
+
+**REMAINDER nodes** exist at two levels with different parent relationships:
+- **File-level REMAINDER:** connected to FILE via CONTAINS. Represents unclaimed lines between domain blocks.
+- **Requirement-level REMAINDER:** connected to REQUIREMENT via STRUCTURES. Represents non-normative sections (Rationale, Notes, etc.) within a requirement. These also have a CONTAINS edge from the FILE (since their text is physically in the file).
+
+Both use `NodeKind.REMAINDER`. The builder distinguishes them by context: content parsed inside a requirement block gets STRUCTURES to the requirement; content parsed outside gets only CONTAINS to the file.
+
+**Impact on unfiltered traversal:** With dual parentage, unfiltered `walk()` and `depth` cross between hierarchies. Consumers should use filtered traversal (`walk(edge_kinds=...)`) to stay within a single view. Unfiltered traversal remains available but is not recommended for most use cases.
 
 ## 2. Build Pipeline
 
@@ -108,29 +184,36 @@ factory.py:
     select domain parser for this file_type
     for each file in directory:
       create FILE node (with file_type, paths, repo, git context)
-      parse with [domain_parser, RemainderParser]
+      parse with [domain_parser, RemainderParser]  (RemainderParser skipped for RESULT)
       for each parsed content:
         create content node
         create CONTAINS edge from FILE to content node (with line range, render_order)
+        for domain-internal children (e.g. ASSERTIONs within REQ):
+          create STRUCTURES edge from parent to child
+          create CONTAINS edge from FILE to child (with line range)
         queue domain edges (IMPLEMENTS, REFINES, etc.) in pending_links
   builder.build() --> TraceGraph
     (satisfies instantiation creates DEFINES edges from declaring FILE to INSTANCE nodes)
+    (satisfies instantiation uses STRUCTURES edges for cloned internal hierarchy)
 ```
 
 **Key changes:**
 - `factory.py` creates the FILE node before calling `DomainFile.deserialize()`, since it knows the file path and type.
 - `DomainFile` / deserializer is unchanged — it still reads files, splits into lines, runs parsers.
 - `GraphBuilder.add_parsed_content()` receives a FILE node reference along with parsed content.
-- `RemainderParser` is mandatory — always registered, always runs as catch-all.
-- `render_order` is assigned sequentially from natural file order at parse time (0, 1, 2, ...).
+- `RemainderParser` is mandatory for text-based files — always registered, always runs as catch-all. Skipped for structured formats (RESULT).
+- `render_order` is assigned sequentially from natural file order at parse time (0.0, 1.0, 2.0, ...).
+- ASSERTION and REMAINDER-section children of REQUIREMENTs get both STRUCTURES edges (domain) and CONTAINS edges from the FILE (physical).
+- Cloned INSTANCE subtrees use STRUCTURES edges internally, mirroring the original structure.
 
 ### 2.3 Satisfies / Template Instantiation
 
 During `_instantiate_satisfies_templates()`:
 - INSTANCE nodes are created as before (cloned from template subtree with composite IDs).
 - INSTANCE nodes get no CONTAINS edge (they are not physically in any file).
+- Cloned subtrees use STRUCTURES edges internally (e.g., cloned REQUIREMENT → cloned ASSERTION), mirroring the original template's internal structure.
 - DEFINES edges are created from the declaring requirement's FILE node to each INSTANCE node.
-- To find the file for an INSTANCE node, navigate: INSTANCE --INSTANCE edge--> original node --CONTAINS edge (incoming)--> FILE node. Or navigate via DEFINES edge directly.
+- To find the file for an INSTANCE node, navigate: INSTANCE --INSTANCE edge--> original node, then `file_node()`. Or navigate via DEFINES edge directly.
 
 ### 2.4 Post-Build Steps
 
@@ -149,41 +232,65 @@ Unchanged:
 - `iter_roots(NodeKind.REQUIREMENT)` — parentless REQ nodes (current default behavior)
 - `iter_roots(NodeKind.FILE)` — all FILE nodes (always parentless)
 - `iter_roots(NodeKind.USER_JOURNEY)` — parentless journey nodes
-- `iter_roots()` with no argument — default to current behavior (REQ + JOURNEY)
+- `iter_roots()` with no argument — default to current behavior (REQ + JOURNEY), excluding FILE nodes
+
+FILE nodes are always parentless (nothing contains a file). They are stored in `_index` like all other nodes and returned by `iter_roots(NodeKind.FILE)` or `iter_by_kind(NodeKind.FILE)`. The default `iter_roots()` excludes them to preserve existing consumer behavior.
 
 ### 3.2 Filtered Traversal
 
 Traversal methods accept optional edge-kind filters:
 
-- `iter_children(edge_kinds={IMPLEMENTS, REFINES})` — domain children only
+- `iter_children(edge_kinds={IMPLEMENTS, REFINES})` — domain traceability children only
 - `iter_children(edge_kinds={CONTAINS})` — file contents only
+- `iter_children(edge_kinds={STRUCTURES})` — domain-internal children (assertions, sections)
 - `iter_children()` — all children (unfiltered, current behavior)
 - Same for `iter_parents()`, `walk()`, `ancestors()`
+
+Filtered `walk()` applies the edge-kind filter at each recursion level: at every node, only children reachable via the specified edge kinds are visited. This produces view-specific subtrees:
+- `walk(edge_kinds={CONTAINS})` from a FILE node yields the file's physical contents
+- `walk(edge_kinds={IMPLEMENTS, REFINES, STRUCTURES})` from a REQUIREMENT yields the domain subtree
+- `walk()` with no filter yields everything reachable (current behavior, not recommended with dual parentage)
 
 This allows consumers to stay in one "view" of the graph without crossing between file structure and domain structure.
 
 ### 3.3 Convenience Methods
 
-- `GraphNode.file_node()` — navigate up via CONTAINS edge to FILE parent. Returns `None` for virtual nodes.
+- `GraphNode.file_node()` — walk incoming edges upward to the nearest FILE ancestor. See Section 1.4 for traversal paths by node type.
 - `TraceGraph.iter_by_kind(kind)` — filter `_index` by NodeKind.
+
+### 3.4 Impact on MCP `get_subtree()`
+
+`get_subtree()` uses filtered traversal to produce view-specific results:
+- Starting from a FILE node: walks CONTAINS edges, produces the file's contents
+- Starting from a REQUIREMENT node: walks domain edges (IMPLEMENTS, REFINES, STRUCTURES), produces the traceability subtree
+- The `include_kinds` parameter already filters by NodeKind; edge-kind filtering is the new dimension
 
 ## 4. Line Numbers & Ordering
 
 ### 4.1 Two Distinct Concepts
 
-- **`parse_line` / `parse_end_line`** (on node and CONTAINS edge) — line numbers as read from disk. Informational snapshot. Becomes stale after any in-memory mutation.
-- **`render_order`** (on CONTAINS edge) — canonical ordinal for rendering. Mutable. Determines the sequence when writing the file.
+- **`parse_line` / `parse_end_line`** (on node and CONTAINS edge metadata) — line numbers as read from disk. Informational snapshot. Becomes stale after any in-memory mutation.
+- **`render_order`** (on CONTAINS edge metadata) — canonical ordinal for rendering. Mutable. Determines the sequence when writing the file. Always `float` to allow insertion between existing items (e.g., 1.5 between 1.0 and 2.0) without renumbering.
 
-At parse time, `render_order` is assigned from natural file order. After mutations, `render_order` is the authoritative ordering; `parse_line` values may be stale.
+At parse time, `render_order` is assigned from natural file order (0.0, 1.0, 2.0, ...). After mutations, `render_order` is the authoritative ordering; `parse_line` values may be stale.
 
-### 4.2 Assertion Ordering Constraint
+### 4.2 Ordering Hierarchy
+
+Ordering operates at two levels:
+
+1. **FILE level:** CONTAINS edges from FILE to top-level content nodes (REQUIREMENTs, file-level REMAINDERs) carry `render_order` that determines file-level sequencing.
+2. **REQUIREMENT level:** STRUCTURES edges from REQUIREMENT to its children (ASSERTIONs, REMAINDER sections) carry their own ordering. For ASSERTIONs, this ordering is locked to the assertion sequence (A=0, B=1, C=2, ...).
+
+These are independent — reordering requirements within a file does not affect assertion ordering within a requirement, and vice versa.
+
+### 4.3 Assertion Ordering Constraint
 
 For ASSERTION children of an active REQUIREMENT:
-- `render_order` is locked to assertion sequence (A=0, B=1, C=2, ...).
+- Ordering is locked to assertion sequence (A=0, B=1, C=2, ...).
 - Reordering assertions requires recomputing labels and updating all references.
 - Assertion reorder is a deferred feature (future plan).
 
-### 4.3 Order-Independent Assertion Hashing
+### 4.4 Order-Independent Assertion Hashing
 
 The requirement hash must not change when assertions are reordered:
 
@@ -193,6 +300,11 @@ The requirement hash must not change when assertions are reordered:
 
 This ensures assertion reordering does not trigger change-detection review, while assertion text edits still do.
 
+**Migration impact:** This changes the hash computation algorithm. All existing requirement hashes will change on the first run after this change is deployed. Mitigation options:
+- A `hash_version` field in config to support both old and new algorithms during transition.
+- A one-time re-hash migration pass that updates all `*End*` markers with new hashes.
+- Accept the one-time change-detection noise and document it in release notes.
+
 ## 5. Rendering & Serialization
 
 ### 5.1 Render Protocol
@@ -201,8 +313,8 @@ Each NodeKind implements a render method returning its text representation:
 
 | NodeKind | Renders As |
 |----------|-----------|
-| `REQUIREMENT` | Full `## REQ-xxx: Title` block (metadata, body, assertions, sections, `*End*` marker) |
-| `ASSERTION` | Rendered as part of parent REQUIREMENT (not independently to file) |
+| `REQUIREMENT` | Full `## REQ-xxx: Title` block (metadata, body, assertions, sections, `*End*` marker). Renders its STRUCTURES children (assertions, sections) inline, ordered by their sequence. |
+| `ASSERTION` | Rendered inline by parent REQUIREMENT (not independently to file) |
 | `REMAINDER` | Raw text verbatim |
 | `USER_JOURNEY` | Full `## JNY-xxx: Title` block |
 | `CODE` | The `# Implements:` comment line(s); surrounding code is REMAINDER |
@@ -221,6 +333,8 @@ Each NodeKind implements a render method returning its text representation:
 3. Create safety branch before writing (existing mechanism).
 4. Rebuild graph from disk (re-read all files).
 5. Compare new graph to pre-save in-memory graph as consistency check.
+
+**Note on step 4-5:** The rebuild-and-compare step proves round-trip fidelity. It may be expensive for large projects. It can be made optional (e.g., enabled by default, skippable via config flag for performance) but should always run during development and testing.
 
 ### 5.3 What Gets Deleted
 
@@ -244,7 +358,9 @@ Each NodeKind implements a render method returning its text representation:
 - `commands/trace.py`, `commands/validate.py` — output file:line
 - `graph/serialize.py` — serialize FILE parent path + line fields
 
-**Common pattern:** `node.file_node()` provides the FILE parent. Consumers switch from `node.source.path` to `node.file_node().relative_path` (or similar).
+**Common pattern:** `node.file_node()` provides the FILE parent. Consumers switch from `node.source.path` to `node.file_node().get_field("relative_path")` (or similar).
+
+**Existing `move_requirement` MCP tool:** Currently implemented in persistence.py. Must be reimplemented to work with FILE nodes: remove the CONTAINS edge from the old FILE, add a CONTAINS edge to the new FILE with appropriate `render_order`. The domain edges (IMPLEMENTS, etc.) are unchanged.
 
 ## 7. Language-Agnostic Parser Support
 
