@@ -90,62 +90,6 @@ class TestIgnorePatterns:
 
 
 # ---------------------------------------------------------------------------
-# Test 50: File patterns determine type
-# ---------------------------------------------------------------------------
-
-
-class TestFilePatternTypeMapping:
-    """File patterns map files to requirement types."""
-
-    def test_file_patterns_assign_types(self, tmp_path):
-        cfg = base_config(
-            name="file-patterns",
-            file_patterns={
-                "product-*.md": "prd",
-                "operations-*.md": "ops",
-                "technical-*.md": "dev",
-            },
-        )
-        prd = Requirement(
-            "REQ-p00001",
-            "Product Feature",
-            "PRD",
-            assertions=[("A", "The system SHALL have product features.")],
-        )
-        ops = Requirement(
-            "REQ-o00001",
-            "Ops Process",
-            "OPS",
-            implements="REQ-p00001",
-            assertions=[("A", "Operations SHALL follow processes.")],
-        )
-        dev = Requirement(
-            "REQ-d00001",
-            "Tech Impl",
-            "DEV",
-            implements="REQ-o00001",
-            assertions=[("A", "The module SHALL implement features.")],
-        )
-        build_project(
-            tmp_path,
-            cfg,
-            spec_files={
-                "spec/product-features.md": [prd],
-                "spec/operations-process.md": [ops],
-                "spec/technical-impl.md": [dev],
-            },
-        )
-
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
-        assert result.returncode == 0
-
-        summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
-        data = json.loads(summary.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-        assert total == 3
-
-
-# ---------------------------------------------------------------------------
 # Test 51: Custom hierarchy rules
 # ---------------------------------------------------------------------------
 

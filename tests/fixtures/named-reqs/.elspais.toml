@@ -20,9 +20,6 @@ style = "named"
 pattern = "[A-Z][a-zA-Z0-9]+"
 max_length = 32
 
-[spec.file_patterns]
-"*.md" = "req"
-
 [rules.hierarchy]
 allowed_implements = ["req -> req"]
 allow_orphans = true

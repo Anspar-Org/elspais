@@ -38,11 +38,6 @@ separator = "-"
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 [rules.hierarchy]
 allowed_implements = [
     "dev -> ops, prd",

@@ -22,12 +22,6 @@ style = "numeric"
 digits = 5
 leading_zeros = true
 
-[spec.file_patterns]
-"prd-*.md" = "PRD"
-"ops-*.md" = "OPS"
-"dev-*.md" = "DEV"
-"tst-*.md" = "TST"
-
 [rules.hierarchy]
 allowed_implements = [
     "DEV -> OPS, PRD",

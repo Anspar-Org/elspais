@@ -20,9 +20,6 @@ style = "numeric"
 digits = 0  # Variable length
 leading_zeros = false
 
-[spec.file_patterns]
-"*.md" = "req"
-
 [rules.hierarchy]
 allowed_implements = [
     "req -> req",

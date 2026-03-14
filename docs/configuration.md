@@ -85,12 +85,6 @@ format_guide = "requirements-format.md"
 # Files to skip during validation
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-# Map file patterns to requirement types
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 #──────────────────────────────────────────────────────────────────────────────
 # PATTERNS - Requirement ID Format
 #──────────────────────────────────────────────────────────────────────────────

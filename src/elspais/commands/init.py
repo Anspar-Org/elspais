@@ -221,11 +221,6 @@ label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 [rules.hierarchy]
 dev = ["dev", "ops", "prd"]
 ops = ["ops", "prd"]
