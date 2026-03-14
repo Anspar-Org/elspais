@@ -50,7 +50,7 @@ def sample_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A"}
-    prd_node.add_child(assertion_a)
+    prd_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -58,7 +58,7 @@ def sample_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B"}
-    prd_node.add_child(assertion_b)
+    prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Create OPS requirement that implements PRD
     ops_node = GraphNode(
@@ -115,11 +115,11 @@ def coverage_graph():
 
     assertion_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL encrypt data")
     assertion_a._content = {"label": "A"}
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(id="REQ-p00001-B", kind=NodeKind.ASSERTION, label="SHALL use TLS")
     assertion_b._content = {"label": "B"}
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Test node linked to assertion A
     test_node = GraphNode(
@@ -131,7 +131,7 @@ def coverage_graph():
     # Test result
     result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.TEST_RESULT, label="passed")
     result_node._content = {"status": "passed", "duration": 0.5}
-    test_node.add_child(result_node)
+    test_node.link(result_node, EdgeKind.YIELDS)
 
     graph._roots = [req_node]
     graph._index = {
@@ -1401,7 +1401,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
         source=SourceLocation(path=rel_path, line=7),
     )
     a1._content = {"label": "A"}
-    req.add_child(a1)
+    req.link(a1, EdgeKind.STRUCTURES)
 
     a2 = GraphNode(
         id="REQ-t00001-B",
@@ -1410,7 +1410,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
         source=SourceLocation(path=rel_path, line=8),
     )
     a2._content = {"label": "B"}
-    req.add_child(a2)
+    req.link(a2, EdgeKind.STRUCTURES)
 
     prd.link(req, EdgeKind.IMPLEMENTS)
 
@@ -1441,7 +1441,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
             source=SourceLocation(path=rel_path, line=19),
         )
         r2a._content = {"label": "A"}
-        req2.add_child(r2a)
+        req2.link(r2a, EdgeKind.STRUCTURES)
         prd.link(req2, EdgeKind.IMPLEMENTS)
         index["REQ-t00002"] = req2
         index["REQ-t00002-A"] = r2a

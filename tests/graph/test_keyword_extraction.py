@@ -12,6 +12,7 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -45,7 +46,7 @@ def simple_graph():
     )
     assertion_a._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = assertion_a
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -54,7 +55,7 @@ def simple_graph():
     )
     assertion_b._content = {"label": "B"}
     graph._index["REQ-p00001-B"] = assertion_b
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     return graph
 
@@ -81,7 +82,7 @@ def multi_req_graph():
     )
     a1._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = a1
-    req1.add_child(a1)
+    req1.link(a1, EdgeKind.STRUCTURES)
 
     # Requirement 2: API
     req2 = GraphNode(
@@ -100,7 +101,7 @@ def multi_req_graph():
     )
     a2._content = {"label": "A"}
     graph._index["REQ-o00001-A"] = a2
-    req2.add_child(a2)
+    req2.link(a2, EdgeKind.STRUCTURES)
 
     # Requirement 3: Also about API (shares keyword)
     req3 = GraphNode(

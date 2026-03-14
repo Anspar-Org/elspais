@@ -1,4 +1,5 @@
 # Implements: REQ-p00050-A, REQ-p00050-C
+# Implements: REQ-d00127-A, REQ-d00127-B, REQ-d00127-C, REQ-d00127-D
 """GraphNode - Unified node representation for traceability graph.
 
 This module provides the core data structures for Architecture 3.0:
@@ -82,6 +83,9 @@ class GraphNode:
     traceability graph. The `kind` field determines the expected
     structure of `content`.
 
+    All parent-child relationships are created via link() with a typed
+    EdgeKind. Use unlink() to sever all edges between two nodes.
+
     Attributes:
         id: Unique identifier for this node (mutable via set_id()).
         kind: The type of node (requirement, assertion, etc.).
@@ -142,14 +146,39 @@ class GraphNode:
         """
         self._label = value
 
-    # Iterator access
-    def iter_children(self) -> Iterator[GraphNode]:
-        """Iterate over child nodes."""
-        yield from self._children
+    # Implements: REQ-d00127-C
+    # Iterator access with optional edge-kind filtering
+    def iter_children(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
+        """Iterate over child nodes.
 
-    def iter_parents(self) -> Iterator[GraphNode]:
-        """Iterate over parent nodes."""
-        yield from self._parents
+        Args:
+            edge_kinds: If provided, only return children reachable via
+                edges of these kinds. If None, return all children.
+        """
+        if edge_kinds is None:
+            yield from self._children
+        else:
+            seen: set[str] = set()
+            for edge in self._outgoing_edges:
+                if edge.kind in edge_kinds and edge.target.id not in seen:
+                    seen.add(edge.target.id)
+                    yield edge.target
+
+    def iter_parents(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
+        """Iterate over parent nodes.
+
+        Args:
+            edge_kinds: If provided, only return parents reachable via
+                incoming edges of these kinds. If None, return all parents.
+        """
+        if edge_kinds is None:
+            yield from self._parents
+        else:
+            seen: set[str] = set()
+            for edge in self._incoming_edges:
+                if edge.kind in edge_kinds and edge.source.id not in seen:
+                    seen.add(edge.source.id)
+                    yield edge.source
 
     def iter_outgoing_edges(self) -> Iterator[Edge]:
         """Iterate over outgoing edges."""
@@ -233,29 +262,16 @@ class GraphNode:
         """Get the content hash."""
         return self._content.get("hash")
 
-    def add_child(self, child: GraphNode) -> None:
-        """Add a child node with bidirectional linking.
-
-        This is the simple form without edge type. For typed edges,
-        use link() instead.
-
-        Args:
-            child: The child node to add.
-        """
-        if child not in self._children:
-            self._children.append(child)
-        if self not in child._parents:
-            child._parents.append(self)
-
-    def remove_child(self, child: GraphNode) -> bool:
+    # Implements: REQ-d00127-B
+    def unlink(self, child: GraphNode) -> bool:
         """Remove a child node and clean up all links.
 
-        Removes the bidirectional node link and ALL edges between
-        this node and the child. Use remove_edge() to remove a single
-        specific edge while preserving others.
+        Severs all edges between this node and the child and removes
+        the bidirectional cache entries. Use remove_edge() to remove
+        a single specific edge while preserving others.
 
         Args:
-            child: The child node to remove.
+            child: The child node to unlink.
 
         Returns:
             True if the child was found and removed, False otherwise.
@@ -355,7 +371,12 @@ class GraphNode:
             return 0
         return 1 + min(p.depth for p in self._parents)
 
-    def walk(self, order: str = "pre") -> Iterator[GraphNode]:
+    # Implements: REQ-d00127-C
+    def walk(
+        self,
+        order: str = "pre",
+        edge_kinds: set[EdgeKind] | None = None,
+    ) -> Iterator[GraphNode]:
         """Iterate over this node and descendants.
 
         Args:
@@ -363,55 +384,91 @@ class GraphNode:
                 - "pre": Parent first (depth-first, pre-order)
                 - "post": Children first (depth-first, post-order)
                 - "level": Breadth-first (level order)
+            edge_kinds: If provided, only traverse children reachable
+                via edges of these kinds at each level. If None,
+                traverse all children.
 
         Yields:
             GraphNode instances in the specified order.
         """
         if order == "pre":
-            yield from self._walk_preorder()
+            yield from self._walk_preorder(edge_kinds)
         elif order == "post":
-            yield from self._walk_postorder()
+            yield from self._walk_postorder(edge_kinds)
         elif order == "level":
-            yield from self._walk_level()
+            yield from self._walk_level(edge_kinds)
         else:
             raise ValueError(f"Unknown traversal order: {order}")
 
-    def _walk_preorder(self) -> Iterator[GraphNode]:
+    def _walk_preorder(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Pre-order traversal (parent before children)."""
         yield self
-        for child in self._children:
-            yield from child._walk_preorder()
+        for child in self.iter_children(edge_kinds):
+            yield from child._walk_preorder(edge_kinds)
 
-    def _walk_postorder(self) -> Iterator[GraphNode]:
+    def _walk_postorder(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Post-order traversal (children before parent)."""
-        for child in self._children:
-            yield from child._walk_postorder()
+        for child in self.iter_children(edge_kinds):
+            yield from child._walk_postorder(edge_kinds)
         yield self
 
-    def _walk_level(self) -> Iterator[GraphNode]:
+    def _walk_level(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Level-order (breadth-first) traversal."""
         queue: deque[GraphNode] = deque([self])
         while queue:
             node = queue.popleft()
             yield node
-            queue.extend(node._children)
+            queue.extend(node.iter_children(edge_kinds))
 
-    def ancestors(self) -> Iterator[GraphNode]:
+    # Implements: REQ-d00127-C
+    def ancestors(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Iterate up through all ancestor paths (BFS).
 
         For DAG structures, visits each unique ancestor once.
+
+        Args:
+            edge_kinds: If provided, only traverse parents reachable
+                via incoming edges of these kinds. If None, traverse
+                all parents.
 
         Yields:
             Ancestor GraphNode instances.
         """
         visited: set[str] = set()
-        queue: deque[GraphNode] = deque(self._parents)
+        queue: deque[GraphNode] = deque(self.iter_parents(edge_kinds))
         while queue:
             node = queue.popleft()
             if node.id not in visited:
                 visited.add(node.id)
                 yield node
-                queue.extend(node._parents)
+                queue.extend(node.iter_parents(edge_kinds))
+
+    # Implements: REQ-d00127-D
+    def file_node(self) -> GraphNode | None:
+        """Walk incoming edges upward to find the nearest FILE ancestor.
+
+        Traversal path depends on node position:
+        - Top-level content (REQUIREMENT, file-level REMAINDER):
+          one hop via incoming CONTAINS edge to FILE.
+        - ASSERTION or REMAINDER section: two hops -- incoming
+          STRUCTURES edge to REQUIREMENT, then incoming CONTAINS
+          edge to FILE.
+        - INSTANCE node: returns None (no CONTAINS edge).
+
+        Returns:
+            The nearest FILE ancestor, or None if not found.
+        """
+        visited: set[str] = set()
+        queue: deque[GraphNode] = deque(self._parents)
+        while queue:
+            node = queue.popleft()
+            if node.id in visited:
+                continue
+            visited.add(node.id)
+            if node.kind == NodeKind.FILE:
+                return node
+            queue.extend(node._parents)
+        return None
 
     def find(self, predicate: Callable[[GraphNode], bool]) -> Iterator[GraphNode]:
         """Find all descendants matching predicate.

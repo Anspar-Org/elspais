@@ -81,8 +81,8 @@ def scoped_graph():
     ops_data.link(dev_pipeline, EdgeKind.IMPLEMENTS)
 
     # Attach assertions as children of OPS-auth
-    ops_auth.add_child(assert_a)
-    ops_auth.add_child(assert_b)
+    ops_auth.link(assert_a, EdgeKind.STRUCTURES)
+    ops_auth.link(assert_b, EdgeKind.STRUCTURES)
 
     graph._roots = [prd_root]
     graph._index = {

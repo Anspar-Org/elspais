@@ -52,7 +52,7 @@ def mutation_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A", "text": "SHALL encrypt all data at rest"}
-    prd_node.add_child(assertion_a)
+    prd_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -60,7 +60,7 @@ def mutation_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B", "text": "SHALL use TLS 1.3 for transit"}
-    prd_node.add_child(assertion_b)
+    prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Create OPS requirement that implements PRD
     ops_node = GraphNode(

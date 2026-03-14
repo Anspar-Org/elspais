@@ -499,3 +499,28 @@ FILE nodes are the foundation for representing source files as first-class graph
    by_level = count_by_level(self.graph)
    by_repo = count_by_repo(self.graph)
    ```
+
+## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+GraphNode SHALL use edge-only relationships (via `link()`) and support filtered traversal by edge kind, eliminating the edge-less `add_child()` mechanism.
+
+## Assertions
+
+A. `GraphNode` SHALL NOT have an `add_child()` method. All parent-child relationships SHALL be created via `link()` with a typed `EdgeKind`.
+
+B. `GraphNode.remove_child()` SHALL be renamed to `unlink()`, retaining identical behavior: severs all edges between two nodes and removes cache entries.
+
+C. `iter_children()`, `iter_parents()`, `walk()`, and `ancestors()` SHALL accept an optional `edge_kinds` parameter. When provided, only nodes reachable via the specified edge kinds are returned. When `None` (default), all nodes are returned (backwards compatible).
+
+D. `GraphNode.file_node()` SHALL walk incoming edges upward to find the nearest ancestor with `kind == NodeKind.FILE`, returning `None` if no FILE ancestor exists.
+
+E. TEST_RESULT nodes SHALL be linked from TEST nodes via `EdgeKind.YIELDS` (TEST -> TEST_RESULT direction), not via `EdgeKind.CONTAINS`.
+
+## Rationale
+
+Eliminating `add_child()` ensures every relationship in the graph has a typed edge, enabling filtered traversal. The `file_node()` convenience method provides efficient navigation to FILE ancestors. Renaming `remove_child()` to `unlink()` creates API symmetry with `link()`. The YIELDS edge kind correctly models the TEST->TEST_RESULT relationship.
+
+*End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 12964863
+---

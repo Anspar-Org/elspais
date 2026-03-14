@@ -114,10 +114,10 @@ class TestAddEdge:
 
         # Check edge has assertion targets
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert len(edges) == 1
-        assert "A" in edges[0].assertion_targets
-        assert "B" in edges[0].assertion_targets
+        impl_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(impl_edges) == 1
+        assert "A" in impl_edges[0].assertion_targets
+        assert "B" in impl_edges[0].assertion_targets
 
     def test_add_edge_source_not_found(self):
         """Adding edge with non-existent source raises KeyError."""
@@ -316,8 +316,9 @@ class TestChangeEdgeKind:
 
         # Edge still has assertion targets
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert "A" in edges[0].assertion_targets
+        refines_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.REFINES]
+        assert len(refines_edges) == 1
+        assert "A" in refines_edges[0].assertion_targets
 
     def test_change_edge_kind_logs_mutation(self):
         """Change edge kind is logged."""
@@ -464,9 +465,9 @@ class TestDeleteEdge:
         graph.undo_last()
 
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert len(edges) == 1
-        assert "A" in edges[0].assertion_targets
+        impl_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(impl_edges) == 1
+        assert "A" in impl_edges[0].assertion_targets
 
     def test_delete_edge_undo_removes_orphan_status(self):
         """Undo removes orphan status if node became orphan after delete."""

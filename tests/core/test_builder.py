@@ -559,7 +559,7 @@ class TestGeneralizedOrphanDetection:
         assert "test:tests/test_foo.py::test_something" not in orphan_ids
 
     def test_result_without_parent_test_is_orphan(self):
-        """TEST_RESULT whose CONTAINS target doesn't exist is an orphan + broken ref."""
+        """TEST_RESULT whose YIELDS target doesn't exist is an orphan + broken ref."""
         graph = build_graph(
             make_test_result(
                 "result-orphan",
@@ -623,7 +623,7 @@ class TestGeneralizedOrphanDetection:
         assert "REQ-o00001" not in orphan_ids
 
     def test_result_linked_to_existing_test_not_orphan(self):
-        """TEST_RESULT with resolved CONTAINS edge is not an orphan."""
+        """TEST_RESULT with resolved YIELDS edge is not an orphan."""
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
@@ -710,7 +710,7 @@ class TestGeneralizedOrphanDetection:
                 source_path="tests/test_standalone.py",
                 function_name="test_standalone_func",
             ),
-            # Create a TEST_RESULT that links to the TEST via CONTAINS
+            # Create a TEST_RESULT that links to the TEST via YIELDS
             make_test_result(
                 "result-standalone",
                 status="passed",

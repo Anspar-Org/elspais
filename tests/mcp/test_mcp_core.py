@@ -27,6 +27,7 @@ import pytest
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -57,7 +58,7 @@ def sample_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A"}
-    prd_node.add_child(assertion_a)
+    prd_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -65,7 +66,7 @@ def sample_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B"}
-    prd_node.add_child(assertion_b)
+    prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Create OPS requirement that implements PRD
     ops_node = GraphNode(
@@ -92,8 +93,6 @@ def sample_graph():
     }
 
     # Link the hierarchy: PRD <- OPS <- DEV
-    from elspais.graph.relations import EdgeKind
-
     prd_node.link(ops_node, EdgeKind.IMPLEMENTS)
     ops_node.link(dev_node, EdgeKind.IMPLEMENTS)
 
@@ -1170,9 +1169,9 @@ class TestRoundTripFidelity:
         assertion_b._content = {"label": "B"}
 
         # Add children in document order (section at line 14, then assertions at 20, 21)
-        prd_node.add_child(section_node)
-        prd_node.add_child(assertion_a)
-        prd_node.add_child(assertion_b)
+        prd_node.link(section_node, EdgeKind.STRUCTURES)
+        prd_node.link(assertion_a, EdgeKind.STRUCTURES)
+        prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
         # OPS requirement implementing PRD
         ops_node = GraphNode(

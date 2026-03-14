@@ -309,7 +309,7 @@ class TraceGraph:
             self._roots = [r for r in self._roots if r.id != node_id]
             # Remove edges
             for parent in list(node.iter_parents()):
-                parent.remove_child(node)
+                parent.unlink(node)
 
     def _undo_delete_requirement(self, entry: MutationEntry) -> None:
         """Undo a delete requirement operation (restore the node)."""
@@ -411,7 +411,7 @@ class TraceGraph:
                 # Remove the edge that was created
                 new_target = self._index.get(new_target_id)
                 if source and new_target:
-                    new_target.remove_child(source)
+                    new_target.unlink(source)
             else:
                 # Remove from broken references (with new target)
                 self._broken_references = [
@@ -439,7 +439,7 @@ class TraceGraph:
         if assertion_id in self._index:
             node = self._index.pop(assertion_id)
             for parent in list(node.iter_parents()):
-                parent.remove_child(node)
+                parent.unlink(node)
                 # Restore parent hash (even if None)
                 if "parent_hash" in entry.before_state:
                     parent.set_field("hash", entry.before_state["parent_hash"])
@@ -483,7 +483,7 @@ class TraceGraph:
                 parent_id = entry.before_state.get("parent_id")
                 if parent_id and parent_id in self._index:
                     parent = self._index[parent_id]
-                    parent.add_child(node)
+                    parent.link(node, EdgeKind.STRUCTURES)
                     # Restore parent hash (even if None)
                     if "parent_hash" in entry.before_state:
                         parent.set_field("hash", entry.before_state["parent_hash"])
@@ -813,7 +813,7 @@ class TraceGraph:
 
         # Disconnect from parents
         for parent in list(node.iter_parents()):
-            parent.remove_child(node)
+            parent.unlink(node)
 
         # Mark children as orphans (except assertions which go with the req)
         for child in list(node.iter_children()):
@@ -824,7 +824,7 @@ class TraceGraph:
                     self._deleted_nodes.append(child)
             else:
                 # Non-assertion children become orphans
-                node.remove_child(child)
+                node.unlink(child)
                 self._orphaned_ids.add(child.id)
 
         self._mutation_log.append(entry)
@@ -1148,7 +1148,7 @@ class TraceGraph:
 
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
-        parent.add_child(assertion_node)
+        parent.link(assertion_node, EdgeKind.STRUCTURES)
 
         # Update body_text to include new assertion
         body_text = parent.get_field("body_text", "")
@@ -1230,7 +1230,7 @@ class TraceGraph:
 
         # Remove from index first
         self._index.pop(assertion_id)
-        parent.remove_child(node)
+        parent.unlink(node)
         self._deleted_nodes.append(node)
 
         # Remove edges referencing this assertion
@@ -1778,7 +1778,7 @@ class GraphBuilder:
         # Add children in document order (sorted by line number)
         children_with_lines.sort(key=lambda x: x[0])
         for _line, child_node in children_with_lines:
-            node.add_child(child_node)
+            node.link(child_node, EdgeKind.STRUCTURES)
 
         # Queue implements/refines links for later resolution
         for impl_ref in data.get("implements", []):
@@ -1924,7 +1924,7 @@ class GraphBuilder:
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
 
-        Creates a TEST_RESULT node and queues a CONTAINS edge to the
+        Creates a TEST_RESULT node and queues a YIELDS edge to the
         referenced TEST node (via test_id). Does NOT auto-create TEST
         nodes — if test_id doesn't exist at link resolution time, it
         becomes a broken reference (same as Implements: REQ-nonexistent).
@@ -1968,7 +1968,8 @@ class GraphBuilder:
 
         # Queue edge to parent TEST node if test_id is provided
         if test_id:
-            self._pending_links.append((result_id, test_id, EdgeKind.CONTAINS))
+            # Implements: REQ-d00127-E
+            self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
 
     def _add_remainder(self, content: ParsedContent) -> None:
         """Add a remainder/unclaimed content node."""
@@ -2165,7 +2166,7 @@ class GraphBuilder:
                     for parent in orig.iter_parents():
                         parent_clone = clone_map.get(parent.id)
                         if parent_clone:
-                            parent_clone.add_child(clone)
+                            parent_clone.link(clone, EdgeKind.STRUCTURES)
 
             # SATISFIES edge from declaring REQ to cloned root
             cloned_root = clone_map.get(template_id)

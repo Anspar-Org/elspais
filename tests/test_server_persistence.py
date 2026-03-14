@@ -123,7 +123,7 @@ def _build_graph_with_spec(
         source=SourceLocation(path=rel_path, line=7),
     )
     assertion_a._content = {"label": "A"}
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-t00001-B",
@@ -132,7 +132,7 @@ def _build_graph_with_spec(
         source=SourceLocation(path=rel_path, line=8),
     )
     assertion_b._content = {"label": "B"}
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Link: REQ-t00001 implements REQ-p00001
     prd_node.link(req_node, EdgeKind.IMPLEMENTS)
@@ -190,7 +190,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
         source=SourceLocation(path=rel_path, line=7),
     )
     a1._content = {"label": "A"}
-    req1.add_child(a1)
+    req1.link(a1, EdgeKind.STRUCTURES)
 
     b1 = GraphNode(
         id="REQ-t00001-B",
@@ -199,7 +199,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
         source=SourceLocation(path=rel_path, line=8),
     )
     b1._content = {"label": "B"}
-    req1.add_child(b1)
+    req1.link(b1, EdgeKind.STRUCTURES)
 
     prd1.link(req1, EdgeKind.IMPLEMENTS)
 
@@ -219,7 +219,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
         source=SourceLocation(path=rel_path, line=19),
     )
     a2._content = {"label": "A"}
-    req2.add_child(a2)
+    req2.link(a2, EdgeKind.STRUCTURES)
 
     prd2.link(req2, EdgeKind.IMPLEMENTS)
 
@@ -799,7 +799,7 @@ def _build_refines_graph(
         source=SourceLocation(path=rel_path, line=7),
     )
     a1._content = {"label": "A"}
-    req.add_child(a1)
+    req.link(a1, EdgeKind.STRUCTURES)
 
     # IMPLEMENTS edge
     prd1.link(req, EdgeKind.IMPLEMENTS)
@@ -956,7 +956,7 @@ class TestReplayDeleteAssertion:
             source=SourceLocation(path=str(spec_file.relative_to(tmp_path)), line=9),
         )
         assertion_c._content = {"label": "C"}
-        graph._index["REQ-t00001"].add_child(assertion_c)
+        graph._index["REQ-t00001"].link(assertion_c, EdgeKind.STRUCTURES)
         graph._index["REQ-t00001-C"] = assertion_c
 
         # Delete assertion A (should compact: B→A, C→B)

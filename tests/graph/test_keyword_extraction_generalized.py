@@ -11,6 +11,7 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -40,7 +41,7 @@ def multi_kind_graph():
     )
     assertion_a._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = assertion_a
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     # USER_JOURNEY node
     journey = GraphNode(

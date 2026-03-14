@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.relations import EdgeKind
 from elspais.pdf.assembler import MarkdownAssembler
 
 # ---------------------------------------------------------------------------
@@ -178,7 +179,7 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
     )
     prd_assert._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = prd_assert
-    prd.add_child(prd_assert)
+    prd.link(prd_assert, EdgeKind.STRUCTURES)
 
     # Rationale section child of PRD
     rationale = GraphNode(
@@ -193,7 +194,7 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         "order": 0,
     }
     graph._index["REQ-p00001:section:0"] = rationale
-    prd.add_child(rationale)
+    prd.link(rationale, EdgeKind.STRUCTURES)
 
     # DEV requirement in dev-login.md (child of PRD, depth 1)
     dev = GraphNode(
@@ -208,7 +209,7 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         "hash": "bbb22222",
     }
     graph._index["REQ-d00001"] = dev
-    prd.add_child(dev)
+    prd.link(dev, EdgeKind.STRUCTURES)
 
     # DEV assertion
     dev_assert = GraphNode(
@@ -219,7 +220,7 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
     )
     dev_assert._content = {"label": "A"}
     graph._index["REQ-d00001-A"] = dev_assert
-    dev.add_child(dev_assert)
+    dev.link(dev_assert, EdgeKind.STRUCTURES)
 
     # Second DEV requirement in dev-session.md (also depth 1)
     dev2 = GraphNode(
@@ -234,7 +235,7 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         "hash": "ccc33333",
     }
     graph._index["REQ-d00002"] = dev2
-    prd.add_child(dev2)
+    prd.link(dev2, EdgeKind.STRUCTURES)
 
     return graph
 
@@ -258,7 +259,7 @@ def _make_overview_graph(base_dir: Path | None = None) -> TraceGraph:
     ops._content = {"level": "OPS", "status": "Active", "hash": "ddd44444"}
     graph._index["REQ-o00001"] = ops
     prd = graph.find_by_id("REQ-p00001")
-    prd.add_child(ops)
+    prd.link(ops, EdgeKind.STRUCTURES)
 
     # Associated-repo PRD (root, depth 0) — detected by namespace pattern
     assoc = GraphNode(
@@ -503,7 +504,7 @@ class TestOverviewMode:
         prd2._content = {"level": "PRD", "status": "Active", "hash": "fff66666"}
         graph._index["REQ-p00002"] = prd2
         prd = graph.find_by_id("REQ-p00001")
-        prd.add_child(prd2)
+        prd.link(prd2, EdgeKind.STRUCTURES)
 
         # max_depth=1 means only depth 0
         asm = MarkdownAssembler(graph, overview=True, max_depth=1)
