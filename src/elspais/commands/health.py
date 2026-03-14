@@ -982,29 +982,39 @@ def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
-_ALL_STATUSES = {"Active", "Draft", "Deprecated", "Superseded", "Proposed"}
-
-
-def _resolve_exclude_status(args: argparse.Namespace) -> set[str]:
+def _resolve_exclude_status(
+    args: argparse.Namespace,
+    config: dict[str, Any] | None = None,
+) -> set[str]:
     """Compute the set of statuses to exclude from coverage.
 
     If --status is provided, include only those statuses (case-insensitive).
-    Otherwise, default to excluding Draft and Deprecated.
+    Otherwise, use status_roles config to determine exclusions.
     """
+    from elspais.config import get_status_roles
+
+    roles = get_status_roles(config or {})
     include_raw: list[str] | None = getattr(args, "status", None)
     if not include_raw:
-        return {"Draft", "Deprecated"}
-    # Normalise to title-case for matching
+        return roles.coverage_excluded_statuses()
+    # --status flag: include only listed statuses, exclude all others
     included = {s.title() for s in include_raw}
-    return _ALL_STATUSES - included
+    all_known = roles.coverage_excluded_statuses() | set(roles._original_case.values())
+    return all_known - included
 
 
-def _excluded_note(graph: TraceGraph, exclude_status: set[str] | None = None) -> str:
+def _excluded_note(
+    graph: TraceGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
     """Build a note about excluded requirements."""
     from elspais.graph import NodeKind
 
     if exclude_status is None:
-        exclude_status = {"Draft", "Deprecated"}
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     counts: dict[str, int] = {}
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if n.status in exclude_status:
@@ -1015,13 +1025,19 @@ def _excluded_note(graph: TraceGraph, exclude_status: set[str] | None = None) ->
     return f" [{', '.join(parts)} excluded]"
 
 
-def check_code_coverage(graph: TraceGraph, exclude_status: set[str] | None = None) -> HealthCheck:
+def check_code_coverage(
+    graph: TraceGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
     from elspais.graph.annotators import count_with_code_refs
 
     if exclude_status is None:
-        exclude_status = {"Draft", "Deprecated"}
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
     coverage = count_with_code_refs(graph, exclude_status=exclude_status)
     note = _excluded_note(graph, exclude_status)
@@ -1195,12 +1211,18 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_test_coverage(graph: TraceGraph, exclude_status: set[str] | None = None) -> HealthCheck:
+def check_test_coverage(
+    graph: TraceGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
     """Check test coverage statistics."""
     from elspais.graph import NodeKind
 
     if exclude_status is None:
-        exclude_status = {"Draft", "Deprecated"}
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
     req_count = sum(
         1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in exclude_status
@@ -1282,7 +1304,8 @@ def render_section(
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
-        exclude_status = _resolve_exclude_status(args)
+        raw_config = config.get_raw() if config else {}
+        exclude_status = _resolve_exclude_status(args, config=raw_config)
         for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status):
@@ -1385,7 +1408,8 @@ def run(args: argparse.Namespace) -> int:
             report.add(check)
 
     # Code checks
-    exclude_status = _resolve_exclude_status(args)
+    raw_config = config.get_raw() if config else {}
+    exclude_status = _resolve_exclude_status(args, config=raw_config)
     if run_code and graph:
         for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
