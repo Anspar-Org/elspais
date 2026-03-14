@@ -1247,7 +1247,9 @@ def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> d
     if graph is None:
         return {"error": "graph not available"}
 
-    exclude = {"Draft"}
+    from elspais.config import get_status_roles
+
+    exclude = get_status_roles(config).coverage_excluded_statuses()
     return {
         "by_coverage": count_by_coverage(graph, exclude_status=exclude),
         "by_level": count_by_level(graph, config=config),
@@ -1557,7 +1559,10 @@ def _get_project_summary(
     """
     # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph, config=config)
-    coverage_stats = count_by_coverage(graph, exclude_status={"Draft"})
+    from elspais.config import get_status_roles
+
+    coverage_exclude = get_status_roles(config or {}).coverage_excluded_statuses()
+    coverage_stats = count_by_coverage(graph, exclude_status=coverage_exclude)
     # Annotate git state before counting (idempotent, safe to call multiple times)
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
