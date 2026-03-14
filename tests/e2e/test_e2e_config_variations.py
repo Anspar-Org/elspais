@@ -657,3 +657,52 @@ class TestAllowOrphansConfig:
         assert orphan_check is not None, "Orphan check should exist"
         # The check ran (not skipped) — message should NOT mention "skipped"
         assert "skipped" not in orphan_check["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Test: status_roles controls coverage exclusion
+# ---------------------------------------------------------------------------
+
+
+class TestStatusRolesConfig:
+    """Config: status_roles controls what is counted in coverage."""
+
+    def test_proposed_excluded_from_summary(self, tmp_path):
+        """Proposed (provisional role) should be excluded from summary counts."""
+        cfg = base_config(name="roles-test", allow_orphans=True)
+        cfg["rules"]["format"]["allowed_statuses"] = [
+            "Active",
+            "Draft",
+            "Deprecated",
+            "Proposed",
+        ]
+        cfg["rules"]["format"]["status_roles"] = {
+            "active": ["Active"],
+            "provisional": ["Draft", "Proposed"],
+            "retired": ["Deprecated"],
+        }
+        active = Requirement(
+            "REQ-p00001",
+            "Active Feature",
+            "PRD",
+            assertions=[("A", "The system SHALL be active.")],
+        )
+        proposed = Requirement(
+            "REQ-p00002",
+            "Proposed Feature",
+            "PRD",
+            status="Proposed",
+            assertions=[("A", "The system SHALL be proposed.")],
+        )
+        build_project(
+            tmp_path,
+            cfg,
+            spec_files={"spec/prd.md": [active, proposed]},
+        )
+
+        result = run_elspais("summary", "--format", "json", cwd=tmp_path)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
+        # Proposed is provisional -> excluded from coverage
+        assert total == 1, f"Expected 1 (Proposed excluded), got {total}"
