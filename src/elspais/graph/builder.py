@@ -1831,6 +1831,11 @@ class GraphBuilder:
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
         }
+        # Extract rationale from sections for format validation (require_rationale)
+        for section in data.get("sections", []):
+            if section.get("heading", "").lower() == "rationale":
+                node._content["rationale"] = section.get("content", "")
+                break
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
 
