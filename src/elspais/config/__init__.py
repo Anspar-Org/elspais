@@ -54,6 +54,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "test_dirs": ["tests"],
         "patterns": ["test_*.py", "*_test.py"],
         "result_files": [],
+        "run_meta_file": "",
         "reference_patterns": [],
         "reference_keyword": "Validates",
     },

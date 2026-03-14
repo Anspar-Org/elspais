@@ -1138,17 +1138,53 @@ def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_test_results(graph: TraceGraph) -> HealthCheck:
+def _read_run_meta(config: dict | None) -> dict:
+    """Read test-run metadata sidecar (deselected counts, runner info).
+
+    Returns a dict with at least {"deselected_count": 0, "runner": ""}.
+    The sidecar JSON format is test-runner agnostic — any runner can produce it.
+    """
+    import json
+    from pathlib import Path
+
+    defaults = {"deselected_count": 0, "runner": ""}
+    meta_file = (config or {}).get("testing", {}).get("run_meta_file", "")
+    if not meta_file:
+        return defaults
+    meta_path = Path(meta_file)
+    if not meta_path.exists():
+        return defaults
+    try:
+        data = json.loads(meta_path.read_text())
+        return {
+            "deselected_count": data.get("deselected_count", 0),
+            "runner": data.get("runner", ""),
+        }
+    except (json.JSONDecodeError, OSError):
+        return defaults
+
+
+def check_test_results(graph: TraceGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output."""
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.TEST_RESULT))
+    run_meta = _read_run_meta(config)
+    deselected = run_meta["deselected_count"]
 
     if not result_nodes:
+        # Check if result scanning is actually configured
+        result_files = (config or {}).get("testing", {}).get("result_files", [])
+        if not result_files:
+            message = "No result files configured"
+        else:
+            message = (
+                f"No test results found ({len(result_files)} result path(s) configured but empty)"
+            )
         return HealthCheck(
             name="tests.results",
             passed=True,
-            message="No test results found (result scanning may be disabled)",
+            message=message,
             category="tests",
             severity="info",
         )
@@ -1168,6 +1204,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
 
     total = passed + failed + skipped
     pass_rate = (passed / total * 100) if total > 0 else 0
+    deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
         findings = [
@@ -1184,7 +1221,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
             passed=False,
             message=(
                 f"Test failures: {passed} passed, {failed} failed, "
-                f"{skipped} skipped ({pass_rate:.1f}% pass rate)"
+                f"{skipped} skipped{deselected_suffix} ({pass_rate:.1f}% pass rate)"
             ),
             category="tests",
             severity="warning",
@@ -1192,6 +1229,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
                 "passed": passed,
                 "failed": failed,
                 "skipped": skipped,
+                "deselected": deselected,
                 "pass_rate": round(pass_rate, 1),
             },
             findings=findings,
@@ -1200,12 +1238,13 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All tests passing: {passed} passed, {skipped} skipped",
+        message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
         details={
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
+            "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
     )
@@ -1263,11 +1302,13 @@ def check_test_coverage(
     )
 
 
-def run_test_checks(graph: TraceGraph, exclude_status: set[str] | None = None) -> list[HealthCheck]:
+def run_test_checks(
+    graph: TraceGraph, exclude_status: set[str] | None = None, config: dict | None = None
+) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
         check_test_references_resolve(graph),
-        check_test_results(graph),
+        check_test_results(graph, config=config),
         check_test_coverage(graph, exclude_status=exclude_status),
     ]
 
@@ -1308,7 +1349,7 @@ def render_section(
         exclude_status = _resolve_exclude_status(args, config=raw_config)
         for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
-        for check in run_test_checks(graph, exclude_status=exclude_status):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     output = _format_report(report, args)
@@ -1416,7 +1457,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Test checks
     if run_tests and graph:
-        for check in run_test_checks(graph, exclude_status=exclude_status):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     return _output_report(report, args)

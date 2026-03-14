@@ -44,3 +44,4 @@ test_dirs = ["tests"]
 patterns = ["test_*.py", "*_test.py"]
 reference_keyword = "Validates"
 result_files = ["test-results.xml"]
+run_meta_file = "test-run-meta.json"
