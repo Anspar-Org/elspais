@@ -1670,6 +1670,19 @@ class GraphBuilder:
         self._orphan_candidates: set[str] = set()
         self._broken_references: list[BrokenReference] = []
 
+    # Implements: REQ-d00128-D
+    def register_file_node(self, file_node: GraphNode) -> None:
+        """Register a FILE node in the builder's node index.
+
+        FILE nodes are created by factory.py and registered here so they
+        appear in the final graph index. They are NOT added to orphan
+        candidates — FILE nodes are always parentless but not orphans.
+
+        Args:
+            file_node: A GraphNode with kind == NodeKind.FILE.
+        """
+        self._nodes[file_node.id] = file_node
+
     def _to_relative_path(self, source_id: str) -> str:
         """Convert an absolute source path to a relative path.
 
@@ -1684,24 +1697,72 @@ class GraphBuilder:
         except ValueError:
             return source_id
 
-    def add_parsed_content(self, content: ParsedContent) -> None:
+    # Implements: REQ-d00128-D
+    def add_parsed_content(
+        self, content: ParsedContent, file_node: GraphNode | None = None
+    ) -> None:
         """Add parsed content to the graph.
 
         Args:
             content: Parsed content from a parser.
+            file_node: Optional FILE node to wire CONTAINS edges from.
         """
         if content.content_type == "requirement":
             self._add_requirement(content)
+            # Wire CONTAINS from FILE to REQUIREMENT (top-level)
+            if file_node is not None:
+                node = self._nodes.get(content.parsed_data.get("id", ""))
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "journey":
             self._add_journey(content)
+            if file_node is not None:
+                node = self._nodes.get(content.parsed_data.get("id", ""))
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "code_ref":
             self._add_code_ref(content)
+            if file_node is not None:
+                source_ctx = getattr(content, "source_context", None)
+                source_id = source_ctx.source_id if source_ctx else "code"
+                code_id = f"code:{source_id}:{content.start_line}"
+                node = self._nodes.get(code_id)
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "test_ref":
             self._add_test_ref(content)
+            if file_node is not None:
+                # Find the test node that was just created
+                data = content.parsed_data
+                source_ctx = getattr(content, "source_context", None)
+                source_id = source_ctx.source_id if source_ctx else "test"
+                func_name = data.get("function_name")
+                class_name = data.get("class_name")
+                if func_name:
+                    rel_path = self._to_relative_path(source_id)
+                    test_id = build_test_id(rel_path, func_name, class_name)
+                else:
+                    test_id = f"test:{source_id}:{content.start_line}"
+                node = self._nodes.get(test_id)
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "test_result":
             self._add_test_result(content)
+            if file_node is not None:
+                node = self._nodes.get(content.parsed_data.get("id", ""))
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "remainder":
             self._add_remainder(content)
+            # Wire CONTAINS from FILE to file-level REMAINDER
+            if file_node is not None:
+                data = content.parsed_data
+                source_ctx = getattr(content, "source_context", None)
+                source_path = source_ctx.source_id if source_ctx else ""
+                remainder_id = data.get("id") or f"rem:{source_path}:{content.start_line}"
+                node = self._nodes.get(remainder_id)
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
 
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
@@ -1993,6 +2054,35 @@ class GraphBuilder:
         )
         node._content = {"text": text}
         self._nodes[remainder_id] = node
+
+    # Implements: REQ-d00128-D
+    def _wire_contains_edge(
+        self, file_node: GraphNode, content_node: GraphNode, content: ParsedContent
+    ) -> None:
+        """Wire a CONTAINS edge from a FILE node to a top-level content node.
+
+        Sets edge metadata with start_line, end_line, and render_order.
+        Tracks render_order per file node, incrementing by 1.0 for each
+        top-level content node.
+
+        Args:
+            file_node: The FILE parent node.
+            content_node: The content node to link.
+            content: The parsed content (for line range info).
+        """
+        # Track render_order per file node
+        order_key = f"_next_render_order:{file_node.id}"
+        current_order = getattr(self, "_render_orders", {}).get(order_key, 0.0)
+        if not hasattr(self, "_render_orders"):
+            self._render_orders: dict[str, float] = {}
+        self._render_orders[order_key] = current_order + 1.0
+
+        edge = file_node.link(content_node, EdgeKind.CONTAINS)
+        edge.metadata = {
+            "start_line": content.start_line,
+            "end_line": content.end_line,
+            "render_order": current_order,
+        }
 
     # Implements: REQ-d00081-D+E+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:

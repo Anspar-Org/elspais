@@ -184,8 +184,12 @@ def run(args: argparse.Namespace) -> int:
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         # Implements: REQ-p00002-B
-        # Check for orphan requirements (no parents except roots)
-        if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
+        # Check for orphan requirements (no traceability parents except roots)
+        # Implements: REQ-d00128-I
+        # FILE parents via CONTAINS edges don't count — orphan detection uses
+        # traceability parents only (IMPLEMENTS, REFINES, etc.)
+        traceability_parents = sum(1 for p in node.iter_parents() if p.kind != NodeKind.FILE)
+        if traceability_parents == 0 and node.level not in ("PRD", "prd"):
             if node.id in has_external_parent:
                 pass  # Cross-repo parent — expected in associate mode
             else:

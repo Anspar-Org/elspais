@@ -1,4 +1,5 @@
 # Implements: REQ-d00054-A
+# Implements: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-G, REQ-d00128-H
 """Graph Factory - Shared utility for building TraceGraph from spec files.
 
 This module provides a single entry point for all commands to build a TraceGraph
@@ -23,14 +24,78 @@ from elspais.config import (
 )
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.deserializer import DomainFile
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
+from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from elspais.utilities.reference_config import ReferenceResolver
+
+
+# Implements: REQ-d00128-C
+def _capture_git_info(repo_root: Path) -> tuple[str | None, str | None]:
+    """Capture git branch and commit once per repo.
+
+    Args:
+        repo_root: Path to repository root.
+
+    Returns:
+        Tuple of (git_branch, git_commit), both may be None.
+    """
+    try:
+        from elspais.utilities.git import get_current_branch, get_current_commit
+
+        return get_current_branch(repo_root), get_current_commit(repo_root)
+    except Exception:
+        return None, None
+
+
+# Implements: REQ-d00128-A, REQ-d00128-B
+def _create_file_node(
+    file_path: Path,
+    repo_root: Path,
+    file_type: FileType,
+    repo: str | None,
+    git_branch: str | None,
+    git_commit: str | None,
+) -> GraphNode:
+    """Create a FILE node for a scanned file.
+
+    Args:
+        file_path: Absolute path to the file.
+        repo_root: Repository root for computing relative path.
+        file_type: The FileType classification.
+        repo: Repository identifier (None for main project).
+        git_branch: Current git branch (captured once per repo).
+        git_commit: Current git commit (captured once per repo).
+
+    Returns:
+        A GraphNode with kind == NodeKind.FILE.
+    """
+    try:
+        rel_path = str(file_path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        rel_path = str(file_path)
+
+    file_id = f"file:{rel_path}"
+    node = GraphNode(
+        id=file_id,
+        kind=NodeKind.FILE,
+        label=file_path.name,
+    )
+    node._content = {
+        "file_type": file_type,
+        "absolute_path": str(file_path.resolve()),
+        "relative_path": rel_path,
+        "repo": repo,
+        "git_branch": git_branch,
+        "git_commit": git_commit,
+    }
+    return node
 
 
 def _build_resolver(config: dict[str, Any]) -> IdResolver:
@@ -139,6 +204,8 @@ def _resolve_spec_dir_config(
     registry.register(JourneyParser())
     registry.register(CodeParser(resolver, reference_resolver))
     registry.register(TestParser(resolver, reference_resolver))
+    # Implements: REQ-d00128-G
+    registry.register(RemainderParser())
 
     spec_config = repo_config.get("spec", {})
     return SpecDirConfig(
@@ -216,13 +283,17 @@ def build_graph(
     default_resolver = _build_resolver(config)
     default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
-    # Registry for code files (code parser only)
+    # Implements: REQ-d00128-G
+    # Registry for code files (code parser + remainder)
     code_registry = ParserRegistry()
     code_registry.register(CodeParser(default_resolver, default_reference_resolver))
+    code_registry.register(RemainderParser())
 
-    # Registry for test files (test parser only)
+    # Implements: REQ-d00128-G
+    # Registry for test files (test parser + remainder)
     test_registry = ParserRegistry()
     test_registry.register(TestParser(default_resolver, default_reference_resolver))
+    test_registry.register(RemainderParser())
 
     # 4. Build graph from all spec directories
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
@@ -242,6 +313,28 @@ def build_graph(
     # Get ignore configuration for code/test scanning (main project only)
     default_ignore_config = get_ignore_config(config)
 
+    # Implements: REQ-d00128-C
+    # Capture git info once per repo
+    git_branch, git_commit = _capture_git_info(repo_root)
+
+    # Track FILE nodes created to avoid duplicates
+    file_nodes: dict[str, GraphNode] = {}  # resolved_path -> FILE node
+
+    def _get_or_create_file_node(
+        source_path: Path,
+        file_type: FileType,
+        file_repo: str | None = None,
+    ) -> GraphNode:
+        """Get or create a FILE node for the given source path."""
+        resolved = str(source_path.resolve())
+        if resolved not in file_nodes:
+            fn = _create_file_node(
+                source_path, repo_root, file_type, file_repo, git_branch, git_commit
+            )
+            file_nodes[resolved] = fn
+            builder.register_file_node(fn)
+        return file_nodes[resolved]
+
     for spec_dir in spec_dirs:
         # Resolve full scan config for this spec dir from its own .elspais.toml
         dir_config = _resolve_spec_dir_config(spec_dir)
@@ -259,7 +352,12 @@ def build_graph(
             source_path = parsed_content.source_context.metadata.get("path")
             if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
                 continue
-            builder.add_parsed_content(parsed_content)
+            # Implements: REQ-d00128-A
+            # Create FILE node for this spec file
+            file_node = None
+            if source_path:
+                file_node = _get_or_create_file_node(Path(source_path), FileType.SPEC)
+            builder.add_parsed_content(parsed_content, file_node=file_node)
 
     # 5. Scan code files from [traceability].scan_patterns AND [directories].code
     if scan_code:
@@ -277,9 +375,11 @@ def build_graph(
                 if path.is_file():
                     resolved = str(path.resolve())
                     scanned_code_files.add(resolved)
+                    # Implements: REQ-d00128-A
+                    fn = _get_or_create_file_node(path, FileType.CODE)
                     domain_file = DomainFile(path)
                     for parsed_content in domain_file.deserialize(code_registry):
-                        builder.add_parsed_content(parsed_content)
+                        builder.add_parsed_content(parsed_content, file_node=fn)
 
         # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
@@ -309,7 +409,11 @@ def build_graph(
                             skip_files.add(resolved)
                     if resolved in skip_files:
                         continue
-                builder.add_parsed_content(parsed_content)
+                # Implements: REQ-d00128-A
+                fn = None
+                if source_path:
+                    fn = _get_or_create_file_node(Path(source_path), FileType.CODE)
+                builder.add_parsed_content(parsed_content, file_node=fn)
 
     # 6. Scan test directories from testing config
     if scan_tests:
@@ -330,12 +434,16 @@ def build_graph(
                             recursive=True,
                         )
                         for parsed_content in domain_file.deserialize(test_registry):
-                            builder.add_parsed_content(parsed_content)
+                            # Implements: REQ-d00128-A
+                            source_path = parsed_content.source_context.metadata.get("path")
+                            fn = None
+                            if source_path:
+                                fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
+                            builder.add_parsed_content(parsed_content, file_node=fn)
 
             # 6b. Scan test result files (JUnit XML, pytest JSON)
-            # Uses standard pipeline: result parsers implement claim_and_parse()
-            # Each file type gets its own registry since result parsers consume
-            # the entire file content (not individual lines).
+            # Implements: REQ-d00128-H
+            # RemainderParser is NOT registered for RESULT file types
             result_files = testing_config.get("result_files", [])
             if result_files:
                 xml_registry = ParserRegistry()
@@ -368,9 +476,11 @@ def build_graph(
                             registry = json_registry
                         else:
                             continue
+                        # Implements: REQ-d00128-A
+                        fn = _get_or_create_file_node(path, FileType.RESULT)
                         domain_file = DomainFile(path)
                         for parsed_content in domain_file.deserialize(registry):
-                            builder.add_parsed_content(parsed_content)
+                            builder.add_parsed_content(parsed_content, file_node=fn)
 
     graph = builder.build()
 

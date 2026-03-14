@@ -524,3 +524,36 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 *End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 12964863
 ---
+
+## REQ-d00128: FILE Node Creation in Build Pipeline
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+The build pipeline SHALL create FILE nodes for every scanned file and wire CONTAINS edges from FILE to top-level content nodes, with RemainderParser mandatory for text-based file types.
+
+## Assertions
+
+A. `factory.py` SHALL create a FILE node with ID `file:<repo-relative-path>` for every scanned file before parsing its content.
+
+B. FILE node content fields SHALL include: `file_type` (FileType enum), `absolute_path` (str), `relative_path` (str), `repo` (str or None), `git_branch` (str or None), `git_commit` (str or None).
+
+C. `git_branch` and `git_commit` SHALL be captured once per repository, not per file.
+
+D. `GraphBuilder.add_parsed_content()` SHALL accept an optional `file_node` parameter and wire CONTAINS edges from the FILE node to top-level content nodes (REQUIREMENT, USER_JOURNEY, file-level REMAINDER, CODE, TEST).
+
+E. CONTAINS edge metadata SHALL include `start_line` (int), `end_line` (int or None), and `render_order` (float, sequential from 0.0).
+
+F. ASSERTION and requirement-level REMAINDER nodes SHALL NOT receive CONTAINS edges from FILE; they are reached via STRUCTURES edges from their parent REQUIREMENT.
+
+G. RemainderParser SHALL be mandatory for SPEC, JOURNEY, CODE, and TEST file types, ensuring every line is claimed by some parser.
+
+H. RemainderParser SHALL NOT be registered for RESULT file types.
+
+I. FILE nodes SHALL be additive: existing graph behavior (traceability, coverage, root/orphan detection) SHALL remain unaffected.
+
+## Rationale
+
+FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files.
+
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: 00000000
+---

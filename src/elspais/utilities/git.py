@@ -426,6 +426,30 @@ def get_current_branch(repo_root: Path) -> str | None:
         return None
 
 
+# Implements: REQ-d00128-C
+def get_current_commit(repo_root: Path) -> str | None:
+    """Get the current git commit hash (short form).
+
+    Args:
+        repo_root: Path to repository root
+
+    Returns:
+        Short commit hash, or None if not in a git repo
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip() or None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 # Implements: REQ-p00004-C
 def git_status_summary(
     repo_root: Path,
