@@ -1816,6 +1816,7 @@ class GraphBuilder:
         )
         # Implements: REQ-p00014-C
         # Implements: REQ-d00129-C
+        # Implements: REQ-d00131-B
         node._content = {
             "level": data.get("level"),
             "status": data.get("status"),
@@ -1825,6 +1826,10 @@ class GraphBuilder:
             "stereotype": Stereotype.CONCRETE,
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
+            # Store reference lists for render protocol
+            "implements_refs": data.get("implements", []),
+            "refines_refs": data.get("refines", []),
+            "satisfies_refs": data.get("satisfies", []),
         }
         self._nodes[req_id] = node
         self._orphan_candidates.add(req_id)  # Track as potential orphan
@@ -1946,6 +1951,9 @@ class GraphBuilder:
                 # Implements: REQ-d00129-C
                 node.set_field("parse_line", content.start_line)
                 node.set_field("parse_end_line", content.end_line)
+                # Implements: REQ-d00131-F
+                # Store raw comment text for render protocol
+                node.set_field("raw_text", content.raw_text)
                 # Store function context for TEST→CODE linking
                 if func_name:
                     node.set_field("function_name", func_name)
@@ -1995,6 +2003,9 @@ class GraphBuilder:
             # Implements: REQ-d00129-C
             node.set_field("parse_line", source_line)
             node.set_field("parse_end_line", content.end_line)
+            # Implements: REQ-d00131-G
+            # Store raw comment text for render protocol
+            node.set_field("raw_text", content.raw_text)
             expected_broken = data.get("expected_broken_count", 0)
             if expected_broken > 0:
                 node.set_metric("_expected_broken_count", expected_broken)

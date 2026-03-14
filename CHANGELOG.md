@@ -2,6 +2,19 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.6] - 2026-03-13
+
+### Added
+
+- **Render protocol** -- Each `NodeKind` has a `render_node()` function that produces its text representation, enabling graph-to-file serialization (REQ-d00131-A)
+- **REQUIREMENT rendering** -- Full requirement block rendering: header, metadata line, body text, assertions from STRUCTURES children, named sections, `*End*` marker with hash (REQ-d00131-B)
+- **REMAINDER rendering** -- Raw text rendered verbatim (REQ-d00131-D)
+- **USER_JOURNEY rendering** -- Full journey block rendering from stored body text (REQ-d00131-E)
+- **CODE/TEST rendering** -- Comment line(s) rendered from stored `raw_text` field (REQ-d00131-F, REQ-d00131-G)
+- **FILE rendering** -- `render_file()` walks CONTAINS children sorted by `render_order` edge metadata and concatenates their rendered output (REQ-d00131-I)
+- **Order-independent assertion hashing** -- `compute_requirement_hash()` sorts individual assertion hashes lexicographically before combining, ensuring assertion reorder does not trigger change detection (REQ-d00131-J)
+- **Builder stores render data** -- CODE and TEST nodes now store `raw_text`, REQUIREMENT nodes store `implements_refs`, `refines_refs`, `satisfies_refs` for render protocol
+
 ## [0.104.5] - 2026-03-13
 
 ### Added

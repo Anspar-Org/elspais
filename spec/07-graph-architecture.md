@@ -613,3 +613,38 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 *End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 00000000
 ---
+
+## REQ-d00131: Render Protocol for Graph Nodes
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+Each domain NodeKind SHALL have a render function that produces its text representation. Walking a FILE node's CONTAINS children in render_order and concatenating their rendered output SHALL produce the file's content.
+
+## Assertions
+
+A. Each `NodeKind` SHALL have a `render()` function that returns its text representation as a string, dispatched by kind.
+
+B. `REQUIREMENT` render SHALL produce the full requirement block: header line (`## REQ-xxx: Title`), metadata line, body text, `## Assertions` heading with assertion lines from STRUCTURES children, non-normative sections from STRUCTURES children, and `*End*` marker with hash.
+
+C. `ASSERTION` nodes SHALL be rendered by their parent REQUIREMENT's render function, not independently. Calling render on an ASSERTION directly SHALL raise `ValueError`.
+
+D. `REMAINDER` render SHALL return its raw text verbatim, preserving all whitespace and content exactly as parsed.
+
+E. `USER_JOURNEY` render SHALL produce the full journey block including header, actor/goal fields, body, and end marker.
+
+F. `CODE` render SHALL produce the `# Implements:` comment line(s) as originally parsed.
+
+G. `TEST` render SHALL produce the `# Tests:` or `# Validates:` comment line(s) as originally parsed.
+
+H. `TEST_RESULT` render SHALL raise `ValueError` as test results are read-only and not rendered back to disk.
+
+I. Rendering a FILE node SHALL walk its CONTAINS children sorted by `render_order` edge metadata, call render on each, and concatenate the results with appropriate line separators to produce the complete file content.
+
+J. Requirement hash computation SHALL use order-independent assertion hashing: compute each assertion's normalized text hash individually, sort the hashes lexicographically, then hash the sorted collection into the requirement's final hash.
+
+## Rationale
+
+The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent assertion hashing ensures that assertion reordering does not trigger false change-detection flags.
+
+*End* *Render Protocol for Graph Nodes* | **Hash**: 00000000
+---
