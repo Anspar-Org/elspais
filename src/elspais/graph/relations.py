@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
@@ -52,6 +52,10 @@ class EdgeKind(Enum):
     SATISFIES = "satisfies"
     # Implements: REQ-p00014-C
     INSTANCE = "instance"
+    # Implements: REQ-d00126-C
+    STRUCTURES = "structures"
+    DEFINES = "defines"
+    YIELDS = "yields"
 
     # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:
@@ -84,6 +88,8 @@ class Edge:
     target: GraphNode
     kind: EdgeKind
     assertion_targets: list[str] = field(default_factory=list)
+    # Implements: REQ-d00126-E
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __eq__(self, other: object) -> bool:
         """Check equality based on source, target, and kind."""

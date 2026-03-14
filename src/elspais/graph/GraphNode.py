@@ -31,6 +31,23 @@ class NodeKind(Enum):
     TEST_RESULT = "result"
     USER_JOURNEY = "journey"
     REMAINDER = "remainder"
+    # Implements: REQ-d00126-A
+    FILE = "file"
+
+
+# Implements: REQ-d00126-B
+class FileType(Enum):
+    """Classification of source files by their domain role.
+
+    Determines which domain parser processes the file and what
+    node kinds its content produces.
+    """
+
+    SPEC = "spec"
+    JOURNEY = "journey"
+    CODE = "code"
+    TEST = "test"
+    RESULT = "result"
 
 
 @dataclass

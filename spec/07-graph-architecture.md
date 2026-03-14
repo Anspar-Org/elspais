@@ -376,6 +376,31 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 *End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
 ---
 
+## REQ-d00126: FILE Node Data Model
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+
+The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the traceability graph.
+
+## Assertions
+
+A. `NodeKind` enum SHALL include a `FILE` value with string representation `"file"`.
+
+B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`.
+
+C. `EdgeKind` enum SHALL include `STRUCTURES`, `DEFINES`, and `YIELDS` values for file-aware structural edges.
+
+D. `STRUCTURES`, `DEFINES`, and `YIELDS` edge kinds SHALL NOT contribute to coverage (i.e., `contributes_to_coverage()` returns `False`).
+
+E. `Edge` dataclass SHALL have a `metadata: dict[str, Any]` field defaulting to an empty dict, excluded from `__eq__` and `__hash__` comparisons.
+
+## Rationale
+
+FILE nodes are the foundation for representing source files as first-class graph participants. The new edge kinds (STRUCTURES, DEFINES, YIELDS) enable domain-internal hierarchy, virtual node provenance, and test-result linking. Edge metadata carries mutable annotations (line ranges, render order) without affecting edge identity.
+
+*End* *FILE Node Data Model* | **Hash**: 00000000
+---
+
 ## Architecture Diagram
 
 ```

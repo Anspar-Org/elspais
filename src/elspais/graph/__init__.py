@@ -2,6 +2,7 @@
 
 Exports:
 - NodeKind: Enum of node types
+- FileType: Enum of source file classifications
 - SourceLocation: Portable file location reference
 - GraphNode: Unified node representation
 - Edge: Typed edge between nodes
@@ -17,6 +18,7 @@ Note: TraceGraph is in elspais.graph.builder (use graph.factory.build_graph() to
 
 from elspais.graph.annotators import annotate_coverage
 from elspais.graph.GraphNode import (
+    FileType,
     GraphNode,
     NodeKind,
     SourceLocation,
@@ -26,6 +28,7 @@ from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.relations import Edge, EdgeKind, Stereotype
 
 __all__ = [
+    "FileType",
     "NodeKind",
     "SourceLocation",
     "GraphNode",

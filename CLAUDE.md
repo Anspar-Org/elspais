@@ -40,6 +40,8 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - `elspais[trace-review]`: Flask-based review server
 - `elspais[all]`: All optional features
 - Missing dependencies produce clear installation instructions.
+**NodeKind.FILE**: Represents a source file as a first-class graph node. ID format: `file:<repo-relative-path>`. Content fields include `file_type` (FileType enum), `absolute_path`, `relative_path`, `repo`, `git_branch`, `git_commit`.
+**FileType Enum**: Classifies source files by domain role: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`. Lives in `graph/GraphNode.py` alongside `NodeKind`.
 **NodeKind.REMAINDER**: Unclaimed file content (not requirements).
 **File-Based Documentation** (`elspais docs [topic]`): User documentation loaded from `docs/cli/*.md` files:
 - **Single Source of Truth**: Markdown files in `docs/cli/` are the canonical docs
