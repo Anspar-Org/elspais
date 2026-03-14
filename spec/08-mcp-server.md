@@ -728,6 +728,34 @@ Chaining existing helpers avoids duplicating search or pruning logic and maintai
 
 ---
 
+## REQ-d00133: MCP FILE Node Integration
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00067, REQ-d00060, REQ-d00061
+
+MCP tools SHALL be aware of FILE nodes without exposing them where they do not belong.
+
+## Assertions
+
+A. `_get_subtree()` starting from a FILE node SHALL walk CONTAINS edges (producing the file's physical contents view), using `iter_children(edge_kinds={EdgeKind.CONTAINS})` at each BFS level.
+
+B. `_get_subtree()` starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), using `iter_children(edge_kinds={EdgeKind.IMPLEMENTS, EdgeKind.REFINES, EdgeKind.STRUCTURES})` at each BFS level.
+
+C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
+
+D. `_search()` SHALL NOT return FILE nodes in search results for requirement queries.
+
+E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dict (already satisfied by iterating all NodeKind values).
+
+F. MCP serialization of requirement and assertion nodes SHALL produce identical `file` and `line` fields as before the FILE node migration, using `file_node()` and `parse_line`.
+
+## Rationale
+
+FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
+
+*End* *MCP FILE Node Integration* | **Hash**: ________
+
+---
+
 ## Architecture Diagram
 
 ```text

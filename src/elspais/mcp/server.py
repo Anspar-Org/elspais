@@ -29,6 +29,8 @@
 # Implements: REQ-o00068-E, REQ-o00068-F
 # Implements: REQ-d00076-A, REQ-d00076-B, REQ-d00076-C, REQ-d00076-D
 # Implements: REQ-d00076-E, REQ-d00076-F, REQ-d00076-G
+# Implements: REQ-d00133-A, REQ-d00133-B, REQ-d00133-C, REQ-d00133-D
+# Implements: REQ-d00133-E, REQ-d00133-F
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.
@@ -2778,13 +2780,21 @@ def _apply_link_impl(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Subtree Extraction (REQ-o00067, REQ-d00075)
+# Subtree Extraction (REQ-o00067, REQ-d00075, REQ-d00133)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Conservative kind defaults per root kind (REQ-d00075-F)
+# Conservative kind defaults per root kind (REQ-d00075-F, REQ-d00133-C)
 _SUBTREE_KIND_DEFAULTS: dict[NodeKind, set[NodeKind]] = {
     NodeKind.REQUIREMENT: {NodeKind.REQUIREMENT, NodeKind.ASSERTION},
     NodeKind.USER_JOURNEY: {NodeKind.USER_JOURNEY},
+    NodeKind.FILE: {NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER},
+}
+
+# Implements: REQ-d00133-A, REQ-d00133-B
+# Edge-kind filters per root kind for filtered traversal
+_SUBTREE_EDGE_DEFAULTS: dict[NodeKind, set[EdgeKind]] = {
+    NodeKind.FILE: {EdgeKind.CONTAINS},
+    NodeKind.REQUIREMENT: {EdgeKind.IMPLEMENTS, EdgeKind.REFINES, EdgeKind.STRUCTURES},
 }
 
 
@@ -2829,6 +2839,8 @@ def _collect_subtree(
     REQ-o00067-A: BFS traversal from root.
     REQ-o00067-B: depth=0 means unlimited, depth=N limits to N levels.
     REQ-o00067-E: Deduplicates via visited set.
+    REQ-d00133-A: FILE roots walk CONTAINS edges.
+    REQ-d00133-B: REQUIREMENT roots walk domain edges.
 
     Returns:
         List of (node, depth_level) tuples in BFS order.
@@ -2837,7 +2849,7 @@ def _collect_subtree(
     if root_node is None:
         return []
 
-    # Determine kind filter (REQ-o00067-C, REQ-d00075-F)
+    # Determine kind filter (REQ-o00067-C, REQ-d00075-F, REQ-d00133-C)
     if include_kinds is None:
         include_kinds = _SUBTREE_KIND_DEFAULTS.get(
             root_node.kind,
@@ -2846,6 +2858,9 @@ def _collect_subtree(
         # Always include ASSERTION when REQUIREMENT is present
         if NodeKind.REQUIREMENT in include_kinds:
             include_kinds = include_kinds | {NodeKind.ASSERTION}
+
+    # Determine edge-kind filter (REQ-d00133-A, REQ-d00133-B)
+    edge_filter = _SUBTREE_EDGE_DEFAULTS.get(root_node.kind)
 
     visited: set[str] = {root_id}
     result: list[tuple[Any, int]] = [(root_node, 0)]
@@ -2858,7 +2873,7 @@ def _collect_subtree(
         if depth > 0 and current_depth >= depth:
             continue
 
-        for child in current.iter_children():
+        for child in current.iter_children(edge_kinds=edge_filter):
             if child.id in visited:
                 continue
             if child.kind not in include_kinds:
@@ -2972,10 +2987,13 @@ def _subtree_to_nested(
     graph: TraceGraph,
     _current_depth: int = 0,
     _visited: set[str] | None = None,
+    _edge_filter: set[EdgeKind] | None = None,
 ) -> dict[str, Any]:
     """Render subtree as recursive nested JSON.
 
     REQ-d00075-E: Recursive JSON with children arrays.
+    REQ-d00133-A: FILE roots walk CONTAINS edges.
+    REQ-d00133-B: REQUIREMENT roots walk domain edges.
     """
     if _visited is None:
         _visited = set()
@@ -2998,7 +3016,7 @@ def _subtree_to_nested(
     # Recurse into children
     children: list[dict[str, Any]] = []
     if depth_limit == 0 or _current_depth < depth_limit:
-        for child in node.iter_children():
+        for child in node.iter_children(edge_kinds=_edge_filter):
             if child.id in _visited:
                 continue
             if child.kind not in kind_filter:
@@ -3011,6 +3029,7 @@ def _subtree_to_nested(
                     graph,
                     _current_depth + 1,
                     _visited,
+                    _edge_filter,
                 )
             )
     entry["children"] = children
@@ -3052,7 +3071,9 @@ def _get_subtree(
             )
             if NodeKind.REQUIREMENT in kind_set:
                 kind_set = kind_set | {NodeKind.ASSERTION}
-        result = _subtree_to_nested(root_node, depth, kind_set, graph)
+        # REQ-d00133-A, REQ-d00133-B: edge filter per root kind
+        edge_filter = _SUBTREE_EDGE_DEFAULTS.get(root_node.kind)
+        result = _subtree_to_nested(root_node, depth, kind_set, graph, _edge_filter=edge_filter)
         return {"format": "nested", "root_id": root_id, "tree": result}
 
     # BFS-based formats: markdown and flat
