@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.17] - 2026-03-14
+
+### Added
+
+- **Help mode** -- "? Help" in hamburger menu activates a fixed help bar below the header. Hovering over controls shows extended descriptions. Native browser tooltips are suppressed while help mode is active and restored on deactivation.
+
 ## [0.104.16] - 2026-03-14
 
 ### Added
