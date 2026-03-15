@@ -611,3 +611,131 @@ class TestIdResolverCanonicalRegex:
         r = _make_hht_resolver()
         codes = r.all_type_codes()
         assert set(codes) == {"prd", "ops", "dev"}
+
+
+# --- DRY: New IdResolver methods ---
+
+
+class TestSplitAssertionRef:
+    """Tests for IdResolver.split_assertion_ref()."""
+
+    def test_assertion_ref(self, resolver):
+        result = resolver.split_assertion_ref("REQ-p00044-E")
+        assert result == ("REQ-p00044", "E")
+
+    def test_plain_requirement_ref(self, resolver):
+        result = resolver.split_assertion_ref("REQ-p00044")
+        assert result is None
+
+    def test_invalid_ref(self, resolver):
+        result = resolver.split_assertion_ref("not-a-valid-id")
+        assert result is None
+
+    def test_multi_assertion_ref(self, resolver):
+        result = resolver.split_assertion_ref("REQ-p00044-A+B")
+        assert result == ("REQ-p00044", "A+B")
+
+
+class TestAllTypeAliasValues:
+    def test_returns_alias_values(self, resolver):
+        values = resolver.all_type_alias_values()
+        assert isinstance(values, list)
+        assert len(values) > 0
+
+    def test_types_without_aliases_return_code(self):
+        config = IdPatternConfig.from_dict(
+            {
+                "project": {"namespace": "PROJ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{component}",
+                    "types": {"req": {"level": 1}},
+                    "component": {"style": "numeric", "digits": 3},
+                },
+            }
+        )
+        resolver = IdResolver(config)
+        values = resolver.all_type_alias_values()
+        assert "req" in values
+
+
+class TestNormalizeRef:
+    def test_lowercase_prefix_normalized(self, resolver):
+        assert resolver.normalize_ref("req-p00001") == "REQ-p00001"
+
+    def test_underscore_to_dash(self, resolver):
+        assert resolver.normalize_ref("REQ_p00001") == "REQ-p00001"
+
+    def test_mixed_case_underscore(self, resolver):
+        assert resolver.normalize_ref("req_p00001") == "REQ-p00001"
+
+    def test_already_canonical(self, resolver):
+        assert resolver.normalize_ref("REQ-p00001") == "REQ-p00001"
+
+    def test_with_assertion(self, resolver):
+        assert resolver.normalize_ref("req_p00001_A") == "REQ-p00001-A"
+
+    def test_invalid_ref_returns_as_is(self, resolver):
+        assert resolver.normalize_ref("not-valid") == "not-valid"
+
+
+class TestInstanceId:
+    """Tests for IdResolver INSTANCE ID methods."""
+
+    def test_build_instance_id(self, resolver):
+        result = resolver.build_instance_id("REQ-d00050", "REQ-p00044")
+        assert result == "REQ-d00050::REQ-p00044"
+
+    def test_get_template_id(self, resolver):
+        result = resolver.get_template_id("REQ-d00050::REQ-p00044")
+        assert result == "REQ-p00044"
+
+    def test_get_template_id_not_instance(self, resolver):
+        result = resolver.get_template_id("REQ-p00044")
+        assert result is None
+
+    def test_get_template_id_with_assertion(self, resolver):
+        """Template ID preserves assertion suffix."""
+        result = resolver.get_template_id("REQ-d00050::REQ-p00044-A")
+        assert result == "REQ-p00044-A"
+
+    def test_is_instance_id(self, resolver):
+        assert resolver.is_instance_id("REQ-d00050::REQ-p00044") is True
+        assert resolver.is_instance_id("REQ-p00044") is False
+
+    def test_template_id_is_parseable(self, resolver):
+        """The template_id part should be parseable by parse()."""
+        template_id = resolver.get_template_id("REQ-d00050::REQ-p00044")
+        parsed = resolver.parse(template_id)
+        assert parsed is not None
+        assert parsed.fqn == "REQ-p00044"
+
+    def test_get_instance_prefix(self, resolver):
+        """Can retrieve the prefix (for display or debugging)."""
+        result = resolver.get_instance_prefix("REQ-d00050::REQ-p00044")
+        assert result == "REQ-d00050"
+
+    def test_get_instance_prefix_not_instance(self, resolver):
+        result = resolver.get_instance_prefix("REQ-p00044")
+        assert result is None
+
+
+class TestBuildResolver:
+    def test_build_resolver_from_config(self):
+        from elspais.utilities.patterns import build_resolver
+
+        config = {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type}{component}",
+                "types": {"p": {"level": 1}},
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+            },
+        }
+        resolver = build_resolver(config)
+        assert resolver.is_valid("REQ-p00001")
+
+    def test_build_resolver_empty_config(self):
+        from elspais.utilities.patterns import build_resolver
+
+        resolver = build_resolver({})
+        assert resolver is not None

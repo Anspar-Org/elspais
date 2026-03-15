@@ -15,6 +15,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+# --- Constants ---
+
+INSTANCE_SEPARATOR = "::"
+
 # --- Shared regex patterns ---
 
 # Matches 3+ consecutive newlines for cleanup (collapse to double-newline)
@@ -254,7 +258,12 @@ class IdResolver:
         return r"[A-Z]"
 
     def parse(self, raw_id: str) -> ParsedId | None:
-        """Try all compiled forms. Returns ParsedId with canonical type_code."""
+        """Try all compiled forms. Returns ParsedId with canonical type_code.
+
+        Does not handle INSTANCE IDs (containing '::').
+        Use ``is_instance_id()`` to detect them and ``get_template_id()``
+        to extract the template part, which can then be passed to ``parse()``.
+        """
         # Reject composite IDs — callers must split on :: first
         if "::" in raw_id:
             return None
@@ -460,6 +469,92 @@ class IdResolver:
     def all_type_codes(self) -> list[str]:
         """All canonical type codes."""
         return list(self.config.types.keys())
+
+    # --- DRY convenience methods ---
+
+    def split_assertion_ref(self, raw_id: str) -> tuple[str, str] | None:
+        """Split an assertion reference into (parent_fqn, assertion_labels_str).
+
+        For example, ``"REQ-p00044-E"`` returns ``("REQ-p00044", "E")``.
+        Returns None if *raw_id* is a plain requirement ID (no assertion)
+        or does not match any known form.
+        """
+        parsed = self.parse(raw_id)
+        if parsed is None or not parsed.assertions:
+            return None
+        af = self.config.assertions
+        sep = af.multi_separator if af.multi_separator else "+"
+        return (parsed.fqn, sep.join(parsed.assertions))
+
+    def all_type_alias_values(self) -> list[str]:
+        """All unique type alias values (or canonical codes if no aliases).
+
+        Used for building regex alternations that match type identifiers
+        as they appear in ID strings (e.g., ``["PRD", "OPS", "DEV"]``).
+        """
+        values: set[str] = set()
+        for code, tdef in self.config.types.items():
+            if tdef.aliases:
+                for alias_val in tdef.aliases.values():
+                    values.add(alias_val)
+            else:
+                values.add(code)
+        return sorted(values)
+
+    def normalize_ref(self, raw_ref: str) -> str:
+        """Normalize a raw reference string to canonical form.
+
+        Handles underscore-to-dash conversion and prefix case normalization.
+        Returns the input unchanged if it doesn't match any known form.
+        """
+        cleaned = raw_ref.replace("_", "-")
+        # Fix namespace case before parsing (parse() is case-sensitive)
+        prefix = self.config.namespace
+        if cleaned.lower().startswith(prefix.lower() + "-"):
+            cleaned = prefix + cleaned[len(prefix) :]
+        result = self.to_canonical(cleaned)
+        return result if result is not None else raw_ref
+
+    def build_instance_id(self, prefix: str, template_id: str) -> str:
+        """Build a unique INSTANCE node ID.
+
+        INSTANCE nodes are copies of template nodes created by the
+        ``Satisfies:`` relationship. The *prefix* provides uniqueness
+        (typically the declaring requirement's ID). The *template_id*
+        identifies which template node was copied.
+        """
+        return f"{prefix}{INSTANCE_SEPARATOR}{template_id}"
+
+    def is_instance_id(self, raw_id: str) -> bool:
+        """True if raw_id is an INSTANCE node ID."""
+        return INSTANCE_SEPARATOR in raw_id
+
+    def get_template_id(self, instance_id: str) -> str | None:
+        """Extract the template ID from an INSTANCE node ID.
+
+        Returns the template ID, or None if *instance_id* is not an instance.
+        """
+        if INSTANCE_SEPARATOR not in instance_id:
+            return None
+        return instance_id.split(INSTANCE_SEPARATOR, 1)[1]
+
+    def get_instance_prefix(self, instance_id: str) -> str | None:
+        """Extract the uniqueness prefix from an INSTANCE node ID.
+
+        Returns the prefix string, or None if *instance_id* is not an instance.
+        """
+        if INSTANCE_SEPARATOR not in instance_id:
+            return None
+        return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
+
+
+def build_resolver(config: dict[str, Any]) -> IdResolver:
+    """Create an IdResolver from a full configuration dictionary.
+
+    Convenience function that reads ``[project].namespace`` and
+    ``[id-patterns]`` sections from *config*.
+    """
+    return IdResolver(IdPatternConfig.from_dict(config))
 
 
 # Implements: REQ-p00002-A
