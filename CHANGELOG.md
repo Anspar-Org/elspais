@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.13] - 2026-03-14
+
+### Fixed
+
+- **Card scroll-to targeting** -- `focusCard()` now renders the card stack before scrolling, preventing stale scroll position when `renderCardStack()` replaced the target DOM element.
+
 ## [0.104.12] - 2026-03-14
 
 ### Fixed

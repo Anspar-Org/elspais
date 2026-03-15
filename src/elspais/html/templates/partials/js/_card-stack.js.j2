@@ -44,16 +44,17 @@ function focusCard(nodeId) {
     editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== nodeId; });
     editState.openCardOrder.unshift(nodeId);
 
-    // Remove focused class from all, add to target
+    // Render first so DOM is rebuilt with correct order, then scroll
+    renderCardStack();
+    saveState();
+
+    // Re-query after render since renderCardStack() replaces all DOM nodes
     document.querySelectorAll('.req-card').forEach(function(c) { c.classList.remove('focused'); });
     const card = document.getElementById('card-' + nodeId);
     if (card) {
         card.classList.add('focused');
         card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-
-    renderCardStack();
-    saveState();
 }
 
 function toggleCardCollapse(nodeId) {
