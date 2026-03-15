@@ -750,3 +750,51 @@ refreshBranchStatus().then(function(data) {
     }
 });
 setInterval(refreshBranchStatus, 60000);
+
+// =====================================================================
+// Refresh from Disk (REQ-p00006-A)
+// =====================================================================
+
+async function refreshFromDisk() {
+    // Check for pending mutations first
+    var freshness = await apiFetch('/api/check-freshness');
+    if (freshness && freshness.has_pending_mutations) {
+        if (!confirm('You have unsaved mutations. Refreshing will discard them. Continue?')) {
+            return;
+        }
+    }
+
+    var btn = document.getElementById('btn-refresh-disk');
+    if (btn) { btn.disabled = true; btn.textContent = 'Refreshing...'; }
+
+    var result = await apiFetch('/api/reload', { method: 'POST' });
+    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+
+    if (result && result.success) {
+        showToast('Graph reloaded from disk', 'success');
+        await refreshAllOpenCards();
+        loadTreeData();
+        refreshFileViewer();
+        await refreshDirtyCount();
+        dismissStaleBanner();
+    } else {
+        showToast((result && result.error) || 'Refresh failed', 'error');
+    }
+}
+
+function dismissStaleBanner() {
+    var banner = document.getElementById('stale-banner');
+    if (banner) { banner.classList.add('hidden'); }
+}
+
+// Poll for file freshness every 30 seconds
+setInterval(function() {
+    apiFetch('/api/check-freshness').then(function(data) {
+        if (!data) return;
+        var banner = document.getElementById('stale-banner');
+        if (!banner) return;
+        if (data.stale) {
+            banner.classList.remove('hidden');
+        }
+    });
+}, 30000);

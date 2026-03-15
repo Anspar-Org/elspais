@@ -1,4 +1,4 @@
-# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F
+# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F, REQ-p00006-A
 """Tests for the Flask trace-edit REST API server.
 
 Validates:
@@ -9,6 +9,7 @@ Validates:
 - REQ-p00004-D: Branch creation endpoint
 - REQ-p00004-E: Commit and push endpoint
 - REQ-p00004-F: Pull fast-forward endpoint
+- REQ-p00006-A: Check-freshness endpoint
 """
 
 from pathlib import Path
@@ -2091,3 +2092,133 @@ class TestMutateValidation:
         """Undo with no pending mutations returns error."""
         resp = disk_client.post("/api/mutate/undo")
         assert resp.status_code == 400
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Check-Freshness Endpoint Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_freshness_app(tmp_path, spec_subdir="spec"):
+    """Build a Flask app with real spec files for freshness testing.
+
+    Returns (app, graph, spec_dir) so tests can manipulate files and state.
+    """
+    from elspais.graph.GraphNode import FileType
+
+    spec_dir = tmp_path / spec_subdir
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    spec_file = spec_dir / "requirements.md"
+    spec_file.write_text(
+        "## REQ-p00001 Product Requirement\n"
+        "Status: Active\n"
+        "Level: PRD\n"
+        "\n"
+        "- A: The system SHALL exist.\n"
+        "\n"
+        "*End* <!-- hash:00000000 -->\n",
+        encoding="utf-8",
+    )
+
+    graph = TraceGraph(repo_root=tmp_path)
+    rel_path = str(spec_file.relative_to(tmp_path))
+
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="requirements.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
+
+    prd = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Requirement")
+    prd._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(prd, EdgeKind.CONTAINS)
+
+    a1 = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="The system SHALL exist.")
+    a1._content = {"label": "A", "parse_line": 5, "parse_end_line": None}
+    prd.link(a1, EdgeKind.STRUCTURES)
+
+    graph._roots = [file_node, prd]
+    graph._index = {
+        f"file:{rel_path}": file_node,
+        "REQ-p00001": prd,
+        "REQ-p00001-A": a1,
+    }
+
+    config = {"spec": {"directories": [spec_subdir]}}
+    app = create_app(repo_root=tmp_path, graph=graph, config=config)
+    app.config["TESTING"] = True
+
+    return app, graph, spec_dir
+
+
+@pytest.fixture
+def freshness_app(tmp_path):
+    """Create a Flask app backed by real spec files for freshness tests."""
+    return _make_freshness_app(tmp_path)
+
+
+@pytest.fixture
+def freshness_client(freshness_app):
+    """Create Flask test client for freshness tests."""
+    app, _graph, _spec_dir = freshness_app
+    return app.test_client()
+
+
+class TestCheckFreshness:
+    """Validates REQ-p00006-A: GET /api/check-freshness endpoint."""
+
+    def test_REQ_p00006_A_check_freshness_fresh(self, freshness_client):
+        """When no spec files have changed since build, stale=False."""
+        resp = freshness_client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["stale"] is False
+        assert data["has_pending_mutations"] is False
+        assert data["stale_files"] == []
+
+    def test_REQ_p00006_A_check_freshness_stale(self, tmp_path):
+        """When spec files are newer than build_time, stale=True with stale_files."""
+        import os
+        import time
+
+        app, _graph, spec_dir = _make_freshness_app(tmp_path)
+        client = app.test_client()
+
+        # Wait briefly then touch the spec file so its mtime > build_time.
+        # Use os.utime to set mtime well into the future to avoid race conditions.
+        spec_file = spec_dir / "requirements.md"
+        future_time = time.time() + 10
+        os.utime(spec_file, (future_time, future_time))
+
+        resp = client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["stale"] is True
+        assert len(data["stale_files"]) > 0
+        # The stale file list should contain the spec file (relative or absolute)
+        stale_names = [Path(f).name for f in data["stale_files"]]
+        assert "requirements.md" in stale_names
+
+    def test_REQ_p00006_A_check_freshness_pending_mutations(self, tmp_path):
+        """When graph has pending mutations, has_pending_mutations=True."""
+        app, _graph, _spec_dir = _make_freshness_app(tmp_path)
+        client = app.test_client()
+
+        # Perform a mutation so the graph has pending changes
+        client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+        )
+
+        resp = client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["has_pending_mutations"] is True

@@ -505,6 +505,39 @@ def create_app(
         count = log.get("count", 0)
         return jsonify({"dirty": count > 0, "mutation_count": count})
 
+    @app.route("/api/check-freshness")
+    def api_check_freshness():
+        # Implements: REQ-p00006-A
+        """GET /api/check-freshness - Check if spec files changed since last build."""
+        import os
+
+        build_time = _state.get("build_time", 0)
+        spec_dirs = _state["config"].get("spec", {}).get("directories", ["spec"])
+        working_dir = _state["working_dir"]
+
+        stale_files: list[str] = []
+        for spec_dir in spec_dirs:
+            spec_path = Path(working_dir) / spec_dir
+            if not spec_path.is_dir():
+                continue
+            for md_file in spec_path.rglob("*.md"):
+                try:
+                    if os.path.getmtime(md_file) > build_time:
+                        stale_files.append(str(md_file.relative_to(working_dir)))
+                except OSError:
+                    continue
+
+        log = _get_mutation_log(_state["graph"], limit=1)
+        has_pending = log.get("count", 0) > 0
+
+        return jsonify(
+            {
+                "stale": len(stale_files) > 0,
+                "has_pending_mutations": has_pending,
+                "stale_files": sorted(stale_files),
+            }
+        )
+
     # ─────────────────────────────────────────────────────────────────
     # Mutation POST endpoints
     # ─────────────────────────────────────────────────────────────────

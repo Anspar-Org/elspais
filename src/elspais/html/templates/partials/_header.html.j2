@@ -60,6 +60,12 @@
                 title="Commit and push spec changes">
             Push
         </button>
+
+        <button class="btn" id="btn-refresh-disk" onclick="refreshFromDisk()"
+                title="Reload graph from disk">
+            Refresh
+        </button>
+
         {% endif %}
 
         <div class="hamburger-menu" id="hamburger-menu">
@@ -87,3 +93,9 @@
         </div>
     </div>
 </header>
+
+<div class="stale-banner hidden" id="stale-banner">
+    <span>Spec files have changed on disk.</span>
+    <button class="btn btn-sm" onclick="refreshFromDisk()">Refresh Now</button>
+    <button class="btn btn-sm stale-dismiss" onclick="dismissStaleBanner()">&times;</button>
+</div>
