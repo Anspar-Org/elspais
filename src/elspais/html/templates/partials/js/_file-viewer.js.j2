@@ -225,6 +225,12 @@ function fvRenderMarkdown(text) {
 // Close & Link Interception
 // =====================================================================
 
+function refreshFileViewer() {
+    var panel = document.getElementById('file-viewer-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (fvState.currentFile) { showSource(fvState.currentFile); }
+}
+
 function closeFileViewer() {
     document.getElementById('file-viewer-panel').classList.remove('open');
     document.getElementById('divider-right').style.display = 'none';

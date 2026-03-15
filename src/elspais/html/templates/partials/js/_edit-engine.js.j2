@@ -260,8 +260,8 @@ function onStatusChange(selectEl) {
         if (result && result.success) {
             selectEl.dataset.original = newStatus.toLowerCase();
             selectEl.classList.remove('dirty');
-            // Refresh the card data
-            await refreshCard(nodeId);
+            await refreshAllOpenCards();
+            loadTreeData();
         }
     });
 }
@@ -289,7 +289,8 @@ function onTitleBlur(el) {
         if (result && result.success) {
             el.dataset.original = newTitle;
             el.classList.remove('dirty');
-            await refreshCard(nodeId);
+            await refreshAllOpenCards();
+            loadTreeData();
         } else {
             el.textContent = original;
             el.classList.remove('dirty');
@@ -413,6 +414,11 @@ async function refreshCard(nodeId) {
     renderCardStack();
 }
 
+async function refreshAllOpenCards() {
+    const ids = Array.from(editState.openCards.keys());
+    await Promise.all(ids.map(function(id) { return refreshCard(id); }));
+}
+
 // =====================================================================
 // Save / Revert / Undo
 // =====================================================================
@@ -421,6 +427,7 @@ async function doSave() {
     const result = await mutate('/api/save', {});
     if (result && result.success) {
         showToast('Saved to disk', 'success');
+        refreshFileViewer();
     }
     // Even if it returns 501 (not yet implemented), display message
     if (result && result.message) {
@@ -433,10 +440,9 @@ async function doRevert() {
     const result = await mutate('/api/revert', {});
     if (result && result.success) {
         showToast('All changes reverted', 'success');
-        // Reload all open cards
-        editState.openCardOrder.forEach(function(id) {
-            refreshCard(id);
-        });
+        await refreshAllOpenCards();
+        loadTreeData();
+        refreshFileViewer();
     }
     if (result && result.message) {
         showToast(result.message, 'info');
@@ -446,10 +452,8 @@ async function doRevert() {
 async function doUndo() {
     const result = await mutate('/api/mutate/undo', {});
     if (result && result.success) {
-        // Reload all open cards to reflect undo
-        editState.openCardOrder.forEach(function(id) {
-            refreshCard(id);
-        });
+        await refreshAllOpenCards();
+        loadTreeData();
     }
 }
 
@@ -472,7 +476,8 @@ function onToggleEdgeKind(el) {
         new_kind: newKind
     }).then(async function(result) {
         if (result && result.success) {
-            await refreshCard(sourceId);
+            await refreshAllOpenCards();
+            loadTreeData();
         }
     });
 }
@@ -486,7 +491,7 @@ function onDeleteEdge(sourceId, targetId) {
         target_id: targetId
     }).then(async function(result) {
         if (result && result.success) {
-            await refreshCard(sourceId);
+            await refreshAllOpenCards();
             loadTreeData();
         }
     });
