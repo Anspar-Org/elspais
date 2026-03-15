@@ -45,7 +45,7 @@ allowed_implements = [
     "prd -> prd",
 ]
 allow_circular = false
-allow_orphans = false
+allow_structural_orphans = false
 
 [rules.format]
 require_hash = true

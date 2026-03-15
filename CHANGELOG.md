@@ -2,6 +2,34 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.12] - 2026-03-14
+
+### Fixed
+
+- **Test scanner class context** -- Python test files now use `ast.parse()` for pre-scanning, fixing incorrect TEST node IDs when multiline strings contained unindented content (e.g., `## REQ-d00001:` at column 0 inside a `"""` heredoc). Previously, the text-based indent tracker incorrectly exited class scope, producing 123 class-less TEST node IDs and 111 broken YIELDS references.
+
+### Added
+
+- **Configurable test pre-scan command** -- `[testing].prescan_command` config option for non-Python test files. The command receives file paths on stdin and outputs a JSON array describing test structure (`[{file, function, class, line}]`), enabling accurate test discovery for any language.
+
+## [0.104.11] - 2026-03-14
+
+### Changed
+
+- **Traceability classification redesign** -- Split `spec.orphans` health check into distinct checks with appropriate severities:
+  - `spec.structural_orphans` (error) -- nodes without FILE ancestor (build bugs)
+  - `spec.broken_references` (warning) -- edges targeting non-existent nodes
+  - `tests.unlinked` (info) -- tests not linked to any requirement
+  - `code.unlinked` (info) -- code refs not linked to any requirement
+- **Removed** `tests.references_resolve` and `code.references_resolve` checks (subsumed by `*.unlinked` + `spec.broken_references`)
+- **Config** `allow_orphans` replaced by `allow_structural_orphans` (backward compatible)
+
+### Added
+
+- **Graph API** -- `is_reachable_to_requirement()`, `iter_unlinked()`, `iter_structural_orphans()` methods on TraceGraph
+- **Edge kind constants** -- `_STRUCTURAL_EDGE_KINDS` and `_TRACEABILITY_EDGE_KINDS` in builder.py for classifying edge types
+- **MCP tool** -- `get_unlinked_nodes(kind?)` lists CODE/TEST nodes not linked to any requirement
+
 ## [0.104.10] - 2026-03-14
 
 ### Added

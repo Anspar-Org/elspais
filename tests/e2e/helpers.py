@@ -292,7 +292,7 @@ def base_config(
     labels_sequential: bool = True,
     # Hierarchy rules
     allowed_implements: list[str] | None = None,
-    allow_orphans: bool = False,
+    allow_structural_orphans: bool = False,
     # Skip/ignore
     skip_files: list[str] | None = None,
     skip_dirs: list[str] | None = None,
@@ -348,7 +348,7 @@ def base_config(
         "rules": {
             "hierarchy": {
                 "allowed_implements": allowed_implements,
-                "allow_orphans": allow_orphans,
+                "allow_structural_orphans": allow_structural_orphans,
             },
             "format": {
                 "require_hash": require_hash,

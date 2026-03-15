@@ -174,7 +174,7 @@ dev = ["dev", "ops", "prd"]
 ops = ["ops", "prd"]
 prd = ["prd"]
 cross_repo_implements = true
-allow_orphans = true  # More permissive for associated development
+allow_structural_orphans = true  # More permissive for associated development
 
 [rules.format]
 require_hash = true
@@ -226,7 +226,7 @@ dev = ["dev", "ops", "prd"]
 ops = ["ops", "prd"]
 prd = ["prd"]
 allow_circular = false
-allow_orphans = false
+allow_structural_orphans = false
 
 [rules.format]
 require_hash = true
@@ -267,6 +267,7 @@ test_dirs = ["tests"]
 patterns = ["test_*.py", "*_test.py"]
 # result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
 reference_keyword = "Validates"
+# prescan_command = ""  # External command for non-Python test structure discovery
 
 [references.defaults]
 # Separator characters accepted between ID components

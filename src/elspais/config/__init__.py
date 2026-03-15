@@ -52,11 +52,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "testing": {
         "enabled": False,
         "test_dirs": ["tests"],
+        "skip_dirs": [],
         "patterns": ["test_*.py", "*_test.py"],
         "result_files": [],
         "run_meta_file": "",
         "reference_patterns": [],
         "reference_keyword": "Validates",
+        "prescan_command": "",
     },
     "ignore": {
         "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],

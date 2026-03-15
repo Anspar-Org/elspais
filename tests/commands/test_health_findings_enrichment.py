@@ -11,14 +11,12 @@ from pathlib import Path
 
 from elspais.commands.health import (
     HealthFinding,
-    check_code_references_resolve,
+    check_broken_references,
     check_spec_format_rules,
     check_spec_hierarchy_levels,
     check_spec_implements_resolve,
     check_spec_no_duplicates,
-    check_spec_orphans,
     check_spec_refines_resolve,
-    check_test_references_resolve,
     check_test_results,
 )
 from elspais.config import ConfigLoader, get_config
@@ -227,10 +225,10 @@ A. The system SHALL also exist.
         assert finding.node_id is not None, "Finding should have node_id"
 
 
-class TestCheckSpecOrphansFindings:
-    """Findings should identify each orphaned node."""
+class TestCheckBrokenReferencesFindings:
+    """Findings should identify each broken reference."""
 
-    def test_REQ_d00085_I_orphans_have_findings(self, tmp_path: Path) -> None:
+    def test_REQ_d00085_I_broken_refs_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """[project]
@@ -264,7 +262,7 @@ A. The system SHALL exist.
 """
         )
 
-        # Create a code file referencing a non-existent requirement to create orphan
+        # Create a code file referencing a non-existent requirement to create broken ref
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "orphan.py").write_text(
@@ -275,10 +273,10 @@ def orphan_func():
         )
 
         graph = _build(tmp_path, config_path, scan_code=True)
-        check = check_spec_orphans(graph)
+        check = check_broken_references(graph)
 
-        assert not check.passed, "Expected check to fail with orphaned nodes"
-        assert len(check.findings) > 0, "Expected findings for orphaned nodes"
+        assert not check.passed, "Expected check to fail with broken references"
+        assert len(check.findings) > 0, "Expected findings for broken references"
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.node_id is not None, "Finding should have node_id"
@@ -332,130 +330,6 @@ This requirement has no assertions section and no hash.
         assert isinstance(finding, HealthFinding)
         assert finding.node_id is not None, "Finding should have node_id"
         assert "REQ-p00010" in (finding.node_id or "")
-
-
-class TestCheckCodeReferencesResolveFindings:
-    """Findings should identify each unresolved code reference with file_path and line."""
-
-    def test_REQ_d00085_I_unresolved_code_refs_have_findings(self, tmp_path: Path) -> None:
-        config_path = tmp_path / ".elspais.toml"
-        config_path.write_text(
-            """[project]
-name = "test"
-
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
-
-[traceability]
-scan_patterns = ["src/**/*.py"]
-
-[directories]
-code = ["src"]
-"""
-        )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        # Create a requirement so the graph is not empty
-        (spec_dir / "reqs.md").write_text(
-            """# REQ-p00001: Real Requirement
-
-**Level**: PRD | **Status**: Active
-
-## Assertions
-
-A. The system SHALL do something.
-
-*End* *Real Requirement* | **Hash**: hhhh8888
-"""
-        )
-
-        # Create code file referencing a non-existent requirement
-        src_dir = tmp_path / "src"
-        src_dir.mkdir()
-        (src_dir / "example.py").write_text(
-            """# Implements: REQ-d99999
-def broken_ref():
-    pass
-"""
-        )
-
-        graph = _build(tmp_path, config_path, scan_code=True)
-        check = check_code_references_resolve(graph)
-
-        assert not check.passed, "Expected check to fail with unresolved code refs"
-        assert len(check.findings) > 0, "Expected findings for unresolved code refs"
-        finding = check.findings[0]
-        assert isinstance(finding, HealthFinding)
-        assert finding.file_path is not None, "Finding should have file_path"
-        assert finding.message, "Finding should have a message"
-
-
-class TestCheckTestReferencesResolveFindings:
-    """Findings should identify each unresolved test reference with file_path."""
-
-    def test_REQ_d00085_I_unresolved_test_refs_have_findings(self, tmp_path: Path) -> None:
-        config_path = tmp_path / ".elspais.toml"
-        config_path.write_text(
-            """[project]
-name = "test"
-
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
-"""
-        )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        (spec_dir / "reqs.md").write_text(
-            """# REQ-p00001: Real Requirement
-
-**Level**: PRD | **Status**: Active
-
-## Assertions
-
-A. The system SHALL do something.
-
-*End* *Real Requirement* | **Hash**: iiii9999
-"""
-        )
-
-        # Create test file referencing a non-existent requirement
-        test_dir = tmp_path / "tests"
-        test_dir.mkdir()
-        (test_dir / "test_broken.py").write_text(
-            """# Validates: REQ-d00085
-def test_REQ_d77777_something():
-    pass
-"""
-        )
-
-        graph = _build(tmp_path, config_path, scan_tests=True)
-        check = check_test_references_resolve(graph)
-
-        assert not check.passed, "Expected check to fail with unresolved test refs"
-        assert len(check.findings) > 0, "Expected findings for unresolved test refs"
-        finding = check.findings[0]
-        assert isinstance(finding, HealthFinding)
-        assert finding.file_path is not None, "Finding should have file_path"
-        assert finding.message, "Finding should have a message"
 
 
 class TestCheckTestResultsFindings:

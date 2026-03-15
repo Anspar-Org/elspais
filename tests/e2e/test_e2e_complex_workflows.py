@@ -150,7 +150,7 @@ class TestConfigSetAffectsHealth:
     """Changing config settings affects health validation."""
 
     def test_change_allowed_statuses(self, tmp_path):
-        cfg = base_config(name="config-affects-health", allow_orphans=True)
+        cfg = base_config(name="config-affects-health", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Custom Status",
@@ -188,7 +188,7 @@ class TestMultipleFixesIdempotent:
     """Running fix twice produces same result."""
 
     def test_fix_idempotent(self, tmp_path):
-        cfg = base_config(name="fix-idempotent", allow_orphans=True)
+        cfg = base_config(name="fix-idempotent", allow_structural_orphans=True)
         build_project(tmp_path, cfg, spec_files={})
 
         spec = tmp_path / "spec" / "prd.md"
@@ -228,7 +228,7 @@ class TestTraceWithAssertions:
     """Trace --assertions shows individual assertion details."""
 
     def test_trace_assertions(self, tmp_path):
-        cfg = base_config(name="trace-assertions", allow_orphans=True)
+        cfg = base_config(name="trace-assertions", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Assertion Trace",
@@ -261,7 +261,7 @@ class TestGraphExportAndMCP:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="graph-mcp", allow_orphans=True)
+        cfg = base_config(name="graph-mcp", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Graph MCP",
@@ -294,7 +294,7 @@ class TestEditCommand:
     """Edit command modifies requirements in-place."""
 
     def test_edit_status(self, tmp_path):
-        cfg = base_config(name="edit-test", allow_orphans=True)
+        cfg = base_config(name="edit-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Edit Target",
@@ -325,7 +325,7 @@ class TestDoctorAndVersion:
     """Doctor and version commands."""
 
     def test_doctor_json(self, tmp_path):
-        cfg = base_config(name="doctor-json", allow_orphans=True)
+        cfg = base_config(name="doctor-json", allow_structural_orphans=True)
         build_project(tmp_path, cfg, spec_files={})
         (tmp_path / "spec").mkdir(exist_ok=True)
 
@@ -349,7 +349,7 @@ class TestHealthTextOutput:
     """Health text output includes check marks and details."""
 
     def test_health_text_contains_checks(self, tmp_path):
-        cfg = base_config(name="health-text", allow_orphans=True)
+        cfg = base_config(name="health-text", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Text Health",
@@ -364,7 +364,7 @@ class TestHealthTextOutput:
         assert "CONFIG" in result.stdout or "SPEC" in result.stdout
 
     def test_health_json_structure(self, tmp_path):
-        cfg = base_config(name="health-json", allow_orphans=True)
+        cfg = base_config(name="health-json", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "JSON Health",
@@ -394,7 +394,7 @@ class TestMCPNumericAssertions:
         cfg = base_config(
             name="mcp-numeric",
             label_style="numeric",
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -451,7 +451,7 @@ class TestMCPSaveRefreshRoundTrip:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="save-refresh", allow_orphans=True)
+        cfg = base_config(name="save-refresh", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Save Refresh",
@@ -496,7 +496,7 @@ class TestHealthSARIF:
     """Health can output in SARIF format."""
 
     def test_health_sarif(self, tmp_path):
-        cfg = base_config(name="sarif-test", allow_orphans=True)
+        cfg = base_config(name="sarif-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "SARIF Test",
@@ -522,7 +522,7 @@ class TestHealthJUnit:
     """Health can output in JUnit format."""
 
     def test_health_junit(self, tmp_path):
-        cfg = base_config(name="junit-test", allow_orphans=True)
+        cfg = base_config(name="junit-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "JUnit Test",
@@ -546,7 +546,7 @@ class TestTraceWithBody:
     """Trace --body includes requirement body text."""
 
     def test_trace_body(self, tmp_path):
-        cfg = base_config(name="trace-body", allow_orphans=True)
+        cfg = base_config(name="trace-body", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Body Trace",
@@ -571,7 +571,7 @@ class TestHealthMarkdown:
     """Health in markdown format."""
 
     def test_health_markdown(self, tmp_path):
-        cfg = base_config(name="health-md", allow_orphans=True)
+        cfg = base_config(name="health-md", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Markdown Health",

@@ -38,22 +38,23 @@ Configuration checks always run as part of the full health check. For focused co
 | `spec.implements_resolve` | All Implements: references resolve |
 | `spec.refines_resolve` | All Refines: references resolve |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
-| `spec.orphans` | No orphan requirements (non-PRD without parents) |
+| `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
+| `spec.broken_references` | No edges targeting non-existent nodes |
 
 ### Code Reference Checks (`--code`)
 
 | Check | Description |
 |-------|-------------|
-| `code.references_resolve` | Code `# Implements:` comments resolve |
 | `code.coverage` | Code coverage statistics (informational) |
+| `code.unlinked` | Code references not linked to any requirement |
 
 ### Test Mapping Checks (`--tests`)
 
 | Check | Description |
 |-------|-------------|
-| `tests.references_resolve` | Test REQ references resolve |
 | `tests.results` | Test pass/fail status from results |
 | `tests.coverage` | Test coverage statistics (informational) |
+| `tests.unlinked` | Tests not linked to any requirement |
 
 ## Output Formats
 
@@ -69,17 +70,18 @@ Configuration checks always run as part of the full health check. For focused co
   ✓ config.hierarchy_rules: Hierarchy rules valid (3 levels configured)
   ✓ config.paths_exist: All spec directories exist (1 found)
 
-✓ SPEC (6/6 checks passed)
+✓ SPEC (7/7 checks passed)
 ----------------------------------------
   ✓ spec.parseable: Parsed 42 requirements with 128 assertions
   ✓ spec.no_duplicates: No duplicate requirement IDs
   ✓ spec.implements_resolve: All Implements references resolve
   ✓ spec.refines_resolve: All Refines references resolve
   ✓ spec.hierarchy_levels: All requirements follow hierarchy rules
-  ✓ spec.orphans: No orphan requirements
+  ✓ spec.structural_orphans: No structural orphans
+  ✓ spec.broken_references: No broken references
 
 ========================================
-✓ HEALTHY: 12 checks passed
+✓ HEALTHY: 13 checks passed
 ========================================
 ```
 

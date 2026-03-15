@@ -38,7 +38,7 @@ class TestFixCorrectsHash:
     """Fix command recalculates hashes correctly."""
 
     def test_fix_corrects_wrong_hash(self, tmp_path):
-        cfg = base_config(name="fix-hash-test", allow_orphans=True)
+        cfg = base_config(name="fix-hash-test", allow_structural_orphans=True)
         build_project(tmp_path, cfg, spec_files={})
 
         # Write spec with intentionally wrong hash
@@ -79,7 +79,7 @@ class TestFixCorrectsHash:
         assert match, "No valid hash found in file after fix"
 
     def test_fix_dry_run_does_not_modify(self, tmp_path):
-        cfg = base_config(name="fix-dryrun", allow_orphans=True)
+        cfg = base_config(name="fix-dryrun", allow_structural_orphans=True)
         build_project(tmp_path, cfg, spec_files={})
 
         spec = tmp_path / "spec" / "prd-dry.md"
@@ -117,7 +117,7 @@ class TestFixThenHealthPasses:
         cfg = base_config(
             name="fix-health-numeric",
             label_style="numeric",
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         build_project(tmp_path, cfg, spec_files={})
 
@@ -160,7 +160,7 @@ class TestChangedCommand:
     """Changed command detects git changes to spec files."""
 
     def test_changed_detects_uncommitted_edit(self, tmp_path):
-        cfg = base_config(name="changed-test", allow_orphans=True)
+        cfg = base_config(name="changed-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Original Title",
@@ -183,7 +183,7 @@ class TestChangedCommand:
             assert isinstance(data, (list, dict))
 
     def test_changed_no_changes(self, tmp_path):
-        cfg = base_config(name="changed-clean", allow_orphans=True)
+        cfg = base_config(name="changed-clean", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Stable",
@@ -480,7 +480,7 @@ class TestGraphExport:
     """Graph command exports JSON."""
 
     def test_graph_json_output(self, tmp_path):
-        cfg = base_config(name="graph-export", allow_orphans=True)
+        cfg = base_config(name="graph-export", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Graph Test",
@@ -507,7 +507,7 @@ class TestHealthSkipFiles:
         cfg = base_config(
             name="skip-files",
             skip_files=["README.md", "INDEX.md", "NOTES.md"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",

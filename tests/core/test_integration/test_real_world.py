@@ -8,11 +8,11 @@ from elspais.config import load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.factory import _build_resolver
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
+from elspais.utilities.patterns import build_resolver
 
 # Get repo root (3 levels up from this test file)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
@@ -27,7 +27,7 @@ def real_resolver():
         pytest.skip("No .elspais.toml found in repo root")
 
     config = load_config(CONFIG_FILE)
-    return _build_resolver(config.get_raw())
+    return build_resolver(config.get_raw())
 
 
 @pytest.fixture

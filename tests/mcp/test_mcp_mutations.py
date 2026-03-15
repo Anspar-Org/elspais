@@ -442,6 +442,57 @@ class TestMutateAddEdge:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_edge"
 
+    def test_normalizes_full_assertion_ids_to_bare_labels(self, mutation_graph):
+        """Full assertion IDs like REQ-o00001-A are normalized to bare labels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_edge
+
+        # Setup: add assertion to target so the ID is valid
+        target = mutation_graph.find_by_id("REQ-o00001")
+        target.set_field("assertions", {"A": "Test assertion"})
+
+        dev_node = GraphNode(
+            id="REQ-d00003",
+            kind=NodeKind.REQUIREMENT,
+            label="DEV with assertion ref",
+        )
+        dev_node._content = {"level": "DEV", "status": "Draft"}
+        mutation_graph._index["REQ-d00003"] = dev_node
+
+        # Config matching the default REQ-{type}{component} pattern
+        config = {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type}{component}",
+                "types": {
+                    "p": {"level": 1},
+                    "o": {"level": 2},
+                    "d": {"level": 3},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase"},
+            },
+        }
+
+        result = _mutate_add_edge(
+            mutation_graph,
+            source_id="REQ-d00003",
+            target_id="REQ-o00001",
+            edge_kind="IMPLEMENTS",
+            assertion_targets=["REQ-o00001-A"],
+            config=config,
+        )
+
+        assert result["success"] is True
+        # Verify the edge has bare label "A", not the full "REQ-o00001-A"
+        edges = [
+            e
+            for e in target.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-d00003"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+
 
 class TestMutateChangeEdgeKind:
     """Tests for mutate_change_edge_kind() tool."""

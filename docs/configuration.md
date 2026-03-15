@@ -218,8 +218,9 @@ allowed_implements = [
 # Forbid circular dependency chains (A -> B -> A)
 allow_circular = false
 
-# Require all requirements to implement something (except root PRD)
-allow_orphans = false
+# Allow nodes without a FILE ancestor (structural orphans)
+# Replaces deprecated `allow_orphans` (still accepted for backward compatibility)
+allow_structural_orphans = false
 
 # Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
@@ -374,6 +375,14 @@ reference_patterns = [
     '(?:IMPLEMENTS|Implements|implements)[:\\s]+(?:REQ[-_])?([pod]\\d{5})(?:-[A-Z])?',
     '\\bREQ[-_]([pod]\\d{5})(?:-[A-Z])?\\b',
 ]
+
+# External command for test structure discovery (optional).
+# If not set, uses built-in Python AST scanner for .py files and
+# text-based scanning for other extensions.
+# The command receives test file paths on stdin (one per line) and
+# outputs a JSON array on stdout:
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+# prescan_command = "dart run tool/list_tests.dart"
 
 #──────────────────────────────────────────────────────────────────────────────
 # GIT HOOKS

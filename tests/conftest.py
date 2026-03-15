@@ -178,7 +178,7 @@ def sample_config_dict() -> dict:
                     "prd -> prd",
                 ],
                 "allow_circular": False,
-                "allow_orphans": False,
+                "allow_structural_orphans": False,
             },
             "format": {
                 "require_hash": True,

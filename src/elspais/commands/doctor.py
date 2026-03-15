@@ -199,7 +199,13 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
         )
 
     issues = []
-    non_level_keys = {"allowed_implements", "allow_circular", "allow_orphans", "allowed"}
+    non_level_keys = {
+        "allowed_implements",
+        "allow_circular",
+        "allow_orphans",
+        "allow_structural_orphans",
+        "allowed",
+    }
 
     for level, allowed_parents in hierarchy.items():
         if level in non_level_keys:

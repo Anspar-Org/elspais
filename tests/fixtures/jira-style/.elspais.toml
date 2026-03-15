@@ -24,4 +24,4 @@ leading_zeros = false
 allowed_implements = [
     "req -> req",
 ]
-allow_orphans = true
+allow_structural_orphans = true

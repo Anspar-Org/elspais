@@ -39,7 +39,7 @@ class TestSingleAssertion:
     """Requirement with only one assertion."""
 
     def test_single_assertion_health(self, tmp_path):
-        cfg = base_config(name="single-assert", allow_orphans=True)
+        cfg = base_config(name="single-assert", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Minimal",
@@ -52,7 +52,7 @@ class TestSingleAssertion:
         assert health.returncode == 0
 
     def test_single_assertion_trace(self, tmp_path):
-        cfg = base_config(name="single-trace", allow_orphans=True)
+        cfg = base_config(name="single-trace", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Single Trace",
@@ -76,7 +76,7 @@ class TestManyAssertions:
     """Requirement with maximum (26) uppercase assertions."""
 
     def test_26_assertions(self, tmp_path):
-        cfg = base_config(name="many-assertions", allow_orphans=True)
+        cfg = base_config(name="many-assertions", allow_structural_orphans=True)
         assertions = [
             (chr(ord("A") + i), f"The system SHALL satisfy criterion {chr(ord('A') + i)}.")
             for i in range(26)
@@ -102,7 +102,7 @@ class TestPlaceholderAssertions:
     """Assertions with placeholder/deprecated values."""
 
     def test_placeholder_values(self, tmp_path):
-        cfg = base_config(name="placeholder", allow_orphans=True, require_shall=False)
+        cfg = base_config(name="placeholder", allow_structural_orphans=True, require_shall=False)
         prd = Requirement(
             "REQ-p00001",
             "With Placeholders",
@@ -210,7 +210,7 @@ class TestFixSpecificRequirement:
     """Fix command targeting a specific requirement ID."""
 
     def test_fix_specific_id(self, tmp_path):
-        cfg = base_config(name="fix-specific", allow_orphans=True)
+        cfg = base_config(name="fix-specific", allow_structural_orphans=True)
         build_project(tmp_path, cfg, spec_files={})
 
         spec = tmp_path / "spec" / "prd.md"
@@ -254,7 +254,7 @@ class TestChangedWithBaseBranch:
     """Changed --base-branch flag."""
 
     def test_changed_base_branch(self, tmp_path):
-        cfg = base_config(name="changed-branch", allow_orphans=True)
+        cfg = base_config(name="changed-branch", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Branch Test",
@@ -283,7 +283,7 @@ class TestTracePresets:
     """Trace --preset minimal/standard/full."""
 
     def _build(self, tmp_path):
-        cfg = base_config(name="presets", allow_orphans=True)
+        cfg = base_config(name="presets", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Preset Test",
@@ -378,7 +378,7 @@ class TestMCPNumeric1Based:
         cfg = base_config(
             name="mcp-1based",
             label_style="numeric_1based",
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -507,7 +507,7 @@ class TestIdempotency:
     """Running same command twice produces identical results."""
 
     def test_health_idempotent(self, tmp_path):
-        cfg = base_config(name="idempotent", allow_orphans=True)
+        cfg = base_config(name="idempotent", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Stable",
@@ -522,7 +522,7 @@ class TestIdempotency:
         assert r1.stdout == r2.stdout
 
     def test_summary_idempotent(self, tmp_path):
-        cfg = base_config(name="idempotent-sum", allow_orphans=True)
+        cfg = base_config(name="idempotent-sum", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Consistent",
@@ -627,7 +627,7 @@ class TestMCPChangeEdgeKind:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="edge-kind", allow_orphans=True)
+        cfg = base_config(name="edge-kind", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Edge Kind Test",
@@ -672,7 +672,7 @@ class TestSummaryStatusFilter:
     """Summary --status filters by status."""
 
     def test_status_filter_draft(self, tmp_path):
-        cfg = base_config(name="status-filter-sum", allow_orphans=True)
+        cfg = base_config(name="status-filter-sum", allow_structural_orphans=True)
         active = Requirement(
             "REQ-p00001",
             "Active",
@@ -721,7 +721,7 @@ class TestMCPFixBrokenReference:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="broken-ref", allow_orphans=True)
+        cfg = base_config(name="broken-ref", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Target",
@@ -774,7 +774,7 @@ class TestTraceOutputToFile:
     """Trace --output writes to file."""
 
     def test_trace_output_json_file(self, tmp_path):
-        cfg = base_config(name="trace-file", allow_orphans=True)
+        cfg = base_config(name="trace-file", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "File Output",

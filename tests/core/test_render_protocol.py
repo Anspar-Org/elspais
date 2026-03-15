@@ -21,6 +21,7 @@ import pytest
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
+from tests.fixtures import fake_reqs
 
 
 def _make_file_node(path: str = "spec/test.md") -> GraphNode:
@@ -33,7 +34,7 @@ def _make_file_node(path: str = "spec/test.md") -> GraphNode:
 
 
 def _make_requirement_node(
-    req_id: str = "REQ-t00001",
+    req_id: str = fake_reqs.FAKE_REQ_ID,
     title: str = "Test Requirement",
     level: str = "Dev",
     status: str = "Draft",
@@ -117,7 +118,7 @@ def _make_journey_node(
 
 
 def _make_code_node(
-    raw_text: str = "# Implements: REQ-t00001",
+    raw_text: str = fake_reqs.CODE_RAW_TEXT,
     node_id: str = "code:src/main.py:10",
 ) -> GraphNode:
     """Create a CODE node for testing."""
@@ -128,7 +129,7 @@ def _make_code_node(
 
 
 def _make_test_node(
-    raw_text: str = "# Tests: REQ-t00001",
+    raw_text: str = fake_reqs.TEST_RAW_TEXT,
     node_id: str = "test:tests/test_main.py::TestClass::test_func",
 ) -> GraphNode:
     """Create a TEST node for testing."""
@@ -375,15 +376,15 @@ class TestCodeRender:
         """CODE render returns single comment line."""
         from elspais.graph.render import render_node
 
-        node = _make_code_node(raw_text="# Implements: REQ-t00001")
+        node = _make_code_node(raw_text=fake_reqs.CODE_RAW_TEXT)
         result = render_node(node)
-        assert result == "# Implements: REQ-t00001"
+        assert result == fake_reqs.CODE_RAW_TEXT
 
     def test_REQ_d00131_F_code_multi_line(self):
         """CODE render returns multiple comment lines."""
         from elspais.graph.render import render_node
 
-        raw = "# Implements: REQ-t00001\n# Implements: REQ-t00002"
+        raw = fake_reqs.CODE_RAW_TEXT_MULTI
         node = _make_code_node(raw_text=raw)
         result = render_node(node)
         assert result == raw
@@ -396,17 +397,17 @@ class TestTestRender:
         """TEST render returns single comment line."""
         from elspais.graph.render import render_node
 
-        node = _make_test_node(raw_text="# Tests: REQ-t00001")
+        node = _make_test_node(raw_text=fake_reqs.TEST_RAW_TEXT)
         result = render_node(node)
-        assert result == "# Tests: REQ-t00001"
+        assert result == fake_reqs.TEST_RAW_TEXT
 
     def test_REQ_d00131_G_test_validates_line(self):
         """TEST render returns Validates comment line."""
         from elspais.graph.render import render_node
 
-        node = _make_test_node(raw_text="# Validates: REQ-t00001-A")
+        node = _make_test_node(raw_text=fake_reqs.TEST_RAW_TEXT_VALIDATES_A)
         result = render_node(node)
-        assert result == "# Validates: REQ-t00001-A"
+        assert result == fake_reqs.TEST_RAW_TEXT_VALIDATES_A
 
 
 class TestTestResultRender:

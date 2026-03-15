@@ -182,12 +182,13 @@ def run(args: argparse.Namespace) -> int:
     else:
         has_external_parent = set()
 
-    # Check allow_orphans config
+    # Check allow_structural_orphans config (with backward compat fallback)
     from elspais.config import get_config
 
     validate_config = get_config(config_path, start_path=repo_root)
-    allow_orphans = (
-        validate_config.get("rules", {}).get("hierarchy", {}).get("allow_orphans", False)
+    hierarchy_rules = validate_config.get("rules", {}).get("hierarchy", {})
+    allow_orphans = hierarchy_rules.get(
+        "allow_structural_orphans", hierarchy_rules.get("allow_orphans", False)
     )
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):

@@ -4,17 +4,17 @@ from elspais.config import find_config_file, load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.factory import _build_resolver
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
+from elspais.utilities.patterns import build_resolver
 
 
 def _make_resolver(config):
     """Build IdResolver from loaded config."""
-    return _build_resolver(config.get_raw())
+    return build_resolver(config.get_raw())
 
 
 def create_parser_registry(resolver) -> ParserRegistry:

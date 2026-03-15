@@ -22,4 +22,4 @@ leading_zeros = true
 
 [rules.hierarchy]
 allowed_implements = ["dev -> prd"]
-allow_orphans = false
+allow_structural_orphans = false

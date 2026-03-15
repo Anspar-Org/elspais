@@ -22,4 +22,4 @@ max_length = 32
 
 [rules.hierarchy]
 allowed_implements = ["req -> req"]
-allow_orphans = true
+allow_structural_orphans = true

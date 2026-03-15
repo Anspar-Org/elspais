@@ -41,6 +41,7 @@ hash_mode = "normalized-text"
 [testing]
 enabled = true
 test_dirs = ["tests"]
+skip_dirs = ["fixtures"]
 patterns = ["test_*.py", "*_test.py"]
 reference_keyword = "Validates"
 result_files = ["test-results.xml"]

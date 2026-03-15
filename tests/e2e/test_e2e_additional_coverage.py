@@ -42,7 +42,7 @@ class TestZeroPaddedNumericAssertions:
             name="zero-pad",
             label_style="numeric",
             zero_pad_assertions=True,
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -69,7 +69,7 @@ class TestMultipleReqsSingleFile:
     """10 requirements in a single spec file."""
 
     def test_many_reqs_one_file(self, tmp_path):
-        cfg = base_config(name="many-reqs", allow_orphans=True)
+        cfg = base_config(name="many-reqs", allow_structural_orphans=True)
         reqs = []
         for i in range(1, 11):
             reqs.append(
@@ -92,7 +92,7 @@ class TestMultipleReqsSingleFile:
         assert total == 10
 
     def test_trace_has_all_10(self, tmp_path):
-        cfg = base_config(name="many-reqs-trace", allow_orphans=True)
+        cfg = base_config(name="many-reqs-trace", allow_structural_orphans=True)
         reqs = [
             Requirement(
                 f"REQ-p{i:05d}",
@@ -119,7 +119,7 @@ class TestRefinesRelationship:
     """Refines: creates a refinement relationship."""
 
     def test_refines_link(self, tmp_path):
-        cfg = base_config(name="refines-test", allow_orphans=True)
+        cfg = base_config(name="refines-test", allow_structural_orphans=True)
         prd1 = Requirement(
             "REQ-p00001",
             "Base Feature",
@@ -157,7 +157,7 @@ class TestDraftStatusRequirements:
     """Draft requirements should not be counted in Active-only summary."""
 
     def test_draft_vs_active(self, tmp_path):
-        cfg = base_config(name="draft-test", allow_orphans=True)
+        cfg = base_config(name="draft-test", allow_structural_orphans=True)
         active = Requirement(
             "REQ-p00001",
             "Active One",
@@ -232,7 +232,7 @@ class TestHeadingLevel3:
     """Requirements with ### heading level."""
 
     def test_h3_requirements(self, tmp_path):
-        cfg = base_config(name="h3-test", allow_orphans=True)
+        cfg = base_config(name="h3-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "H3 Requirement",
@@ -264,7 +264,7 @@ class TestSpecFilePreamble:
     """Spec files can have preamble text before requirements."""
 
     def test_preamble_ignored(self, tmp_path):
-        cfg = base_config(name="preamble-test", allow_orphans=True)
+        cfg = base_config(name="preamble-test", allow_structural_orphans=True)
         spec = tmp_path / "spec" / "prd-with-preamble.md"
         spec.parent.mkdir(parents=True, exist_ok=True)
 
@@ -432,7 +432,7 @@ class TestMCPUndoToMutation:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="undo-to", allow_orphans=True)
+        cfg = base_config(name="undo-to", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Undo Target",
@@ -497,7 +497,7 @@ class TestMCPRenameNode:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="rename-test", allow_orphans=True)
+        cfg = base_config(name="rename-test", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Rename Me",
@@ -550,7 +550,7 @@ class TestMCPChangeStatus:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="status-change", allow_orphans=True)
+        cfg = base_config(name="status-change", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Status Test",
@@ -590,7 +590,7 @@ class TestMCPDeleteRequirement:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="delete-test", allow_orphans=True)
+        cfg = base_config(name="delete-test", allow_structural_orphans=True)
         reqs = [
             Requirement(
                 "REQ-p00001",
@@ -650,7 +650,7 @@ class TestMCPRenameAssertion:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="rename-assert", allow_orphans=True)
+        cfg = base_config(name="rename-assert", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Rename Assert",
@@ -697,7 +697,7 @@ class TestMCPWorkspaceInfoProfiles:
             name="workspace-profiles",
             testing_enabled=True,
             test_dirs=["tests"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -769,7 +769,7 @@ class TestMCPAgentInstructions:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="agent-inst", allow_orphans=True)
+        cfg = base_config(name="agent-inst", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Instructions",
@@ -795,7 +795,7 @@ class TestHealthOutputToFile:
     """Health --output writes to file."""
 
     def test_output_to_file(self, tmp_path):
-        cfg = base_config(name="output-file", allow_orphans=True)
+        cfg = base_config(name="output-file", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Output Test",
@@ -912,7 +912,7 @@ class TestMCPChangedRequirements:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="changed-mcp", allow_orphans=True)
+        cfg = base_config(name="changed-mcp", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Stable",
@@ -1011,7 +1011,7 @@ class TestEmptyAssertions:
         cfg = base_config(
             name="no-assertions",
             require_assertions=False,
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         # Write a requirement without assertions section
         spec = tmp_path / "spec" / "prd.md"
@@ -1045,7 +1045,7 @@ class TestMCPMultiMutationWorkflow:
         pytest.importorskip("mcp")
         from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(name="scratch-build", allow_orphans=True)
+        cfg = base_config(name="scratch-build", allow_structural_orphans=True)
         prd = Requirement(
             "REQ-p00001",
             "Existing PRD",

@@ -505,7 +505,8 @@ class IdResolver:
         """Normalize a raw reference string to canonical form.
 
         Handles underscore-to-dash conversion and prefix case normalization.
-        Returns the input unchanged if it doesn't match any known form.
+        Returns the cleaned (dash-normalized, case-fixed) form even if
+        it doesn't match any known canonical pattern.
         """
         cleaned = raw_ref.replace("_", "-")
         # Fix namespace case before parsing (parse() is case-sensitive)
@@ -513,7 +514,7 @@ class IdResolver:
         if cleaned.lower().startswith(prefix.lower() + "-"):
             cleaned = prefix + cleaned[len(prefix) :]
         result = self.to_canonical(cleaned)
-        return result if result is not None else raw_ref
+        return result if result is not None else cleaned
 
     def build_instance_id(self, prefix: str, template_id: str) -> str:
         """Build a unique INSTANCE node ID.

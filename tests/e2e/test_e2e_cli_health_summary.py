@@ -306,7 +306,7 @@ class TestNamedComponentIds:
             component_style="named",
             types={"req": {"level": 1}},
             allowed_implements=["req -> req"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         cfg["id-patterns"]["component"] = {
             "style": "named",
@@ -373,7 +373,7 @@ class TestVariableLengthIds:
             leading_zeros=False,
             types={"req": {"level": 1}},
             allowed_implements=["req -> req"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         reqs = [
             Requirement(
@@ -425,7 +425,7 @@ class TestSkipDirsMultiSegment:
         cfg = base_config(
             name="skip-dirs-test",
             skip_dirs=["drafts/wip"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         included = Requirement(
             "REQ-p00001",
@@ -471,7 +471,7 @@ class TestCustomStatuses:
         cfg = base_config(
             name="custom-statuses",
             allowed_statuses=["Active", "Draft", "Review", "Archived"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         r1 = Requirement(
             "REQ-p00001",
@@ -654,7 +654,7 @@ class TestTraceFormats:
     """Trace JSON, CSV, markdown, text all produce valid output."""
 
     def _build(self, tmp_path):
-        cfg = base_config(name="trace-formats", allow_orphans=True)
+        cfg = base_config(name="trace-formats", allow_structural_orphans=True)
         reqs = [
             Requirement(
                 "REQ-p00001",
@@ -767,7 +767,7 @@ class TestSummaryFormats:
     """Summary in text, markdown, csv, json formats."""
 
     def _build(self, tmp_path):
-        cfg = base_config(name="summary-formats", allow_orphans=True)
+        cfg = base_config(name="summary-formats", allow_structural_orphans=True)
         reqs = [
             Requirement(
                 "REQ-p00001",
