@@ -374,6 +374,8 @@ class TraceGraph:
             self._undo_update_assertion(entry)
         elif op == "rename_assertion":
             self._undo_rename_assertion(entry)
+        elif op == "move_node_to_file":
+            self._undo_move_node_to_file(entry)
         elif op == "fix_broken_reference":
             self._undo_fix_broken_reference(entry)
         # Unknown operations are silently ignored (forward compatibility)
@@ -512,6 +514,26 @@ class TraceGraph:
                         edge.assertion_targets.clear()
                         edge.assertion_targets.extend(old_targets)
                         break
+
+    def _undo_move_node_to_file(self, entry: MutationEntry) -> None:
+        """Undo a move_node_to_file operation."""
+        node_id = entry.target_id
+        old_file_id = entry.before_state.get("file_id")
+        new_file_id = entry.after_state.get("file_id")
+        old_metadata = entry.before_state.get("metadata", {})
+
+        if node_id and old_file_id and new_file_id:
+            node = self._index.get(node_id)
+            old_file = self._index.get(old_file_id)
+            new_file = self._index.get(new_file_id)
+
+            if node and old_file and new_file:
+                # Unlink from new file
+                new_file.unlink(node)
+
+                # Re-link to old file with original metadata
+                edge = old_file.link(node, EdgeKind.CONTAINS)
+                edge.metadata.update(old_metadata)
 
     def _undo_fix_broken_reference(self, entry: MutationEntry) -> None:
         """Undo a fix broken reference operation."""
@@ -1707,6 +1729,89 @@ class TraceGraph:
             if source.kind == NodeKind.REQUIREMENT:
                 self._orphaned_ids.add(source_id)
                 entry.after_state["became_orphan"] = True
+
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-o00063
+    def move_node_to_file(
+        self,
+        node_id: str,
+        target_file_id: str,
+    ) -> MutationEntry:
+        """Move a content node from one FILE parent to another.
+
+        Re-wires the CONTAINS edge from the current FILE parent to the
+        target FILE node. ASSERTION and REMAINDER children follow via
+        STRUCTURES edges automatically.
+
+        Args:
+            node_id: The node to move.
+            target_file_id: The FILE node to move to.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id or target_file_id is not found.
+            ValueError: If target is not a FILE node, or node has no
+                current FILE parent.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+        if target_file_id not in self._index:
+            raise KeyError(f"Target file '{target_file_id}' not found")
+
+        node = self._index[node_id]
+        target_file = self._index[target_file_id]
+
+        if target_file.kind != NodeKind.FILE:
+            raise ValueError(f"Target '{target_file_id}' is not a FILE node")
+
+        # Find current FILE parent via CONTAINS edge
+        current_file = node.file_node()
+        if current_file is None:
+            raise ValueError(f"Node '{node_id}' has no FILE parent")
+
+        # Get current render_order from the CONTAINS edge
+        old_render_order = 0.0
+        old_metadata: dict = {}
+        for edge in node.iter_incoming_edges():
+            if edge.source is current_file and edge.kind == EdgeKind.CONTAINS:
+                old_render_order = edge.metadata.get("render_order", 0.0)
+                old_metadata = dict(edge.metadata)
+                break
+
+        entry = MutationEntry(
+            operation="move_node_to_file",
+            target_id=node_id,
+            before_state={
+                "file_id": current_file.id,
+                "render_order": old_render_order,
+                "metadata": old_metadata,
+            },
+            after_state={
+                "file_id": target_file_id,
+            },
+        )
+
+        # Unlink from current file
+        current_file.unlink(node)
+
+        # Compute render_order at end of target file's children
+        max_order = -1.0
+        for edge in target_file.iter_outgoing_edges():
+            if edge.kind == EdgeKind.CONTAINS:
+                order = edge.metadata.get("render_order", 0.0)
+                if order > max_order:
+                    max_order = order
+        new_order = max_order + 1.0
+
+        # Link to target file
+        new_edge = target_file.link(node, EdgeKind.CONTAINS)
+        new_edge.metadata["render_order"] = new_order
+
+        entry.after_state["render_order"] = new_order
 
         self._mutation_log.append(entry)
         return entry
