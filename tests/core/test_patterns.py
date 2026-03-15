@@ -216,6 +216,27 @@ class TestParsedId:
 # --- Helper factories ---
 
 
+@pytest.fixture
+def resolver():
+    """Default IdResolver matching the HHT-style config."""
+    config = IdPatternConfig.from_dict(
+        {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
+                "types": {
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase"},
+            },
+        }
+    )
+    return IdResolver(config)
+
+
 def _make_hht_resolver():
     config = IdPatternConfig.from_dict(
         {
