@@ -1,5 +1,8 @@
 # Known Issues
 
+[ ] Bug: Viewer Push button (in edit mode) isn't active unless changes were made in the viewer. But there could be changes on-disk (and therefore in memory) that could be pushed.
+- The push-able state should depend on the actual file states, not on elspais activity.
+
 [ ] Design: does Addresses support REQ->JNY, JNY->REQ, or both? I think we only use JNT->REQ?
 
 [ ] Chore: review specs for accuracy
@@ -13,7 +16,7 @@
 [ ] Major Project: In elspais repo, udpdate spec file naming convention
 - Rename spec/ files more sensibly  and consistently
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
-- Maybe a tool to help with renumber REQs (it will have to check all code, test, doc, etc files and make approte replacements.
+- The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.
 
 [ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
