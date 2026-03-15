@@ -34,6 +34,7 @@ from elspais.mcp.server import (
     _mutate_add_assertion,
     _mutate_add_edge,
     _mutate_change_edge_kind,
+    _mutate_change_edge_targets,
     _mutate_change_status,
     _mutate_delete_assertion,
     _mutate_delete_edge,
@@ -623,11 +624,12 @@ def create_app(
 
     @app.route("/api/mutate/edge", methods=["POST"])
     def api_mutate_edge():
-        """POST /api/mutate/edge - Edge mutations (add/change_kind/delete).
+        """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete).
 
         The ``action`` field in the JSON body determines the operation:
         - "add": requires source_id, target_id, edge_kind
         - "change_kind": requires source_id, target_id, new_kind
+        - "change_targets": requires source_id, target_id, assertion_targets
         - "delete": requires source_id, target_id
         """
         data = request.get_json(force=True)
@@ -661,6 +663,9 @@ def create_app(
                     400,
                 )
             result = _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
+        elif action == "change_targets":
+            targets = data.get("assertion_targets", [])
+            result = _mutate_change_edge_targets(_state["graph"], source_id, target_id, targets)
         elif action == "delete":
             result = _mutate_delete_edge(_state["graph"], source_id, target_id, confirm=True)
         else:

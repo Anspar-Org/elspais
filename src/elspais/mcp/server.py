@@ -1933,6 +1933,34 @@ def _mutate_change_edge_kind(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-C
+def _mutate_change_edge_targets(
+    graph: TraceGraph,
+    source_id: str,
+    target_id: str,
+    assertion_targets: list[str],
+) -> dict[str, Any]:
+    """Change assertion targets on an edge.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.change_edge_targets(source_id, target_id, assertion_targets)
+        if assertion_targets:
+            targets_display = ", ".join(assertion_targets)
+        else:
+            targets_display = "(whole requirement)"
+        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}"
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": msg,
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
 def _mutate_delete_edge(
     graph: TraceGraph,
     source_id: str,

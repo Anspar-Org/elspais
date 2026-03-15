@@ -497,6 +497,74 @@ function onDeleteEdge(sourceId, targetId) {
     });
 }
 
+function editEdgeTargets(sourceId, targetId, btn) {
+    // Remove any existing picker
+    var existing = document.querySelector('.edge-targets-picker');
+    if (existing) existing.remove();
+
+    // Fetch target's assertions
+    fetch('/api/requirement/' + encodeURIComponent(targetId))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });
+            if (assertions.length === 0) {
+                showToast('Target has no assertions', 'warning');
+                return;
+            }
+
+            // Find current targets from parent row data
+            var parentRow = btn.closest('.card-parent-row');
+            var targetsSpan = parentRow ? parentRow.querySelector('.card-parent-targets') : null;
+            var currentTargets = [];
+            if (targetsSpan) {
+                var text = targetsSpan.textContent.replace(/[\[\]]/g, '');
+                currentTargets = text.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            }
+
+            // Build checkbox popup
+            var picker = document.createElement('div');
+            picker.className = 'edge-targets-picker';
+            picker.innerHTML = '<div class="edge-targets-picker-title">Assertion Targets</div>';
+
+            assertions.forEach(function(a) {
+                var checked = currentTargets.indexOf(a.label) >= 0 ? ' checked' : '';
+                picker.innerHTML += '<label class="edge-targets-option">' +
+                    '<input type="checkbox" value="' + escapeAttr(a.label) + '"' + checked + '> ' +
+                    '<strong>' + escapeHtml(a.label) + '</strong> ' +
+                    escapeHtml((a.text || '').substring(0, 60)) +
+                    '</label>';
+            });
+
+            picker.innerHTML += '<div class="edge-targets-actions">' +
+                '<button class="edge-targets-apply" onclick="applyEdgeTargets(\'' +
+                sourceId + '\', \'' + targetId + '\', this)">Apply</button> ' +
+                '<button class="edge-targets-cancel" onclick="this.closest(\'.edge-targets-picker\').remove()">Cancel</button>' +
+                '</div>';
+
+            btn.parentNode.appendChild(picker);
+        });
+}
+
+function applyEdgeTargets(sourceId, targetId, btn) {
+    var picker = btn.closest('.edge-targets-picker');
+    var checks = picker.querySelectorAll('input[type="checkbox"]');
+    var targets = [];
+    checks.forEach(function(cb) { if (cb.checked) targets.push(cb.value); });
+
+    mutate('/api/mutate/edge', {
+        action: 'change_targets',
+        source_id: sourceId,
+        target_id: targetId,
+        assertion_targets: targets
+    }).then(async function(result) {
+        if (result && result.success) {
+            picker.remove();
+            await refreshAllOpenCards();
+            loadTreeData();
+        }
+    });
+}
+
 function onAddRelationship(nodeId, btn) {
     // If form already exists, remove it
     var existing = btn.parentNode.querySelector('.card-add-rel-form');

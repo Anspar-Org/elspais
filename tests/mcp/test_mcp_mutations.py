@@ -518,6 +518,55 @@ class TestMutateChangeEdgeKind:
         assert result["mutation"]["operation"] == "change_edge_kind"
 
 
+class TestMutateChangeEdgeTargets:
+    """Tests for mutate_change_edge_targets() tool.
+
+    Validates REQ-o00062-C: Edge mutation tools include change_targets action.
+    """
+
+    def test_REQ_o00062_C_delegates_to_graph_change_edge_targets(self, mutation_graph):
+        """REQ-o00062-C: Delegates to graph.change_edge_targets()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        # REQ-o00001 implements REQ-p00001 (edge exists from fixture)
+        # Change assertion targets to just ["A"]
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["A"])
+
+        assert result["success"] is True
+        # Verify the edge's assertion_targets is ["A"]
+        parent = mutation_graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-o00001"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+
+    def test_REQ_o00062_E_returns_mutation_entry(self, mutation_graph):
+        """REQ-o00062-E: Returns MutationEntry for audit."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["B"])
+
+        assert "mutation" in result
+        mutation = result["mutation"]
+        assert mutation["operation"] == "change_edge_targets"
+
+    def test_change_edge_targets_error_no_edge(self, mutation_graph):
+        """Returns error when no edge exists between nodes."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        # REQ-p00001-A is an assertion, no edge from it to REQ-o00001
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-p00001-A", "REQ-o00001", ["A"])
+
+        assert result["success"] is False
+        assert "error" in result
+
+
 class TestMutateDeleteEdge:
     """Tests for mutate_delete_edge() tool."""
 
