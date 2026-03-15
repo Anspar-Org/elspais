@@ -364,6 +364,8 @@ class TraceGraph:
             self._undo_delete_edge(entry)
         elif op == "change_edge_kind":
             self._undo_change_edge_kind(entry)
+        elif op == "change_edge_targets":
+            self._undo_change_edge_targets(entry)
         elif op == "add_assertion":
             self._undo_add_assertion(entry)
         elif op == "delete_assertion":
@@ -492,6 +494,23 @@ class TraceGraph:
                 for edge in source.iter_incoming_edges():
                     if edge.source.id == target_id:
                         edge.kind = EdgeKind(old_kind)
+                        break
+
+    def _undo_change_edge_targets(self, entry: MutationEntry) -> None:
+        """Undo an edge assertion_targets change."""
+        source_id = entry.before_state.get("source_id")
+        target_id = entry.before_state.get("target_id")
+        old_targets = entry.before_state.get("assertion_targets", [])
+        if source_id and target_id:
+            source = self._index.get(source_id)
+            if source:
+                for edge in source.iter_incoming_edges():
+                    if edge.source.id == target_id and edge.kind in (
+                        EdgeKind.IMPLEMENTS,
+                        EdgeKind.REFINES,
+                    ):
+                        edge.assertion_targets.clear()
+                        edge.assertion_targets.extend(old_targets)
                         break
 
     def _undo_fix_broken_reference(self, entry: MutationEntry) -> None:
@@ -1558,6 +1577,73 @@ class TraceGraph:
 
         # Update the edge kind directly (dataclass field, not _kind)
         edge_to_update.kind = new_kind
+
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-o00062-C
+    def change_edge_targets(
+        self,
+        source_id: str,
+        target_id: str,
+        assertion_targets: list[str],
+    ) -> MutationEntry:
+        """Change assertion targets on an existing IMPLEMENTS/REFINES edge.
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+            assertion_targets: New assertion target labels (empty list = whole-req).
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If source_id or target_id is not found.
+            ValueError: If no IMPLEMENTS/REFINES edge exists between source and target.
+        """
+        if source_id not in self._index:
+            raise KeyError(f"Source node '{source_id}' not found")
+        if target_id not in self._index:
+            raise KeyError(f"Target node '{target_id}' not found")
+
+        source = self._index[source_id]
+
+        # Find the edge from target to source (target is parent, source is child)
+        edge_to_update = None
+        for edge in source.iter_incoming_edges():
+            if edge.source.id == target_id and edge.kind in (
+                EdgeKind.IMPLEMENTS,
+                EdgeKind.REFINES,
+            ):
+                edge_to_update = edge
+                break
+
+        if edge_to_update is None:
+            raise ValueError(
+                f"No IMPLEMENTS/REFINES edge exists from '{target_id}' to '{source_id}'"
+            )
+
+        old_targets = list(edge_to_update.assertion_targets)
+
+        entry = MutationEntry(
+            operation="change_edge_targets",
+            target_id=source_id,
+            before_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "assertion_targets": old_targets,
+            },
+            after_state={
+                "source_id": source_id,
+                "target_id": target_id,
+                "assertion_targets": list(assertion_targets),
+            },
+        )
+
+        # Update assertion_targets in place
+        edge_to_update.assertion_targets.clear()
+        edge_to_update.assertion_targets.extend(assertion_targets)
 
         self._mutation_log.append(entry)
         return entry

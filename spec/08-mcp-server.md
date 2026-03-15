@@ -94,7 +94,7 @@ A. Node mutations SHALL include: rename, update_title, change_status, add_requir
 
 B. Assertion mutations SHALL include: add_assertion, update_assertion, delete_assertion, rename_assertion.
 
-C. Edge mutations SHALL include: add_edge, change_edge_kind, delete_edge, fix_broken_reference.
+C. Edge mutations SHALL include: add_edge, change_edge_kind, change_edge_targets, delete_edge, fix_broken_reference.
 
 D. All mutations SHALL delegate to TraceGraph mutation methods, not implement mutation logic directly.
 

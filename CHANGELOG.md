@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`change_edge_targets()` mutation** -- Modifies assertion targets on IMPLEMENTS/REFINES edges without requiring delete+add. Full undo support.
+
 ## [0.104.17] - 2026-03-14
 
 ### Added
