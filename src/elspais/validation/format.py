@@ -84,6 +84,7 @@ class FormatViolation:
 def validate_requirement_format(
     node: GraphNode,
     rules: FormatRulesConfig,
+    resolver: Any | None = None,
 ) -> list[FormatViolation]:
     """Validate a requirement node against format rules.
 
@@ -201,6 +202,10 @@ def validate_requirement_format(
         if child.kind == NodeKind.ASSERTION:
             # Extract label from assertion ID (e.g., "REQ-p00001-A" -> "A")
             label = child.get_field("label")
+            if not label and resolver:
+                parsed = resolver.parse(child.id)
+                if parsed and parsed.assertions:
+                    label = parsed.assertions[0]
             if not label and "-" in child.id:
                 label = child.id.split("-")[-1]
             if label:

@@ -127,9 +127,9 @@ class CodeParser:
             return context.config["resolver"]
 
         # Fall back to creating a default
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
+        from elspais.utilities.patterns import build_resolver
 
-        config = IdPatternConfig.from_dict(
+        return build_resolver(
             {
                 "project": {"namespace": "REQ"},
                 "id-patterns": {
@@ -143,7 +143,6 @@ class CodeParser:
                 },
             }
         )
-        return IdResolver(config)
 
     def _get_reference_config(
         self,

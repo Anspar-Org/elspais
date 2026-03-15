@@ -335,26 +335,6 @@ class ReferenceResolver:
 # =============================================================================
 
 
-def _get_type_codes(resolver: IdResolver) -> list[str]:
-    """Get sorted unique type alias values from an IdResolver.
-
-    Args:
-        resolver: IdResolver instance.
-
-    Returns:
-        Sorted list of unique type code strings.
-    """
-    type_ids: set[str] = set()
-    for tdef in resolver.config.types.values():
-        for alias_val in tdef.aliases.values():
-            type_ids.add(alias_val)
-    # Also add type codes themselves if no aliases
-    for code, tdef in resolver.config.types.items():
-        if not tdef.aliases:
-            type_ids.add(code)
-    return sorted(type_ids)
-
-
 def _get_assertion_label(resolver: IdResolver) -> str:
     """Build assertion label regex from an IdResolver's config.
 
@@ -398,7 +378,7 @@ def build_id_pattern(
     sep_pattern = _build_separator_pattern(ref_config.separators)
 
     # Get type codes from resolver
-    type_codes = _get_type_codes(resolver)
+    type_codes = resolver.all_type_alias_values()
     if type_codes:
         type_pattern = f"(?:{'|'.join(re.escape(t) for t in type_codes)})"
     else:

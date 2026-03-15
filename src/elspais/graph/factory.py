@@ -32,7 +32,7 @@ from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
-from elspais.utilities.patterns import IdPatternConfig, IdResolver
+from elspais.utilities.patterns import build_resolver
 from elspais.utilities.reference_config import ReferenceResolver
 
 
@@ -98,10 +98,92 @@ def _create_file_node(
     return node
 
 
-def _build_resolver(config: dict[str, Any]) -> IdResolver:
-    """Create IdResolver from a full config dict (reads project.namespace + id-patterns)."""
-    id_config = IdPatternConfig.from_dict(config)
-    return IdResolver(id_config)
+def _run_prescan_command(
+    command: str,
+    test_dirs: list[str],
+    test_patterns: list[str],
+    skip_dirs: list[str],
+    repo_root: Path,
+) -> dict[str, list[dict]] | None:
+    """Run an external prescan command to discover test structure.
+
+    The command receives test file paths on stdin (one per line) and
+    outputs a JSON array on stdout with the standardized schema:
+    [{"file": "...", "function": "...", "class": "...|null", "line": N}, ...]
+
+    Args:
+        command: Shell command to run.
+        test_dirs: Test directory patterns from config.
+        test_patterns: File patterns to match.
+        skip_dirs: Directories to skip.
+        repo_root: Repository root for resolving paths.
+
+    Returns:
+        Dict mapping file path -> list of function entries, or None on failure.
+    """
+    import json
+    import subprocess
+    import sys
+
+    # Collect all test file paths
+    test_files: list[str] = []
+    for dir_pattern in test_dirs:
+        matched_dirs = glob(str(repo_root / dir_pattern), recursive=True)
+        for dir_path in matched_dirs:
+            p = Path(dir_path)
+            if p.is_dir():
+                domain_file = DomainFile(
+                    p, patterns=test_patterns, recursive=True, skip_dirs=skip_dirs
+                )
+                for ctx, _content in domain_file.iterate_sources():
+                    source_path = ctx.metadata.get("path", ctx.source_id)
+                    try:
+                        rel = str(Path(source_path).resolve().relative_to(repo_root.resolve()))
+                    except ValueError:
+                        rel = source_path
+                    test_files.append(rel)
+
+    if not test_files:
+        return None
+
+    stdin_data = "\n".join(test_files)
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            input=stdin_data,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            print(
+                f"Warning: prescan_command failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return None
+
+        entries = json.loads(result.stdout)
+        if not isinstance(entries, list):
+            print("Warning: prescan_command output is not a JSON array", file=sys.stderr)
+            return None
+
+        # Group by file path
+        by_file: dict[str, list[dict]] = {}
+        for entry in entries:
+            file_path = entry.get("file", "")
+            if file_path:
+                by_file.setdefault(file_path, []).append(entry)
+        return by_file
+
+    except subprocess.TimeoutExpired:
+        print("Warning: prescan_command timed out after 60s", file=sys.stderr)
+        return None
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: prescan_command error: {e}", file=sys.stderr)
+        return None
 
 
 # Default file patterns for [directories].code scanning.
@@ -196,7 +278,7 @@ def _resolve_spec_dir_config(
 
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
-    resolver = _build_resolver(repo_config)
+    resolver = build_resolver(repo_config)
     reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
     registry = ParserRegistry()
@@ -280,7 +362,7 @@ def build_graph(
                 print(f"Warning: {err}", file=sys.stderr)
 
     # 3. Create default resolver and reference resolver
-    default_resolver = _build_resolver(config)
+    default_resolver = build_resolver(config)
     default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
     # Implements: REQ-d00128-G
@@ -421,6 +503,23 @@ def build_graph(
         if testing_config.get("enabled", False):
             test_dirs = testing_config.get("test_dirs", [])
             test_patterns = testing_config.get("patterns", ["*_test.*", "test_*.*"])
+            test_skip_dirs = testing_config.get("skip_dirs", [])
+
+            # Run external prescan command if configured
+            prescan_command = testing_config.get("prescan_command", "")
+            prescan_data: dict[str, list[dict]] | None = None
+            if prescan_command:
+                prescan_data = _run_prescan_command(
+                    prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
+                )
+
+            # Rebuild test registry with prescan data if available
+            if prescan_data:
+                test_registry = ParserRegistry()
+                test_registry.register(
+                    TestParser(default_resolver, default_reference_resolver, prescan_data)
+                )
+                test_registry.register(RemainderParser())
 
             for dir_pattern in test_dirs:
                 # Resolve glob pattern to get directories
@@ -432,6 +531,7 @@ def build_graph(
                             path,
                             patterns=test_patterns,
                             recursive=True,
+                            skip_dirs=test_skip_dirs,
                         )
                         for parsed_content in domain_file.deserialize(test_registry):
                             # Implements: REQ-d00128-A

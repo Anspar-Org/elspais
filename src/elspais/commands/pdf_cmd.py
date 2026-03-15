@@ -58,11 +58,10 @@ def run(args: argparse.Namespace) -> int:
     # Assemble Markdown from graph
     from elspais.config import get_config
     from elspais.pdf.assembler import MarkdownAssembler
-    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+    from elspais.utilities.patterns import build_resolver
 
     config = get_config(config_path, repo_root)
-    id_config = IdPatternConfig.from_dict(config)
-    resolver = IdResolver(id_config)
+    resolver = build_resolver(config)
 
     title = getattr(args, "title", None)
     cover = getattr(args, "cover", None)

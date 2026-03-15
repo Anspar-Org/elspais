@@ -21,6 +21,7 @@ from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
 
 
@@ -33,6 +34,10 @@ def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
 _DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
+
+# Traceability edges: all edge kinds except structural (CONTAINS, STRUCTURES)
+_STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.CONTAINS, EdgeKind.STRUCTURES})
+_TRACEABILITY_EDGE_KINDS = frozenset(k for k in EdgeKind if k not in _STRUCTURAL_EDGE_KINDS)
 
 
 @dataclass
@@ -213,6 +218,63 @@ class TraceGraph:
     def has_broken_references(self) -> bool:
         """Check if the graph has broken references."""
         return len(self._broken_references) > 0
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Reachability API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def is_reachable_to_requirement(self, node: GraphNode) -> bool:
+        """Check if node is connected to any REQUIREMENT via traceability edges.
+
+        Traverses ancestors excluding structural edges (CONTAINS, STRUCTURES).
+        A node is "linked" if it can reach a REQUIREMENT through traceability
+        edges like IMPLEMENTS, VALIDATES, YIELDS, etc.
+        """
+        for ancestor in node.ancestors(edge_kinds=_TRACEABILITY_EDGE_KINDS):
+            if ancestor.kind == NodeKind.REQUIREMENT:
+                return True
+        return False
+
+    def iter_unlinked(self, kind: NodeKind) -> Iterator[GraphNode]:
+        """Iterate nodes of given kind that have a FILE parent but no requirement link.
+
+        "Unlinked" means the node is structurally sound (has FILE parent via
+        CONTAINS) but has no path to any REQUIREMENT through traceability edges.
+
+        Args:
+            kind: The NodeKind to check (typically TEST or CODE).
+
+        Yields:
+            Unlinked GraphNode instances.
+        """
+        for node in self.iter_by_kind(kind):
+            # Must have a FILE parent (not a structural orphan)
+            has_file_parent = any(
+                p.kind == NodeKind.FILE for p in node.iter_parents(edge_kinds={EdgeKind.CONTAINS})
+            )
+            if has_file_parent and not self.is_reachable_to_requirement(node):
+                yield node
+
+    def iter_structural_orphans(self) -> Iterator[GraphNode]:
+        """Iterate nodes that have no FILE ancestor.
+
+        Structural orphans indicate build pipeline bugs — nodes that
+        failed to wire into the file structure.
+        Skips FILE nodes (they are files) and INSTANCE nodes (virtual, no file).
+
+        Yields:
+            Structurally orphaned GraphNode instances.
+        """
+        skip_kinds = {NodeKind.FILE}
+        for node in self.all_nodes():
+            if node.kind in skip_kinds:
+                continue
+            # INSTANCE nodes are virtual (no file) — skip
+            stereotype = node.get_field("stereotype")
+            if stereotype is not None and getattr(stereotype, "value", None) == "instance":
+                continue
+            if node.file_node() is None:
+                yield node
 
     # ─────────────────────────────────────────────────────────────────────────
     # Mutation Infrastructure
@@ -1704,8 +1766,7 @@ class GraphBuilder:
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
         # Implements: REQ-p00014-B
         self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
-        # Detection: track orphan candidates and broken references
-        self._orphan_candidates: set[str] = set()
+        # Detection: broken references
         self._broken_references: list[BrokenReference] = []
 
     # Implements: REQ-d00128-D
@@ -1837,7 +1898,6 @@ class GraphBuilder:
                 node._content["rationale"] = section.get("content", "")
                 break
         self._nodes[req_id] = node
-        self._orphan_candidates.add(req_id)  # Track as potential orphan
 
         # Collect all children (assertions + sections) with line numbers,
         # then add in document order so iter_children() yields document order.
@@ -1915,8 +1975,6 @@ class GraphBuilder:
             "parse_end_line": content.end_line,
         }
         self._nodes[journey_id] = node
-        # Implements: REQ-d00071-D
-        self._orphan_candidates.add(journey_id)
 
         # Queue addresses links for later resolution
         for addr_ref in data.get("addresses", []):
@@ -1967,7 +2025,6 @@ class GraphBuilder:
                 if func_line:
                     node.set_field("function_line", func_line)
                 self._nodes[code_id] = node
-                self._orphan_candidates.add(code_id)
 
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
 
@@ -2015,7 +2072,6 @@ class GraphBuilder:
             if expected_broken > 0:
                 node.set_metric("_expected_broken_count", expected_broken)
             self._nodes[test_id] = node
-            self._orphan_candidates.add(test_id)
 
         for val_ref in data.get("validates", []):
             self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
@@ -2057,7 +2113,6 @@ class GraphBuilder:
             "parse_end_line": content.end_line,
         }
         self._nodes[result_id] = node
-        self._orphan_candidates.add(result_id)
 
         # Queue edge to parent TEST node if test_id is provided
         if test_id:
@@ -2243,7 +2298,11 @@ class GraphBuilder:
             clone_map: dict[str, GraphNode] = {}
 
             for orig in template_nodes:
-                clone_id = f"{declaring_id}::{orig.id}"
+                clone_id = (
+                    self._resolver.build_instance_id(declaring_id, orig.id)
+                    if self._resolver
+                    else f"{declaring_id}{INSTANCE_SEPARATOR}{orig.id}"
+                )
                 clone = GraphNode(
                     id=clone_id,
                     kind=orig.kind,
@@ -2412,7 +2471,11 @@ class GraphBuilder:
                                         and inst_edge.target.id == template_root.id
                                     ):
                                         # Found it! Redirect to instance ID
-                                        instance_id = f"{ancestor.id}::{target_id}"
+                                        instance_id = (
+                                            self._resolver.build_instance_id(ancestor.id, target_id)
+                                            if self._resolver
+                                            else f"{ancestor.id}{INSTANCE_SEPARATOR}{target_id}"
+                                        )
                                         if self._nodes.get(instance_id):
                                             result[idx] = (source_id, instance_id, edge_kind)
                                             attributed = True
@@ -2466,9 +2529,6 @@ class GraphBuilder:
             target = self._nodes.get(target_id)
 
             if source and target:
-                # Node is being linked to a parent - no longer orphan candidate
-                self._orphan_candidates.discard(source_id)
-
                 # If target is an assertion, link from its parent requirement
                 # with assertion_targets set, so the child appears under the
                 # parent REQ (not the assertion node) with assertion badges
@@ -2512,23 +2572,42 @@ class GraphBuilder:
                     source.set_metric("_expected_broken_targets", targets)
 
         # Implements: REQ-d00071-A, REQ-d00071-B
+        # Compute orphan candidates from graph structure instead of tracking
+        # incrementally. A content node (not FILE, REMAINDER, ASSERTION) is an
+        # orphan candidate if it has no content-level parent edges — i.e. no
+        # incoming IMPLEMENTS, REFINES, VALIDATES, ADDRESSES, or YIELDS edges.
+        # CONTAINS edges (from FILE nodes) don't count as content-level links.
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
         #        with at least one meaningful (non-satellite) child.
         # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
+        _non_candidate_kinds = {NodeKind.FILE, NodeKind.REMAINDER, NodeKind.ASSERTION}
+        _content_edge_kinds = {
+            EdgeKind.IMPLEMENTS,
+            EdgeKind.REFINES,
+            EdgeKind.VALIDATES,
+            EdgeKind.ADDRESSES,
+            EdgeKind.YIELDS,
+        }
         roots = []
         root_ids = set()
-        for node_id in self._orphan_candidates:
-            node = self._nodes.get(node_id)
-            if not node:
+        orphaned_ids: set[str] = set()
+        for node_id, node in self._nodes.items():
+            if node.kind in _non_candidate_kinds:
                 continue
+            # Check if node has any content-level parent edge
+            has_content_parent = any(
+                edge.kind in _content_edge_kinds for edge in node.iter_incoming_edges()
+            )
+            if has_content_parent:
+                continue
+            # Parentless (content-wise) node — classify as root or orphan
             if node.kind == NodeKind.REQUIREMENT or any(
                 c.kind not in self.satellite_kinds for c in node.iter_children()
             ):
                 roots.append(node)
                 root_ids.add(node_id)
-
-        # Final orphan set: candidates that aren't roots
-        orphaned_ids = self._orphan_candidates - root_ids
+            else:
+                orphaned_ids.add(node_id)
 
         graph = TraceGraph(
             repo_root=self.repo_root,

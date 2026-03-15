@@ -357,7 +357,7 @@ def _derive_refines_refs(node: GraphNode) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: TraceGraph) -> set[str]:
+def _find_dirty_files(graph: TraceGraph, resolver: Any | None = None) -> set[str]:
     """Identify FILE node IDs whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
@@ -412,9 +412,13 @@ def _find_dirty_files(graph: TraceGraph) -> set[str]:
                 _mark_node_file(parent_id)
             else:
                 # Derive parent from assertion ID (REQ-xxx-A -> REQ-xxx)
-                parts = target_id.rsplit("-", 1)
-                if len(parts) == 2:
-                    _mark_node_file(parts[0])
+                split = resolver.split_assertion_ref(target_id) if resolver else None
+                if split is None and "-" in target_id:
+                    parts = target_id.rsplit("-", 1)
+                    if len(parts) == 2:
+                        split = (parts[0], parts[1])
+                if split:
+                    _mark_node_file(split[0])
 
         # For add_requirement, the target file is the parent's file
         if entry.operation == "add_requirement":
@@ -460,6 +464,7 @@ def render_save(
     repo_root: Path,
     consistency_check: bool = False,
     rebuild_fn: Any | None = None,
+    resolver: Any | None = None,
 ) -> dict[str, Any]:
     """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
 
@@ -493,7 +498,7 @@ def render_save(
     _wire_new_requirements_to_files(graph)
 
     # Find dirty FILE nodes
-    dirty_file_ids = _find_dirty_files(graph)
+    dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
 
     if not dirty_file_ids:
         # No dirty files — clear log and return

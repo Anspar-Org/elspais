@@ -613,7 +613,12 @@ def create_app(
                 return jsonify({"success": False, "error": "edge_kind required for add"}), 400
             assertion_targets = data.get("assertion_targets")
             result = _mutate_add_edge(
-                _state["graph"], source_id, target_id, edge_kind, assertion_targets
+                _state["graph"],
+                source_id,
+                target_id,
+                edge_kind,
+                assertion_targets,
+                config=_state.get("config"),
             )
         elif action == "change_kind":
             new_kind = data.get("new_kind", "")
@@ -664,10 +669,12 @@ def create_app(
         """POST /api/save - Persist mutations to spec files on disk."""
         # Implements: REQ-d00132-A
         from elspais.graph.render import render_save
+        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
 
         result = render_save(
             _state["graph"],
             _state["working_dir"],
+            resolver=_build_resolver_for_save(_state["config"]),
         )
         status_code = 200 if result.get("success") else 409
         # Update build_time after successful save

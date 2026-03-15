@@ -69,6 +69,7 @@ from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 from elspais.mcp.search import matches_node, parse_query, score_node
+from elspais.utilities.patterns import build_resolver
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source path helper
@@ -1857,12 +1858,33 @@ def _mutate_rename_assertion(graph: TraceGraph, old_id: str, new_label: str) -> 
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _normalize_assertion_targets(
+    targets: list[str], target_id: str, config: dict[str, Any]
+) -> list[str]:
+    """Normalize assertion targets to bare labels using IdResolver.
+
+    Callers may pass full assertion IDs like "REQ-p00044-E"; the Edge
+    contract expects bare labels like "E".  Uses IdResolver.parse() to
+    extract the assertion label when a full ID is provided.
+    """
+    resolver = build_resolver(config)
+    normalized: list[str] = []
+    for at in targets:
+        parsed = resolver.parse(at)
+        if parsed and parsed.assertions and parsed.fqn == target_id:
+            normalized.extend(parsed.assertions)
+        else:
+            normalized.append(at)
+    return normalized
+
+
 def _mutate_add_edge(
     graph: TraceGraph,
     source_id: str,
     target_id: str,
     edge_kind: str,
     assertion_targets: list[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add an edge between nodes.
 
@@ -1870,6 +1892,8 @@ def _mutate_add_edge(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        if assertion_targets and config:
+            assertion_targets = _normalize_assertion_targets(assertion_targets, target_id, config)
         edge_kind_enum = EdgeKind[edge_kind.upper()]
         entry = graph.add_edge(
             source_id=source_id,
@@ -2020,10 +2044,10 @@ def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
 
 
 def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
-    """Get all orphaned nodes (nodes with no parents).
+    """Get structural orphans — nodes without any FILE ancestor.
 
-    Returns nodes that have been orphaned — parentless nodes that are
-    not roots. Includes all node kinds (REQUIREMENT, TEST, TEST_RESULT, CODE).
+    Structural orphans indicate build pipeline bugs where nodes failed
+    to wire into the file structure. Excludes FILE and INSTANCE nodes.
     """
     orphans: list[dict[str, Any]] = []
     by_kind: dict[str, list[dict[str, Any]]] = {}
@@ -2052,6 +2076,57 @@ def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
     return {
         "orphans": orphans,
         "count": len(orphans),
+        "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
+    }
+
+
+def _get_unlinked_nodes(graph: TraceGraph, kind: str | None = None) -> dict[str, Any]:
+    """Get unlinked nodes — nodes with a FILE parent but no requirement link.
+
+    Unlinked nodes are structurally sound (have a FILE parent via CONTAINS)
+    but have no path to any REQUIREMENT through traceability edges.
+
+    Args:
+        graph: The trace graph to inspect.
+        kind: Optional filter — "test" or "code". If None, returns both.
+
+    Returns:
+        Dictionary with unlinked nodes grouped by kind with counts.
+    """
+    kinds_to_check: list[NodeKind] = []
+    if kind is None:
+        kinds_to_check = [NodeKind.TEST, NodeKind.CODE]
+    elif kind == "test":
+        kinds_to_check = [NodeKind.TEST]
+    elif kind == "code":
+        kinds_to_check = [NodeKind.CODE]
+
+    unlinked: list[dict[str, Any]] = []
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+
+    for nk in kinds_to_check:
+        for node in graph.iter_unlinked(nk):
+            entry: dict[str, Any] = {
+                "id": node.id,
+                "kind": node.kind.value,
+                "label": node.get_label(),
+            }
+            _fn = node.file_node()
+            _line = node.get_field("parse_line")
+            if _fn and _line is not None:
+                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
+            elif _fn:
+                entry["source"] = _fn.get_field("relative_path")
+            unlinked.append(entry)
+
+            kind_name = node.kind.value
+            if kind_name not in by_kind:
+                by_kind[kind_name] = []
+            by_kind[kind_name].append(entry)
+
+    return {
+        "unlinked": unlinked,
+        "count": len(unlinked),
         "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
     }
 
@@ -3981,11 +4056,23 @@ def create_server(
     ) -> dict[str, Any]:
         """Add an edge between nodes.
 
+        source_id is the child (the requirement doing the implementing/refining).
+        target_id is the parent (the requirement being implemented/refined).
+
         Args:
             edge_kind: 'IMPLEMENTS' or 'REFINES'.
-            assertion_targets: Optional list of assertion IDs to target.
+            assertion_targets: Optional list of assertion labels or full assertion
+                IDs to target (e.g. ["A", "B"] or ["REQ-p00044-A", "REQ-p00044-B"]).
+                Full IDs are automatically normalized to bare labels.
         """
-        return _mutate_add_edge(_state["graph"], source_id, target_id, edge_kind, assertion_targets)
+        return _mutate_add_edge(
+            _state["graph"],
+            source_id,
+            target_id,
+            edge_kind,
+            assertion_targets,
+            config=_state.get("config"),
+        )
 
     @mcp.tool()
     def mutate_change_edge_kind(source_id: str, target_id: str, new_kind: str) -> dict[str, Any]:
@@ -4031,8 +4118,24 @@ def create_server(
 
     @mcp.tool()
     def get_orphaned_nodes() -> dict[str, Any]:
-        """Nodes with no parent relationships."""
+        """Structural orphans — nodes without any FILE ancestor."""
         return _get_orphaned_nodes(_state["graph"])
+
+    @mcp.tool()
+    def get_unlinked_nodes(kind: str | None = None) -> dict[str, Any]:
+        """Unlinked nodes — have a FILE parent but no requirement link.
+
+        These are TEST or CODE nodes that exist in the file structure but
+        are not connected to any requirement through traceability edges.
+
+        Args:
+            kind: Optional filter — "test" or "code". If omitted, returns both.
+        """
+        if kind is not None:
+            kind = kind.lower()
+            if kind not in ("test", "code"):
+                return {"error": f"Invalid kind '{kind}'. Must be 'test' or 'code'."}
+        return _get_unlinked_nodes(_state["graph"], kind)
 
     @mcp.tool()
     def get_broken_references() -> dict[str, Any]:
@@ -4198,7 +4301,11 @@ def create_server(
 
             create_safety_branch(_state["working_dir"], "save-mutations")
 
-        result = render_save(graph, _state["working_dir"])
+        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
+
+        result = render_save(
+            graph, _state["working_dir"], resolver=_build_resolver_for_save(config)
+        )
 
         # Add changelog entries for Active requirements after save
         if result.get("success") and changelog_enforce and message:

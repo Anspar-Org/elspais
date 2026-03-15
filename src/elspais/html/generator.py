@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
 from elspais.html.theme import get_catalog
+from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
@@ -756,7 +757,11 @@ class HTMLGenerator:
             elif classname:
                 display_id = classname.split(".")[-1]
             else:
-                display_id = node.id.split("::")[-1] if "::" in node.id else node.id[-30:]
+                display_id = (
+                    node.id.split(INSTANCE_SEPARATOR)[-1]
+                    if INSTANCE_SEPARATOR in node.id
+                    else node.id[-30:]
+                )
 
             row = TreeRow(
                 id=f"{node.id}_0_root",

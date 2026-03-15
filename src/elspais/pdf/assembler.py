@@ -15,7 +15,7 @@ from pathlib import Path
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.utilities.patterns import IdPatternConfig, IdResolver
+from elspais.utilities.patterns import IdResolver, build_resolver
 
 # Level display names and sort order
 _LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
@@ -66,8 +66,7 @@ class MarkdownAssembler:
         else:
             self._title = "Requirements Specification"
         if resolver is None:
-            config = IdPatternConfig.from_dict({})
-            resolver = IdResolver(config)
+            resolver = build_resolver({})
         self._resolver = resolver
 
     def assemble(self) -> str:

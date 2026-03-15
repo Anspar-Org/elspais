@@ -68,9 +68,9 @@ class PytestJSONParser:
         if self._resolver is not None:
             return self._resolver
 
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
+        from elspais.utilities.patterns import build_resolver
 
-        config = IdPatternConfig.from_dict(
+        return build_resolver(
             {
                 "project": {"namespace": "REQ"},
                 "id-patterns": {
@@ -84,7 +84,6 @@ class PytestJSONParser:
                 },
             }
         )
-        return IdResolver(config)
 
     def _get_reference_config(self, source_file: str | None = None) -> ReferenceConfig:
         """Get reference config for the current file.
