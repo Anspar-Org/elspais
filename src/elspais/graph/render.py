@@ -448,12 +448,32 @@ def _find_dirty_files(graph: TraceGraph, resolver: Any | None = None) -> set[str
             _mark_node_file(target_id)
 
         # For edge mutations - mark the source requirement
-        if entry.operation in ("add_edge", "delete_edge", "change_edge_kind"):
+        if entry.operation in (
+            "add_edge",
+            "delete_edge",
+            "change_edge_kind",
+            "change_edge_targets",
+        ):
             source_id = entry.before_state.get("source_id") or entry.after_state.get(
                 "source_id", ""
             )
             if source_id:
                 _mark_node_file(source_id)
+
+        # For move_node_to_file - mark both old and new file
+        if entry.operation == "move_node_to_file":
+            old_file = entry.before_state.get("file_id", "")
+            new_file = entry.after_state.get("file_id", "")
+            if old_file:
+                dirty_file_ids.add(old_file)
+            if new_file:
+                dirty_file_ids.add(new_file)
+
+        # For rename_file - mark the new file ID (old ID no longer exists)
+        if entry.operation == "rename_file":
+            new_file_id = entry.after_state.get("id", "")
+            if new_file_id:
+                dirty_file_ids.add(new_file_id)
 
     return dirty_file_ids
 
@@ -511,6 +531,18 @@ def render_save(
             "errors": [],
             "skipped": ["No dirty files to save"],
         }
+
+    # Handle file renames on disk before rendering
+    for entry in graph.mutation_log.iter_entries():
+        if entry.operation == "rename_file":
+            old_rel = entry.before_state.get("relative_path", "")
+            new_rel = entry.after_state.get("relative_path", "")
+            if old_rel and new_rel:
+                old_path = repo_root / old_rel
+                new_path = repo_root / new_rel
+                if old_path.exists() and not new_path.exists():
+                    new_path.parent.mkdir(parents=True, exist_ok=True)
+                    old_path.rename(new_path)
 
     # Render and write each dirty FILE
     for file_id in sorted(dirty_file_ids):

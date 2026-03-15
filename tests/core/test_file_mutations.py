@@ -1,9 +1,11 @@
 # Validates REQ-o00063-A
-"""Tests for file mutation operations (move_node_to_file).
+"""Tests for file mutation operations (move_node_to_file, rename_file).
 
 Validates REQ-o00063: file mutation operations with undo support.
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
@@ -179,3 +181,84 @@ class TestMoveNodeToFile:
         assert len(moved_edges) == 1
         # render_order should be after the existing child's 0.0
         assert moved_edges[0].metadata["render_order"] > 0.0
+
+
+class TestRenameFile:
+    """Tests for TraceGraph.rename_file().
+
+    Validates REQ-o00063: rename_file mutation with undo support.
+    """
+
+    def test_REQ_o00063_A_rename_file(self):
+        """REQ-o00063-A: Rename updates FILE node ID, index, and path fields."""
+        graph = build_two_file_graph()
+
+        graph.rename_file("file:spec/main.md", "spec/renamed.md")
+
+        # New ID is findable
+        node = graph.find_by_id("file:spec/renamed.md")
+        assert node is not None
+        # Old ID is gone
+        assert graph.find_by_id("file:spec/main.md") is None
+        # Path field updated
+        assert node.get_field("relative_path") == "spec/renamed.md"
+
+    def test_REQ_o00063_A_rename_file_undo(self):
+        """REQ-o00063-A: Undo restores original file ID and paths."""
+        graph = build_two_file_graph()
+
+        graph.rename_file("file:spec/main.md", "spec/renamed.md")
+        assert graph.find_by_id("file:spec/renamed.md") is not None
+
+        graph.undo_last()
+
+        # Original ID is back
+        node = graph.find_by_id("file:spec/main.md")
+        assert node is not None
+        # Renamed ID is gone
+        assert graph.find_by_id("file:spec/renamed.md") is None
+        # Path field restored
+        assert node.get_field("relative_path") == "spec/main.md"
+
+    def test_rename_non_file_raises(self):
+        """ValueError if node is not a FILE node."""
+        graph = build_two_file_graph()
+
+        with pytest.raises(ValueError):
+            graph.rename_file("REQ-p00001", "spec/renamed.md")
+
+    def test_rename_file_logs_mutation(self):
+        """Verify mutation log entry has correct operation and states."""
+        graph = build_two_file_graph()
+        initial_count = len(graph.mutation_log)
+
+        entry = graph.rename_file("file:spec/main.md", "spec/renamed.md")
+
+        assert len(graph.mutation_log) == initial_count + 1
+        assert entry.operation == "rename_file"
+        assert entry.target_id == "file:spec/main.md"
+        assert entry.before_state["id"] == "file:spec/main.md"
+        assert entry.before_state["relative_path"] == "spec/main.md"
+        assert entry.after_state["id"] == "file:spec/renamed.md"
+        assert entry.after_state["relative_path"] == "spec/renamed.md"
+
+    def test_rename_file_updates_absolute_path(self):
+        """When repo_root is provided, absolute_path is updated."""
+        graph = build_two_file_graph()
+
+        graph.rename_file(
+            "file:spec/main.md",
+            "spec/renamed.md",
+            repo_root=Path("/repo"),
+        )
+
+        node = graph.find_by_id("file:spec/renamed.md")
+        assert node is not None
+        assert node.get_field("absolute_path") == str(Path("/repo") / "spec/renamed.md")
+
+    def test_rename_file_not_found(self):
+        """KeyError if file_id doesn't exist."""
+        graph = build_two_file_graph()
+
+        with pytest.raises(KeyError):
+            graph.rename_file("file:spec/nonexistent.md", "spec/renamed.md")

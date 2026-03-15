@@ -376,6 +376,8 @@ class TraceGraph:
             self._undo_rename_assertion(entry)
         elif op == "move_node_to_file":
             self._undo_move_node_to_file(entry)
+        elif op == "rename_file":
+            self._undo_rename_file(entry)
         elif op == "fix_broken_reference":
             self._undo_fix_broken_reference(entry)
         # Unknown operations are silently ignored (forward compatibility)
@@ -534,6 +536,23 @@ class TraceGraph:
                 # Re-link to old file with original metadata
                 edge = old_file.link(node, EdgeKind.CONTAINS)
                 edge.metadata.update(old_metadata)
+
+    def _undo_rename_file(self, entry: MutationEntry) -> None:
+        """Undo a rename_file operation."""
+        old_id = entry.before_state.get("id")
+        new_id = entry.after_state.get("id")
+        old_rel_path = entry.before_state.get("relative_path")
+        old_abs_path = entry.before_state.get("absolute_path")
+
+        if old_id and new_id and new_id in self._index:
+            node = self._index.pop(new_id)
+            node.set_id(old_id)
+            self._index[old_id] = node
+
+            if old_rel_path is not None:
+                node.set_field("relative_path", old_rel_path)
+            if old_abs_path is not None:
+                node.set_field("absolute_path", old_abs_path)
 
     def _undo_fix_broken_reference(self, entry: MutationEntry) -> None:
         """Undo a fix broken reference operation."""
@@ -1812,6 +1831,65 @@ class TraceGraph:
         new_edge.metadata["render_order"] = new_order
 
         entry.after_state["render_order"] = new_order
+
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-o00063
+    def rename_file(
+        self,
+        file_id: str,
+        new_relative_path: str,
+        repo_root: Path | None = None,
+    ) -> MutationEntry:
+        """Rename a FILE node, updating its ID, index, and path fields.
+
+        Args:
+            file_id: The current FILE node ID (e.g. "file:spec/main.md").
+            new_relative_path: New repo-relative path (e.g. "spec/renamed.md").
+            repo_root: Optional repo root for computing absolute_path.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If file_id is not found.
+            ValueError: If the node is not a FILE node.
+        """
+        if file_id not in self._index:
+            raise KeyError(f"File node '{file_id}' not found")
+
+        node = self._index[file_id]
+        if node.kind != NodeKind.FILE:
+            raise ValueError(f"Node '{file_id}' is not a FILE node")
+
+        new_id = f"file:{new_relative_path}"
+        old_relative_path = node.get_field("relative_path")
+        old_absolute_path = node.get_field("absolute_path")
+
+        entry = MutationEntry(
+            operation="rename_file",
+            target_id=file_id,
+            before_state={
+                "id": file_id,
+                "relative_path": old_relative_path,
+                "absolute_path": str(old_absolute_path) if old_absolute_path else None,
+            },
+            after_state={
+                "id": new_id,
+                "relative_path": new_relative_path,
+            },
+        )
+
+        # Update index
+        del self._index[file_id]
+        node.set_id(new_id)
+        self._index[new_id] = node
+
+        # Update path fields
+        node.set_field("relative_path", new_relative_path)
+        if repo_root is not None:
+            node.set_field("absolute_path", str(repo_root / new_relative_path))
 
         self._mutation_log.append(entry)
         return entry
