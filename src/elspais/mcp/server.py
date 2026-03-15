@@ -2011,6 +2011,50 @@ def _mutate_fix_broken_reference(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00063
+def _mutate_move_node_to_file(
+    graph: TraceGraph,
+    node_id: str,
+    target_file_id: str,
+) -> dict[str, Any]:
+    """Move a content node to a different FILE.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    try:
+        entry = graph.move_node_to_file(node_id, target_file_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Moved {node_id} to {target_file_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-o00063
+def _mutate_rename_file(
+    graph: TraceGraph,
+    file_id: str,
+    new_relative_path: str,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Rename a FILE node.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    try:
+        entry = graph.rename_file(file_id, new_relative_path, repo_root)
+        new_id = entry.after_state.get("id", "")
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Renamed {file_id} to {new_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Undo Operations (REQ-o00062-G)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4123,6 +4167,41 @@ def create_server(
         """Fix a broken reference by redirecting to a valid target."""
         return _mutate_fix_broken_reference(
             _state["graph"], source_id, old_target_id, new_target_id
+        )
+
+    @mcp.tool()
+    def mutate_change_edge_targets(
+        source_id: str, target_id: str, assertion_targets: list[str]
+    ) -> dict[str, Any]:
+        """Change assertion targets on an IMPLEMENTS/REFINES edge.
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+            assertion_targets: Assertion labels to target (empty = whole req).
+        """
+        return _mutate_change_edge_targets(_state["graph"], source_id, target_id, assertion_targets)
+
+    @mcp.tool()
+    def mutate_move_node_to_file(node_id: str, target_file_id: str) -> dict[str, Any]:
+        """Move a content node to a different FILE.
+
+        Args:
+            node_id: The node to move.
+            target_file_id: The target FILE node ID (e.g. "file:spec/other.md").
+        """
+        return _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
+
+    @mcp.tool()
+    def mutate_rename_file(file_id: str, new_relative_path: str) -> dict[str, Any]:
+        """Rename a FILE node and its on-disk path.
+
+        Args:
+            file_id: Current FILE node ID (e.g. "file:spec/main.md").
+            new_relative_path: New repo-relative path (e.g. "spec/renamed.md").
+        """
+        return _mutate_rename_file(
+            _state["graph"], file_id, new_relative_path, _state.get("repo_root")
         )
 
     # ─────────────────────────────────────────────────────────────────────

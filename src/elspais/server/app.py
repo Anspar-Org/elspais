@@ -39,6 +39,8 @@ from elspais.mcp.server import (
     _mutate_delete_assertion,
     _mutate_delete_edge,
     _mutate_delete_requirement,
+    _mutate_move_node_to_file,
+    _mutate_rename_file,
     _mutate_update_assertion,
     _mutate_update_title,
     _query_nodes,
@@ -671,6 +673,51 @@ def create_app(
         else:
             return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
 
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/move-to-file", methods=["POST"])
+    def api_mutate_move_to_file():
+        """POST /api/mutate/move-to-file - Move node to a different file."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        target_file_id = data.get("target_file_id", "")
+        if not node_id or not target_file_id:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "node_id and target_file_id required",
+                    }
+                ),
+                400,
+            )
+        result = _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/rename-file", methods=["POST"])
+    def api_mutate_rename_file():
+        """POST /api/mutate/rename-file - Rename a FILE node."""
+        data = request.get_json(force=True)
+        file_id = data.get("file_id", "")
+        new_relative_path = data.get("new_relative_path", "")
+        if not file_id or not new_relative_path:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "file_id and new_relative_path required",
+                    }
+                ),
+                400,
+            )
+        result = _mutate_rename_file(
+            _state["graph"],
+            file_id,
+            new_relative_path,
+            _state.get("repo_root"),
+        )
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
 

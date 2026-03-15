@@ -565,6 +565,43 @@ function applyEdgeTargets(sourceId, targetId, btn) {
     });
 }
 
+function onMoveToFile(nodeId) {
+    var targetFile = prompt('Move ' + nodeId + ' to file ID (e.g. file:spec/other.md):');
+    if (!targetFile || !targetFile.trim()) return;
+
+    mutate('/api/mutate/move-to-file', {
+        node_id: nodeId,
+        target_file_id: targetFile.trim()
+    }).then(async function(result) {
+        if (result && result.success) {
+            await refreshAllOpenCards();
+            loadTreeData();
+        }
+    });
+}
+
+function onRenameFile() {
+    var pathEl = document.getElementById('fv-path');
+    if (!pathEl) return;
+    var currentPath = pathEl.title || pathEl.textContent;
+    if (!currentPath || currentPath === 'No file selected') return;
+
+    var fileId = 'file:' + currentPath;
+    var newPath = prompt('Rename file to:', currentPath);
+    if (!newPath || newPath.trim() === currentPath) return;
+
+    mutate('/api/mutate/rename-file', {
+        file_id: fileId,
+        new_relative_path: newPath.trim()
+    }).then(async function(result) {
+        if (result && result.success) {
+            await refreshAllOpenCards();
+            loadTreeData();
+            showToast('File renamed', 'success');
+        }
+    });
+}
+
 function onAddRelationship(nodeId, btn) {
     // If form already exists, remove it
     var existing = btn.parentNode.querySelector('.card-add-rel-form');

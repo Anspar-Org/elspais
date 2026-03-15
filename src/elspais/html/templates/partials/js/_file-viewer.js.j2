@@ -37,6 +37,10 @@ async function showSource(filePath, lineNumber) {
     }
     langEl.textContent = '';
 
+    // Show rename button if it exists
+    var renameBtn = document.getElementById('fv-rename');
+    if (renameBtn) renameBtn.style.display = '';
+
     // Show panel and divider
     panel.classList.add('open');
     divider.style.display = '';
