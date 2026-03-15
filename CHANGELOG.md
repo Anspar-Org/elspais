@@ -2,6 +2,12 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [0.104.16] - 2026-03-14
+
+### Added
+
+- **CLI config overrides** -- `--set key=value` repeatable flag overrides any config value at runtime. Supports dotted paths, JSON lists, and booleans. Precedence: `--set` > env vars > `.elspais.local.toml` > `.elspais.toml` > defaults.
+
 ## [0.104.15] - 2026-03-14
 
 ### Added

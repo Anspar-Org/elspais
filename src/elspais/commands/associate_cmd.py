@@ -161,7 +161,9 @@ def cmd_list(args: argparse.Namespace) -> int:
     from elspais.config import get_config
 
     config_path = _get_config_path(args)
-    config = get_config(config_path=config_path, quiet=True)
+    config = get_config(
+        config_path=config_path, quiet=True, overrides=getattr(args, "config_overrides", None)
+    )
 
     paths = config.get("associates", {}).get("paths", [])
 

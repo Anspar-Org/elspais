@@ -663,7 +663,9 @@ def run(args: argparse.Namespace) -> int:
     config = None
     config_dict = {}
     try:
-        config_dict = get_config(config_path, start_path=start_path)
+        config_dict = get_config(
+            config_path, start_path=start_path, overrides=getattr(args, "config_overrides", None)
+        )
         config = ConfigLoader.from_dict(config_dict)
         for check in run_config_checks(config_path, config, start_path):
             report.add(check)

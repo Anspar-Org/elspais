@@ -80,7 +80,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     changelog_enforce = config.get("changelog", {}).get("enforce", True)
 
     graph = build_graph(
@@ -269,7 +269,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     spec_dirs = get_spec_directories(spec_dir, config)
 
     if not spec_dirs:

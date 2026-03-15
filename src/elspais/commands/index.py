@@ -31,7 +31,7 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     mode = getattr(args, "mode", "combined")
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     spec_dirs = get_spec_directories(spec_dir, config)
 
     scan_sponsors = mode == "combined"

@@ -60,7 +60,7 @@ def run(args: argparse.Namespace) -> int:
     from elspais.pdf.assembler import MarkdownAssembler
     from elspais.utilities.patterns import build_resolver
 
-    config = get_config(config_path, repo_root)
+    config = get_config(config_path, repo_root, overrides=getattr(args, "config_overrides", None))
     resolver = build_resolver(config)
 
     title = getattr(args, "title", None)

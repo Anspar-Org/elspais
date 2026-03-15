@@ -128,6 +128,13 @@ For detailed command help: elspais <command> --help
         action="store_true",
         help="Suppress non-error output",
     )
+    parser.add_argument(
+        "--set",
+        action="append",
+        dest="config_overrides",
+        metavar="KEY=VALUE",
+        help="Override config value (e.g. --set testing.enabled=false). Repeatable.",
+    )
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

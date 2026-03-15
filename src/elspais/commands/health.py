@@ -1404,7 +1404,11 @@ def run(args: argparse.Namespace) -> int:
         try:
             from elspais.commands.doctor import run_config_checks as _run_config_checks
 
-            config_dict = get_config(config_path, start_path=start_path)
+            config_dict = get_config(
+                config_path,
+                start_path=start_path,
+                overrides=getattr(args, "config_overrides", None),
+            )
             config = ConfigLoader.from_dict(config_dict)
             for check in _run_config_checks(config_path, config, start_path):
                 report.add(check)
@@ -1432,7 +1436,11 @@ def run(args: argparse.Namespace) -> int:
                 canonical_root=canonical_root,
             )
             if config is None:
-                config_dict = get_config(config_path, start_path=start_path)
+                config_dict = get_config(
+                    config_path,
+                    start_path=start_path,
+                    overrides=getattr(args, "config_overrides", None),
+                )
                 config = ConfigLoader.from_dict(config_dict)
         except Exception as e:
             report.add(

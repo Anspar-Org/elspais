@@ -119,7 +119,9 @@ def run(args: argparse.Namespace) -> int:
     if scan_sponsors:
         from elspais.config import get_config
 
-        config_dict = get_config(config_path, start_path=repo_root)
+        config_dict = get_config(
+            config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+        )
         associate_paths = config_dict.get("associates", {}).get("paths", [])
         if associate_paths:
             from elspais.associates import discover_associate_from_path
@@ -185,7 +187,9 @@ def run(args: argparse.Namespace) -> int:
     # Check allow_structural_orphans config (with backward compat fallback)
     from elspais.config import get_config
 
-    validate_config = get_config(config_path, start_path=repo_root)
+    validate_config = get_config(
+        config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+    )
     hierarchy_rules = validate_config.get("rules", {}).get("hierarchy", {})
     allow_orphans = hierarchy_rules.get(
         "allow_structural_orphans", hierarchy_rules.get("allow_orphans", False)
