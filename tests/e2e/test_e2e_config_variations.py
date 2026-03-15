@@ -38,7 +38,7 @@ class TestIgnorePatterns:
     """Unified ignore patterns for different scan types."""
 
     def test_global_ignore_excludes_node_modules(self, tmp_path):
-        cfg = base_config(name="ignore-global", allow_orphans=True)
+        cfg = base_config(name="ignore-global", allow_structural_orphans=True)
         cfg["ignore"] = {
             "global": ["node_modules", ".git", "__pycache__"],
         }
@@ -61,7 +61,7 @@ class TestIgnorePatterns:
         assert result.returncode == 0
 
     def test_spec_ignore_excludes_pattern(self, tmp_path):
-        cfg = base_config(name="ignore-spec", allow_orphans=True)
+        cfg = base_config(name="ignore-spec", allow_structural_orphans=True)
         cfg["ignore"] = {
             "spec": ["draft-*.md"],
         }
@@ -128,9 +128,9 @@ class TestCustomHierarchyRules:
         result = run_elspais("health", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
-    def test_allow_orphans(self, tmp_path):
-        """Orphan requirements should pass when allow_orphans=True."""
-        cfg = base_config(name="orphans-ok", allow_orphans=True)
+    def test_allow_structural_orphans(self, tmp_path):
+        """Orphan requirements should pass when allow_structural_orphans=True."""
+        cfg = base_config(name="orphans-ok", allow_structural_orphans=True)
         orphan = Requirement(
             "REQ-d00001",
             "Orphan Dev",
@@ -156,7 +156,7 @@ class TestRequireRationale:
     """Config: require_rationale = true."""
 
     def test_rationale_required_present(self, tmp_path):
-        cfg = base_config(name="rationale-required", allow_orphans=True)
+        cfg = base_config(name="rationale-required", allow_structural_orphans=True)
         cfg["rules"]["format"]["require_rationale"] = True
         prd = Requirement(
             "REQ-p00001",
@@ -188,7 +188,7 @@ class TestRequireShallDisabled:
         cfg = base_config(
             name="no-shall",
             require_shall=False,
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -265,7 +265,7 @@ class TestReferencesOverrides:
         cfg = base_config(
             name="ref-overrides",
             comment_styles=["#", "//"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         prd = Requirement(
             "REQ-p00001",
@@ -421,7 +421,7 @@ class TestStatusFiltering:
     """Health and summary handle Deprecated/Superseded requirements."""
 
     def test_deprecated_excluded_from_summary(self, tmp_path):
-        cfg = base_config(name="status-filter", allow_orphans=True)
+        cfg = base_config(name="status-filter", allow_structural_orphans=True)
         active = Requirement(
             "REQ-p00001",
             "Active Feature",
@@ -513,7 +513,7 @@ class TestComplexDirectoryStructure:
             name="complex-dirs",
             spec_dir=["spec/active", "spec/approved"],
             skip_dirs=["drafts", "archive"],
-            allow_orphans=True,
+            allow_structural_orphans=True,
         )
         # Active requirements
         active1 = Requirement(
@@ -578,7 +578,7 @@ class TestEnvVarOverrides:
     """Configuration can be overridden via ELSPAIS_* env vars."""
 
     def test_env_override_project_name(self, tmp_path):
-        cfg = base_config(name="original-name", allow_orphans=True)
+        cfg = base_config(name="original-name", allow_structural_orphans=True)
         build_project(
             tmp_path,
             cfg,
@@ -612,16 +612,16 @@ class TestEnvVarOverrides:
 
 
 # ---------------------------------------------------------------------------
-# Test: allow_orphans config
+# Test: allow_structural_orphans config
 # ---------------------------------------------------------------------------
 
 
-class TestAllowOrphansConfig:
-    """Config: allow_orphans suppresses orphan warnings."""
+class TestAllowStructuralOrphansConfig:
+    """Config: allow_structural_orphans suppresses orphan warnings."""
 
     def test_orphan_warning_suppressed(self, tmp_path):
-        """DEV without parent should pass health when allow_orphans=True."""
-        cfg = base_config(name="orphans-allowed", allow_orphans=True)
+        """DEV without parent should pass health when allow_structural_orphans=True."""
+        cfg = base_config(name="orphans-allowed", allow_structural_orphans=True)
         dev = Requirement(
             "REQ-d00001",
             "Orphan Dev",
@@ -634,15 +634,17 @@ class TestAllowOrphansConfig:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         # The orphan check should pass (not just be a warning)
-        orphan_check = next((c for c in data["checks"] if c["name"] == "spec.orphans"), None)
+        orphan_check = next(
+            (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None
+        )
         if orphan_check:
             assert orphan_check[
                 "passed"
-            ], f"Orphan check should pass with allow_orphans=True: {orphan_check}"
+            ], f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
 
     def test_orphan_check_runs_when_disallowed(self, tmp_path):
-        """With allow_orphans=False, orphan check should actually run (not skip)."""
-        cfg = base_config(name="orphans-denied", allow_orphans=False)
+        """With allow_structural_orphans=False, orphan check should actually run (not skip)."""
+        cfg = base_config(name="orphans-denied", allow_structural_orphans=False)
         dev = Requirement(
             "REQ-d00001",
             "Orphan Dev",
@@ -653,7 +655,9 @@ class TestAllowOrphansConfig:
 
         result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
         data = json.loads(result.stdout)
-        orphan_check = next((c for c in data["checks"] if c["name"] == "spec.orphans"), None)
+        orphan_check = next(
+            (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None
+        )
         assert orphan_check is not None, "Orphan check should exist"
         # The check ran (not skipped) — message should NOT mention "skipped"
         assert "skipped" not in orphan_check["message"].lower()
@@ -669,7 +673,7 @@ class TestStatusRolesConfig:
 
     def test_proposed_excluded_from_summary(self, tmp_path):
         """Proposed (provisional role) should be excluded from summary counts."""
-        cfg = base_config(name="roles-test", allow_orphans=True)
+        cfg = base_config(name="roles-test", allow_structural_orphans=True)
         cfg["rules"]["format"]["allowed_statuses"] = [
             "Active",
             "Draft",
