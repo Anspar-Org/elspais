@@ -932,7 +932,7 @@ def create_app(
                 )
 
             if result.returncode != 0:
-                return jsonify({"success": False, "error": result.stderr.strip()})
+                return jsonify({"success": False, "error": result.stderr.strip()}), 400
 
             return jsonify({"success": True, "branch": branch})
 

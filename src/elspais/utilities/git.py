@@ -624,11 +624,10 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
         # Skip HEAD pointer entries like "origin/HEAD -> origin/main"
         if "->" in stripped:
             continue
-        # Strip origin/ prefix
-        if stripped.startswith("origin/"):
-            name = stripped[len("origin/") :]
-        else:
-            name = stripped
+        # Only include origin/ branches (checkout hardcodes origin/)
+        if not stripped.startswith("origin/"):
+            continue
+        name = stripped[len("origin/") :]
         # Deduplicate: skip if already in local
         if name not in local_set:
             remote_names.append(name)
