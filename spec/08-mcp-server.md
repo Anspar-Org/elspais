@@ -108,7 +108,7 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
-*End* *MCP Graph Mutation Tools* | **Hash**: bed69e43
+*End* *MCP Graph Mutation Tools* | **Hash**: 064271fb
 
 ---
 

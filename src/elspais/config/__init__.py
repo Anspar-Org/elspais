@@ -160,6 +160,98 @@ class ConfigLoader:
         return self._data
 
 
+def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
+    """Migrate legacy [patterns] config to [id-patterns] format.
+
+    Configs without an explicit ``version`` field (pre-v2) may define ID
+    patterns in the old ``[patterns]`` section.  This function synthesizes
+    the equivalent ``[id-patterns]`` so that ``IdResolver`` works correctly.
+
+    Once all repos have migrated to ``[id-patterns]`` and set ``version = 2``,
+    this migration path can be removed.
+    """
+    # v2+ configs must use [id-patterns] directly — skip migration
+    config_version = config.get("version")
+    if config_version is not None and config_version >= 2:
+        return config
+
+    patterns = config.get("patterns", {})
+    if not patterns or not patterns.get("types"):
+        return config
+
+    # Only migrate if [id-patterns] is still at defaults (user didn't define it)
+    id_patterns = config.get("id-patterns", {})
+    if id_patterns.get("canonical") != DEFAULT_CONFIG["id-patterns"]["canonical"]:
+        return config  # user has explicit [id-patterns], don't override
+
+    # Build type definitions: old types.*.id -> new types.*.aliases.letter
+    old_types = patterns.get("types", {})
+    new_types: dict[str, Any] = {}
+    for code, tdef in old_types.items():
+        if isinstance(tdef, dict):
+            new_types[code] = {
+                "level": tdef.get("level", 1),
+                "aliases": {"letter": tdef.get("id", code[0])},
+            }
+
+    # Build component format from old id_format
+    old_id_format = patterns.get("id_format", {})
+    new_component = {
+        "style": old_id_format.get("style", "numeric"),
+        "digits": old_id_format.get("digits", 5),
+        "leading_zeros": old_id_format.get("leading_zeros", True),
+    }
+    if old_id_format.get("pattern"):
+        new_component["pattern"] = old_id_format["pattern"]
+
+    # Build canonical template by translating tokens
+    old_template = patterns.get("id_template", "{prefix}-{type}{id}")
+    canonical = old_template
+    canonical = canonical.replace("{prefix}", "{namespace}")
+    canonical = canonical.replace("{id}", "{component}")
+    canonical = canonical.replace("{type}", "{type.letter}")
+
+    # Handle {associated} token: replace with literal prefix if configured
+    associated_config = patterns.get("associated", {})
+    if associated_config.get("enabled") and "{associated}" in canonical:
+        assoc_prefix = config.get("associated", {}).get("prefix", "")
+        sep = associated_config.get("separator", "-")
+        if assoc_prefix:
+            canonical = canonical.replace("{associated}", f"{assoc_prefix}{sep}")
+        else:
+            # Associated enabled but no prefix — drop the token
+            canonical = canonical.replace("{associated}", "")
+    else:
+        canonical = canonical.replace("{associated}", "")
+
+    # Build assertions config
+    old_assertions = patterns.get("assertions", {})
+    new_assertions: dict[str, Any] = {}
+    if old_assertions:
+        new_assertions["label_style"] = old_assertions.get("label_style", "uppercase")
+        new_assertions["max_count"] = old_assertions.get("max_count", 26)
+        if "zero_pad" in old_assertions:
+            new_assertions["zero_pad"] = old_assertions["zero_pad"]
+        if "multi_separator" in old_assertions:
+            new_assertions["multi_separator"] = old_assertions["multi_separator"]
+
+    # Also set namespace from patterns.prefix if not already in [project]
+    namespace = patterns.get("prefix", "REQ")
+    if config.get("project", {}).get("namespace") == DEFAULT_CONFIG["project"]["namespace"]:
+        config.setdefault("project", {})["namespace"] = namespace
+
+    # Write synthesized [id-patterns]
+    config["id-patterns"] = {
+        "canonical": canonical,
+        "aliases": {"short": canonical.split("-", 1)[1] if "-" in canonical else canonical},
+        "types": new_types,
+        "component": new_component,
+        "assertions": new_assertions or id_patterns.get("assertions", {}),
+    }
+
+    return config
+
+
 def load_config(config_path: Path) -> ConfigLoader:
     """Load configuration from a TOML file.
 
@@ -184,6 +276,7 @@ def load_config(config_path: Path) -> ConfigLoader:
         merged = _merge_configs(merged, local_config)
 
     merged = _apply_env_overrides(merged)
+    merged = _migrate_legacy_patterns(merged)
     return ConfigLoader(merged)
 
 

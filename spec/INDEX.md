@@ -11,7 +11,7 @@
 | REQ-p00001 | Requirements Management Tool                     | prd-elspais.md           | 3cddd08e |
 | REQ-p00002 | Requirements Validation                          | prd-elspais.md           | e8f0e4eb |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-elspais.md           | b935bd53 |
-| REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | 921396bb |
+| REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | f8ff5509 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | 7964180f |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-elspais.md           | b3dd4d1a |
 | REQ-p00007 | Collaborative Review System                      | prd-elspais.md           | f275694a |
@@ -35,7 +35,7 @@
 | REQ-o00051 | Composable Annotation Design        | 07-graph-architecture.md | c73a6e32 |
 | REQ-o00060 | MCP Core Query Tools                | 08-mcp-server.md         | 73c31134 |
 | REQ-o00061 | MCP Workspace Context Tools         | 08-mcp-server.md         | 0aa9dff4 |
-| REQ-o00062 | MCP Graph Mutation Tools            | 08-mcp-server.md         | bed69e43 |
+| REQ-o00062 | MCP Graph Mutation Tools            | 08-mcp-server.md         | 064271fb |
 | REQ-o00063 | MCP File Mutation Tools             | 08-mcp-server.md         | dee88649 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | 08-mcp-server.md         | 82d8f37e |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
@@ -50,16 +50,16 @@
 
 | ID         | Title                                                         | File                     | Hash     |
 | ---------- | ------------------------------------------------------------- | ------------------------ | -------- |
-| REQ-d00001 | Review Package Management                                     | dev-traceview-review.md  | 8d2f827b |
-| REQ-d00002 | Review Storage Architecture                                   | dev-traceview-review.md  | 9ba72e6f |
-| REQ-d00003 | Review Package Archival                                       | dev-traceview-review.md  | 458be109 |
-| REQ-d00004 | Review Git Audit Trail                                        | dev-traceview-review.md  | f1829e0a |
-| REQ-d00005 | Review Archive Viewer                                         | dev-traceview-review.md  | 0bcf8525 |
-| REQ-d00006 | Review Threads and Comments                                   | dev-traceview-review.md  | 74becc99 |
-| REQ-d00007 | Review Storage Operations                                     | dev-traceview-review.md  | bffc007d |
-| REQ-d00008 | Position Resolution                                           | dev-traceview-review.md  | ad27b8e5 |
-| REQ-d00009 | Git Branch Management                                         | dev-traceview-review.md  | ec2a7171 |
-| REQ-d00010 | Review API Server                                             | dev-traceview-review.md  | 41715183 |
+| REQ-d00001 | Review Package Management                                     | dev-traceview-review.md  | 557e0c13 |
+| REQ-d00002 | Review Storage Architecture                                   | dev-traceview-review.md  | 6e485776 |
+| REQ-d00003 | Review Package Archival                                       | dev-traceview-review.md  | e2e12ef2 |
+| REQ-d00004 | Review Git Audit Trail                                        | dev-traceview-review.md  | 8eff4c13 |
+| REQ-d00005 | Review Archive Viewer                                         | dev-traceview-review.md  | c31ada6e |
+| REQ-d00006 | Review Threads and Comments                                   | dev-traceview-review.md  | 682ff5d5 |
+| REQ-d00007 | Review Storage Operations                                     | dev-traceview-review.md  | 4916717c |
+| REQ-d00008 | Position Resolution                                           | dev-traceview-review.md  | a9128928 |
+| REQ-d00009 | Git Branch Management                                         | dev-traceview-review.md  | 6181ebb6 |
+| REQ-d00010 | Review API Server                                             | dev-traceview-review.md  | b647ec64 |
 | REQ-d00011 | Status Modifier                                               | dev-traceview-review.md  | 3e581bc6 |
 | REQ-d00012 | Review UI Framework                                           | dev-traceview-review.md  | 448be3b9 |
 | REQ-d00050 | Node Annotator Functions                                      | 07-graph-architecture.md | 35713bbd |

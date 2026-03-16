@@ -375,18 +375,21 @@ def create_app(
                 }
             )
 
-            # Recurse into requirement children only
-            for child in node.iter_children():
-                if child.kind == NodeKind.REQUIREMENT:
-                    _walk(child, depth + 1, node.id)
+            # Recurse into requirement children only (sorted by ID)
+            req_children = sorted(
+                (c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT),
+                key=lambda n: n.id,
+            )
+            for child in req_children:
+                _walk(child, depth + 1, node.id)
 
-        # Start from roots
-        for root in g.iter_roots():
+        # Start from roots (sorted by ID for stable display order)
+        for root in sorted(g.iter_roots(), key=lambda n: n.id):
             if root.kind == NodeKind.REQUIREMENT:
                 _walk(root, 0, None)
 
-        # Add USER_JOURNEY nodes as root-level rows
-        for node in g.nodes_by_kind(NodeKind.USER_JOURNEY):
+        # Add USER_JOURNEY nodes as root-level rows (sorted by ID)
+        for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
             _fn = node.file_node()
             source_file = _fn.get_field("relative_path") if _fn else ""
             source_line = node.get_field("parse_line") or 0

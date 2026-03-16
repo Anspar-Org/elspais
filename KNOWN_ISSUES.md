@@ -1,5 +1,18 @@
 # Known Issues
 
+[ ] Feature: Add version number for .elspais.toml file
+
+[ ] Feature: Check .elspais.toml for unknown and missing config settings
+
+[ ] Feature: Default elspais init should include ALL possible settings, even if some are commented out
+
+[ ] Bug: Health. Don't count errors in Deprecated REQs as errors for HEALTH calculations. They can still be put into the detailed report.
+
+[ ] Feature: Health. If not HEALTHY, show the command to get a detailed list of errors: --code -o filename.json
+
+[ ] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
+- Use multi-select dropdown, then render the reference using the configured settings, e.g. REQ-p12345-A+B+C+X
+
 [ ] Feature: change ID of a Requirement
 - All references are updated, creating a complete list of graph mutation operations to do so
 - The list of before / after IDs are written/appended to a file (`elspais-renumbering-<before-hash>.csv`)
@@ -9,7 +22,7 @@
 - infrastructure/ (although that will eventually be a code/ dir, with filetypes .tf, .tfvars, .yaml, .sh, etc.
 infra
 
-[ ] Bug: Viewer does not display the Tree with items sorted by ID.
+[x] Bug: Viewer does not display the Tree with items sorted by ID.
 - e.g. p00001 should be above p00002, etc.
 
 [x] Bug: Viewer Push button (in edit mode) isn't active unless changes were made in the viewer. But there could be changes on-disk (and therefore in memory) that could be pushed.

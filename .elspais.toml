@@ -3,6 +3,8 @@
 # Tip: Create .elspais.local.toml alongside this file for developer-local
 # overrides (e.g. associate paths). It is deep-merged and gitignored.
 
+version = 2
+
 [project]
 name = "elspais"
 version = "0.1.0"
