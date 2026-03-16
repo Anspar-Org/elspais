@@ -20,6 +20,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - Requirement loading: only in core/loader.py (create_parser, parse_requirements_from_directories)
 - Git state detection: only in core/git.py (get_git_changes, GitChangeInfo)
 - Pattern validation: only in core/patterns.py (PatternValidator)
+- Hash computation: only in `utilities/hasher.py` (`compute_normalized_hash`, `calculate_hash`). Do NOT create alternative hash functions elsewhere.
 - Do NOT create hierarchy.py files in multiple locations
 
 **Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.10+ stdlib for everything else.

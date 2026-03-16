@@ -32,7 +32,7 @@ class RequirementParser:
     priority = 50
 
     # Regex patterns
-    HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
+    HEADER_PATTERN = re.compile(r"^(?P<hashes>#+)\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
     LEVEL_STATUS_PATTERN = re.compile(
         r"\*\*Level\*\*:\s*(?P<level>\w+)"
         r"(?:\s*\|\s*\*\*Implements\*\*:\s*(?P<implements>[^|\n]+))?"
@@ -107,6 +107,7 @@ class RequirementParser:
                     continue
 
                 title = header_match.group("title").strip()
+                heading_level = len(header_match.group("hashes"))
                 start_line = ln
 
                 # Find the end of this requirement
@@ -123,13 +124,7 @@ class RequirementParser:
                     # Check for end marker
                     if self.END_MARKER_PATTERN.match(next_text):
                         j += 1
-                        # Include separator if present
-                        if j < len(line_numbers):
-                            sep_ln = line_numbers[j]
-                            if line_map[sep_ln].strip() == "---":
-                                req_lines.append((sep_ln, line_map[sep_ln]))
-                                end_line = sep_ln
-                                j += 1
+                        # Separator (---) is NOT claimed; it becomes REMAINDER
                         break
 
                     # Check for next requirement header
@@ -149,6 +144,7 @@ class RequirementParser:
                 # Parse the requirement data
                 raw_text = "\n".join(t for _, t in req_lines)
                 parsed_data = self._parse_requirement(req_id, title, raw_text, start_line)
+                parsed_data["heading_level"] = heading_level
 
                 yield ParsedContent(
                     content_type="requirement",
@@ -304,22 +300,45 @@ class RequirementParser:
 
         assertions_text = section_text[:end_pos]
 
-        # Parse assertion lines
-        for match in self.ASSERTION_LINE_PATTERN.finditer(assertions_text):
-            label = match.group(1)
-            assertion_text = match.group(2).strip()
-            # Compute absolute line number: use match.start(1) to point to the
-            # label character itself (not leading whitespace which may include \n)
-            abs_pos = start_pos + match.start(1)
-            line = start_line + text[:abs_pos].count("\n")
-            assertions.append(
-                {
-                    "label": label,
-                    "text": assertion_text,
-                    "line": line,
-                }
-            )
+        # Parse assertion lines with multi-line continuation.
+        # A continuation line is any non-blank line that doesn't start a new
+        # assertion label (e.g. indented list items under "A. ... SHALL contain:").
+        assertion_lines = assertions_text.split("\n")
+        current_label: str | None = None
+        current_text_parts: list[str] = []
+        current_line_num = 0
 
+        def _flush() -> None:
+            if current_label is not None:
+                # Strip trailing blank lines (inter-assertion gaps)
+                parts = list(current_text_parts)
+                while parts and not parts[-1].strip():
+                    parts.pop()
+                assertions.append(
+                    {
+                        "label": current_label,
+                        "text": "\n".join(parts),
+                        "line": current_line_num,
+                    }
+                )
+
+        for i, raw_line in enumerate(assertion_lines):
+            abs_pos = start_pos + sum(len(assertion_lines[k]) + 1 for k in range(i))
+            line_num = start_line + text[:abs_pos].count("\n")
+
+            m = self.ASSERTION_LINE_PATTERN.match(raw_line)
+            if m:
+                _flush()
+                current_label = m.group(1)
+                current_text_parts = [m.group(2).strip()]
+                current_line_num = line_num
+            elif current_label is not None:
+                # Continuation: blank lines and indented/list content
+                # belong to the current assertion. Trailing blanks are
+                # stripped during _flush so inter-assertion gaps work.
+                current_text_parts.append(raw_line)
+
+        _flush()
         return assertions
 
     # Implements: REQ-p00002-C

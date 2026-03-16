@@ -14,13 +14,12 @@ their CONTAINS children, replacing the old persistence.py text surgery.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
-from elspais.utilities.hasher import normalize_assertion_text
+from elspais.utilities.hasher import compute_normalized_hash
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
@@ -95,8 +94,9 @@ def _render_requirement(node: GraphNode) -> str:
 
     lines: list[str] = []
 
-    # Header
-    lines.append(f"## {req_id}: {title}")
+    # Header (preserve original heading level)
+    heading_prefix = "#" * (node.get_field("heading_level") or 2)
+    lines.append(f"{heading_prefix} {req_id}: {title}")
     lines.append("")
 
     # Metadata line
@@ -118,51 +118,48 @@ def _render_requirement(node: GraphNode) -> str:
         sat_str = ", ".join(satisfies_refs)
         lines.append(f"Satisfies: {sat_str}")
 
-    # Collect STRUCTURES children: assertions and sections
+    # Walk STRUCTURES children in document order (insertion order preserves
+    # line-number sorting done during build). Collect assertions for hashing
+    # while rendering sections in their original order.
     assertions: list[tuple[str, str]] = []
-    preamble_text: str | None = None
-    named_sections: list[tuple[str, str]] = []
+    in_assertions = False
 
     for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
         if child.kind == NodeKind.ASSERTION:
             label = child.get_field("label") or ""
             text = child.get_label()
             assertions.append((label, text))
+            if not in_assertions:
+                if lines and lines[-1] != "":
+                    lines.append("")
+                lines.append("## Assertions")
+                lines.append("")
+                in_assertions = True
+            lines.append(f"{label}. {text}")
+            lines.append("")
         elif child.kind == NodeKind.REMAINDER:
+            in_assertions = False
             heading = child.get_field("heading") or "preamble"
             content = child.get_field("text") or ""
             if heading == "preamble":
-                preamble_text = content
+                if content:
+                    lines.append("")
+                    lines.append(content)
             else:
-                named_sections.append((heading, content))
+                # Ensure blank line before heading (unless previous line is
+                # already blank, e.g. after the last assertion)
+                if lines and lines[-1] != "":
+                    lines.append("")
+                lines.append(f"## {heading}")
+                lines.append("")
+                lines.append(content)
+                lines.append("")
 
-    # Preamble body text
-    if preamble_text:
-        lines.append("")
-        lines.append(preamble_text)
+    # Compute hash using canonical hasher (DRY: utilities/hasher.py)
+    hash_val = compute_normalized_hash(assertions)
 
-    # Assertions section
-    if assertions:
-        lines.append("")
-        lines.append("## Assertions")
-        lines.append("")
-        for label, text in assertions:
-            lines.append(f"{label}. {text}")
-            lines.append("")
-
-    # Named sections (Rationale, Notes, etc.)
-    for heading, content in named_sections:
-        lines.append(f"## {heading}")
-        lines.append("")
-        lines.append(content)
-        lines.append("")
-
-    # Compute hash using order-independent assertion hashing
-    hash_val = compute_requirement_hash(assertions)
-
-    # End marker
+    # End marker (separator is a REMAINDER node, not part of the requirement)
     lines.append(f"*End* *{title}* | **Hash**: {hash_val}")
-    lines.append("---")
 
     return "\n".join(lines)
 
@@ -241,57 +238,6 @@ def render_file(node: GraphNode) -> str:
             parts.append(rendered)
 
     return "\n".join(parts)
-
-
-# Implements: REQ-d00131-J
-def compute_requirement_hash(
-    assertions: list[tuple[str, str]],
-    length: int = 8,
-    algorithm: str = "sha256",
-) -> str:
-    """Compute requirement hash using order-independent assertion hashing.
-
-    1. Compute normalized text hash for each assertion individually.
-    2. Sort the individual assertion hashes lexicographically.
-    3. Hash the sorted collection into the requirement's final hash.
-
-    This ensures assertion reordering does not trigger change-detection
-    review, while assertion text edits still do.
-
-    Args:
-        assertions: List of (label, text) tuples.
-        length: Number of characters in the hash (default 8).
-        algorithm: Hash algorithm to use (default "sha256").
-
-    Returns:
-        Hexadecimal hash string of specified length.
-    """
-    if not assertions:
-        # Empty assertions: hash empty string
-        h = hashlib.sha256(b"")
-        return h.hexdigest()[:length]
-
-    # Step 1: Compute individual assertion hashes
-    individual_hashes: list[str] = []
-    for label, text in assertions:
-        normalized = normalize_assertion_text(label, text)
-        if algorithm == "sha256":
-            h = hashlib.sha256(normalized.encode("utf-8"))
-        else:
-            raise ValueError(f"Unsupported algorithm: {algorithm}")
-        individual_hashes.append(h.hexdigest())
-
-    # Step 2: Sort lexicographically
-    individual_hashes.sort()
-
-    # Step 3: Hash the sorted collection
-    combined = "\n".join(individual_hashes)
-    if algorithm == "sha256":
-        final = hashlib.sha256(combined.encode("utf-8"))
-    else:
-        raise ValueError(f"Unsupported algorithm: {algorithm}")
-
-    return final.hexdigest()[:length]
 
 
 # ─────────────────────────────────────────────────────────────────────────

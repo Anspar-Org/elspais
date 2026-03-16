@@ -2160,6 +2160,7 @@ class GraphBuilder:
             "implements_refs": data.get("implements", []),
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
+            "heading_level": data.get("heading_level", 2),
         }
         # Extract rationale from sections for format validation (require_rationale)
         for section in data.get("sections", []):
@@ -2417,26 +2418,19 @@ class GraphBuilder:
         """Wire a CONTAINS edge from a FILE node to a top-level content node.
 
         Sets edge metadata with start_line, end_line, and render_order.
-        Tracks render_order per file node, incrementing by 1.0 for each
-        top-level content node.
+        Uses start_line as render_order so that elements are rendered in
+        their original file position regardless of parser execution order.
 
         Args:
             file_node: The FILE parent node.
             content_node: The content node to link.
             content: The parsed content (for line range info).
         """
-        # Track render_order per file node
-        order_key = f"_next_render_order:{file_node.id}"
-        current_order = getattr(self, "_render_orders", {}).get(order_key, 0.0)
-        if not hasattr(self, "_render_orders"):
-            self._render_orders: dict[str, float] = {}
-        self._render_orders[order_key] = current_order + 1.0
-
         edge = file_node.link(content_node, EdgeKind.CONTAINS)
         edge.metadata = {
             "start_line": content.start_line,
             "end_line": content.end_line,
-            "render_order": current_order,
+            "render_order": float(content.start_line),
         }
 
     # Implements: REQ-d00081-D+E+G

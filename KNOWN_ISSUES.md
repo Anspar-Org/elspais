@@ -1,5 +1,14 @@
 # Known Issues
 
+[ ] Feature: change ID of a Requirement
+- All references are updated, creating a complete list of graph mutation operations to do so
+- The list of before / after IDs are written/appended to a file (`elspais-renumbering-<before-hash>.csv`)
+- This file is intended to allow updating references in non-graph locations, such as:
+- docs/
+- database/ (although this will eventually be a code/ dir, with filetypes .sql
+- infrastructure/ (although that will eventually be a code/ dir, with filetypes .tf, .tfvars, .yaml, .sh, etc.
+infra
+
 [ ] Bug: Viewer does not display the Tree with items sorted by ID.
 - e.g. p00001 should be above p00002, etc.
 

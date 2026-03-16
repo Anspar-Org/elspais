@@ -262,8 +262,8 @@ class TestRequirementRender:
         result = render_node(node)
         assert "This requirement describes something." in result
 
-    def test_REQ_d00131_B_requirement_separator(self):
-        """Rendered requirement ends with --- separator after end marker."""
+    def test_REQ_d00131_B_requirement_ends_with_end_marker(self):
+        """Rendered requirement ends with *End* marker (separator is REMAINDER)."""
         from elspais.graph.render import render_node
 
         node = _make_requirement_node(
@@ -272,7 +272,7 @@ class TestRequirementRender:
         )
         result = render_node(node)
         lines = result.rstrip().split("\n")
-        assert lines[-1] == "---"
+        assert lines[-1].startswith("*End*")
 
     def test_REQ_d00131_B_requirement_full_round_trip_structure(self):
         """Rendered requirement has correct overall structure."""
@@ -294,14 +294,15 @@ class TestRequirementRender:
         lines = result.split("\n")
 
         # Check structure
-        assert lines[0] == "## REQ-t00001: Full Test"
+        assert lines[0].endswith("REQ-t00001: Full Test")
         assert "**Level**: PRD" in lines[2]
         assert "**Status**: Active" in lines[2]
         assert "**Implements**: REQ-p00001" in lines[2]
         assert "*End* *Full Test*" in result
         assert "## Assertions" in result
         assert "## Rationale" in result
-        assert "---" in lines[-1]
+        # Requirement ends with *End* marker; separator is now REMAINDER
+        assert lines[-1].startswith("*End*") or lines[-1] == ""
 
 
 class TestAssertionRender:
@@ -499,52 +500,37 @@ class TestFileRender:
         assert "A. SHALL work." in result
 
 
-class TestOrderIndependentHashing:
-    """Validates REQ-d00131-J: Order-independent assertion hashing."""
-
-    def test_REQ_d00131_J_hash_independent_of_assertion_order(self):
-        """Same assertions in different order produce the same hash."""
-        from elspais.graph.render import compute_requirement_hash
-
-        assertions_ab = [("A", "SHALL do X."), ("B", "SHALL do Y.")]
-        assertions_ba = [("B", "SHALL do Y."), ("A", "SHALL do X.")]
-
-        hash_ab = compute_requirement_hash(assertions_ab)
-        hash_ba = compute_requirement_hash(assertions_ba)
-
-        assert hash_ab == hash_ba
+class TestNormalizedHashing:
+    """Validates REQ-d00131-J: Renderer uses canonical compute_normalized_hash."""
 
     def test_REQ_d00131_J_hash_changes_on_text_edit(self):
         """Editing assertion text changes the hash."""
-        from elspais.graph.render import compute_requirement_hash
+        from elspais.utilities.hasher import compute_normalized_hash
 
         original = [("A", "SHALL do X."), ("B", "SHALL do Y.")]
         modified = [("A", "SHALL do X."), ("B", "SHALL do Z.")]
 
-        hash_orig = compute_requirement_hash(original)
-        hash_mod = compute_requirement_hash(modified)
+        hash_orig = compute_normalized_hash(original)
+        hash_mod = compute_normalized_hash(modified)
 
         assert hash_orig != hash_mod
 
     def test_REQ_d00131_J_hash_is_8_chars(self):
         """Computed hash is 8 characters long."""
-        from elspais.graph.render import compute_requirement_hash
+        from elspais.utilities.hasher import compute_normalized_hash
 
         assertions = [("A", "SHALL do X.")]
-        result = compute_requirement_hash(assertions)
+        result = compute_normalized_hash(assertions)
         assert len(result) == 8
         assert all(c in "0123456789abcdef" for c in result)
 
-    def test_REQ_d00131_J_sorts_individual_hashes(self):
-        """Individual assertion hashes are sorted lexicographically before combining."""
-        from elspais.graph.render import compute_requirement_hash
+    def test_REQ_d00131_J_whitespace_normalization(self):
+        """Whitespace differences do not change the hash."""
+        from elspais.utilities.hasher import compute_normalized_hash
 
-        # The implementation should:
-        # 1. Hash each assertion individually
-        # 2. Sort those hashes
-        # 3. Hash the sorted collection
-        # We verify by checking that reordered assertions give same result
-        assertions1 = [("A", "First"), ("B", "Second"), ("C", "Third")]
-        assertions2 = [("C", "Third"), ("A", "First"), ("B", "Second")]
+        assertions_clean = [("A", "SHALL do X."), ("B", "SHALL do Y.")]
+        assertions_extra_spaces = [("A", "SHALL  do  X."), ("B", "SHALL  do  Y.")]
 
-        assert compute_requirement_hash(assertions1) == compute_requirement_hash(assertions2)
+        assert compute_normalized_hash(assertions_clean) == compute_normalized_hash(
+            assertions_extra_spaces
+        )

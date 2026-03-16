@@ -438,11 +438,11 @@ The system SHALL do thing two.
         ), f"Expected at least 2 CONTAINS edges, got {len(contains_edges)}"
 
         orders = sorted(e.metadata["render_order"] for e in contains_edges)
-        # Should be sequential 0.0, 1.0, 2.0, ...
-        for i, order in enumerate(orders):
-            assert order == float(
-                i
-            ), f"Expected render_order {float(i)} at position {i}, got {order}"
+        # Should be monotonically increasing (based on start_line)
+        for i in range(1, len(orders)):
+            assert (
+                orders[i] > orders[i - 1]
+            ), f"render_order not increasing: {orders[i - 1]} -> {orders[i]} at position {i}"
 
 
 class TestAssertionsNotContained:
