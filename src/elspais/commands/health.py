@@ -1580,9 +1580,13 @@ def _print_text_report(
 
 def _print_summary_line(report: HealthReport) -> None:
     """Print a single summary line."""
-    total = report.passed + report.failed + report.warnings
-    if report.failed == 0 and report.warnings == 0:
+    total = len(report.checks)
+    if report.failed == 0 and report.warnings == 0 and report.passed == total:
         print(f"HEALTHY: {total}/{total} checks passed")
+    elif report.failed == 0 and report.warnings == 0:
+        # Info-severity failures only
+        infos = total - report.passed
+        print(f"{report.passed}/{total} checks passed, {infos} info")
     elif report.failed == 0:
         print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
     else:
@@ -1651,9 +1655,12 @@ def _render_markdown(
         lines.append("")
 
     # Summary
-    total = report.passed + report.failed + report.warnings
-    if report.failed == 0 and report.warnings == 0:
+    total = len(report.checks)
+    if report.failed == 0 and report.warnings == 0 and report.passed == total:
         lines.append(f"**HEALTHY**: {total}/{total} checks passed")
+    elif report.failed == 0 and report.warnings == 0:
+        infos = total - report.passed
+        lines.append(f"**{report.passed}/{total}** checks passed, {infos} info")
     elif report.failed == 0:
         lines.append(f"**{report.passed}/{total}** checks passed," f" {report.warnings} warnings")
     else:
