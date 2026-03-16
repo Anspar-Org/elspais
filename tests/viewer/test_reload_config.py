@@ -1,0 +1,79 @@
+# Validates REQ-p00004-J
+"""Tests for /api/reload config refresh.
+
+Validates:
+- REQ-p00004-J: The tool SHALL re-read configuration from disk when reloading
+  the graph, ensuring branch switches with different configurations produce
+  correct rebuilds.
+"""
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from elspais.graph import GraphNode, NodeKind
+from elspais.graph.builder import TraceGraph
+from elspais.server.app import create_app
+
+
+@pytest.fixture
+def _minimal_graph():
+    """Create a minimal TraceGraph for testing."""
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+    node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Test")
+    node._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
+    graph._roots = [node]
+    graph._index = {"REQ-p00001": node}
+    return graph
+
+
+class TestReloadRefreshesConfig:
+    """Validates REQ-p00004-J: /api/reload re-reads config from disk."""
+
+    def test_REQ_p00004_J_reload_refreshes_config(self, tmp_path, _minimal_graph):
+        """After modifying .elspais.toml on disk, POST /api/reload picks up
+        the new config values.
+        """
+        # Write initial config
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            '[spec]\ndirectories = ["spec"]\n' '[spec.patterns]\nid = "REQ-{level}{number}"\n'
+        )
+
+        # Create the app with initial config and the tmp_path as working_dir
+        initial_config = {"spec": {"directories": ["spec"]}}
+        app = create_app(
+            repo_root=tmp_path,
+            graph=_minimal_graph,
+            config=initial_config,
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        # Modify config on disk — add a custom_marker field
+        config_path.write_text(
+            '[spec]\ndirectories = ["spec", "extra-specs"]\n'
+            '[spec.patterns]\nid = "REQ-{level}{number}"\n'
+        )
+
+        # Mock build_graph so we don't need real spec files.
+        # We capture the config argument it receives to verify it was refreshed.
+        captured_configs = []
+
+        def fake_build_graph(**kwargs):
+            captured_configs.append(kwargs.get("config"))
+            return _minimal_graph
+
+        with patch("elspais.graph.factory.build_graph", fake_build_graph):
+            resp = client.post("/api/reload")
+
+        data_debug = resp.get_json()
+        assert resp.status_code == 200, f"Reload failed: {data_debug}"
+        data = resp.get_json()
+        assert data["success"] is True
+
+        # Verify build_graph was called with the REFRESHED config (from disk)
+        assert len(captured_configs) == 1
+        refreshed = captured_configs[0]
+        assert "extra-specs" in refreshed.get("spec", {}).get("directories", [])

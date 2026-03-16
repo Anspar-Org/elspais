@@ -786,10 +786,18 @@ def create_app(
 
     @app.route("/api/reload", methods=["POST"])
     def api_reload():
-        """POST /api/reload - Reload graph from disk (same as revert)."""
+        # Implements: REQ-p00004-J
+        """POST /api/reload - Reload graph from disk with fresh config."""
+        from elspais.config import load_config
         from elspais.graph.factory import build_graph
 
         try:
+            # Re-read config from disk so branch switches pick up changes
+            config_path = Path(_state["working_dir"]) / ".elspais.toml"
+            if config_path.exists():
+                loader = load_config(config_path)
+                _state["config"] = loader.get_raw()
+
             new_graph = build_graph(
                 config=_state["config"],
                 repo_root=_state["working_dir"],
@@ -854,5 +862,81 @@ def create_app(
         result = sync_branch(_state["working_dir"])
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
+
+    @app.route("/api/git/branches")
+    def api_git_branches():
+        # Implements: REQ-p00004-H
+        """GET /api/git/branches - List local and remote git branches."""
+        from elspais.utilities.git import list_branches
+
+        result = list_branches(_state["working_dir"])
+        return jsonify(result)
+
+    @app.route("/api/git/checkout", methods=["POST"])
+    def api_git_checkout():
+        # Implements: REQ-p00004-I
+        """POST /api/git/checkout - Switch to an existing git branch."""
+        import subprocess
+
+        from elspais.utilities.git import _clean_git_env
+
+        data = request.get_json(force=True)
+        branch = data.get("branch", "").strip()
+        is_remote = data.get("is_remote", False)
+
+        if not branch:
+            return jsonify({"success": False, "error": "branch name required"}), 400
+
+        # Refuse if in-memory mutations are pending
+        log = _get_mutation_log(_state["graph"], limit=1)
+        if log.get("count", 0) > 0:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Save or revert changes before switching branches",
+                    }
+                ),
+                409,
+            )
+
+        env = _clean_git_env()
+        repo = _state["working_dir"]
+
+        try:
+            if is_remote:
+                # Try creating a local tracking branch from origin
+                result = subprocess.run(
+                    ["git", "checkout", "-b", branch, f"origin/{branch}"],
+                    cwd=repo,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0 and "already exists" in result.stderr:
+                    # Local branch already exists — fall back to plain checkout
+                    result = subprocess.run(
+                        ["git", "checkout", branch],
+                        cwd=repo,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+            else:
+                result = subprocess.run(
+                    ["git", "checkout", branch],
+                    cwd=repo,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+
+            if result.returncode != 0:
+                return jsonify({"success": False, "error": result.stderr.strip()})
+
+            return jsonify({"success": True, "branch": branch})
+
+        except FileNotFoundError:
+            return jsonify({"success": False, "error": "git not found"}), 500
 
     return app

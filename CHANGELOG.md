@@ -6,6 +6,11 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
+- **Branch selection** -- Click the branch badge in the viewer header to switch between local and remote git branches. Modal shows a filterable list grouped by local/remote, handles checkout, graph reload with config refresh, and full UI state refresh. Refuses to switch when unsaved mutations exist. Detached HEAD shown as "no branch selected" with tooltip.
+- **`list_branches()` git utility** -- Lists local and remote branches, strips `origin/` prefix, deduplicates.
+- **`GET /api/git/branches`** -- Returns branch list for the viewer.
+- **`POST /api/git/checkout`** -- Switches branches with mutation guard and remote fallback.
+- **`/api/reload` config refresh** -- Re-reads `.elspais.toml` from disk before rebuilding the graph, supporting branch-specific configuration.
 - **`move_node_to_file()` graph mutation** -- Moves a requirement between FILE nodes by re-wiring the CONTAINS edge. Full undo support.
 - **`rename_file()` graph mutation** -- Renames a FILE node (updates ID, index, paths). `render_save()` handles disk rename. Full undo support.
 - **`change_edge_targets()` mutation** -- Modifies assertion targets on IMPLEMENTS/REFINES edges without requiring delete+add. Full undo support.

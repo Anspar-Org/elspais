@@ -1,12 +1,16 @@
-# elspais Product Requirements
+## REQ-p00001: Requirements Management Tool
 
-This document defines the high-level product requirements for elspais, a requirements validation and traceability tool.
+**Level**: prd | **Status**: Draft | **Implements**: -
 
----
+## Assertions
 
-# REQ-p00001: Requirements Management Tool
+A. The tool SHALL provide command-line validation of requirement documents stored as Markdown files.
 
-**Level**: PRD | **Status**: Draft | **Implements**: -
+B. The tool SHALL generate traceability matrices showing requirement relationships.
+
+C. The tool SHALL detect changes to requirements using content hashing and git integration.
+
+D. This edit SHALL be reverted, eventually.
 
 ## Rationale
 
@@ -22,22 +26,19 @@ elspais addresses this gap by providing a lightweight, file-based requirements m
 
 The name derives from Terry Pratchett's "L-Space"—the dimension where all libraries connect through accumulated knowledge.
 
+*End* *Requirements Management Tool* | **Hash**: c70e8774
+---
+## REQ-p00002: Requirements Validation
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
 ## Assertions
 
-A. The tool SHALL provide command-line validation of requirement documents stored as Markdown files.
+A. The tool SHALL validate requirement format against configurable patterns and rules.
 
-B. The tool SHALL generate traceability matrices showing requirement relationships.
+B. The tool SHALL detect and report hierarchy violations including circular dependencies and orphaned requirements.
 
-C. The tool SHALL detect changes to requirements using content hashing and git integration.
-
-D. This edit SHALL be reverted, eventually.
-
-*End* *Requirements Management Tool* | **Hash**: 3cddd08e
----
-
-# REQ-p00002: Requirements Validation
-
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+C. The tool SHALL verify content hashes match requirement body text.
 
 ## Rationale
 
@@ -52,20 +53,17 @@ The validation system enforces:
 - **Traceability completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
+*End* *Requirements Validation* | **Hash**: b29ef9b6
+---
+## REQ-p00003: Traceability Matrix Generation
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
 ## Assertions
 
-A. The tool SHALL validate requirement format against configurable patterns and rules.
+A. The tool SHALL generate traceability matrices in Markdown, HTML, and CSV formats.
 
-B. The tool SHALL detect and report hierarchy violations including circular dependencies and orphaned requirements.
-
-C. The tool SHALL verify content hashes match requirement body text.
-
-*End* *Requirements Validation* | **Hash**: e8f0e4eb
----
-
-# REQ-p00003: Traceability Matrix Generation
-
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+B. The tool SHALL derive traceability from `Implements:` metadata without manual matrix maintenance.
 
 ## Rationale
 
@@ -79,33 +77,11 @@ Multiple output formats serve different audiences:
 - **HTML**: Interactive viewing with clickable links
 - **CSV**: Import into spreadsheets or compliance tools
 
-## Assertions
-
-A. The tool SHALL generate traceability matrices in Markdown, HTML, and CSV formats.
-
-B. The tool SHALL derive traceability from `Implements:` metadata without manual matrix maintenance.
-
-*End* *Traceability Matrix Generation* | **Hash**: b935bd53
+*End* *Traceability Matrix Generation* | **Hash**: 1e12ea25
 ---
+## REQ-p00004: Change Detection and Auditability
 
-# REQ-p00004: Change Detection and Auditability
-
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
-
-## Rationale
-
-Requirements change over time. Regulators and auditors need to know what changed, when, and whether downstream artifacts (tests, code, documentation) have been updated accordingly.
-
-elspais provides two complementary change detection mechanisms:
-
-- **Content hashing**: A SHA-256 hash of each requirement's body is stored in the document footer. When the hash no longer matches the content, the requirement has changed and downstream artifacts may need review.
-- **Git integration**: The tool detects uncommitted changes, changes relative to the main branch, and requirements that have moved between files.
-
-Together, these mechanisms support:
-
-- Pre-commit validation (catch accidental changes)
-- Pull request review (see exactly what requirements changed)
-- Audit trails (link requirement changes to commits)
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Assertions
 
@@ -123,12 +99,46 @@ F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, 
 
 G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
 
-*End* *Change Detection and Auditability* | **Hash**: 921396bb
+H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
+
+I. The tool SHALL switch to an existing local or remote git branch, refusing if in-memory mutations are pending, and falling back from remote checkout to local checkout when the local branch already exists.
+
+J. The tool SHALL re-read configuration from disk when reloading the graph, ensuring branch switches with different configurations produce correct rebuilds.
+
+## Rationale
+
+Requirements change over time. Regulators and auditors need to know what changed, when, and whether downstream artifacts (tests, code, documentation) have been updated accordingly.
+
+elspais provides two complementary change detection mechanisms:
+
+- **Content hashing**: A SHA-256 hash of each requirement's body is stored in the document footer. When the hash no longer matches the content, the requirement has changed and downstream artifacts may need review.
+- **Git integration**: The tool detects uncommitted changes, changes relative to the main branch, and requirements that have moved between files.
+
+Together, these mechanisms support:
+
+- Pre-commit validation (catch accidental changes)
+- Pull request review (see exactly what requirements changed)
+- Audit trails (link requirement changes to commits)
+
+*End* *Change Detection and Auditability* | **Hash**: 3be84c6e
 ---
+## REQ-p00005: Multi-Repository Requirements
 
-# REQ-p00005: Multi-Repository Requirements
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+## Assertions
+
+A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
+
+B. The tool SHALL generate combined traceability matrices spanning multiple repositories.
+
+C. The tool SHALL support CLI-based configuration of associate repository paths so that external systems can register associates without manually editing configuration files.
+
+D. The tool SHALL discover an associated repository's identity — including its project type and namespace prefix — by reading that repository's own configuration file.
+
+E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
+
+F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
 
 ## Rationale
 
@@ -149,26 +159,19 @@ This architecture supports:
 
 CI/CD pipelines and diverse developer environments mean associated repositories may be located at different filesystem paths on each machine. Rather than requiring each environment to maintain a separate override file, the tool treats all cross-repository resolution as a local path concern: CI systems clone repos and then configure paths via the CLI, developers set paths to match their local directory layout, and the associated repository's own configuration file declares its identity (project type, namespace prefix). This keeps repository topology — which repos exist and where they are hosted — as a CI/infrastructure concern outside the tool, while the tool focuses on discovering and validating whatever local repos it is pointed at.
 
+*End* *Multi-Repository Requirements* | **Hash**: e3d654ea
+---
+## REQ-p00006: Interactive Traceability Viewer
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00003
+
 ## Assertions
 
-A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
+A. The tool SHALL generate an interactive HTML view with clickable requirement navigation.
 
-B. The tool SHALL generate combined traceability matrices spanning multiple repositories.
+B. The tool SHALL display test coverage information per requirement when test data is available.
 
-C. The tool SHALL support CLI-based configuration of associate repository paths so that external systems can register associates without manually editing configuration files.
-
-D. The tool SHALL discover an associated repository's identity — including its project type and namespace prefix — by reading that repository's own configuration file.
-
-E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
-
-F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
-
-*End* *Multi-Repository Requirements* | **Hash**: 7964180f
----
-
-# REQ-p00006: Interactive Traceability Viewer
-
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00003
+C. The viewer SHALL display source files inline in a side panel with syntax-highlighted content and stable line numbers, when embedded content is enabled.
 
 ## Rationale
 
@@ -189,20 +192,23 @@ This supports:
 - Change impact analysis (see what's affected by a modification)
 - Regulatory audits (demonstrate complete traceability in one view)
 
+*End* *Interactive Traceability Viewer* | **Hash**: 2578f15c
+---
+## REQ-p00007: Collaborative Review System
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00001
+
 ## Assertions
 
-A. The tool SHALL generate an interactive HTML view with clickable requirement navigation.
+A. The tool SHALL support threaded comments attached to individual requirements.
 
-B. The tool SHALL display test coverage information per requirement when test data is available.
+B. The tool SHALL allow users to group requirements into review packages for focused review sessions.
 
-C. The viewer SHALL display source files inline in a side panel with syntax-highlighted content and stable line numbers, when embedded content is enabled.
+C. The tool SHALL display the git commit context for each review, enabling users to understand which version of the requirements was reviewed.
 
-*End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
----
+D. The tool SHALL provide access to archived reviews for audit and historical reference.
 
-# REQ-p00007: Collaborative Review System
-
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00001
+E. The tool SHALL preserve review history through archival rather than deletion.
 
 ## Rationale
 
@@ -223,36 +229,11 @@ This supports:
 - Regulatory evidence of review activities
 - Historical context (why was this requirement written this way?)
 
-## Assertions
-
-A. The tool SHALL support threaded comments attached to individual requirements.
-
-B. The tool SHALL allow users to group requirements into review packages for focused review sessions.
-
-C. The tool SHALL display the git commit context for each review, enabling users to understand which version of the requirements was reviewed.
-
-D. The tool SHALL provide access to archived reviews for audit and historical reference.
-
-E. The tool SHALL preserve review history through archival rather than deletion.
-
-*End* *Collaborative Review System* | **Hash**: f275694a
+*End* *Collaborative Review System* | **Hash**: 2ec02b10
 ---
+## REQ-p00008: Review User Interface
 
-# REQ-p00008: Review User Interface
-
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
-
-## Rationale
-
-The collaborative review system requires an interactive user interface that enables reviewers to navigate requirements, attach comments to specific locations, and manage review workflows efficiently. The UI must support precise position anchoring (line, block, word, or general) while gracefully handling content drift when requirements change.
-
-Key UI capabilities:
-
-- **Review mode toggle**: Switch between normal viewing and review mode
-- **Position-aware commenting**: Click on lines or select text to anchor comments
-- **Visual highlighting**: Show where comments are anchored with confidence indicators
-- **Resizable panels**: Adjust review panel width for comfortable reading
-- **Contextual help**: Guide users through review workflows
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Assertions
 
@@ -268,12 +249,33 @@ E. The UI SHALL provide a resizable review panel for managing threads and commen
 
 F. The UI SHALL provide contextual help explaining review workflows and features.
 
-*End* *Review User Interface* | **Hash**: 2c550af9
+## Rationale
+
+The collaborative review system requires an interactive user interface that enables reviewers to navigate requirements, attach comments to specific locations, and manage review workflows efficiently. The UI must support precise position anchoring (line, block, word, or general) while gracefully handling content drift when requirements change.
+
+Key UI capabilities:
+
+- **Review mode toggle**: Switch between normal viewing and review mode
+- **Position-aware commenting**: Click on lines or select text to anchor comments
+- **Visual highlighting**: Show where comments are anchored with confidence indicators
+- **Resizable panels**: Adjust review panel width for comfortable reading
+- **Contextual help**: Guide users through review workflows
+
+*End* *Review User Interface* | **Hash**: ba802905
 ---
+## REQ-p00009: Review Data Model
 
-# REQ-p00009: Review Data Model
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+## Assertions
+
+A. The system SHALL define a package model for grouping requirements into reviewable units.
+
+B. The system SHALL define a thread model for comment discussions attached to requirements.
+
+C. The system SHALL define storage structures that persist review data reliably with atomic writes.
+
+D. The system SHALL support position anchoring that identifies specific locations within requirement text.
 
 ## Rationale
 
@@ -286,22 +288,19 @@ Key data concepts:
 - **Comments**: Individual messages within threads with author and timestamp
 - **Position anchors**: Location references that survive content changes
 
+*End* *Review Data Model* | **Hash**: aa248a9e
+---
+## REQ-p00010: Review Git Integration
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
+
 ## Assertions
 
-A. The system SHALL define a package model for grouping requirements into reviewable units.
+A. The system SHALL record the git commit context when reviews are created or updated.
 
-B. The system SHALL define a thread model for comment discussions attached to requirements.
+B. The system SHALL support review branches that isolate reviewer work until ready to merge.
 
-C. The system SHALL define storage structures that persist review data reliably with atomic writes.
-
-D. The system SHALL support position anchoring that identifies specific locations within requirement text.
-
-*End* *Review Data Model* | **Hash**: 8967dc31
----
-
-# REQ-p00010: Review Git Integration
-
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+C. The system SHALL merge review data from multiple contributor branches.
 
 ## Rationale
 
@@ -312,20 +311,19 @@ Reviews occur in the context of specific code versions. When a reviewer comments
 - Managing review branches for isolated work
 - Merging review data from multiple contributors
 
+*End* *Review Git Integration* | **Hash**: ea7a8dfb
+---
+## REQ-p00011: Review Package Lifecycle
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
+
 ## Assertions
 
-A. The system SHALL record the git commit context when reviews are created or updated.
+A. The system SHALL support archiving completed review packages rather than deleting them.
 
-B. The system SHALL support review branches that isolate reviewer work until ready to merge.
+B. The system SHALL preserve archived reviews in a read-only state for audit purposes.
 
-C. The system SHALL merge review data from multiple contributor branches.
-
-*End* *Review Git Integration* | **Hash**: a410550e
----
-
-# REQ-p00011: Review Package Lifecycle
-
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+C. The system SHALL provide access to view archived packages and their contents.
 
 ## Rationale
 
@@ -337,20 +335,19 @@ Lifecycle stages:
 - **Resolved**: All threads resolved, ready for archival
 - **Archived**: Read-only preservation for audit trail
 
+*End* *Review Package Lifecycle* | **Hash**: ef9a138f
+---
+## REQ-p00012: Review Backend Services
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
+
 ## Assertions
 
-A. The system SHALL support archiving completed review packages rather than deleting them.
+A. The system SHALL resolve comment positions to current document locations, handling content drift gracefully.
 
-B. The system SHALL preserve archived reviews in a read-only state for audit purposes.
+B. The system SHALL provide API endpoints for creating, reading, updating, and managing review data.
 
-C. The system SHALL provide access to view archived packages and their contents.
-
-*End* *Review Package Lifecycle* | **Hash**: 0c09b663
----
-
-# REQ-p00012: Review Backend Services
-
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+C. The system SHALL support modifying requirement status in spec files based on review outcomes.
 
 ## Rationale
 
@@ -362,31 +359,11 @@ Key services:
 - **API server**: RESTful endpoints for CRUD operations on review data
 - **Status modification**: Update requirement status in spec files based on review decisions
 
-## Assertions
-
-A. The system SHALL resolve comment positions to current document locations, handling content drift gracefully.
-
-B. The system SHALL provide API endpoints for creating, reading, updating, and managing review data.
-
-C. The system SHALL support modifying requirement status in spec files based on review outcomes.
-
-*End* *Review Backend Services* | **Hash**: c1ec12e5
+*End* *Review Backend Services* | **Hash**: 24533121
 ---
+## REQ-p00013: Automated Testing
 
-# REQ-p00013: Automated Testing
-
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
-
-## Rationale
-
-A requirements management tool must itself be rigorously tested to maintain credibility. Unit tests verify individual components in isolation, but integration and end-to-end tests are essential to catch cross-component failures, CLI subprocess regressions, and real-world workflow breakages that mocked unit tests miss.
-
-The testing strategy follows a pyramid:
-
-- **Unit tests**: Fast, isolated tests for individual functions and classes
-- **Integration tests**: Tests that exercise multiple components together
-- **End-to-end tests**: Subprocess-based tests that invoke the CLI binary and verify real output
-- **Self-validation**: The tool validates its own repository as the strongest regression test
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Assertions
 
@@ -400,4 +377,21 @@ D. The project SHALL include multi-command workflow tests that verify cross-comm
 
 E. The project SHALL include MCP protocol tests that verify tool invocation, search, cursor pagination, and mutation roundtrips via the stdio transport.
 
-*End* *Automated Testing* | **Hash**: bedb66fd
+## Rationale
+
+A requirements management tool must itself be rigorously tested to maintain credibility. Unit tests verify individual components in isolation, but integration and end-to-end tests are essential to catch cross-component failures, CLI subprocess regressions, and real-world workflow breakages that mocked unit tests miss.
+
+The testing strategy follows a pyramid:
+
+- **Unit tests**: Fast, isolated tests for individual functions and classes
+- **Integration tests**: Tests that exercise multiple components together
+- **End-to-end tests**: Subprocess-based tests that invoke the CLI binary and verify real output
+- **Self-validation**: The tool validates its own repository as the strongest regression test
+
+*End* *Automated Testing* | **Hash**: 8e02b976
+---
+# elspais Product Requirements
+
+This document defines the high-level product requirements for elspais, a requirements validation and traceability tool.
+
+---

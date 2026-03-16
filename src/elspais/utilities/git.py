@@ -557,6 +557,85 @@ def git_status_summary(
     }
 
 
+# Implements: REQ-p00004-H
+def list_branches(repo_root: Path) -> dict[str, Any]:
+    """List local and remote git branches.
+
+    Runs ``git branch --list`` for local branches and ``git branch -r --list``
+    for remote branches.  Strips whitespace, ``*`` prefix, and
+    ``origin/HEAD -> ...`` entries.  Remote branch names have the ``origin/``
+    prefix removed and are deduplicated against local branches.
+
+    Args:
+        repo_root: Path to repository root.
+
+    Returns:
+        Dict with ``local`` (list[str]), ``remote`` (list[str]),
+        and ``current`` (str | None).
+    """
+    env = _clean_git_env()
+    current: str | None = None
+
+    # --- local branches ---
+    try:
+        local_out = subprocess.run(
+            ["git", "branch", "--list", "--no-color"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {"local": [], "remote": [], "current": None}
+
+    local_names: list[str] = []
+    for line in local_out.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("* "):
+            name = stripped[2:].strip()
+            current = name
+        else:
+            name = stripped
+        local_names.append(name)
+
+    local_set = set(local_names)
+
+    # --- remote branches ---
+    try:
+        remote_out = subprocess.run(
+            ["git", "branch", "-r", "--list", "--no-color"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {"local": local_names, "remote": [], "current": current}
+
+    remote_names: list[str] = []
+    for line in remote_out.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip HEAD pointer entries like "origin/HEAD -> origin/main"
+        if "->" in stripped:
+            continue
+        # Strip origin/ prefix
+        if stripped.startswith("origin/"):
+            name = stripped[len("origin/") :]
+        else:
+            name = stripped
+        # Deduplicate: skip if already in local
+        if name not in local_set:
+            remote_names.append(name)
+
+    return {"local": local_names, "remote": remote_names, "current": current}
+
+
 # Implements: REQ-p00004-D
 def create_and_switch_branch(
     repo_root: Path,

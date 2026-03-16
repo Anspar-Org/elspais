@@ -92,7 +92,14 @@ async function refreshBranchStatus() {
     var syncBtn = document.getElementById('btn-sync');
     var warningEl = document.getElementById('branch-warning');
     if (!dot || !nameEl) return data;
-    nameEl.textContent = data.branch || 'detached';
+    editState.isMain = !!data.is_main;
+    if (data.branch) {
+        nameEl.textContent = data.branch;
+        nameEl.parentElement.title = 'Click to switch branch';
+    } else {
+        nameEl.textContent = 'no branch selected';
+        nameEl.parentElement.title = 'No branch selected (detached HEAD) — click to choose one';
+    }
     dot.className = 'branch-status-dot';
     if (data.is_main) { dot.classList.add('red'); }
     else if (data.local_ahead > 0) { dot.classList.add('blue'); }
@@ -105,10 +112,14 @@ async function refreshBranchStatus() {
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.main_diverged);
     }
-    // Push button: enabled when not on main AND local has unpushed commits
+    // Push button: enabled when not on main AND there is something to push
+    // (committed changes ahead of remote, dirty spec files on disk, or in-memory mutations)
     var pushBtn = document.getElementById('btn-push');
     if (pushBtn) {
-        pushBtn.disabled = data.is_main || data.local_ahead === 0;
+        var hasPushable = data.local_ahead > 0
+            || (data.dirty_spec_files && data.dirty_spec_files.length > 0)
+            || (typeof editState !== 'undefined' && editState.mutationCount > 0);
+        pushBtn.disabled = data.is_main || !hasPushable;
     }
     return data;
 }
@@ -238,6 +249,226 @@ function showBranchModal(reason, callback) {
 
     overlay.addEventListener('click', function(e) {
         if (e.target === overlay) closeModal();
+    });
+}
+
+// =====================================================================
+// Branch Picker Modal
+// =====================================================================
+
+function showBranchPickerModal() {
+    // Guard: unsaved mutations
+    if (editState.mutationCount > 0) {
+        showToast('Save or revert changes before switching branches', 'warning');
+        return;
+    }
+
+    apiFetch('/api/git/branches').then(function(data) {
+        if (!data) {
+            showToast('Failed to load branches', 'error');
+            return;
+        }
+
+        var localBranches = data.local || [];
+        var remoteBranches = data.remote || [];
+        var currentBranch = data.current || null;
+
+        // Remove existing modal
+        var old = document.getElementById('branch-modal-overlay');
+        if (old) old.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'branch-modal-overlay';
+        overlay.className = 'modal-overlay visible';
+
+        var dialog = document.createElement('div');
+        dialog.className = 'modal-dialog';
+
+        var title = document.createElement('div');
+        title.className = 'modal-title';
+        title.textContent = currentBranch ? 'Switch Branch' : 'You\'re not on any branch \u2014 select one to continue';
+
+        var filterInput = document.createElement('input');
+        filterInput.type = 'text';
+        filterInput.className = 'modal-input';
+        filterInput.placeholder = 'Filter branches...';
+        filterInput.style.marginBottom = '8px';
+
+        var listContainer = document.createElement('div');
+        listContainer.className = 'branch-list-container';
+
+        // Build branch items
+        function buildList(filter) {
+            listContainer.innerHTML = '';
+            var filterLower = (filter || '').toLowerCase();
+
+            var filteredLocal = localBranches.filter(function(b) {
+                return !filterLower || b.toLowerCase().indexOf(filterLower) >= 0;
+            });
+            var filteredRemote = remoteBranches.filter(function(b) {
+                return !filterLower || b.toLowerCase().indexOf(filterLower) >= 0;
+            });
+
+            if (filteredLocal.length > 0) {
+                var localHeading = document.createElement('h4');
+                localHeading.className = 'branch-list-heading';
+                localHeading.textContent = 'Local';
+                listContainer.appendChild(localHeading);
+
+                filteredLocal.forEach(function(branch) {
+                    var item = document.createElement('div');
+                    item.className = 'branch-list-item';
+                    if (branch === currentBranch) {
+                        item.className += ' current';
+                    }
+
+                    var nameSpan = document.createElement('span');
+                    nameSpan.textContent = branch;
+                    item.appendChild(nameSpan);
+
+                    if (branch === currentBranch) {
+                        var tag = document.createElement('span');
+                        tag.className = 'branch-current-tag';
+                        tag.textContent = '(current)';
+                        item.appendChild(tag);
+                    } else {
+                        item.addEventListener('click', function() {
+                            doSwitchBranch(branch, false);
+                        });
+                    }
+
+                    listContainer.appendChild(item);
+                });
+            }
+
+            if (filteredRemote.length > 0) {
+                var remoteHeading = document.createElement('h4');
+                remoteHeading.className = 'branch-list-heading';
+                remoteHeading.textContent = 'Remote';
+                listContainer.appendChild(remoteHeading);
+
+                filteredRemote.forEach(function(branch) {
+                    var item = document.createElement('div');
+                    item.className = 'branch-list-item';
+
+                    var nameSpan = document.createElement('span');
+                    nameSpan.textContent = branch;
+                    item.appendChild(nameSpan);
+
+                    var tag = document.createElement('span');
+                    tag.className = 'branch-remote-tag';
+                    tag.textContent = '(remote)';
+                    item.appendChild(tag);
+
+                    item.addEventListener('click', function() {
+                        doSwitchBranch(branch, true);
+                    });
+
+                    listContainer.appendChild(item);
+                });
+            }
+
+            if (filteredLocal.length === 0 && filteredRemote.length === 0) {
+                var empty = document.createElement('div');
+                empty.style.padding = '12px';
+                empty.style.color = 'var(--text-secondary, #888)';
+                empty.style.textAlign = 'center';
+                empty.textContent = 'No matching branches';
+                listContainer.appendChild(empty);
+            }
+        }
+
+        filterInput.addEventListener('input', function() {
+            buildList(filterInput.value);
+        });
+
+        var errorEl = document.createElement('div');
+        errorEl.className = 'modal-error hidden';
+
+        var actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = 'Cancel';
+        actions.appendChild(cancelBtn);
+
+        dialog.appendChild(title);
+        dialog.appendChild(filterInput);
+        dialog.appendChild(listContainer);
+        dialog.appendChild(errorEl);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        buildList('');
+        filterInput.focus();
+
+        function closeModal() {
+            var el = document.getElementById('branch-modal-overlay');
+            if (el) {
+                el.classList.remove('visible');
+                setTimeout(function() { el.remove(); }, 200);
+            }
+        }
+
+        function doSwitchBranch(branch, isRemote) {
+            // Disable all items and show switching state
+            var items = listContainer.querySelectorAll('.branch-list-item');
+            items.forEach(function(item) {
+                item.style.pointerEvents = 'none';
+                item.style.opacity = '0.5';
+            });
+            // Find the clicked item and update text
+            items.forEach(function(item) {
+                var nameSpan = item.querySelector('span');
+                if (nameSpan && nameSpan.textContent === branch) {
+                    nameSpan.textContent = 'Switching...';
+                }
+            });
+
+            apiFetch('/api/git/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ branch: branch, is_remote: isRemote })
+            }).then(function(result) {
+                if (result && result.success) {
+                    closeModal();
+                    // Reload graph from disk after branch switch
+                    apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                        showToast('Switched to branch: ' + (result.branch || branch), 'success');
+                        refreshBranchStatus();
+                        refreshAllOpenCards();
+                        loadTreeData();
+                        refreshFileViewer();
+                        refreshDirtyCount();
+                        dismissStaleBanner();
+                    });
+                } else {
+                    errorEl.textContent = (result && result.error) || 'Failed to switch branch';
+                    errorEl.classList.remove('hidden');
+                    // Re-enable items
+                    items.forEach(function(item) {
+                        item.style.pointerEvents = '';
+                        item.style.opacity = '';
+                    });
+                    buildList(filterInput.value);
+                }
+            });
+        }
+
+        cancelBtn.addEventListener('click', closeModal);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeModal();
+        });
+
+        document.addEventListener('keydown', function onEsc(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', onEsc);
+            }
+        });
     });
 }
 

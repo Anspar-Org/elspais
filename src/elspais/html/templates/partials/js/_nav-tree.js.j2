@@ -113,6 +113,13 @@ async function refreshDirtyCount() {
         btnRevert.disabled = true;
         btnUndo.disabled = true;
     }
+    // Update push button: in-memory mutations are pushable (save + commit + push)
+    var pushBtn = document.getElementById('btn-push');
+    if (pushBtn && !editState.isMain) {
+        if (editState.mutationCount > 0) {
+            pushBtn.disabled = false;
+        }
+    }
 }
 
 // =====================================================================

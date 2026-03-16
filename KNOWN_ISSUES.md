@@ -1,23 +1,39 @@
 # Known Issues
 
-[ ] Bug: Viewer Push button (in edit mode) isn't active unless changes were made in the viewer. But there could be changes on-disk (and therefore in memory) that could be pushed.
+[ ] Bug: Viewer does not display the Tree with items sorted by ID.
+- e.g. p00001 should be above p00002, etc.
+
+[x] Bug: Viewer Push button (in edit mode) isn't active unless changes were made in the viewer. But there could be changes on-disk (and therefore in memory) that could be pushed.
 - The push-able state should depend on the actual file states, not on elspais activity.
 
-[ ] Design: does Addresses support REQ->JNY, JNY->REQ, or both? I think we only use JNT->REQ?
+[x] Feature: select branch to view and reload the graph.
+- triggered by clicking on the branch name
+- Both local and remote branches can be selected.
+- If a remote branch, pull it local first, of course.
+- If there a conflicts on the pull, just show an error and don't change anything.
+- obviously refresh the GUI after loading a new branch.
+- warn if unsaved in-memory edits will be lost
+
+[ ] Feature: Add the ability to select a different commit on the current branch
+- as part of the 'select branch' modal
+- this is like a 'rewind' for the user - or an 'undo save'
+- there are many ways this could be complicated, but let's keep it simple: if they check out the non-HEAD of a branch, then any future commits will be a force and non merge with the intermediate commits
+
+[ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
 [ ] Chore: review specs for accuracy
-[ ] Chore: start using Changelog in REQs
 
-[ ] Feature: drag handles in the hierarchy, to move requirements to be children of other requirements.
+---
 
 [ ] Feature: **Assertion reordering** with automatic label recomputation and reference updating
-- **Drag-and-drop reordering** in the UI (render_order mutation)
+- Also handle Assertion deletion re-numbering (when state is 'prospective'), or marking 'deprecated' (active states)
+- Don't allow editing of state = retired REQs
 
 [ ] Major Project: In elspais repo, udpdate spec file naming convention
 - Rename spec/ files more sensibly  and consistently
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
 - The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.
 
-[ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
+[ ] Chore: start using Changelog in REQs
 
-[x] Chore: DRY: search for every instance of string matching using regex or character indexing, splitting on chars, etc. Determine if they are doing something unique or if they should be using a defined library function like IdResolver. We don't want to implement the same parsing or rendering code more than once, for maintainability.
+[ ] Wishlist **Drag-and-drop reordering** in the UI (render_order mutation) - prospective only

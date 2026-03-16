@@ -31,7 +31,8 @@
 
     <div class="header-right">
         {% if mode == 'edit' %}
-        <span class="branch-badge" id="branch-badge" title="Current git branch">
+        <span class="branch-badge" id="branch-badge" onclick="showBranchPickerModal()"
+              title="Click to switch branch" style="cursor: pointer;">
             <span class="branch-status-dot" id="branch-status-dot"></span>
             <span id="branch-name">...</span>
             <span class="branch-warning hidden" id="branch-warning"
