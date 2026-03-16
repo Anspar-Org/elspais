@@ -7,10 +7,6 @@
   // that markdownlint misidentifies as setext-style headings.
   "MD003": false,
 
-  // Blanks around headings: Disabled because spec files use *End* markers
-  // immediately before the next requirement heading (no blank line between).
-  "MD022": false,
-
   // Line length: Disabled because modern viewers wrap dynamically.
   // Hard breaks at 80 chars create awkward formatting in rendered output.
   "MD013": false,
@@ -22,10 +18,6 @@
   // Multiple H1 headings: Disabled because requirement spec files use
   // # for each requirement ID which is intentional.
   "MD025": false,
-
-  // First line heading: Disabled because spec files may start with
-  // ## level headings when the file contains a subset of requirements.
-  "MD041": false,
 
   // Ordered list prefix: Disabled because CLAUDE.md uses semantic numbering
   // (8, 9, 10, etc.) for stable references even when items are added/removed.
