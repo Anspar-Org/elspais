@@ -177,12 +177,10 @@ def create_app(
         result = _get_graph_status(_state["graph"])
         # Include associated repos metadata for badge display
         try:
-            from elspais.associates import load_associates_config
+            from elspais.config import get_associates_config
 
-            assoc_config = load_associates_config(_state["config"], _state["working_dir"])
-            result["associated_repos"] = [
-                {"code": a.code, "name": a.name} for a in assoc_config.associates if a.enabled
-            ]
+            assoc_map = get_associates_config(_state["config"])
+            result["associated_repos"] = [{"code": name, "name": name} for name in assoc_map]
         except Exception:
             result["associated_repos"] = []
         return jsonify(result)

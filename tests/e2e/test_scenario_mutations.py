@@ -1129,7 +1129,6 @@ class TestScenarioMutations:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # =================================================================
@@ -1247,7 +1246,6 @@ class TestScenarioMutations:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # Verify second-round mutations survived

@@ -784,7 +784,6 @@ class TestFactoryIntegration:
         graph = factory_build_graph(
             config_path=config_file,
             repo_root=tmp_path,
-            scan_sponsors=False,
         )
 
         # Check that the graph was built (may or may not have transitive edges
@@ -836,7 +835,6 @@ class TestFactoryIntegration:
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         assert graph is not None
@@ -893,7 +891,6 @@ class TestFactoryIntegration:
             config_path=config_file,
             repo_root=tmp_path,
             scan_code=False,
-            scan_sponsors=False,
         )
 
         assert graph is not None

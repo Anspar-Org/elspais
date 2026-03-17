@@ -27,7 +27,6 @@ def hht_graph():
         repo_root=_FIXTURE_ROOT,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=False,
     )
 
 

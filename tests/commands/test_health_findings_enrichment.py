@@ -57,7 +57,6 @@ def _build(tmp_path: Path, config_path: Path, **kwargs):
         "repo_root": tmp_path,
         "scan_code": False,
         "scan_tests": False,
-        "scan_sponsors": False,
     }
     defaults.update(kwargs)
     return build_graph(**defaults)

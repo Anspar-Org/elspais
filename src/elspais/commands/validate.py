@@ -73,14 +73,11 @@ def run(args: argparse.Namespace) -> int:
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    scan_sponsors = mode == "combined"
-
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
-        scan_sponsors=scan_sponsors,
         canonical_root=canonical_root,
     )
 
@@ -116,7 +113,7 @@ def run(args: argparse.Namespace) -> int:
     fixable = []  # Issues that can be auto-fixed
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
-    if scan_sponsors:
+    if mode == "combined":
         from elspais.config import get_config
 
         config_dict = get_config(

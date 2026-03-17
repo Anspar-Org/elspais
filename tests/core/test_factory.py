@@ -68,7 +68,6 @@ code = ["src"]
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -109,7 +108,6 @@ scan_patterns = ["scripts/*.py"]
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -147,7 +145,6 @@ scan_patterns = ["src/**/*.py"]
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -186,7 +183,6 @@ ignore = ["vendor"]
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -226,7 +222,6 @@ spec = "spec"
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -258,7 +253,6 @@ code = ["does_not_exist"]
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
@@ -328,7 +322,6 @@ A. The system SHALL perform action X.
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = graph.find_by_id("REQ-p00001")
@@ -395,7 +388,6 @@ B. The system SHALL do B.
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = graph.find_by_id("REQ-p00001")
@@ -468,7 +460,6 @@ A. The system SHALL do A.
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # Simulate what the MCP server does: call count_by_coverage on the graph

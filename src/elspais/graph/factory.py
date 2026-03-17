@@ -14,7 +14,6 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
-from elspais.associates import get_associate_spec_directories
 from elspais.config import (
     IgnoreConfig,
     get_code_directories,
@@ -308,7 +307,6 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    scan_sponsors: bool = True,
     canonical_root: Path | None = None,
     strict: bool = False,
     _build_associates: bool = True,
@@ -319,10 +317,10 @@ def build_graph(
     It handles:
     - Configuration loading (auto-discovery or explicit)
     - Spec directory resolution
-    - Sponsor/associate spec directory resolution
     - Parser registration
     - Graph construction
     - Code and test directory scanning (configurable)
+    - Multi-repo federation via [associates] config
 
     Args:
         config: Pre-loaded config dict (optional).
@@ -331,7 +329,6 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
-        scan_sponsors: Whether to scan sponsor/associate spec directories.
         canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
         strict: If True, raise on missing associate paths instead of soft-failing.
         _build_associates: Internal flag to prevent recursive associate building.
@@ -353,23 +350,6 @@ def build_graph(
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
-
-    # 2b. Add sponsor/associate spec directories if enabled
-    # Skip legacy sponsor scanning when [associates] config is present
-    # (associates are built as separate TraceGraphs in the federation pipeline)
-    from elspais.config import get_associates_config as _get_assoc_cfg
-
-    has_new_associates = bool(_get_assoc_cfg(config)) and _build_associates
-    if scan_sponsors and not has_new_associates:
-        sponsor_dirs, associate_errors = get_associate_spec_directories(
-            config, repo_root, canonical_root=canonical_root
-        )
-        spec_dirs = list(spec_dirs) + sponsor_dirs
-        if associate_errors:
-            import sys
-
-            for err in associate_errors:
-                print(f"Warning: {err}", file=sys.stderr)
 
     # 3. Create default resolver and reference resolver
     default_resolver = build_resolver(config)
@@ -664,7 +644,6 @@ def build_graph(
                     repo_root=assoc_path,
                     scan_code=scan_code,
                     scan_tests=scan_tests,
-                    scan_sponsors=False,
                     canonical_root=canonical_root,
                     _build_associates=False,
                 )

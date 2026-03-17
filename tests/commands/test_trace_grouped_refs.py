@@ -120,7 +120,6 @@ patterns = ["test_*.py"]
             repo_root=project_dir,
             scan_code=False,
             scan_tests=True,
-            scan_sponsors=False,
         )
 
         # Find REQ-p00001
@@ -231,7 +230,6 @@ enabled = false
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = None
@@ -358,7 +356,6 @@ patterns = ["test_*.py"]
             repo_root=project_dir,
             scan_code=False,
             scan_tests=True,
-            scan_sponsors=False,
         )
 
         preset = ReportPreset(
@@ -501,7 +498,6 @@ patterns = ["test_*.py"]
             repo_root=project_dir,
             scan_code=False,
             scan_tests=True,
-            scan_sponsors=False,
         )
 
         preset = ReportPreset(
@@ -623,7 +619,6 @@ patterns = ["test_*.py"]
             repo_root=project_dir,
             scan_code=False,
             scan_tests=True,
-            scan_sponsors=False,
         )
 
         preset = ReportPreset(
@@ -764,7 +759,6 @@ patterns = ["test_*.py"]
             repo_root=project_dir,
             scan_code=False,
             scan_tests=True,
-            scan_sponsors=False,
         )
 
         preset = ReportPreset(

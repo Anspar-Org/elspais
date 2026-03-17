@@ -277,7 +277,6 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
 # Implements: REQ-p00004-B
 def get_req_locations_from_graph(
     repo_root: Path,
-    scan_sponsors: bool = False,
 ) -> dict[str, str]:
     """Get REQ ID -> file path mapping from a graph built at the given path.
 
@@ -286,7 +285,6 @@ def get_req_locations_from_graph(
 
     Args:
         repo_root: Path to repository root (or worktree path).
-        scan_sponsors: Whether to include sponsor/associated repos.
 
     Returns:
         Dict mapping full canonical REQ ID (e.g., 'REQ-d00001') to relative file path.
@@ -298,7 +296,6 @@ def get_req_locations_from_graph(
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=scan_sponsors,
     )
 
     return _extract_req_locations_from_graph(graph, repo_root)

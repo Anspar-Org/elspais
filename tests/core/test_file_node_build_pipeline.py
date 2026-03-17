@@ -84,7 +84,6 @@ class TestFileNodeCreation:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_nodes = list(graph.nodes_by_kind(NodeKind.FILE))
@@ -106,7 +105,6 @@ class TestFileNodeCreation:
             config_path=config,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_nodes = list(graph.nodes_by_kind(NodeKind.FILE))
@@ -126,7 +124,6 @@ class TestFileNodeCreation:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -147,7 +144,6 @@ class TestFileNodeContentFields:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -164,7 +160,6 @@ class TestFileNodeContentFields:
             config_path=config,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:src/main.py")
@@ -181,7 +176,6 @@ class TestFileNodeContentFields:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -201,7 +195,6 @@ class TestFileNodeContentFields:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -222,7 +215,6 @@ class TestGitInfoCapture:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -259,7 +251,6 @@ The system SHALL do something else.
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file1 = graph.find_by_id("file:spec/reqs.md")
@@ -282,7 +273,6 @@ class TestContainsEdges:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -304,7 +294,6 @@ class TestContainsEdges:
             config_path=config,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:src/main.py")
@@ -324,7 +313,6 @@ class TestContainsEdges:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = graph.find_by_id("REQ-p00001")
@@ -348,7 +336,6 @@ class TestContainsEdgeMetadata:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -374,7 +361,6 @@ class TestContainsEdgeMetadata:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -426,7 +412,6 @@ The system SHALL do thing two.
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -458,7 +443,6 @@ class TestAssertionsNotContained:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -481,7 +465,6 @@ class TestAssertionsNotContained:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = graph.find_by_id("REQ-p00001")
@@ -503,7 +486,6 @@ class TestAssertionsNotContained:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -534,7 +516,6 @@ class TestRemainderParserRegistration:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:spec/reqs.md")
@@ -558,7 +539,6 @@ class TestRemainderParserRegistration:
             config_path=config,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         file_node = graph.find_by_id("file:src/main.py")
@@ -585,7 +565,6 @@ class TestExistingBehaviorUnaffected:
             config_path=config,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         req_node = graph.find_by_id("REQ-p00001")
@@ -606,7 +585,6 @@ class TestExistingBehaviorUnaffected:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         roots = list(graph.iter_roots())
@@ -626,7 +604,6 @@ class TestExistingBehaviorUnaffected:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # The requirement should not be an orphan
@@ -643,7 +620,6 @@ class TestExistingBehaviorUnaffected:
             repo_root=tmp_path,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # FILE node should be findable

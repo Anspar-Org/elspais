@@ -279,23 +279,13 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         print("Would regenerate INDEX.md")
         return
 
-    # Include associated repo spec dirs for combined mode
-    from elspais.associates import get_associate_spec_directories
-
-    repo_root = getattr(args, "git_root", None)
-    sponsor_dirs, _ = get_associate_spec_directories(
-        config,
-        repo_root,
-        canonical_root=canonical_root,
-    )
-    all_spec_dirs = list(spec_dirs) + sponsor_dirs
+    all_spec_dirs = list(spec_dirs)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=True,
         canonical_root=canonical_root,
     )
 

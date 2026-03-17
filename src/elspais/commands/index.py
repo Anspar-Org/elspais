@@ -29,34 +29,17 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    mode = getattr(args, "mode", "combined")
 
     config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     spec_dirs = get_spec_directories(spec_dir, config)
 
-    scan_sponsors = mode == "combined"
-
-    # Include associated repo spec dirs so nodes classify correctly
-    if scan_sponsors:
-        from elspais.associates import get_associate_spec_directories
-
-        canonical_root = getattr(args, "canonical_root", None)
-        repo_root = getattr(args, "git_root", None)
-        sponsor_dirs, _ = get_associate_spec_directories(
-            config,
-            repo_root,
-            canonical_root=canonical_root,
-        )
-        all_spec_dirs = list(spec_dirs) + sponsor_dirs
-    else:
-        all_spec_dirs = list(spec_dirs)
-
     canonical_root = getattr(args, "canonical_root", None)
+    all_spec_dirs = list(spec_dirs)
+
     graph = build_graph(
         config=config,
         spec_dirs=all_spec_dirs if spec_dir else None,
         config_path=config_path,
-        scan_sponsors=scan_sponsors,
         canonical_root=canonical_root,
     )
 

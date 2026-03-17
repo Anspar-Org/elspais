@@ -1261,31 +1261,31 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
 def _build_associates_info(
     config: dict[str, Any], working_dir: Path, include_paths: bool = False
 ) -> dict[str, Any]:
-    """Build associates info from config. Lazily imports associates module."""
+    """Build associates info from [associates] TOML config."""
     try:
-        from elspais.associates import load_associates_config
+        from elspais.config import get_associates_config
 
-        associates_cfg = load_associates_config(config, working_dir)
+        assoc_map = get_associates_config(config)
     except Exception:
         return {"count": 0, "associates": [], "config_file": None}
 
     result = []
-    for a in associates_cfg.associates:
-        entry: dict[str, Any] = {
-            "name": a.name,
-            "code": a.code,
-            "enabled": a.enabled,
+    for name, entry in assoc_map.items():
+        info: dict[str, Any] = {
+            "name": name,
+            "code": name,
+            "enabled": True,
         }
         if include_paths:
-            entry["path"] = a.path
-            entry["local_path"] = a.local_path
-            entry["spec_path"] = a.spec_path
-        result.append(entry)
+            info["path"] = entry.get("path", "")
+            info["local_path"] = None
+            info["spec_path"] = "spec"
+        result.append(info)
 
     return {
         "count": len(result),
         "associates": result,
-        "config_file": associates_cfg.config_file or None,
+        "config_file": None,
     }
 
 

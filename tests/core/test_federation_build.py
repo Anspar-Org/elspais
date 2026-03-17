@@ -242,7 +242,6 @@ class TestFederationBuild:
             repo_root=root_dir,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         entries = list(fed.iter_repos())
@@ -265,7 +264,6 @@ class TestFederationBuild:
             repo_root=missing_assoc_repo,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         entries = list(fed.iter_repos())
@@ -293,7 +291,6 @@ class TestFederationBuild:
                 repo_root=missing_assoc_repo,
                 scan_code=False,
                 scan_tests=False,
-                scan_sponsors=False,
                 strict=True,  # type: ignore[call-arg]
             )
 
@@ -306,7 +303,6 @@ class TestFederationBuild:
             repo_root=root_dir,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # The root repo entry should match root_dir
@@ -327,7 +323,6 @@ class TestFederationBuild:
                 repo_root=root_dir,
                 scan_code=False,
                 scan_tests=False,
-                scan_sponsors=False,
             )
 
 
@@ -350,7 +345,6 @@ class TestCrossGraphWiring:
             repo_root=root_dir,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # REQ-d00001 should have REQ-p00001 as parent via IMPLEMENTS
@@ -372,7 +366,6 @@ class TestCrossGraphWiring:
             repo_root=root_dir,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         # The reference REQ-d00001 -> REQ-p00001 should not be broken
@@ -414,7 +407,6 @@ class TestCrossGraphWiring:
                 repo_root=root_dir,
                 scan_code=False,
                 scan_tests=False,
-                scan_sponsors=False,
             )
 
     def test_unresolvable_ref_stays_broken(self, tmp_path: Path) -> None:
@@ -449,7 +441,6 @@ class TestCrossGraphWiring:
             repo_root=root_dir,
             scan_code=False,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         broken = fed.broken_references()

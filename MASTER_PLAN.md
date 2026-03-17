@@ -41,27 +41,15 @@ Remove legacy YAML loading from `associates.py`, `Sponsor`/`SponsorsConfig` alia
 
 **TASK_FILE**: `FEDGRAPH_MP2_TASK_2.md`
 
-- [ ] **Baseline**: confirm tests pass before any changes
-- [ ] **Create TASK_FILE**: write the task description into it
-- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
-      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [ ] **Write failing tests** (use sub-agent):
-  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
-  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
-  - Confirm tests fail for the right reason (not syntax errors)
-  - Append test summary to TASK_FILE
-- [ ] **Implement**:
-  - Use existing code patterns and APIs — search before creating
-  - Add `# Implements: REQ-xxx` comments to new/modified source
-  - Append implementation summary to TASK_FILE
-- [ ] **Verify**:
-  - All tests pass (no workarounds)
-  - Lint clean
-  - Append results to TASK_FILE
-- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [ ] **Bump version** in pyproject.toml
-- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [x] **Baseline**: 2743 passed
+- [x] **Create TASK_FILE**: FEDGRAPH_MP2_TASK_2.md
+- [x] **Find assertions**: REQ-d00202, REQ-d00203, REQ-p00005-C/D/E/F
+- [x] **Write failing tests**: 15 tests in `tests/core/test_legacy_sponsor_removal.py`
+- [x] **Implement**: removed all legacy YAML code, aliases, scan_sponsors param
+- [x] **Verify**: 2755 passed, doc sync clean
+- [x] **Update docs**: CHANGELOG.md, CLAUDE.md
+- [x] **Bump version**: 0.104.34
+- [ ] **Commit**: pending
 
 ---
 

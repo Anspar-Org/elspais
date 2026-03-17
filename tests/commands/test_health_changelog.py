@@ -52,7 +52,6 @@ def _build(tmp_path: Path, config_path: Path):
         repo_root=tmp_path,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=False,
     )
 
 
