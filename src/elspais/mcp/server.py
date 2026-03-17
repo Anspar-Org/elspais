@@ -582,10 +582,23 @@ def _refresh_graph(
             }, FederatedGraph.empty()
         raise
 
+    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync
+    root_config = None
+    if hasattr(new_graph, "iter_repos"):
+        for entry in new_graph.iter_repos():
+            if entry.config is not None:
+                from elspais.config import ConfigLoader
+
+                root_config = (
+                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
+                )
+                break
+
     return {
         "success": True,
         "message": "Graph refreshed successfully",
         "node_count": new_graph.node_count(),
+        "config": root_config,
     }, new_graph
 
 
@@ -1506,6 +1519,7 @@ _WORKSPACE_PROFILE_DISPATCH: dict[str, Any] = {
 }
 
 
+# Implements: REQ-d00205-A, REQ-d00205-D
 def _get_workspace_info(
     working_dir: Path,
     config: dict[str, Any] | None = None,
@@ -1516,6 +1530,8 @@ def _get_workspace_info(
 
     REQ-o00061-A: Returns repository path, project name, and configuration summary.
     REQ-o00061-D: Reads configuration from unified config system.
+    REQ-d00205-A: Includes federation details when multiple repos present.
+    REQ-d00205-D: Derives root config from graph when config not provided.
 
     Args:
         working_dir: The repository root directory.
@@ -1526,10 +1542,37 @@ def _get_workspace_info(
     Returns:
         Workspace information dict with profile-specific sections.
     """
+    # REQ-d00205-D: Derive root config from graph when not provided
+    if config is None and graph is not None and hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.config is not None:
+                from elspais.config import ConfigLoader
+
+                config = (
+                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
+                )
+                break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)
 
     base = _build_base_workspace_info(working_dir, config)
+
+    # REQ-d00205-A: Include federation details when multi-repo graph present
+    if graph is not None and hasattr(graph, "iter_repos"):
+        repos_info = []
+        for entry in graph.iter_repos():
+            repo_info: dict[str, Any] = {
+                "name": entry.name,
+                "path": str(entry.repo_root),
+                "status": "error" if entry.graph is None else "ok",
+            }
+            if entry.git_origin:
+                repo_info["git_origin"] = entry.git_origin
+            if entry.error:
+                repo_info["error"] = entry.error
+            repos_info.append(repo_info)
+        if len(repos_info) > 1:
+            base["federation"] = {"repos": repos_info, "root_repo": graph._root_repo}
 
     if detail == "default":
         return base
@@ -3874,6 +3917,9 @@ def create_server(
             canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
+        # REQ-d00205-B: Sync config from rebuilt graph's root repo
+        if result.get("config") is not None:
+            _state["config"] = result["config"]
         result["working_dir"] = str(_state["working_dir"])
         return result
 

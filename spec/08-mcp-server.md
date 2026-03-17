@@ -756,6 +756,30 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 ---
 
+## REQ-d00205: MCP Federation Support
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00061, REQ-d00200
+
+The MCP server SHALL leverage FederatedGraph's per-repo config access for federation-aware operation.
+
+## Assertions
+
+A. `get_workspace_info()` SHALL include federation details when multiple repos are present: repo names, paths, error states, and git origins from `iter_repos()`.
+
+B. `refresh_graph()` SHALL sync `_state["config"]` with the rebuilt federation's root repo config to prevent config staleness.
+
+C. Node-specific config operations (assertion target normalization, edge mutation config) SHALL use `graph.config_for(node_id)` instead of global `_state["config"]`.
+
+D. Global operations (workspace info, agent instructions, project summary) SHALL continue to use root repo config from `_state["config"]`.
+
+## Rationale
+
+Without federation-aware config access, all MCP operations use the root repo's config regardless of which repo a node belongs to. Per-repo config access ensures correct ID pattern resolution and changelog settings for multi-repo operations. Federation info in workspace queries helps AI agents understand the multi-repo topology.
+
+*End* *MCP Federation Support* | **Hash**: 00000000
+
+---
+
 ## Architecture Diagram
 
 ```text
