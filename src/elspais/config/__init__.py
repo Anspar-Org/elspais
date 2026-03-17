@@ -1059,8 +1059,10 @@ def validate_no_transitive_associates(
     """
     from elspais.graph.federated import FederationError
 
-    associates = associate_config.get("associates", {})
-    if associates:
+    # Use get_associates_config to check for NEW-format [associates.<name>] entries
+    # (not the legacy associates.paths list from the old sponsor system)
+    new_format_associates = get_associates_config(associate_config)
+    if new_format_associates:
         raise FederationError(
             f"Associate '{associate_name}' declares its own associates "
             f"-- only the root repo may declare associates."

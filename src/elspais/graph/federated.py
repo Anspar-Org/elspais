@@ -146,12 +146,17 @@ class FederatedGraph:
         self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
         self._root_repo = root_repo or (repos[0].name if repos else "")
         # Build ownership map: node_id -> repo name
-        # Detect ID conflicts across repos
+        # Detect ID conflicts across repos (skip FILE/REMAINDER nodes which
+        # naturally have same relative paths across repos)
         self._ownership: dict[str, str] = {}
+        _structural_prefixes = ("file:", "remainder:")
         for entry in repos:
             if entry.graph is not None:
                 for node_id in entry.graph._index:
                     if node_id in self._ownership:
+                        # FILE and REMAINDER nodes may share relative paths
+                        if any(node_id.startswith(p) for p in _structural_prefixes):
+                            continue
                         existing_repo = self._ownership[node_id]
                         raise FederationError(
                             f"ID conflict: '{node_id}' exists in both "
