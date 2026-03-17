@@ -71,7 +71,7 @@ Missing repos leave unresolved cross-repo references as broken references, makin
 
 ## Cross-Graph Edge Wiring
 
-`TraceGraph.add_edge()` gains an optional `target_graph` parameter (defaults to `self`):
+`TraceGraph.add_edge()` (internal API) gains an optional `target_graph` parameter (defaults to `self`):
 
 ```python
 def add_edge(self, source_id, target_id, edge_kind,
@@ -83,6 +83,8 @@ def add_edge(self, source_id, target_id, edge_kind,
 
 When `target_graph` is provided, the target node is looked up in that graph's index. The edge is wired via `node.link()` as usual. `_orphaned_ids` on the source's graph is updated by the existing mutation logic.
 
+Note: during the build pipeline, broken references from each sub-graph are used as the mechanism to discover cross-graph edges. After the wiring pass, any remaining broken references are genuinely unresolvable (missing target across all repos).
+
 ## Always Federated
 
 `build_graph()` always returns a `FederatedGraph`, even for single-repo projects (a federation of one). This eliminates the risk of consumers accidentally working with a bare `TraceGraph` that's part of a federation, which would bypass the unified mutation log and ownership tracking.
@@ -93,11 +95,13 @@ When `target_graph` is provided, the target node is looked up in that graph's in
 
 Every `TraceGraph` public method has an explicit implementation on `FederatedGraph` with a documented federation strategy:
 
-- **by_id**: Look up owning graph, delegate. Examples: `find_by_id`, `rename_node`, `update_title`, `change_status`, `add_assertion`, `delete_assertion`, `update_assertion`, `rename_assertion`, `move_node_to_file`, `rename_file`, `fix_broken_reference`, `has_root`, `delete_requirement`.
+- **by_id**: Look up owning graph, delegate. Must update `_ownership` when IDs change (rename, add, delete). Examples: `find_by_id`, `rename_node`, `update_title`, `change_status`, `add_assertion`, `delete_assertion`, `update_assertion`, `rename_assertion`, `rename_file`, `fix_broken_reference`, `has_root`, `delete_requirement`.
 - **aggregate**: Combine results from all graphs. Examples: `iter_roots`, `all_nodes`, `all_connected_nodes`, `nodes_by_kind`, `iter_by_kind`, `node_count`, `root_count`, `has_orphans`, `orphan_count`, `orphaned_nodes`, `has_broken_references`, `broken_references`, `deleted_nodes`, `has_deletions`, `iter_unlinked`, `iter_structural_orphans`.
-- **broadcast**: Run on each graph with its own config/repo_root. Examples: `clone`, `render_save`.
-- **cross-graph**: Source and target may be in different graphs. Examples: `add_edge`, `delete_edge`, `change_edge_kind`, `change_edge_targets`.
-- **special**: `add_requirement` requires caller to specify target repo. `is_reachable_to_requirement` traversal may cross graph boundaries (works naturally via object references).
+- **broadcast**: Run on each graph with its own config/repo_root. Examples: `render_save`.
+- **cross-graph**: Source and target may be in different graphs. Examples: `add_edge`, `delete_edge`, `change_edge_kind`, `change_edge_targets`, `move_node_to_file` (target file may be in a different repo).
+- **special**: `add_requirement` requires caller to specify target repo. `clone` requires federation-aware deep copy that rebuilds cross-graph edges after cloning sub-graphs. `is_reachable_to_requirement` traversal may cross graph boundaries (works naturally via object references).
+
+Aggregate methods skip repos with `graph: None` (error-state repos).
 
 ## Unified Mutation Log
 
@@ -110,9 +114,9 @@ class MutationEntry:
     repo: str | None = None
 ```
 
-When `FederatedGraph` delegates a mutation to a sub-graph, it pops the entry from the sub-graph's log, tags it with `repo=name`, and appends it to the federated log.
+Sub-graphs do not maintain independent mutation logs under federation. `FederatedGraph` owns the only log. When delegating a mutation, `FederatedGraph` calls the sub-graph's mutation method, then moves the resulting entry from the sub-graph's log to the federated log (tagged with `repo=name`), keeping the sub-graph's log empty.
 
-`undo_last()` reads the federated log, identifies the repo, and delegates to that sub-graph's undo.
+`undo_last()` reads the federated log, identifies the repo, and replays the undo operation directly on the sub-graph's state (not via the sub-graph's own undo method, since its log is empty).
 
 ## Render and Persistence
 
@@ -137,4 +141,13 @@ deployment repo (private, DEV/OPS)   <-- root repo (where you run elspais)
 module-a  module-b  ...  (optional associates)
 ```
 
-The root repo is wherever you start from, not necessarily the top of the requirement hierarchy. Typically the deployment repo refines the core repo's requirements.
+The root repo is wherever you start from, not necessarily the top of the requirement hierarchy. Typically the deployment repo refines the core repo's requirements. Cross-repo references can go in any direction; the diagram shows the typical case but does not imply a constraint.
+
+## Out of Scope
+
+- **Cross-repo `Satisfies` template instantiation**: The `Satisfies:` mechanism that clones template subtrees as INSTANCE nodes is complex enough within a single repo. Cross-repo template instantiation is a future extension.
+- **Health check federation details**: Each sub-graph is health-checked with its own config, results merged. The specific implementation of per-repo health delegation will be designed during implementation planning.
+
+## Consumer Migration
+
+Every type hint that currently says `TraceGraph` changes to `FederatedGraph`. Since `build_graph()` always returns `FederatedGraph`, most consumers require only a type hint change. Config-sensitive operations that currently receive a separate `config` parameter can use `federated.config_for(node_id)` or `federated.repo_for(node_id).config` when they need per-repo config.
