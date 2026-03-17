@@ -67,13 +67,21 @@ class TestSnippetFor:
     """Tests for _snippet_for()."""
 
     def test_REQ_p00001_A_bash_snippet_contains_marker(self):
-        assert _COMPLETION_MARKER in _snippet_for("bash")
+        snippet = _snippet_for("bash")
+        assert _COMPLETION_MARKER in snippet
+        assert "register-python-argcomplete" in snippet
 
     def test_REQ_p00001_A_fish_snippet_uses_source(self):
-        assert "source" in _snippet_for("fish")
+        snippet = _snippet_for("fish")
+        assert "register-python-argcomplete" in snippet
+        # fish uses piped `| source` pattern
+        assert "| source" in snippet
 
     def test_REQ_p00001_A_tcsh_snippet_uses_eval(self):
-        assert "eval" in _snippet_for("tcsh")
+        snippet = _snippet_for("tcsh")
+        assert "register-python-argcomplete" in snippet
+        # tcsh uses eval backtick pattern
+        assert "eval `" in snippet
 
 
 class TestInstall:

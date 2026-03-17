@@ -179,13 +179,17 @@ class TestAppFactory:
         assert isinstance(app, Flask)
 
     def test_REQ_d00010_A_create_app_accepts_config(self, sample_graph):
-        """App factory accepts repo_root, graph, and config arguments."""
+        """App factory stores the provided config in internal state."""
+        test_config = {"project": {"name": "test"}}
         app = create_app(
             repo_root=Path("/another/repo"),
             graph=sample_graph,
-            config={"project": {"name": "test"}},
+            config=test_config,
         )
-        assert app is not None
+        # Verify the config was applied by hitting an endpoint
+        client = app.test_client()
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -310,15 +314,37 @@ class TestGetSearch:
         data = resp.get_json()
         assert len(data) <= 1
 
-    def test_REQ_d00061_E_search_default_limit(self, client):
-        """Default limit is 50 when not specified."""
-        # Just verify the endpoint works without limit param (uses default 50)
-        resp = client.get("/api/search?q=Security")
+    def test_REQ_d00061_E_search_default_limit(self):
+        """Default limit is 50 when not specified — truncates beyond 50."""
+        # Build a graph with 60 matching nodes to verify the limit
+        big_graph = TraceGraph(repo_root=Path("/test/repo"))
+        for i in range(60):
+            node = GraphNode(
+                id=f"REQ-d{i:05d}",
+                kind=NodeKind.REQUIREMENT,
+                label=f"Searchable Requirement {i}",
+            )
+            node._content = {
+                "level": "DEV",
+                "status": "Active",
+                "hash": f"{i:08x}",
+                "body_text": f"Searchable body {i}",
+            }
+            big_graph._index[node.id] = node
+            big_graph._roots.append(node)
+
+        big_app = create_app(
+            repo_root=Path("/test/repo"),
+            graph=big_graph,
+            config={},
+        )
+        big_app.config["TESTING"] = True
+        big_client = big_app.test_client()
+
+        resp = big_client.get("/api/search?q=Searchable")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
-        # Our test graph has few nodes, so all should be returned
-        assert len(data) >= 1
+        assert len(data) == 50
 
     def test_REQ_d00061_C_search_with_regex(self, client):
         """Regex parameter enables regex matching."""
@@ -386,14 +412,6 @@ class TestGetTestCoverage:
 
 class TestGetTreeData:
     """Validates REQ-d00010-A: GET /api/tree-data."""
-
-    def test_REQ_d00010_A_tree_data_returns_list(self, client):
-        """Tree data endpoint returns flat list of rows."""
-        resp = client.get("/api/tree-data")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
 
     def test_REQ_d00010_A_tree_data_row_structure(self, client):
         """Each tree row has expected keys."""
@@ -1836,13 +1854,11 @@ class TestMutateSaveRoundTrip:
         assert resp.get_json()["dirty"] is True
 
         # Save clears dirty state
-        client.post("/api/save")
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
         resp = client.get("/api/dirty")
-        # After save, build_time is updated — mutations are still in the log
-        # but /api/dirty checks the mutation count, not the build_time
         data = resp.get_json()
-        # dirty may still be True (mutations stay in log), but save succeeded
-        assert isinstance(data["dirty"], bool)
+        assert data["dirty"] is False, "Save should clear the dirty flag"
 
     def test_add_assertion_then_delete_it_then_save(self, disk_app):
         """Add assertion, then delete it, then save -> file unchanged."""

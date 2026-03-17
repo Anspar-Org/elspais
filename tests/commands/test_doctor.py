@@ -58,7 +58,12 @@ class TestDoctorConfigChecks:
         )
         results = run_config_checks(None, config, tmp_path)
         assert isinstance(results, list)
+        assert len(results) >= 5, f"Expected at least 5 config checks, got {len(results)}"
         assert all(r.category == "config" for r in results)
+        check_names = {r.name for r in results}
+        assert "config.exists" in check_names
+        assert "config.syntax" in check_names
+        assert "config.required_fields" in check_names
 
 
 class TestDoctorWorktreeCheck:

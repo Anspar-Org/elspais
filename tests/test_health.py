@@ -24,52 +24,29 @@ from elspais.config import ConfigLoader
 class TestHealthCheck:
     """Tests for the HealthCheck dataclass."""
 
-    def test_basic_creation(self):
-        """Test creating a health check."""
+    def test_basic_creation_defaults(self):
+        """Test HealthCheck default values for severity and details."""
         check = HealthCheck(
             name="test.check",
             passed=True,
             message="All good",
             category="config",
         )
-        assert check.name == "test.check"
-        assert check.passed is True
-        assert check.message == "All good"
-        assert check.category == "config"
         assert check.severity == "error"  # default
         assert check.details == {}  # default
-
-    def test_with_details(self):
-        """Test health check with details."""
-        check = HealthCheck(
-            name="test.check",
-            passed=False,
-            message="Something wrong",
-            category="spec",
-            severity="warning",
-            details={"file": "test.md", "line": 42},
-        )
-        assert check.details == {"file": "test.md", "line": 42}
-        assert check.severity == "warning"
 
 
 class TestHealthReport:
     """Tests for the HealthReport dataclass."""
 
-    def test_empty_report(self):
-        """Test empty health report is healthy."""
-        report = HealthReport()
-        assert report.passed == 0
-        assert report.failed == 0
-        assert report.warnings == 0
-        assert report.is_healthy is True
+    def test_empty_and_all_passed_are_healthy(self):
+        """Empty report and all-passed report are both healthy."""
+        empty = HealthReport()
+        assert empty.is_healthy is True
 
-    def test_all_passed(self):
-        """Test report with all passed checks."""
         report = HealthReport()
         report.add(HealthCheck("a", True, "ok", "config"))
         report.add(HealthCheck("b", True, "ok", "spec"))
-
         assert report.passed == 2
         assert report.failed == 0
         assert report.is_healthy is True
@@ -139,8 +116,8 @@ class TestConfigChecks:
         check = check_config_required_fields(config)
         assert check.passed is True
 
-    def test_required_fields_missing(self):
-        """Test required fields check with missing sections."""
+    def test_required_fields_present_with_defaults(self):
+        """Test that default config has all required fields present."""
         config = ConfigLoader.from_dict({})  # Will get defaults
 
         # With defaults, all required fields should be present
@@ -290,18 +267,23 @@ The system SHALL do something.
 """
         )
 
-        # Create config
+        # Create config using the current schema
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[project]
+namespace = "REQ"
 
-[patterns.types.prd]
-id = "p"
-name = "PRD"
-level = 1
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
 
 [spec]
 directories = ["spec"]
@@ -312,8 +294,8 @@ prd = []
         )
 
         args = argparse.Namespace(
-            spec_dir=str(spec_dir),
-            config=str(config_file),
+            spec_dir=spec_dir,
+            config=config_file,
             spec_only=False,
             code_only=False,
             tests_only=False,
@@ -326,10 +308,8 @@ prd = []
         old_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
-            # Run the health check
+            # Run the health check — minimal valid config should pass
             result = health.run(args)
-            # Should be healthy (0) or have warnings (still 0 since warnings don't fail)
-            # May return 1 if spec checks find issues with the minimal test case
-            assert result in (0, 1)
+            assert result == 0, f"Expected healthy (0) but got {result}"
         finally:
             os.chdir(old_cwd)

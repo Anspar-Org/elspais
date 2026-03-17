@@ -142,12 +142,6 @@ def _make_test_node(
 class TestRenderDispatch:
     """Validates REQ-d00131-A: Each NodeKind has a render() function dispatched by kind."""
 
-    def test_REQ_d00131_A_render_function_importable(self):
-        """render_node() can be imported from graph.render module."""
-        from elspais.graph.render import render_node
-
-        assert callable(render_node)
-
     def test_REQ_d00131_A_render_dispatches_by_kind(self):
         """render_node() dispatches correctly for each NodeKind."""
         from elspais.graph.render import render_node
@@ -157,7 +151,7 @@ class TestRenderDispatch:
         result = render_node(rem)
         assert result == "hello world"
 
-    def test_REQ_d00131_A_render_unknown_kind_raises(self):
+    def test_render_remainder_kind_raises(self):
         """render_node() should handle all known kinds gracefully."""
         from elspais.graph.render import render_node
 

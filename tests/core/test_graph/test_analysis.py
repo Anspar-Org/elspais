@@ -229,8 +229,12 @@ class TestCompositeScore:
         root.link(c2, EdgeKind.IMPLEMENTS)
 
         report = analyze_foundations(graph, weights=(0.4, 0.3, 0.3))
-        # Just verify report has ranked_nodes with composite_score set
         assert len(report.ranked_nodes) > 0
+        # Root has 2 uncovered children -> highest composite score
+        scores = {s.node_id: s.composite_score for s in report.ranked_nodes}
+        assert scores["REQ-R"] > scores["REQ-C1"]
+        assert scores["REQ-R"] > scores["REQ-C2"]
+        # All scores should be non-negative floats
         for ns in report.ranked_nodes:
             assert isinstance(ns.composite_score, float)
             assert ns.composite_score >= 0.0

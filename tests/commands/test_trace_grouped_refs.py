@@ -516,11 +516,17 @@ patterns = ["test_*.py"]
 
     def test_html_test_refs_in_code_tags(self, project_dir: Path):
         """Each test ref is wrapped in <code> tags."""
+        import re
+
         output = self._build_and_format(project_dir)
-        assert "<code>" in output
-        assert "</code>" in output
-        # Verify specific test refs are in code tags
-        assert "<code>test" in output or "<code>tests/" in output
+        # Verify specific known test ref IDs appear inside <code> tags
+        code_contents = re.findall(r"<code>(.*?)</code>", output)
+        assert len(code_contents) > 0, "No <code> tags found in output"
+        # At least one code tag should contain a known test file/function ref
+        all_code_text = " ".join(code_contents)
+        assert (
+            "test_input_validation" in all_code_text or "test_output" in all_code_text
+        ), f"Expected known test ref IDs in <code> tags, got: {code_contents}"
 
 
 class TestJsonGroupedRefs:

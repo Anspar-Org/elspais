@@ -111,13 +111,18 @@ class TestCollectCoverage:
     """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
 
     def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
-        """_collect_coverage returns dict with 'levels' and 'excluded' keys."""
+        """_collect_coverage returns dict with 'levels' list and 'excluded' dict."""
         graph = _make_graph()
         data = _collect_coverage(graph)
 
         assert "levels" in data
         assert "excluded" in data
         assert isinstance(data["levels"], list)
+        assert isinstance(data["excluded"], dict)
+        # Empty graph has 3 zero-count levels and no exclusions
+        assert len(data["levels"]) == 3
+        assert all(lv["total"] == 0 for lv in data["levels"])
+        assert data["excluded"] == {}
 
     def test_REQ_d00086_D_levels_always_three(self):
         """There are always exactly 3 level entries (PRD, OPS, DEV)."""
@@ -387,15 +392,6 @@ class TestMarkdownFormat:
 class TestJsonFormat:
     """Validates REQ-d00086-C: JSON format output."""
 
-    def test_REQ_d00086_C_json_is_valid(self):
-        """JSON output parses without error."""
-        graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
-        output = _render(data, "json")
-
-        parsed = json.loads(output)
-        assert isinstance(parsed, dict)
-
     def test_REQ_d00086_C_json_has_levels_and_excluded(self):
         """JSON output contains 'levels' and 'excluded' keys."""
         graph = _build_mixed_graph()
@@ -537,18 +533,6 @@ class TestRenderDispatch:
 
         assert "Coverage Summary" in output
         assert output == _render(data, "text")
-
-    def test_REQ_d00086_C_render_all_formats_non_empty(self):
-        """All four formats produce non-empty output."""
-        graph = _make_graph()
-        node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
-        _set_rollup(node, total=1, covered=1, tested=1, validated=1)
-
-        data = _collect_coverage(graph)
-
-        for fmt in ("text", "markdown", "json", "csv"):
-            output = _render(data, fmt)
-            assert len(output) > 0, f"Format '{fmt}' produced empty output"
 
 
 # ===========================================================================

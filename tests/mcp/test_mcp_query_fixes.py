@@ -332,12 +332,13 @@ class TestBodyFieldSearch:
         assert len(results) == 1
         assert results[0]["id"] == "REQ-p00001"
 
-    def test_REQ_d00061_B_search_body_returns_list(self, graph_with_body):
-        """REQ-d00061-B: Body search returns list (per REQ-d00061-D)."""
+    def test_REQ_d00061_B_search_body_matches_all_with_shall(self, graph_with_body):
+        """REQ-d00061-B: Body search for 'SHALL' matches all 3 requirements."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _search
 
         results = _search(graph_with_body, "SHALL", field="body")
-        assert isinstance(results, list)
         # All 3 requirements have SHALL in body
         assert len(results) == 3
+        ids = {r["id"] for r in results}
+        assert ids == {"REQ-p00001", "REQ-o00001", "REQ-d00001"}

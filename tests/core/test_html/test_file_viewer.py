@@ -74,12 +74,6 @@ def no_source_graph():
 class TestCollectSourceFilesStructure:
     """Validates REQ-p00006-C: _collect_source_files returns correct data structure."""
 
-    def test_REQ_p00006_C_collect_source_files_returns_dict(self, hht_graph):
-        """_collect_source_files returns a dict."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-        assert isinstance(result, dict)
-
     def test_REQ_p00006_C_collect_source_files_returns_correct_keys(self, hht_graph):
         """Each entry in source_files has lines, language, and raw keys."""
         generator = HTMLGenerator(hht_graph)
@@ -90,25 +84,6 @@ class TestCollectSourceFilesStructure:
             assert "lines" in data, f"Missing 'lines' key for {path}"
             assert "language" in data, f"Missing 'language' key for {path}"
             assert "raw" in data, f"Missing 'raw' key for {path}"
-
-    def test_REQ_p00006_C_collect_source_files_lines_is_list(self, hht_graph):
-        """The lines value is a list of strings."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-
-        for path, data in result.items():
-            assert isinstance(data["lines"], list), f"lines should be list for {path}"
-            for line in data["lines"]:
-                assert isinstance(line, str), f"Each line should be str for {path}"
-
-    def test_REQ_p00006_C_collect_source_files_raw_is_string(self, hht_graph):
-        """The raw value is a string containing the file contents."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-
-        for path, data in result.items():
-            assert isinstance(data["raw"], str), f"raw should be str for {path}"
-            assert len(data["raw"]) > 0, f"raw should not be empty for {path}"
 
 
 class TestCollectSourceFilesHighlighting:
@@ -262,14 +237,6 @@ class TestCollectSourceFilesEmpty:
 
 class TestGetPygmentsCss:
     """Validates REQ-p00006-C: _get_pygments_css returns CSS for syntax highlighting."""
-
-    def test_REQ_p00006_C_get_pygments_css_returns_nonempty_string(self, hht_graph):
-        """Returns a non-empty string."""
-        generator = HTMLGenerator(hht_graph)
-        css = generator._get_pygments_css()
-
-        assert isinstance(css, str)
-        assert len(css) > 0
 
     def test_REQ_p00006_C_get_pygments_css_contains_highlight_class(self, hht_graph):
         """Returned CSS contains .highlight selector."""

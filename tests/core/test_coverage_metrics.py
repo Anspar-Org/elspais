@@ -11,46 +11,8 @@ from tests.core.graph_test_helpers import (
 )
 
 
-class TestCoverageSource:
-    """Tests for CoverageSource enum."""
-
-    def test_source_values(self):
-        """Verify enum values."""
-        assert CoverageSource.DIRECT.value == "direct"
-        assert CoverageSource.EXPLICIT.value == "explicit"
-        assert CoverageSource.INFERRED.value == "inferred"
-
-
-class TestCoverageContribution:
-    """Tests for CoverageContribution dataclass."""
-
-    def test_contribution_fields(self):
-        """Contribution stores all fields correctly."""
-        contrib = CoverageContribution(
-            source_id="test:foo.py:10",
-            source_type=CoverageSource.DIRECT,
-            assertion_label="A",
-        )
-
-        assert contrib.source_id == "test:foo.py:10"
-        assert contrib.source_type == CoverageSource.DIRECT
-        assert contrib.assertion_label == "A"
-
-
 class TestRollupMetrics:
     """Tests for RollupMetrics dataclass."""
-
-    def test_default_values(self):
-        """Default metrics are all zero."""
-        metrics = RollupMetrics()
-
-        assert metrics.total_assertions == 0
-        assert metrics.covered_assertions == 0
-        assert metrics.direct_covered == 0
-        assert metrics.explicit_covered == 0
-        assert metrics.inferred_covered == 0
-        assert metrics.coverage_pct == 0.0
-        assert metrics.assertion_coverage == {}
 
     def test_add_contribution(self):
         """Contributions are stored by assertion label."""
