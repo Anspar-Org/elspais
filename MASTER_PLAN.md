@@ -1,11 +1,11 @@
-# Master Plan: FederatedGraph — Legacy Removal and Health Check Federation
+# Master Plan: FederatedGraph — MCP Server and Viewer Updates
 
 **Branch**: claude/cross-cutting-requirements-2Zd0c
 **Ticket**: CUR-1082
 **Status**: Not Started
-**Depends on**: MASTER_PLAN1.md (Config + Multi-Repo) must be complete first
+**Depends on**: MASTER_PLAN.md (Core Wrapper) must be complete. MASTER_PLAN1.md (Config + Multi-Repo) should be complete for full federation features but is not strictly required — MCP can work with federation-of-one from MASTER_PLAN.md.
 
-**Background**: With multi-repo federation working (MASTER_PLAN1.md), this plan removes the legacy `sponsors.yml` / YAML-based associate system and replaces all usage with the new `[associates]` config. It also ensures health checks run per-repo with the correct config, which was a primary motivator for the FederatedGraph design.
+**Background**: With the core FederatedGraph in place and multi-repo federation working, this plan updates the MCP server and viewer to fully leverage federation: per-repo config access, federation info in workspace queries, and repo staleness indicators in the viewer/server.
 
 **Spec**: `docs/superpowers/specs/2026-03-16-federated-graph-design.md`
 
@@ -19,55 +19,63 @@ Read `AGENT_DESIGN_PRINCIPLES.md` before starting the first task.
 
 ## Plan
 
-### Task 1: Redirect associate call sites to new config system
+### Task 1: MCP server federation support
 
-Grep for `load_associates_config`, `get_associate_spec_directories`, `sponsors`, `SponsorsConfig` across `src/` and `tests/`. Redirect each call site in `factory.py`, `health.py`, and other commands from the old associate functions to the new multi-repo build pipeline (MASTER_PLAN1 Task 3). Do not delete dead code yet — just redirect consumers.
+Update `_state["graph"]` to hold `FederatedGraph`. Replace `_state["config"]` with per-repo config access: tools that currently read `_state["config"]` should use `fg.config_for(node_id)` or `fg.repo_for(repo_name).config` where appropriate. Key config accesses to update: `get_status_roles()` calls, workspace info hierarchy rules, coverage stat computation. Update `get_workspace_info` to expose federation info: repo names, paths, error states, git origins via `fg.iter_repos()`. Update `refresh_graph()` to rebuild the entire federation (all repos). Run MCP test suite.
 
-**TASK_FILE**: `FEDGRAPH_MP2_TASK_1.md`
+**TASK_FILE**: `FEDGRAPH_MP3_TASK_1.md`
 
-- [x] **Baseline**: 2743 passed
-- [x] **Create TASK_FILE**: FEDGRAPH_MP2_TASK_1.md
-- [x] **Implement**: Skip legacy scan_sponsors when [associates] present
-- [x] **Verify**: 2743 passed, tested on hht_diary+callisto
-- [x] **Update docs**: CHANGELOG.md
-- [x] **Bump version**: 0.104.33
-- [x] **Commit**: done
-
----
-
-### Task 2: Remove dead legacy associate code
-
-Remove legacy YAML loading from `associates.py`, `Sponsor`/`SponsorsConfig` aliases, `sponsors.yml` handling, and `sponsors.local.yml` override logic. Remove or update tests that exercise the old system. Keep only what's needed for the new `[associates]` config (or move into config module if appropriate).
-
-**TASK_FILE**: `FEDGRAPH_MP2_TASK_2.md`
-
-- [x] **Baseline**: 2743 passed
-- [x] **Create TASK_FILE**: FEDGRAPH_MP2_TASK_2.md
-- [x] **Find assertions**: REQ-d00202, REQ-d00203, REQ-p00005-C/D/E/F
-- [x] **Write failing tests**: 15 tests in `tests/core/test_legacy_sponsor_removal.py`
-- [x] **Implement**: removed all legacy YAML code, aliases, scan_sponsors param
-- [x] **Verify**: 2755 passed, doc sync clean
-- [x] **Update docs**: CHANGELOG.md, CLAUDE.md
-- [x] **Bump version**: 0.104.34
-- [x] **Commit**: 8554c9a
+- [ ] **Baseline**: confirm tests pass before any changes
+- [ ] **Create TASK_FILE**: write the task description into it
+- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
+      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
+- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
+- [ ] **Write failing tests** (use sub-agent):
+  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
+  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
+  - Confirm tests fail for the right reason (not syntax errors)
+  - Append test summary to TASK_FILE
+- [ ] **Implement**:
+  - Use existing code patterns and APIs — search before creating
+  - Add `# Implements: REQ-xxx` comments to new/modified source
+  - Append implementation summary to TASK_FILE
+- [ ] **Verify**:
+  - All tests pass (no workarounds)
+  - Lint clean
+  - Append results to TASK_FILE
+- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
+- [ ] **Bump version** in pyproject.toml
+- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 
-### Task 3: Per-repo health check delegation with config isolation
+### Task 2: Viewer/server repo staleness and Flask app update
 
-Modify health check functions in `commands/health.py` to iterate `fg.iter_repos()`, running config-sensitive checks per-repo with `entry.config`: hierarchy rules, format rules, hash mode, changelog checks. Merge results. Cross-repo broken references (spanning repos) reported separately from within-repo broken refs. Test with a multi-repo federation where two repos have different `[rules.hierarchy]` or `[rules.format]` configs and assert the correct config is applied to each repo's nodes.
+Update `create_app()` in `server/app.py` to accept `FederatedGraph`. Add repo info API endpoint that includes staleness: for repos with `git_origin` configured, check if local is behind remote (mock the git remote check in tests). Staleness is informational only — not a build error. Include staleness info in workspace/repo info API responses.
 
-**TASK_FILE**: `FEDGRAPH_MP2_TASK_3.md`
+**TASK_FILE**: `FEDGRAPH_MP3_TASK_2.md`
 
-- [x] **Baseline**: 2755 passed
-- [x] **Create TASK_FILE**: FEDGRAPH_MP2_TASK_3.md
-- [x] **Find assertions**: Created REQ-d00204-A..F in spec/07-graph-architecture.md
-- [x] **Write failing tests**: 10 tests in tests/commands/test_health_per_repo.py
-- [x] **Implement**: per-repo delegation in run_spec_checks, enhanced check_broken_references
-- [x] **Verify**: 2765 passed (10 new), doc sync 68 passed
-- [x] **Update docs**: CHANGELOG.md
-- [x] **Bump version**: 0.104.35
-- [ ] **Commit**: pending
+- [ ] **Baseline**: confirm tests pass before any changes
+- [ ] **Create TASK_FILE**: write the task description into it
+- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
+      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
+- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
+- [ ] **Write failing tests** (use sub-agent):
+  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
+  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
+  - Confirm tests fail for the right reason (not syntax errors)
+  - Append test summary to TASK_FILE
+- [ ] **Implement**:
+  - Use existing code patterns and APIs — search before creating
+  - Add `# Implements: REQ-xxx` comments to new/modified source
+  - Append implementation summary to TASK_FILE
+- [ ] **Verify**:
+  - All tests pass (no workarounds)
+  - Lint clean
+  - Append results to TASK_FILE
+- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
+- [ ] **Bump version** in pyproject.toml
+- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 
@@ -83,6 +91,6 @@ After `/clear` or context compaction:
 
 When ALL tasks are complete:
 
-- [ ] Move plan: `mv MASTER_PLAN.md ~/archive/2026-03-16/MASTER_PLAN_CUR-1082_FEDGRAPH_LEGACY.md`
+- [ ] Move plan: `mv MASTER_PLAN.md ~/archive/2026-03-16/MASTER_PLAN_CUR-1082_FEDGRAPH_MCP.md`
 - [ ] Move all TASK_FILEs to the same archive directory
-- [ ] Promote next queued plan if one exists: `mv MASTER_PLAN3.md MASTER_PLAN.md`
+- [ ] Promote next queued plan if one exists: check for any remaining MASTER_PLANx.md files
