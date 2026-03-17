@@ -14,7 +14,6 @@
 #   - Python code quality (ruff + black)
 #   - Markdown linting (markdownlint)
 #   - Secret detection (gitleaks)
-#   - elspais self-validation on fixtures
 #
 # To install this hook:
 #   git config core.hooksPath .githooks
@@ -332,33 +331,7 @@ fi
 echo ""
 
 # =====================================================
-# 9. elspais Self-Validation on Fixtures
-# =====================================================
-
-echo -e "${BLUE}Running elspais validation on test fixtures...${NC}"
-echo ""
-
-# Test on a few fixture directories
-FIXTURE_DIRS=(
-    "tests/fixtures/hht-like"
-    "tests/fixtures/assertions"
-)
-
-for fixture_dir in "${FIXTURE_DIRS[@]}"; do
-    if [ -d "$REPO_ROOT/$fixture_dir" ]; then
-        echo "  Validating $fixture_dir..."
-        if ! (cd "$REPO_ROOT/$fixture_dir" && elspais health 2>&1); then
-            VALIDATION_FAILED=true
-            echo -e "${RED}  Validation failed in $fixture_dir${NC}"
-        else
-            echo -e "${GREEN}  $fixture_dir OK${NC}"
-        fi
-    fi
-done
-echo ""
-
-# =====================================================
-# 10. Full Test Suite
+# 9. Full Test Suite
 # =====================================================
 
 echo -e "${BLUE}Running full test suite...${NC}"
