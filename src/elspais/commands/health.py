@@ -492,25 +492,21 @@ def check_broken_references(graph: FederatedGraph) -> HealthCheck:
     broken = graph.broken_references()
 
     if broken:
-        # Identify error-state repos for cross-repo distinction
-        has_iter_repos = hasattr(graph, "iter_repos")
-        error_repos = (
-            {entry.name for entry in graph.iter_repos() if entry.graph is None}
-            if has_iter_repos
-            else set()
-        )
+        # Identify error-state repos and collect all known node IDs
+        error_repos = {entry.name for entry in graph.iter_repos() if entry.graph is None}
+        # All node IDs owned by live repos — if a target isn't here and
+        # error-state repos exist, it might belong to a missing repo
+        owned_ids = set(graph._ownership.keys()) if hasattr(graph, "_ownership") else set()
 
         within_repo_findings = []
         cross_repo_findings = []
 
         for br in broken:
-            repo_name = None
-            if has_iter_repos:
-                try:
-                    source_entry = graph.repo_for(br.source_id)
-                    repo_name = source_entry.name
-                except KeyError:
-                    pass
+            try:
+                source_entry = graph.repo_for(br.source_id)
+                repo_name = source_entry.name
+            except KeyError:
+                repo_name = None
 
             finding = HealthFinding(
                 message=f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})",
@@ -518,9 +514,12 @@ def check_broken_references(graph: FederatedGraph) -> HealthCheck:
                 repo=repo_name,
             )
 
-            # If there are error-state repos, this broken ref might be
-            # due to the missing repo — classify as cross-repo warning
-            if error_repos:
+            # Only classify as cross-repo if the target is genuinely
+            # unresolvable AND error-state repos exist that might contain it.
+            # A target that isn't in any live repo's ownership map could
+            # plausibly belong to a missing repo.
+            target_in_live_repo = br.target_id in owned_ids
+            if error_repos and not target_in_live_repo:
                 cross_repo_findings.append(finding)
             else:
                 within_repo_findings.append(finding)
@@ -1006,10 +1005,6 @@ def run_spec_checks(
     from elspais.config import ConfigLoader as CL
     from elspais.graph.federated import FederatedGraph as FG
 
-    # Ensure we have a FederatedGraph (old callers may pass bare TraceGraph)
-    if not hasattr(graph, "iter_repos"):
-        graph = FG.from_single(graph, config, Path.cwd())
-
     # --- Non-config-sensitive checks: run once on full federation ---
     checks: list[HealthCheck] = [
         check_spec_files_parseable(graph),
@@ -1027,7 +1022,7 @@ def run_spec_checks(
         # Normalize config: may be raw dict or ConfigLoader
         repo_config = entry.config if isinstance(entry.config, CL) else CL.from_dict(entry.config)
         repo_graph = FG.from_single(entry.graph, repo_config, entry.repo_root)
-        repo_resolver = build_resolver(repo_config._data)
+        repo_resolver = build_resolver(repo_config.get_raw())
 
         checks.append(
             _annotate_findings(

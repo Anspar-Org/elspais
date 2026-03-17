@@ -18,6 +18,7 @@ from elspais.commands.health import (
 )
 from elspais.config import ConfigLoader, get_config
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 
@@ -27,6 +28,12 @@ from ..core.graph_test_helpers import (
     make_requirement,
     make_test_ref,
 )
+
+
+def _wrap(graph: TraceGraph, config: ConfigLoader | None = None) -> FederatedGraph:
+    """Wrap a bare TraceGraph in a federation-of-one."""
+    return FederatedGraph.from_single(graph, config, graph.repo_root or Path("/test/repo"))
+
 
 # =============================================================================
 # Structural Orphans
@@ -234,7 +241,7 @@ class TestCheckBrokenReferences:
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
             make_requirement("REQ-o00001", title="Child", level="OPS", implements=["REQ-p00001"]),
         )
-        check = check_broken_references(graph)
+        check = check_broken_references(_wrap(graph))
         assert check.passed
         assert check.name == "spec.broken_references"
 
@@ -259,7 +266,7 @@ class TestCheckBrokenReferences:
             ),
         ]
 
-        check = check_broken_references(graph)
+        check = check_broken_references(_wrap(graph))
         assert not check.passed
         assert check.severity == "error"  # REQ-d00204-E: within-repo broken refs are errors
         assert check.name == "spec.broken_references"
@@ -279,7 +286,7 @@ class TestCheckBrokenReferences:
             ),
         ]
 
-        check = check_broken_references(graph)
+        check = check_broken_references(_wrap(graph))
         assert not check.passed
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
@@ -324,7 +331,7 @@ allow_orphans = true
         orphan = GraphNode(id="REQ-o99999", kind=NodeKind.REQUIREMENT, label="Orphan")
         graph._index["REQ-o99999"] = orphan
 
-        checks = run_spec_checks(graph, config)
+        checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
         # The legacy allow_orphans=true should cause the structural orphan check to pass
         assert (
@@ -360,7 +367,7 @@ allow_structural_orphans = false
         orphan = GraphNode(id="REQ-o99999", kind=NodeKind.REQUIREMENT, label="Orphan")
         graph._index["REQ-o99999"] = orphan
 
-        checks = run_spec_checks(graph, config)
+        checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
         # allow_structural_orphans=false should override allow_orphans=true
         assert (

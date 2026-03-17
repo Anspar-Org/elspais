@@ -828,7 +828,7 @@ A. Config-sensitive health checks (hierarchy levels, format rules, reference res
 
 B. Non-config-sensitive health checks (file parseability, duplicate IDs, hash integrity, index staleness) SHALL run once on the full `FederatedGraph`.
 
-C. Per-repo check results SHALL be merged into a single `HealthCheck` per check type, with `HealthFinding` entries annotated with a `repo` field identifying the source repository.
+C. Per-repo checks SHALL produce a separate `HealthCheck` per repo per check type, with `HealthFinding` entries annotated with a `repo` field identifying the source repository.
 
 D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
 
