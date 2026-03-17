@@ -373,20 +373,30 @@ def run(args: argparse.Namespace) -> int:
                 if fixed_count > 0:
                     print(f"Fixed {fixed_count} issue(s)")
 
-        for err in errors:
+        # Separate fixed issues from remaining errors/warnings
+        if fix_mode and not dry_run:
+            fixed_ids = {(f["id"], f["rule"]) for f in fixable}
+            unfixed_errors = [e for e in errors if (e["id"], e["rule"]) not in fixed_ids]
+            unfixed_warnings = [w for w in warnings if not w.get("fixable")]
+            # Show what was fixed (informational, not alarming)
+            for f in fixable:
+                print(f"FIXED [{f['rule']}] {f['id']}: {f['message']}")
+        else:
+            unfixed_errors = errors
+            unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
+
+        for err in unfixed_errors:
             print(f"ERROR [{err['rule']}] {err['id']}: {err['message']}", file=sys.stderr)
 
-        # Only show unfixed warnings
-        unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
         for warn in unfixed_warnings:
             print(
                 f"WARNING [{warn['rule']}] {warn['id']}: {warn['message']}",
                 file=sys.stderr,
             )
 
-        if errors:
+        if unfixed_errors:
             print(
-                f"\n{len(errors)} errors, {len(unfixed_warnings)} warnings",
+                f"\n{len(unfixed_errors)} errors, {len(unfixed_warnings)} warnings",
                 file=sys.stderr,
             )
         elif unfixed_warnings:

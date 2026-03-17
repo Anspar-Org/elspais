@@ -113,6 +113,7 @@ class TestHealthFindingSerialization:
             "node_id": "REQ-d00010-B",
             "related": ["REQ-p00001"],
             "repo": None,
+            "retired": False,
         }
 
     def test_REQ_d00085_I_report_to_dict_includes_findings(self) -> None:
@@ -229,3 +230,157 @@ class TestHealthFindingRendererCompat:
         tree_without = ET.fromstring(junit_without)
 
         assert ET.tostring(tree_with) == ET.tostring(tree_without)
+
+
+class TestRetiredFindingDowngrade:
+    """Retired requirements' findings should not count as health errors."""
+
+    def test_all_retired_findings_downgrades_check(self) -> None:
+        """A check where ALL findings are for retired REQs is downgraded to info."""
+        from elspais.commands.health import _downgrade_retired_findings
+
+        finding = HealthFinding(
+            message="Hash mismatch",
+            node_id="REQ-d00099",
+        )
+        check = HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message="1 requirement(s) have stale hashes: REQ-d00099",
+            category="spec",
+            severity="warning",
+            findings=[finding],
+        )
+        _downgrade_retired_findings([check], retired_ids={"REQ-d00099"})
+
+        assert check.passed is True
+        assert check.severity == "info"
+        assert finding.retired is True
+        assert "[retired only]" in check.message
+
+    def test_mixed_findings_keeps_check_failed(self) -> None:
+        """A check with both retired and active findings stays failed."""
+        from elspais.commands.health import _downgrade_retired_findings
+
+        retired_finding = HealthFinding(message="Hash mismatch", node_id="REQ-d00099")
+        active_finding = HealthFinding(message="Hash mismatch", node_id="REQ-d00001")
+        check = HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message="2 requirement(s) have stale hashes",
+            category="spec",
+            severity="warning",
+            findings=[retired_finding, active_finding],
+        )
+        _downgrade_retired_findings([check], retired_ids={"REQ-d00099"})
+
+        assert check.passed is False
+        assert check.severity == "warning"
+        assert retired_finding.retired is True
+        assert active_finding.retired is False
+
+    def test_passing_check_not_affected(self) -> None:
+        """Passing checks are not modified by downgrade."""
+        from elspais.commands.health import _downgrade_retired_findings
+
+        check = HealthCheck(
+            name="spec.hash_integrity",
+            passed=True,
+            message="All hashes up to date",
+            category="spec",
+        )
+        _downgrade_retired_findings([check], retired_ids={"REQ-d00099"})
+
+        assert check.passed is True
+
+    def test_retired_finding_to_dict_includes_flag(self) -> None:
+        """Retired findings include 'retired: true' in serialization."""
+        finding = HealthFinding(message="Stale hash", node_id="REQ-d00099", retired=True)
+        d = finding.to_dict()
+        assert d["retired"] is True
+
+    def test_non_retired_finding_to_dict_omits_flag(self) -> None:
+        """Non-retired findings omit 'retired' from serialization."""
+        finding = HealthFinding(message="Stale hash", node_id="REQ-d00099")
+        d = finding.to_dict()
+        assert "retired" not in d
+
+
+class TestDetailHint:
+    """Unhealthy reports should show a hint about how to get details."""
+
+    def test_hint_shown_when_unhealthy(self, capsys: pytest.CaptureFixture) -> None:
+        """When report has errors, hint shows verbose and JSON commands."""
+        check = HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message="2 stale hashes",
+            category="spec",
+            severity="error",
+            findings=[HealthFinding(message="bad", node_id="REQ-001")],
+        )
+        report = HealthReport(checks=[check])
+        _print_text_report(report, verbose=False)
+        output = capsys.readouterr().out
+        assert "elspais health --spec -v" in output
+        assert "--format json -o health.json" in output
+
+    def test_hint_skips_verbose_suggestion_when_already_verbose(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """When already verbose, hint only shows JSON command."""
+        check = HealthCheck(
+            name="spec.hash_integrity",
+            passed=False,
+            message="2 stale hashes",
+            category="spec",
+            severity="error",
+            findings=[HealthFinding(message="bad", node_id="REQ-001")],
+        )
+        report = HealthReport(checks=[check])
+        _print_text_report(report, verbose=True)
+        output = capsys.readouterr().out
+        assert "elspais health --spec -v" not in output
+        assert "--format json -o health.json" in output
+
+    def test_hint_not_shown_when_healthy(self, capsys: pytest.CaptureFixture) -> None:
+        """Healthy reports don't show the hint."""
+        check = HealthCheck(
+            name="spec.ok",
+            passed=True,
+            message="All good",
+            category="spec",
+        )
+        report = HealthReport(checks=[check])
+        _print_text_report(report, verbose=False)
+        output = capsys.readouterr().out
+        assert "elspais health" not in output
+
+    def test_hint_no_scope_flag_when_multiple_categories_fail(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """When multiple categories fail, hint omits scope flags."""
+        checks = [
+            HealthCheck(
+                name="spec.hash",
+                passed=False,
+                message="stale",
+                category="spec",
+                severity="error",
+                findings=[HealthFinding(message="bad", node_id="REQ-001")],
+            ),
+            HealthCheck(
+                name="code.unlinked",
+                passed=False,
+                message="unlinked",
+                category="code",
+                severity="warning",
+                findings=[HealthFinding(message="bad", node_id="CODE-001")],
+            ),
+        ]
+        report = HealthReport(checks=checks)
+        _print_text_report(report, verbose=False)
+        output = capsys.readouterr().out
+        assert "elspais health -v" in output
+        assert "--spec" not in output
+        assert "--code" not in output

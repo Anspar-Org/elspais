@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.config.status_roles import StatusRole
+
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
     from elspais.graph.federated import FederatedGraph
@@ -34,9 +36,10 @@ class HealthFinding:
     node_id: str | None = None
     related: list[str] = field(default_factory=list)
     repo: str | None = None
+    retired: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "message": self.message,
             "file_path": self.file_path,
             "line": self.line,
@@ -44,6 +47,9 @@ class HealthFinding:
             "related": self.related,
             "repo": self.repo,
         }
+        if self.retired:
+            d["retired"] = True
+        return d
 
 
 @dataclass
@@ -990,6 +996,38 @@ def _annotate_findings(check: HealthCheck, repo_name: str) -> HealthCheck:
     return check
 
 
+def _downgrade_retired_findings(
+    checks: list[HealthCheck],
+    retired_ids: set[str],
+) -> list[HealthCheck]:
+    """Downgrade health checks whose failures come only from retired requirements.
+
+    For each failing check, mark findings whose node_id is a retired requirement.
+    If ALL findings in a check are retired, downgrade the check to info severity
+    so it doesn't count against the health score. The findings are preserved for
+    the detailed report.
+    """
+    for check in checks:
+        if check.passed or not check.findings:
+            continue
+
+        # Mark individual findings for retired nodes
+        has_active = False
+        for finding in check.findings:
+            if finding.node_id and finding.node_id in retired_ids:
+                finding.retired = True
+            else:
+                has_active = True
+
+        # If all findings are retired, downgrade the entire check
+        if not has_active:
+            check.passed = True
+            check.severity = "info"
+            check.message = f"[retired only] {check.message}"
+
+    return checks
+
+
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
@@ -1001,9 +1039,22 @@ def run_spec_checks(
     Non-config-sensitive checks run once on the full FederatedGraph.
     Config-sensitive checks run per-repo using each repo's own config,
     with results annotated by repo name.
+
+    Findings for retired requirements (Deprecated, Superseded, Rejected)
+    are preserved in the detailed report but do not count as errors
+    for health scoring.
     """
     from elspais.config import ConfigLoader as CL
+    from elspais.config import get_status_roles
+    from elspais.graph import NodeKind as NK
     from elspais.graph.federated import FederatedGraph as FG
+
+    # Build the set of retired requirement IDs for post-processing
+    roles = get_status_roles(config.get_raw())
+    retired_ids: set[str] = set()
+    for node in graph.nodes_by_kind(NK.REQUIREMENT):
+        if roles.role_of(node.status) == StatusRole.RETIRED:
+            retired_ids.add(node.id)
 
     # --- Non-config-sensitive checks: run once on full federation ---
     checks: list[HealthCheck] = [
@@ -1081,6 +1132,11 @@ def run_spec_checks(
 
     if spec_dirs:
         checks.append(check_spec_index_current(graph, spec_dirs))
+
+    # Post-process: downgrade checks that only have findings for retired REQs
+    if retired_ids:
+        _downgrade_retired_findings(checks, retired_ids)
+
     return checks
 
 
@@ -1699,6 +1755,8 @@ def _print_text_report(
     print()
     print("=" * 40)
     _print_summary_line(report)
+    if not report.is_healthy:
+        _print_detail_hint(report, verbose)
     print("=" * 40)
 
 
@@ -1715,6 +1773,37 @@ def _print_summary_line(report: HealthReport) -> None:
         print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
     else:
         print(f"UNHEALTHY: {report.failed} errors," f" {report.warnings} warnings")
+
+
+def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
+    """Print a hint about how to get more details on failures."""
+    # Identify which categories have failures
+    failed_categories = set()
+    for check in report.checks:
+        if not check.passed and check.severity in ("error", "warning"):
+            failed_categories.add(check.category)
+
+    if not failed_categories:
+        return
+
+    # Build a targeted command hint
+    category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
+    if len(failed_categories) == 1:
+        cat = next(iter(failed_categories))
+        flag = category_flags.get(cat, "")
+        scope = f" {flag}" if flag else ""
+    else:
+        scope = ""
+
+    if not already_verbose:
+        print(f"Run 'elspais health{scope} -v' for details,")
+        print(
+            f" or 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        )
+    else:
+        print(
+            f"Run 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        )
 
 
 def _print_quiet_report(report: HealthReport) -> None:
