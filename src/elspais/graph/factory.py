@@ -355,7 +355,12 @@ def build_graph(
         spec_dirs = get_spec_directories(None, config, repo_root)
 
     # 2b. Add sponsor/associate spec directories if enabled
-    if scan_sponsors:
+    # Skip legacy sponsor scanning when [associates] config is present
+    # (associates are built as separate TraceGraphs in the federation pipeline)
+    from elspais.config import get_associates_config as _get_assoc_cfg
+
+    has_new_associates = bool(_get_assoc_cfg(config)) and _build_associates
+    if scan_sponsors and not has_new_associates:
         sponsor_dirs, associate_errors = get_associate_spec_directories(
             config, repo_root, canonical_root=canonical_root
         )
