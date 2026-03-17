@@ -5,6 +5,7 @@
 #
 # Validates code quality before commits:
 #   - Branch protection (blocks commits to main/master)
+#   - Unstaged src/tests changes (prevents partial commits)
 #   - Python code quality (ruff + black)
 #   - Markdown linting (markdownlint)
 #
@@ -46,7 +47,21 @@ if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
 fi
 
 # =====================================================
-# 2. Python Code Quality (ruff + black)
+# 2. Unstaged Changes in src/ or tests/
+# =====================================================
+
+UNSTAGED_SRC_TESTS=$(git diff --name-only -- src/ tests/ 2>/dev/null || true)
+
+if [ -n "$UNSTAGED_SRC_TESTS" ]; then
+    echo -e "${RED}ERROR: Unstaged changes detected in src/ or tests/:${NC}"
+    echo "$UNSTAGED_SRC_TESTS" | sed 's/^/  /'
+    echo ""
+    echo "Stage them (git add) or stash them (git stash -k) before committing."
+    exit 1
+fi
+
+# =====================================================
+# 3. Python Code Quality (ruff + black)
 # =====================================================
 
 PYTHON_FILES_CHANGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
@@ -100,7 +115,7 @@ if [ -n "$PYTHON_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# 3. Markdown Linting
+# 4. Markdown Linting
 # =====================================================
 
 MARKDOWN_FILES_CHANGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.md$' || true)
@@ -136,7 +151,7 @@ if [ -n "$MARKDOWN_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# All Validations Passed
+# 5. All Validations Passed
 # =====================================================
 
 echo -e "${GREEN}Pre-commit checks passed!${NC}"
