@@ -10,13 +10,16 @@ This document defines the core product requirements for the platform.
 
 The system SHALL provide secure user authentication to verify user identity before granting access to protected resources.
 
-**Rationale**: Security and compliance require verified user identity.
+## Assertions
 
-**Acceptance Criteria**:
-- Users can authenticate with email and password
-- Failed login attempts are logged
-- Account lockout after 5 failed attempts
-- Session timeout after 30 minutes of inactivity
+A. The system SHALL authenticate users with email and password.
+B. The system SHALL log failed login attempts.
+C. The system SHALL lock accounts after 5 failed attempts.
+D. The system SHALL timeout sessions after 30 minutes of inactivity.
+
+## Rationale
+
+Security and compliance require verified user identity.
 
 *End* *User Authentication* | **Hash**: d18171fc
 ---
@@ -27,13 +30,16 @@ The system SHALL provide secure user authentication to verify user identity befo
 
 The system SHALL protect user data in accordance with GDPR and HIPAA requirements.
 
-**Rationale**: Legal compliance and user trust require data protection.
+## Assertions
 
-**Acceptance Criteria**:
-- Personal data is encrypted at rest
-- Data access is logged
-- Users can request data export
-- Users can request data deletion
+A. The system SHALL encrypt personal data at rest.
+B. The system SHALL log all data access.
+C. The system SHALL allow users to request data export.
+D. The system SHALL allow users to request data deletion.
+
+## Rationale
+
+Legal compliance and user trust require data protection.
 
 *End* *Data Privacy* | **Hash**: 38a6a60a
 ---
@@ -44,13 +50,16 @@ The system SHALL protect user data in accordance with GDPR and HIPAA requirement
 
 The system SHALL maintain comprehensive audit logs for all security-relevant events.
 
-**Rationale**: Compliance requires complete audit trails for FDA 21 CFR Part 11.
+## Assertions
 
-**Acceptance Criteria**:
-- All authentication events are logged
-- All data access events are logged
-- Logs are tamper-evident
-- Logs are retained for 7 years
+A. The system SHALL log all authentication events.
+B. The system SHALL log all data access events.
+C. The system SHALL store logs in a tamper-evident format.
+D. The system SHALL retain logs for 7 years.
+
+## Rationale
+
+Compliance requires complete audit trails for FDA 21 CFR Part 11.
 
 *End* *Audit Logging* | **Hash**: f2c44ef9
 ---

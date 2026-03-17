@@ -6,7 +6,7 @@
 
 A. The implementation SHALL use bcrypt with cost factor >= 12.
 B. The implementation SHALL NOT store plaintext passwords.
-C. Removed - was duplicate of A.
+C. The implementation SHALL reject passwords shorter than 8 characters.
 
 ## Rationale
 

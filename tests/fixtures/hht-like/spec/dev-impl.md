@@ -10,13 +10,16 @@ This document defines development implementation requirements.
 
 The authentication module SHALL implement secure user verification using industry-standard protocols.
 
-**Rationale**: Security best practices require proven authentication mechanisms.
+## Assertions
 
-**Acceptance Criteria**:
-- OAuth 2.0 / OIDC support
-- Password hashing with bcrypt
-- JWT token management
-- Refresh token rotation
+A. The module SHALL support OAuth 2.0 and OIDC.
+B. The module SHALL hash passwords with bcrypt.
+C. The module SHALL manage JWT tokens with expiry.
+D. The module SHALL implement refresh token rotation.
+
+## Rationale
+
+Security best practices require proven authentication mechanisms.
 
 *End* *Authentication Module* | **Hash**: 343879f1
 ---
@@ -27,13 +30,16 @@ The authentication module SHALL implement secure user verification using industr
 
 The privacy module SHALL implement data protection controls as specified in product requirements.
 
-**Rationale**: Implementation of data privacy features.
+## Assertions
 
-**Acceptance Criteria**:
-- AES-256 encryption for PII
-- Data masking in logs
-- GDPR export endpoint
-- Data deletion workflow
+A. The module SHALL use AES-256 encryption for PII.
+B. The module SHALL mask sensitive data in logs.
+C. The module SHALL provide a GDPR export endpoint.
+D. The module SHALL implement a data deletion workflow.
+
+## Rationale
+
+Implementation of data privacy features.
 
 *End* *Privacy Controls* | **Hash**: 48edab8c
 ---
@@ -44,13 +50,16 @@ The privacy module SHALL implement data protection controls as specified in prod
 
 The audit module SHALL implement comprehensive event logging with tamper-evident storage.
 
-**Rationale**: FDA compliance requires verifiable audit trails.
+## Assertions
 
-**Acceptance Criteria**:
-- Event sourcing architecture
-- Cryptographic hash chains
-- Immutable log storage
-- Query API for auditors
+A. The module SHALL use event sourcing architecture.
+B. The module SHALL use cryptographic hash chains.
+C. The module SHALL store logs in immutable storage.
+D. The module SHALL provide a query API for auditors.
+
+## Rationale
+
+FDA compliance requires verifiable audit trails.
 
 *End* *Audit Trail Implementation* | **Hash**: 3329f7a0
 ---
