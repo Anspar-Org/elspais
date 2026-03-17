@@ -6,7 +6,7 @@ This document specifies the unified TraceGraph architecture and design principle
 
 ## REQ-p00050: Unified Graph Architecture
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 The elspais system SHALL use a unified graph-based architecture where TraceGraph is the single source of truth for all requirement data, hierarchy, and metrics.
 
@@ -34,7 +34,7 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 
 ## REQ-o00050: Graph Builder as Single Entry Point
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00050
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00050
 
 TraceGraphBuilder SHALL be the single entry point for constructing requirement graphs from parsed data.
 
@@ -59,7 +59,7 @@ Centralizing graph construction ensures consistent hierarchy building, cycle det
 
 ## REQ-o00051: Composable Annotation Design
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00050
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00050
 
 The system SHALL use a composable annotation pattern where the graph provides iteration and separate annotator functions enrich nodes.
 
@@ -91,7 +91,7 @@ Separating iteration from annotation enables:
 
 ## REQ-d00050: Node Annotator Functions
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
 The `core/annotators.py` module SHALL provide standalone annotator functions for enriching graph nodes.
 
@@ -116,7 +116,7 @@ Per-node annotators enable fine-grained control over which annotations are appli
 
 ## REQ-d00051: Graph Aggregate Functions
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051, REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051, REQ-p00050
 
 The `core/annotators.py` module SHALL provide aggregate functions that compute statistics from annotated graphs.
 
@@ -143,7 +143,7 @@ Aggregate functions provide reusable statistics computation that any output form
 
 ## REQ-d00052: Output Generators Consume Graph Directly
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 All output generators SHALL consume TraceGraph directly without creating intermediate data structures.
 
@@ -172,7 +172,7 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 ## REQ-d00054: Annotation Pipeline Pattern
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
 Output generators SHALL follow a standard annotation pipeline pattern.
 
@@ -189,7 +189,7 @@ A standard pipeline ensures consistent annotation across all output formats and 
 
 ## REQ-d00055: Node Metrics as Extension Point
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
 TraceNode.metrics SHALL be the single extension point for adding data to nodes.
 
@@ -214,7 +214,7 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ## REQ-d00069: Indirect Coverage Source
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00051
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
 The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
 
@@ -251,7 +251,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion su
 
 ## REQ-d00070: Indirect Coverage Toggle Display
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00006
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
 
 The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
 
@@ -276,7 +276,7 @@ Users need both a strict traceability view (only assertion-targeted tests count)
 
 ## REQ-d00071: Unified Root vs Orphan Classification
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00050, REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00050, REQ-p00002
 
 The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
 
@@ -299,7 +299,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00050
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00050
 
 The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
 
@@ -326,7 +326,7 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 ## REQ-d00072: Link Suggestion Core Engine
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00065
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00065
 
 The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
 
@@ -334,26 +334,20 @@ The `graph/link_suggest.py` module SHALL implement the link suggestion scoring p
 
 A. `suggest_links(graph, repo_root, file_path?, limit?)` SHALL orchestrate all heuristics and return deduplicated `LinkSuggestion` instances sorted by confidence descending.
 
-B. The import chain heuristic SHALL trace TEST→import→CODE→REQ relationships using `extract_python_imports()` and `module_to_source_path()` from `utilities/import_analyzer.py`, scoring matches at 0.9.
+B. `_extract_search_terms(test_node)` SHALL extract meaningful keywords from test node metadata (function name, class name, file path, docstring), filter stopwords and short tokens, and return an OR-joined query string for `discover_assertions` matching.
 
-C. The function name heuristic SHALL match test function names to CODE nodes using `_extract_candidate_functions()` from `graph/test_code_linker.py`, scoring exact matches at 0.85 with decreasing scores for partial matches.
-
-D. The file path proximity heuristic SHALL map test file paths to source directories and find REQUIREMENTs linked to CODE in those directories, scoring at 0.6.
-
-E. The keyword overlap heuristic SHALL compare test name/docstring keywords against REQUIREMENT title keywords using `extract_keywords()` from `graph/annotators.py`, scoring at the overlap ratio capped at 0.5.
-
-F. `_deduplicate_suggestions()` SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
+C. `_deduplicate_suggestions()` SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
 
 ## Rationale
 
 The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
 
-*End* *Link Suggestion Core Engine* | **Hash**: 2cd50cdc
+*End* *Link Suggestion Core Engine* | **Hash**: b26954bd
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065-D
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00065
 
 The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
 
@@ -378,7 +372,7 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 ## REQ-d00126: FILE Node Data Model
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the traceability graph.
 
@@ -502,7 +496,7 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 GraphNode SHALL use edge-only relationships (via `link()`) and support filtered traversal by edge kind, eliminating the edge-less `add_child()` mechanism.
 
@@ -527,7 +521,7 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 ## REQ-d00128: FILE Node Creation in Build Pipeline
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 The build pipeline SHALL create FILE nodes for every scanned file and wire CONTAINS edges from FILE to top-level content nodes, with RemainderParser mandatory for text-based file types.
 
@@ -566,7 +560,7 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 The `SourceLocation` class and `GraphNode.source` field SHALL be removed. All consumers SHALL migrate to use `file_node()` for file paths and `get_field("parse_line")` / `get_field("parse_end_line")` for line numbers.
 
@@ -595,7 +589,7 @@ SourceLocation duplicates information now available through the graph structure 
 
 ## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 `TraceGraph.iter_roots()` SHALL accept an optional `NodeKind` filter, and `TraceGraph` SHALL provide `iter_by_kind()` for general kind-based index queries.
 
@@ -622,7 +616,7 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 ## REQ-d00131: Render Protocol for Graph Nodes
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 Each domain NodeKind SHALL have a render function that produces its text representation. Walking a FILE node's CONTAINS children in render_order and concatenating their rendered output SHALL produce the file's content.
 
@@ -657,7 +651,7 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 
 ## REQ-d00132: Render-Based Save Operation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
 
 `save_mutations()` SHALL write dirty FILE nodes to disk by rendering their CONTAINS children. `persistence.py` is replaced entirely by render-based serialization.
 
@@ -684,7 +678,7 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-d00132
+**Level**: dev | **Status**: Draft | **Implements**: REQ-d00132
 
 The system SHALL pass a comprehensive end-to-end scenario test that exercises all mutation types through the Flask API layer, saves to disk, reloads, and verifies round-trip fidelity.
 
@@ -711,7 +705,7 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 ## REQ-d00200: FederatedGraph Read-Only Delegation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050, REQ-p00005
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005, REQ-p00050
 
 FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its own configuration and repo root, delegating all read-only TraceGraph methods with documented federation strategies.
 
@@ -737,12 +731,12 @@ H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
 
 FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: 00000000
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050, REQ-d00200
+**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00050
 
 FederatedGraph SHALL delegate all mutation operations to the appropriate sub-graph, maintain a unified mutation log across repos, and update internal ownership when IDs change.
 
@@ -766,12 +760,12 @@ G. clone() SHALL perform federation-aware deep copy: deep-copy each sub-graph in
 
 Mutation delegation preserves TraceGraph's existing mutation+undo logic while adding federation awareness. The lightweight federated log avoids duplicating MutationEntry data. Ownership tracking ensures by_id lookups remain O(1) after mutations.
 
-*End* *FederatedGraph Mutation Delegation* | **Hash**: 00000000
+*End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
 ---
 
 ## REQ-d00202: Associates Config Loading
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00005
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005
 
 The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml` to declare federated repository associations.
 
@@ -789,12 +783,12 @@ D. Associates declaring their own `[associates]` section SHALL be a hard error: 
 
 Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
 
-*End* *Associates Config Loading* | **Hash**: 00000000
+*End* *Associates Config Loading* | **Hash**: 479dcbb8
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00005, REQ-d00200
+**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00005
 
 The `build_graph()` factory SHALL build separate TraceGraph instances per repository when associates are configured, constructing a multi-repo FederatedGraph.
 
@@ -814,11 +808,11 @@ E. The root repo and all valid associates SHALL be combined into a single `Feder
 
 Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
 
-*End* *Multi-Repo Build Pipeline* | **Hash**: 00000000
+*End* *Multi-Repo Build Pipeline* | **Hash**: 31e019a1
 
 ## REQ-d00204: Per-Repo Health Check Delegation
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00002, REQ-d00200
+**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00002
 
 Health checks that depend on per-repo configuration SHALL run once per federated repo using that repo's own config, ensuring config isolation in multi-repo federations.
 
@@ -840,5 +834,5 @@ F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` 
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 00000000
+*End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d
 ---
