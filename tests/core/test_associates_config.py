@@ -1,11 +1,15 @@
-"""Tests for get_associates_config() function.
+"""Tests for associates config functions.
 
 Validates REQ-d00202-A: Read associate definitions from config.
 Validates REQ-d00202-B: Path is required, git is optional.
 Validates REQ-d00202-C: Missing or empty associates section returns empty dict.
+Validates REQ-d00202-D: Transitive associates raise FederationError.
 """
 
-from elspais.config import get_associates_config
+import pytest
+
+from elspais.config import get_associates_config, validate_no_transitive_associates
+from elspais.graph.federated import FederationError
 
 
 class TestGetAssociatesConfig:
@@ -56,3 +60,27 @@ class TestGetAssociatesConfig:
         result = get_associates_config(config)
 
         assert result == {}
+
+
+class TestTransitiveAssociateDetection:
+    """Validates REQ-d00202-D: transitive associates are a hard error."""
+
+    def test_REQ_d00202_D_associate_with_associates_raises(self):
+        """Associate declaring its own associates raises FederationError."""
+        associate_config = {
+            "associates": {
+                "sub-module": {"path": "../sub-module"},
+            }
+        }
+
+        with pytest.raises(FederationError, match="declares its own associates"):
+            validate_no_transitive_associates("core", associate_config)
+
+    def test_REQ_d00202_D_associate_without_associates_ok(self):
+        """Associate without [associates] section passes validation."""
+        associate_config = {
+            "spec": {"directories": ["spec"]},
+        }
+
+        # Should not raise
+        validate_no_transitive_associates("core", associate_config)

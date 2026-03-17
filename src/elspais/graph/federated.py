@@ -99,6 +99,13 @@ class FederatedMutationLog:
         return len(self._pointers)
 
 
+class FederationError(Exception):
+    """Error raised for federation configuration issues.
+
+    Examples: transitive associates, ID conflicts across repos.
+    """
+
+
 # Implements: REQ-d00200-A
 @dataclass
 class RepoEntry:

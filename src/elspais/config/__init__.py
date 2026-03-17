@@ -1009,6 +1009,7 @@ __all__ = [
     "_try_parse_env_value",
     "apply_cli_overrides",
     "get_associates_config",
+    "validate_no_transitive_associates",
 ]
 
 
@@ -1038,6 +1039,32 @@ def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
                 "git": entry.get("git"),
             }
     return result
+
+
+# Implements: REQ-d00202-D
+def validate_no_transitive_associates(
+    associate_name: str, associate_config: dict[str, Any]
+) -> None:
+    """Check that an associate does not declare its own associates.
+
+    Only the root repo may declare [associates]. If an associate's config
+    contains an [associates] section, raise FederationError.
+
+    Args:
+        associate_name: Name of the associate being validated.
+        associate_config: The associate's loaded config dict.
+
+    Raises:
+        FederationError: If the associate declares its own associates.
+    """
+    from elspais.graph.federated import FederationError
+
+    associates = associate_config.get("associates", {})
+    if associates:
+        raise FederationError(
+            f"Associate '{associate_name}' declares its own associates "
+            f"-- only the root repo may declare associates."
+        )
 
 
 def get_status_roles(config: dict[str, Any]):
