@@ -1,5 +1,7 @@
 # Known Issues
 
+[x] Chore: The elspais fix command output is confusing. It makes it look like errors have occured, rather than being fixed.
+
 [ ] Feature: **Declarative config schema and versioned migration**
 - There is no single authoritative schema for .elspais.toml. Config fields are defined across three sources that drift independently: `DEFAULT_CONFIG` (code), `elspais init` template (hardcoded string), and `docs/configuration.md`.
 - Some fields used in code are absent from DEFAULT_CONFIG (e.g. `version`, `associated.prefix`, `core.path`, `directories.code`, `directories.ignore`, `traceability.scan_patterns`, `traceability.source_roots`).
@@ -8,9 +10,9 @@
 - A single declarative schema should drive: config validation (error on unknown/missing keys), `elspais init` template generation, version-to-version migration, and docs verification.
 - Add a `version` field to .elspais.toml (v2 = current [id-patterns] format). Configs without `version` get the legacy migration path until sunset.
 
-[ ] Bug: Health. Don't count errors in Deprecated REQs as errors for HEALTH calculations. They can still be put into the detailed report.
+[x] Bug: Health. Don't count errors in Retired REQs as errors for HEALTH calculations. They can still be put into the detailed report.
 
-[ ] Feature: Health. If not HEALTHY, show the command to get a detailed list of errors: e.g. --code -o filename.json, or whatever is appropriate
+[x] Feature: Health. If not HEALTHY, show the command to get a detailed list of errors: e.g. --code -o filename.json, or whatever is appropriate
 
 [ ] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
 - Use multi-select dropdown, then render the reference using the configured settings, e.g. REQ-p12345-A+B+C+X
