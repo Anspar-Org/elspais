@@ -148,6 +148,47 @@ class FederatedGraph:
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Root Repo Convenience Properties
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @property
+    def repo_root(self) -> Path:
+        """Return the root repo's filesystem path."""
+        return self._repos[self._root_repo].repo_root
+
+    @property
+    def hash_mode(self) -> str:
+        """Return the root repo's hash mode."""
+        graph = self._repos[self._root_repo].graph
+        return graph.hash_mode if graph else "normalized-text"
+
+    @property
+    def satellite_kinds(self) -> frozenset:
+        """Return the root repo's satellite kinds."""
+        graph = self._repos[self._root_repo].graph
+        if graph:
+            return graph.satellite_kinds
+        from elspais.graph.builder import _DEFAULT_SATELLITE_KINDS
+
+        return _DEFAULT_SATELLITE_KINDS
+
+    @classmethod
+    def empty(cls) -> FederatedGraph:
+        """Create an empty FederatedGraph with no repos.
+
+        Used as an error fallback when graph construction fails.
+        """
+        from elspais.graph.builder import TraceGraph
+
+        entry = RepoEntry(
+            name="root",
+            graph=TraceGraph(),
+            config=None,
+            repo_root=Path("."),
+        )
+        return cls([entry], root_repo="root")
+
     # Implements: REQ-d00200-B
     @classmethod
     def from_single(

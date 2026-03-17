@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
 
@@ -71,7 +71,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
 
-def _validate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+def _validate_index(graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
     """Validate INDEX.md against graph requirements."""
     # Find INDEX.md
     index_path = None
@@ -233,7 +233,9 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     return None
 
 
-def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+def _regenerate_index(
+    graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace
+) -> int:
     """Regenerate INDEX.md from graph requirements."""
     # Use git root (threaded from CLI) for relative paths
     repo_root = getattr(args, "git_root", None)

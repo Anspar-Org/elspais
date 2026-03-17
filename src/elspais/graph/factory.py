@@ -22,8 +22,9 @@ from elspais.config import (
     get_ignore_config,
     get_spec_directories,
 )
-from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
@@ -309,10 +310,10 @@ def build_graph(
     scan_tests: bool = True,
     scan_sponsors: bool = True,
     canonical_root: Path | None = None,
-) -> TraceGraph:
-    """Build a TraceGraph from spec directories.
+) -> FederatedGraph:
+    """Build a FederatedGraph from spec directories.
 
-    This is the standard way for commands to obtain a TraceGraph.
+    This is the standard way for commands to obtain a graph.
     It handles:
     - Configuration loading (auto-discovery or explicit)
     - Spec directory resolution
@@ -332,7 +333,7 @@ def build_graph(
         canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
 
     Returns:
-        Complete TraceGraph with all requirements linked.
+        FederatedGraph wrapping the built TraceGraph.
 
     Priority:
         spec_dirs > config > config_path > defaults
@@ -602,7 +603,7 @@ def build_graph(
     annotate_keywords(graph)
     annotate_coverage(graph)
 
-    return graph
+    return FederatedGraph.from_single(graph, config, repo_root)
 
 
 __all__ = ["build_graph"]

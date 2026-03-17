@@ -22,7 +22,7 @@ from elspais.graph.relations import EdgeKind
 from elspais.utilities.hasher import compute_normalized_hash
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 
 def render_node(node: GraphNode) -> str:
@@ -303,7 +303,7 @@ def _derive_refines_refs(node: GraphNode) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: TraceGraph, resolver: Any | None = None) -> set[str]:
+def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set[str]:
     """Identify FILE node IDs whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
@@ -426,7 +426,7 @@ def _find_dirty_files(graph: TraceGraph, resolver: Any | None = None) -> set[str
 
 # Implements: REQ-d00132-A, REQ-d00132-C
 def render_save(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     consistency_check: bool = False,
     rebuild_fn: Any | None = None,
@@ -546,7 +546,7 @@ def render_save(
 
 
 def _run_consistency_check(
-    original_graph: TraceGraph,
+    original_graph: FederatedGraph,
     rebuild_fn: Any,
 ) -> dict[str, Any]:
     """Run consistency check by rebuilding graph from disk and comparing.
@@ -621,7 +621,7 @@ def _run_consistency_check(
     return {"consistent": True, "checked": checked}
 
 
-def _wire_new_requirements_to_files(graph: TraceGraph) -> None:
+def _wire_new_requirements_to_files(graph: FederatedGraph) -> None:
     """Wire newly added requirements to their parent's FILE node.
 
     When add_requirement creates a new node, it links to a parent via

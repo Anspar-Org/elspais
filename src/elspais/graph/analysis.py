@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from elspais.graph.GraphNode import GraphNode, NodeKind
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ _DEFAULT_KINDS: frozenset[NodeKind] = frozenset({NodeKind.REQUIREMENT, NodeKind.
 # ---------------------------------------------------------------------------
 
 
-def _collect_included(graph: TraceGraph, include_kinds: set[NodeKind]) -> dict[str, GraphNode]:
+def _collect_included(graph: FederatedGraph, include_kinds: set[NodeKind]) -> dict[str, GraphNode]:
     """Collect included nodes as {id: node} dict, avoiding redundant lookups."""
     result: dict[str, GraphNode] = {}
     for kind in include_kinds:
@@ -79,7 +79,7 @@ def _collect_included(graph: TraceGraph, include_kinds: set[NodeKind]) -> dict[s
 
 
 def analyze_centrality(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     include_kinds: set[NodeKind],
     damping: float = 0.85,
     max_iterations: int = 50,
@@ -139,7 +139,7 @@ def analyze_centrality(
 
 
 def analyze_fan_in(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     include_kinds: set[NodeKind],
 ) -> dict[str, int]:
     """Return {node_id: parent_count} for included nodes.
@@ -166,7 +166,7 @@ def analyze_fan_in(
 
 
 def analyze_neighborhood(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     include_kinds: set[NodeKind],
     decay: float = 0.5,
 ) -> dict[str, float]:
@@ -229,7 +229,7 @@ def analyze_neighborhood(
 
 
 def _count_uncovered_descendants(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     node_id: str,
     included_set: set[str],
 ) -> int:
@@ -269,7 +269,7 @@ def _count_uncovered_descendants(
 
 
 def _count_descendants(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     node_id: str,
     included_set: set[str],
 ) -> int:
@@ -311,7 +311,7 @@ def _normalize(values: dict[str, float]) -> dict[str, float]:
 
 
 def analyze_foundations(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     include_kinds: set[NodeKind] | None = None,
     weights: tuple[float, ...] = (0.3, 0.2, 0.2, 0.3),
     top_n: int = 10,

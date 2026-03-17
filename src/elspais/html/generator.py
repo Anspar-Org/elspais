@@ -19,7 +19,7 @@ from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -174,7 +174,7 @@ class HTMLGenerator:
 
     def __init__(
         self,
-        graph: TraceGraph,
+        graph: FederatedGraph,
         base_path: str = "",
         version: str | None = None,
         repo_name: str | None = None,

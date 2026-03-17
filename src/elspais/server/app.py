@@ -21,7 +21,7 @@ from flask_cors import CORS
 
 from elspais.config import get_project_name, get_status_roles
 from elspais.graph import NodeKind
-from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.html.theme import get_catalog
 from elspais.mcp.server import (
     _get_assertion_code_map,
@@ -51,7 +51,7 @@ from elspais.mcp.server import (
 
 def create_app(
     repo_root: Path,
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: dict[str, Any],
 ) -> Flask:
     """Create the Flask application with REST API routes.
@@ -468,7 +468,7 @@ def create_app(
 
         # Check which nodes in the mutation log are sourced from this file
         g = _state["graph"]
-        mutation_log: MutationLog = g._mutation_log
+        mutation_log: MutationLog = g.mutation_log
         affected_node_ids: set[str] = set()
         for entry in mutation_log.iter_entries():
             # Each entry has node_id in before_state or after_state

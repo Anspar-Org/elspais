@@ -13,7 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -86,7 +86,7 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
     return result
 
 
-def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
+def serialize_graph(graph: FederatedGraph) -> dict[str, Any]:
     """Serialize a TraceGraph to a JSON-compatible dict.
 
     Args:
@@ -117,7 +117,7 @@ def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def to_markdown(graph: TraceGraph) -> str:
+def to_markdown(graph: FederatedGraph) -> str:
     """Generate a markdown traceability matrix from graph.
 
     Args:
@@ -163,7 +163,7 @@ def to_markdown(graph: TraceGraph) -> str:
     return "\n".join(lines)
 
 
-def to_csv(graph: TraceGraph) -> str:
+def to_csv(graph: FederatedGraph) -> str:
     """Generate a CSV export from graph.
 
     Args:

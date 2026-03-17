@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.utilities.patterns import IdResolver
 
 
@@ -145,7 +145,7 @@ def __getattr__(name: str):  # noqa: N807
 # =============================================================================
 
 
-def check_spec_files_parseable(graph: TraceGraph) -> HealthCheck:
+def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
     """Check that all spec files were parsed without errors."""
     from elspais.graph import NodeKind
 
@@ -171,7 +171,7 @@ def check_spec_files_parseable(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
+def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
     """Check for duplicate requirement IDs."""
     from elspais.graph import NodeKind
 
@@ -215,7 +215,7 @@ def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
 
 
 def check_spec_implements_resolve(
-    graph: TraceGraph, resolver: IdResolver | None = None
+    graph: FederatedGraph, resolver: IdResolver | None = None
 ) -> HealthCheck:
     """Check that all Implements references resolve to valid requirements."""
     from elspais.graph import NodeKind
@@ -269,7 +269,7 @@ def check_spec_implements_resolve(
 
 
 def check_spec_refines_resolve(
-    graph: TraceGraph, resolver: IdResolver | None = None
+    graph: FederatedGraph, resolver: IdResolver | None = None
 ) -> HealthCheck:
     """Check that all Refines references resolve to valid requirements."""
     from elspais.graph import NodeKind
@@ -346,7 +346,7 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
-def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_hierarchy_levels(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
 
@@ -429,7 +429,7 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
 
 
 def check_structural_orphans(
-    graph: TraceGraph, allow_structural_orphans: bool = False
+    graph: FederatedGraph, allow_structural_orphans: bool = False
 ) -> HealthCheck:
     """Check for nodes without a FILE ancestor (build pipeline bugs)."""
     if allow_structural_orphans:
@@ -479,7 +479,7 @@ def check_structural_orphans(
     )
 
 
-def check_broken_references(graph: TraceGraph) -> HealthCheck:
+def check_broken_references(graph: FederatedGraph) -> HealthCheck:
     """Check for edges targeting non-existent nodes."""
     broken = graph.broken_references()
 
@@ -516,7 +516,7 @@ def check_broken_references(graph: TraceGraph) -> HealthCheck:
 
 
 def check_spec_format_rules(
-    graph: TraceGraph, config: ConfigLoader, resolver: IdResolver | None = None
+    graph: FederatedGraph, config: ConfigLoader, resolver: IdResolver | None = None
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
@@ -607,7 +607,7 @@ def check_spec_format_rules(
 
 
 # Implements: REQ-p00004
-def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
+def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
     """Check that stored requirement hashes match computed hashes."""
     from elspais.commands.validate import compute_hash_for_node
     from elspais.graph import NodeKind
@@ -683,7 +683,7 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_present(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that all Active requirements have at least one changelog entry."""
     from elspais.graph import NodeKind
 
@@ -734,7 +734,7 @@ def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> Hea
     )
 
 
-def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_current(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
     from elspais.graph import NodeKind
 
@@ -790,7 +790,7 @@ def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> Hea
     )
 
 
-def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_format(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Validate changelog entry fields per config requirements."""
     from elspais.graph import NodeKind
 
@@ -857,7 +857,7 @@ def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> Heal
 
 
 def check_spec_index_current(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     spec_dirs: list[Path],
 ) -> HealthCheck:
     """Check that INDEX.md is up to date with current requirements."""
@@ -929,7 +929,7 @@ def check_spec_index_current(
 
 
 def run_spec_checks(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: ConfigLoader,
     spec_dirs: list[Path] | None = None,
 ) -> list[HealthCheck]:
@@ -989,7 +989,7 @@ def _resolve_exclude_status(
 
 
 def _excluded_note(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> str:
@@ -1011,7 +1011,7 @@ def _excluded_note(
 
 
 def check_code_coverage(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
@@ -1045,7 +1045,7 @@ def check_code_coverage(
     )
 
 
-def check_unlinked_code(graph: TraceGraph) -> HealthCheck:
+def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
     """Check for CODE nodes not linked to any requirement."""
     from elspais.graph import NodeKind
 
@@ -1088,7 +1088,9 @@ def check_unlinked_code(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def run_code_checks(graph: TraceGraph, exclude_status: set[str] | None = None) -> list[HealthCheck]:
+def run_code_checks(
+    graph: FederatedGraph, exclude_status: set[str] | None = None
+) -> list[HealthCheck]:
     """Run all code reference health checks."""
     return [
         check_code_coverage(graph, exclude_status=exclude_status),
@@ -1127,7 +1129,7 @@ def _read_run_meta(config: dict | None) -> dict:
         return defaults
 
 
-def check_test_results(graph: TraceGraph, config: dict | None = None) -> HealthCheck:
+def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output."""
     from elspais.graph import NodeKind
 
@@ -1214,7 +1216,7 @@ def check_test_results(graph: TraceGraph, config: dict | None = None) -> HealthC
 
 
 def check_test_coverage(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
@@ -1265,7 +1267,7 @@ def check_test_coverage(
     )
 
 
-def check_unlinked_tests(graph: TraceGraph) -> HealthCheck:
+def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     """Check for TEST nodes not linked to any requirement."""
     from elspais.graph import NodeKind
 
@@ -1309,7 +1311,7 @@ def check_unlinked_tests(graph: TraceGraph) -> HealthCheck:
 
 
 def run_test_checks(
-    graph: TraceGraph, exclude_status: set[str] | None = None, config: dict | None = None
+    graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
@@ -1326,7 +1328,7 @@ def run_test_checks(
 
 # Implements: REQ-d00085-A
 def render_section(
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
     config: ConfigLoader | None,
     args: argparse.Namespace,
 ) -> tuple[str, int]:

@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
 
@@ -90,7 +90,7 @@ REPORT_PRESETS = {
 DEFAULT_PRESET = "standard"
 
 
-def _get_node_data(node, graph: TraceGraph) -> dict:
+def _get_node_data(node, graph: FederatedGraph) -> dict:
     """Extract data from a node for use in formatters."""
     from elspais.graph.metrics import RollupMetrics
 
@@ -187,7 +187,7 @@ def _format_row(data: dict, columns: list[str]) -> list[str]:
     return values
 
 
-def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
     """Generate markdown table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -243,7 +243,7 @@ def format_markdown(graph: TraceGraph, preset: ReportPreset | None = None) -> It
             yield "</details>"
 
 
-def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
     """Generate CSV. Streams one node at a time.
 
     When test refs are included, adds a Kind column (first) and Assertion/Test Ref
@@ -298,7 +298,7 @@ def format_csv(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterato
                     yield ",".join(["TEST"] + empty_cols + empty_assertions + [key, escape(ref)])
 
 
-def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
     """Generate basic HTML table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -369,7 +369,7 @@ def format_html(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
     yield "</table></body></html>"
 
 
-def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
     """Generate JSON array. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -410,7 +410,7 @@ def format_json(graph: TraceGraph, preset: ReportPreset | None = None) -> Iterat
 
 # Implements: REQ-p00006-A
 def format_view(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     embed_content: bool = False,
     base_path: str = "",
     repo_name: str | None = None,
@@ -432,7 +432,7 @@ def format_view(
 
 # Implements: REQ-d00085-A
 def render_section(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     args: argparse.Namespace,
 ) -> tuple[str, int]:
     """Render trace as a composed report section.

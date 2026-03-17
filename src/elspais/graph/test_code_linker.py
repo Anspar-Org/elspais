@@ -21,7 +21,7 @@ from elspais.utilities.import_analyzer import (
 )
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -58,7 +58,7 @@ def _camel_to_snake(name: str) -> str:
 
 # Implements: REQ-o00050-C
 def _build_code_index(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path | None = None,
 ) -> dict[tuple[str, str], list[GraphNode]]:
     """Build index of CODE nodes by (normalized_path, function_name).
@@ -150,7 +150,7 @@ def _extract_candidate_functions(test_node: GraphNode) -> list[str]:
 
 # Implements: REQ-o00050-C
 def link_tests_to_code(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     source_roots: list[str] | None = None,
 ) -> int:

@@ -12,10 +12,12 @@ Exports:
 - CoverageContribution: Single coverage claim on an assertion
 - RollupMetrics: Aggregated coverage metrics for a requirement
 
-Note: TraceGraph is in elspais.graph.builder (use graph.factory.build_graph() to construct)
+Note: TraceGraph is internal to graph/builder.py.
+Use FederatedGraph (the public API) via graph.factory.build_graph().
 """
 
 from elspais.graph.annotators import annotate_coverage
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import (
     FileType,
     GraphNode,
@@ -38,5 +40,6 @@ __all__ = [
     "CoverageSource",
     "CoverageContribution",
     "RollupMetrics",
+    "FederatedGraph",
     "annotate_coverage",
 ]

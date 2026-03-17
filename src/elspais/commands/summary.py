@@ -18,7 +18,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
 from elspais.graph.metrics import RollupMetrics
@@ -26,7 +26,7 @@ from elspais.graph.metrics import RollupMetrics
 
 # Implements: REQ-d00085-A
 def render_section(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     args: argparse.Namespace,
     config: dict | None = None,
 ) -> tuple[str, int]:
@@ -68,7 +68,7 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _collect_coverage(graph: TraceGraph, config: dict | None = None) -> dict:
+def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict:
     """Collect coverage data from the graph.
 
     Uses pre-computed RollupMetrics from annotate_coverage().

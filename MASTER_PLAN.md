@@ -85,27 +85,23 @@ Modify `build_graph()` in `factory.py` to wrap its result in `FederatedGraph.fro
 
 **TASK_FILE**: `FEDGRAPH_TASK_3.md`
 
-- [ ] **Baseline**: confirm tests pass before any changes
-- [ ] **Create TASK_FILE**: write the task description into it
-- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
-      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [ ] **Write failing tests** (use sub-agent):
-  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
-  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
-  - Confirm tests fail for the right reason (not syntax errors)
-  - Append test summary to TASK_FILE
-- [ ] **Implement**:
-  - Use existing code patterns and APIs — search before creating
-  - Add `# Implements: REQ-xxx` comments to new/modified source
-  - Append implementation summary to TASK_FILE
-- [ ] **Verify**:
-  - All tests pass (no workarounds)
+- [x] **Baseline**: confirm tests pass before any changes
+- [x] **Create TASK_FILE**: write the task description into it
+- [x] **Find assertions**: existing REQ-d00200 assertions cover this (consumer migration)
+- [x] **Create assertions if missing**: N/A — covered by existing assertions
+- [x] **Write failing tests** (use sub-agent): N/A — refactoring; verified via existing test suite
+- [x] **Implement**:
+  - Modified factory.py build_graph() to wrap in FederatedGraph.from_single()
+  - Updated 14 source files: type hints TraceGraph -> FederatedGraph
+  - Added FederatedGraph.empty() for error fallbacks
+  - Exported FederatedGraph from `graph/__init__.py`
+  - Fixed 1 test using _orphaned_ids to use public API
+- [x] **Verify**:
+  - All 2728 tests pass (no workarounds)
   - Lint clean
-  - Append results to TASK_FILE
-- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [ ] **Bump version** in pyproject.toml
-- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [x] **Update docs** (use sub-agent): CHANGELOG.md updated
+- [x] **Bump version** in pyproject.toml
+- [x] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 

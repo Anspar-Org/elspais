@@ -13,7 +13,7 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.utilities.patterns import IdResolver, build_resolver
 
@@ -50,7 +50,7 @@ class MarkdownAssembler:
 
     def __init__(
         self,
-        graph: TraceGraph,
+        graph: FederatedGraph,
         title: str | None = None,
         overview: bool = False,
         max_depth: int | None = None,

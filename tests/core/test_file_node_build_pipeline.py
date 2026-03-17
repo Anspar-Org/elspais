@@ -630,7 +630,7 @@ class TestExistingBehaviorUnaffected:
         )
 
         # The requirement should not be an orphan
-        orphan_ids = graph._orphaned_ids
+        orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
     def test_REQ_d00128_I_node_count_includes_file_nodes(self, tmp_path: Path) -> None:

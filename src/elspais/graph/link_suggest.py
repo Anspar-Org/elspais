@@ -33,7 +33,7 @@ from elspais.utilities.import_analyzer import (
 )
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 # Confidence band thresholds
@@ -81,7 +81,7 @@ class LinkSuggestion:
 
 
 def suggest_links(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     file_path: str | None = None,
     limit: int = 50,
@@ -128,7 +128,7 @@ def suggest_links(
 
 
 def _find_unlinked_tests(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     file_path: str | None = None,
 ) -> list[GraphNode]:
     """Find TEST nodes without REQUIREMENT parents (directly or via assertion).
@@ -175,7 +175,7 @@ def _find_unlinked_tests(
 
 
 def _build_code_to_req_index(
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> dict[str, list[tuple[str, str]]]:
     """Build index mapping CODE node IDs to their parent REQUIREMENTs.
 
@@ -202,7 +202,7 @@ def _build_code_to_req_index(
 
 def _heuristic_import_chain(
     test_node: GraphNode,
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     code_index: dict[tuple[str, str], list[GraphNode]],
     code_to_reqs: dict[str, list[tuple[str, str]]],
@@ -321,7 +321,7 @@ def _heuristic_function_name(
 
 def _heuristic_file_proximity(
     test_node: GraphNode,
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     code_to_reqs: dict[str, list[tuple[str, str]]],
 ) -> list[LinkSuggestion]:
@@ -434,7 +434,7 @@ def _infer_source_dirs(test_path: str) -> list[str]:
 
 def _heuristic_keyword_overlap(
     test_node: GraphNode,
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> list[LinkSuggestion]:
     """H4: Compare test name/docstring keywords against requirement titles.
 

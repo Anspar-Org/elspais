@@ -63,8 +63,8 @@ from elspais.graph.annotators import (
     count_by_level,
     count_with_code_refs,
 )
-from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
@@ -76,7 +76,7 @@ from elspais.utilities.patterns import build_resolver
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _relative_source_path(node: Any, graph: TraceGraph) -> str:
+def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
     """Return the node's source file path, relative to repo root.
 
     Implements: REQ-d00129-D
@@ -150,7 +150,7 @@ def _iter_assertion_coverage(
             yield target, [label]
 
 
-def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
+def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified TEST-node serializer (superset of all consumers).
 
     Returns::
@@ -180,7 +180,7 @@ def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _serialize_code_info(code_node: Any, graph: TraceGraph) -> dict[str, Any]:
+def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified CODE-node serializer.
 
     Returns::
@@ -223,7 +223,7 @@ def _serialize_assertion(node: Any) -> dict[str, Any]:
     }
 
 
-def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[str, Any]:
+def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> dict[str, Any]:
     """Serialize any graph node to full format with kind-specific properties.
 
     Returns a common envelope (id, kind, title, source, parents, children,
@@ -458,7 +458,7 @@ def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
+def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
     """Get graph status.
 
     REQ-d00060-A: Returns is_stale from metadata.
@@ -482,7 +482,7 @@ def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _get_active_mutated_reqs(graph: TraceGraph) -> set[str]:
+def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
     """Return IDs of Active requirements that have pending mutations."""
     from elspais.graph import NodeKind
 
@@ -507,7 +507,7 @@ def _get_active_mutated_reqs(graph: TraceGraph) -> set[str]:
 
 
 def _add_changelog_for_active_mutations(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     config: dict,
     message: str,
@@ -553,7 +553,7 @@ def _refresh_graph(
     repo_root: Path,
     full: bool = False,
     canonical_root: Path | None = None,
-) -> tuple[dict[str, Any], TraceGraph]:
+) -> tuple[dict[str, Any], FederatedGraph]:
     """Rebuild the graph from spec files.
 
     REQ-o00060-B: Forces graph rebuild.
@@ -573,13 +573,13 @@ def _refresh_graph(
         error_msg = str(e)
         if ".elspais.toml" in error_msg:
             # Config parse error — return a descriptive error, not a stack trace
-            from elspais.graph.builder import TraceGraph
+            from elspais.graph.federated import FederatedGraph
 
             return {
                 "success": False,
                 "message": f"CONFIG ERROR: {error_msg}",
                 "node_count": 0,
-            }, TraceGraph()
+            }, FederatedGraph.empty()
         raise
 
     return {
@@ -642,7 +642,7 @@ def _matches_query(
 
 
 def _search(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     field: str = "all",
     regex: bool = False,
@@ -689,7 +689,7 @@ def _search(
 
 
 def _minimize_requirement_set(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_ids: list[str],
     edge_kinds: set[EdgeKind],
 ) -> dict[str, Any]:
@@ -778,7 +778,7 @@ def _minimize_requirement_set(
 
 
 def _collect_scope_ids(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     scope_id: str,
     direction: str,
 ) -> set[str] | None:
@@ -838,7 +838,7 @@ def _match_assertions(
 
 
 def _scoped_search_regex(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     compiled_pattern: re.Pattern[str],
     scope_ids: set[str],
     scope_id: str,
@@ -869,7 +869,7 @@ def _scoped_search_regex(
 
 
 def _scoped_search(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     scope_id: str,
     direction: str = "descendants",
@@ -947,7 +947,7 @@ def _scoped_search(
 
 
 def _discover_requirements(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     scope_id: str,
     direction: str = "descendants",
@@ -1019,7 +1019,7 @@ def _discover_requirements(
     }
 
 
-def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
+def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
     Returns the generic node envelope with kind-specific properties.
@@ -1038,7 +1038,7 @@ def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     return _serialize_node_generic(node, graph)
 
 
-def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get single requirement details.
 
     Thin wrapper around _get_node() with a kind == REQUIREMENT guard.
@@ -1061,7 +1061,7 @@ def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     return _serialize_node_generic(node, graph)
 
 
-def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_hierarchy(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get requirement hierarchy.
 
     REQ-d00063-A: Returns ancestors by walking iter_parents() recursively.
@@ -1243,7 +1243,7 @@ def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
     return {"allowed_implements": list(allowed)}
 
 
-def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> dict[str, Any]:
+def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) -> dict[str, Any]:
     """Build coverage statistics from graph."""
     if graph is None:
         return {"error": "graph not available"}
@@ -1289,7 +1289,7 @@ def _build_associates_info(
     }
 
 
-def _build_change_metrics(graph: TraceGraph | None) -> dict[str, Any]:
+def _build_change_metrics(graph: FederatedGraph | None) -> dict[str, Any]:
     """Build change metrics from graph."""
     if graph is None:
         return {"error": "graph not available"}
@@ -1305,7 +1305,7 @@ def _workspace_profile_testing(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for writing/updating tests with REQ references."""
     result = dict(base)
@@ -1328,7 +1328,7 @@ def _workspace_profile_code_refs(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for adding code references (# Implements: comments)."""
     result = dict(base)
@@ -1353,7 +1353,7 @@ def _workspace_profile_coverage(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for sign-off/coverage reporting."""
     result = dict(base)
@@ -1369,7 +1369,7 @@ def _workspace_profile_retrofit(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for systematically adding traceability to existing code."""
     result = dict(base)
@@ -1406,7 +1406,7 @@ def _workspace_profile_manager(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for manager quick status/health check."""
     result = dict(base)
@@ -1428,7 +1428,7 @@ def _workspace_profile_worktree(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for bulk changes across repos (renumbering, worktree ops)."""
     result = dict(base)
@@ -1448,7 +1448,7 @@ def _workspace_profile_all(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile returning all available information."""
     result = dict(base)
@@ -1509,7 +1509,7 @@ _WORKSPACE_PROFILE_DISPATCH: dict[str, Any] = {
 def _get_workspace_info(
     working_dir: Path,
     config: dict[str, Any] | None = None,
-    graph: TraceGraph | None = None,
+    graph: FederatedGraph | None = None,
     detail: str = "default",
 ) -> dict[str, Any]:
     """Get workspace information with use-case-driven detail levels.
@@ -1543,7 +1543,7 @@ def _get_workspace_info(
 
 
 def _get_project_summary(
-    graph: TraceGraph, working_dir: Path, config: dict[str, Any] | None = None
+    graph: FederatedGraph, working_dir: Path, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Get project summary statistics.
 
@@ -1578,7 +1578,7 @@ def _get_project_summary(
     }
 
 
-def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
+def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
     """Get requirements with git changes.
 
     Annotates the graph with git state, then filters for requirement nodes
@@ -1655,7 +1655,7 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_rename_node(graph: TraceGraph, old_id: str, new_id: str) -> dict[str, Any]:
+def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict[str, Any]:
     """Rename a node.
 
     REQ-d00065-A: Delegates to graph.rename_node().
@@ -1672,7 +1672,7 @@ def _mutate_rename_node(graph: TraceGraph, old_id: str, new_id: str) -> dict[str
         return {"success": False, "error": str(e)}
 
 
-def _mutate_update_title(graph: TraceGraph, node_id: str, new_title: str) -> dict[str, Any]:
+def _mutate_update_title(graph: FederatedGraph, node_id: str, new_title: str) -> dict[str, Any]:
     """Update requirement title.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1689,7 +1689,7 @@ def _mutate_update_title(graph: TraceGraph, node_id: str, new_title: str) -> dic
         return {"success": False, "error": str(e)}
 
 
-def _mutate_change_status(graph: TraceGraph, node_id: str, new_status: str) -> dict[str, Any]:
+def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) -> dict[str, Any]:
     """Change requirement status.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1707,7 +1707,7 @@ def _mutate_change_status(graph: TraceGraph, node_id: str, new_status: str) -> d
 
 
 def _mutate_add_requirement(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_id: str,
     title: str,
     level: str,
@@ -1744,7 +1744,7 @@ def _mutate_add_requirement(
 
 
 def _mutate_delete_requirement(
-    graph: TraceGraph, node_id: str, confirm: bool = False
+    graph: FederatedGraph, node_id: str, confirm: bool = False
 ) -> dict[str, Any]:
     """Delete a requirement.
 
@@ -1774,7 +1774,9 @@ def _mutate_delete_requirement(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_add_assertion(graph: TraceGraph, req_id: str, label: str, text: str) -> dict[str, Any]:
+def _mutate_add_assertion(
+    graph: FederatedGraph, req_id: str, label: str, text: str
+) -> dict[str, Any]:
     """Add assertion to requirement.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1791,7 +1793,9 @@ def _mutate_add_assertion(graph: TraceGraph, req_id: str, label: str, text: str)
         return {"success": False, "error": str(e)}
 
 
-def _mutate_update_assertion(graph: TraceGraph, assertion_id: str, new_text: str) -> dict[str, Any]:
+def _mutate_update_assertion(
+    graph: FederatedGraph, assertion_id: str, new_text: str
+) -> dict[str, Any]:
     """Update assertion text.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1809,7 +1813,7 @@ def _mutate_update_assertion(graph: TraceGraph, assertion_id: str, new_text: str
 
 
 def _mutate_delete_assertion(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     assertion_id: str,
     compact: bool = True,
     confirm: bool = False,
@@ -1836,7 +1840,7 @@ def _mutate_delete_assertion(
         return {"success": False, "error": str(e)}
 
 
-def _mutate_rename_assertion(graph: TraceGraph, old_id: str, new_label: str) -> dict[str, Any]:
+def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str) -> dict[str, Any]:
     """Rename assertion label.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1879,7 +1883,7 @@ def _normalize_assertion_targets(
 
 
 def _mutate_add_edge(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     edge_kind: str,
@@ -1911,7 +1915,7 @@ def _mutate_add_edge(
 
 
 def _mutate_change_edge_kind(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     new_kind: str,
@@ -1935,7 +1939,7 @@ def _mutate_change_edge_kind(
 
 # Implements: REQ-o00062-C
 def _mutate_change_edge_targets(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     assertion_targets: list[str],
@@ -1962,7 +1966,7 @@ def _mutate_change_edge_targets(
 
 
 def _mutate_delete_edge(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     confirm: bool = False,
@@ -1990,7 +1994,7 @@ def _mutate_delete_edge(
 
 
 def _mutate_fix_broken_reference(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     old_target_id: str,
     new_target_id: str,
@@ -2013,7 +2017,7 @@ def _mutate_fix_broken_reference(
 
 # Implements: REQ-o00063
 def _mutate_move_node_to_file(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     node_id: str,
     target_file_id: str,
 ) -> dict[str, Any]:
@@ -2034,7 +2038,7 @@ def _mutate_move_node_to_file(
 
 # Implements: REQ-o00063
 def _mutate_rename_file(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     file_id: str,
     new_relative_path: str,
     repo_root: Path | None = None,
@@ -2060,7 +2064,7 @@ def _mutate_rename_file(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _undo_last_mutation(graph: TraceGraph) -> dict[str, Any]:
+def _undo_last_mutation(graph: FederatedGraph) -> dict[str, Any]:
     """Undo the most recent mutation.
 
     REQ-o00062-G: Reverses mutations using graph.undo_last().
@@ -2076,7 +2080,7 @@ def _undo_last_mutation(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _undo_to_mutation(graph: TraceGraph, mutation_id: str) -> dict[str, Any]:
+def _undo_to_mutation(graph: FederatedGraph, mutation_id: str) -> dict[str, Any]:
     """Undo all mutations back to a specific point.
 
     REQ-o00062-G: Reverses mutations using graph.undo_to().
@@ -2093,7 +2097,7 @@ def _undo_to_mutation(graph: TraceGraph, mutation_id: str) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
+def _get_mutation_log(graph: FederatedGraph, limit: int = 50) -> dict[str, Any]:
     """Get mutation history.
 
     Returns the most recent mutations from the log.
@@ -2115,7 +2119,7 @@ def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
+def _get_orphaned_nodes(graph: FederatedGraph) -> dict[str, Any]:
     """Get structural orphans — nodes without any FILE ancestor.
 
     Structural orphans indicate build pipeline bugs where nodes failed
@@ -2152,7 +2156,7 @@ def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _get_unlinked_nodes(graph: TraceGraph, kind: str | None = None) -> dict[str, Any]:
+def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[str, Any]:
     """Get unlinked nodes — nodes with a FILE parent but no requirement link.
 
     Unlinked nodes are structurally sound (have a FILE parent via CONTAINS)
@@ -2203,7 +2207,7 @@ def _get_unlinked_nodes(graph: TraceGraph, kind: str | None = None) -> dict[str,
     }
 
 
-def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
+def _get_broken_references(graph: FederatedGraph) -> dict[str, Any]:
     """Get all broken references.
 
     Returns edges that point to non-existent nodes.
@@ -2222,7 +2226,7 @@ def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
 
 
 def _find_by_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     keywords: list[str],
     match_all: bool = True,
     kind: str | None = None,
@@ -2258,7 +2262,7 @@ def _find_by_keywords(
     }
 
 
-def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
+def _get_all_keywords(graph: FederatedGraph) -> dict[str, Any]:
     """Get all unique keywords from the graph.
 
     Args:
@@ -2279,7 +2283,7 @@ def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
 
 
 def _query_nodes(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     kind: str | None = None,
     keywords: list[str] | None = None,
     match_all: bool = True,
@@ -2347,7 +2351,7 @@ def _query_nodes(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get test coverage information for a requirement.
 
     REQ-d00066-A: SHALL accept req_id parameter identifying the target requirement.
@@ -2424,7 +2428,7 @@ def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     }
 
 
-def _get_assertion_test_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion test coverage map for a requirement.
 
     Returns a structure mapping each assertion label to its tests and their
@@ -2484,7 +2488,7 @@ def _get_assertion_test_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     }
 
 
-def _get_assertion_code_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion code implementation map for a requirement.
 
     Returns a structure mapping each assertion label to its CODE nodes,
@@ -2545,7 +2549,7 @@ def _get_assertion_code_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
 
 
 def _get_uncovered_assertions(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_id: str | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
@@ -2652,7 +2656,7 @@ def _get_uncovered_assertions(
 
 
 def _find_assertions_by_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     keywords: list[str],
     match_all: bool = True,
 ) -> dict[str, Any]:
@@ -2874,7 +2878,7 @@ def _list_safety_branches_impl(repo_root: Path) -> dict[str, Any]:
 
 
 def _suggest_links_impl(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     working_dir: Path,
     file_path: str | None = None,
     limit: int = 50,
@@ -2993,7 +2997,7 @@ def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
 
 
 def _collect_subtree(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
     depth: int = 0,
     include_kinds: set[NodeKind] | None = None,
@@ -3052,7 +3056,7 @@ def _collect_subtree(
 
 def _subtree_to_markdown(
     collected: list[tuple[Any, int]],
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> str:
     """Render subtree as indented markdown.
 
@@ -3089,7 +3093,7 @@ def _subtree_to_markdown(
 
 def _subtree_to_flat(
     collected: list[tuple[Any, int]],
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
 ) -> dict[str, Any]:
     """Render subtree as flat JSON structure.
@@ -3149,7 +3153,7 @@ def _subtree_to_nested(
     node: Any,
     depth_limit: int,
     kind_filter: set[NodeKind],
-    graph: TraceGraph,
+    graph: FederatedGraph,
     _current_depth: int = 0,
     _visited: set[str] | None = None,
     _edge_filter: set[EdgeKind] | None = None,
@@ -3202,7 +3206,7 @@ def _subtree_to_nested(
 
 
 def _get_subtree(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
     depth: int = 0,
     include_kinds: str = "",
@@ -3289,7 +3293,7 @@ class CursorState:
 def _reshape_for_batch_size(
     nodes: list[tuple[Any, int]],
     batch_size: int,
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> list[dict[str, Any]]:
     """Reshape collected nodes based on batch_size semantics.
 
@@ -3387,7 +3391,7 @@ def _materialize_cursor_items(
     query: str,
     params: dict[str, Any],
     batch_size: int,
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> list[dict[str, Any]]:
     """Run query and reshape results for cursor iteration.
 
@@ -3793,7 +3797,7 @@ Use `save_mutations()` after making in-memory changes with `mutate_*` tools to p
 
 
 def create_server(
-    graph: TraceGraph | None = None,
+    graph: FederatedGraph | None = None,
     working_dir: Path | None = None,
 ) -> FastMCP:
     """Create the MCP server with all tools registered.
@@ -3826,7 +3830,7 @@ def create_server(
             import sys
 
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
-            graph = TraceGraph()
+            graph = FederatedGraph.empty()
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
