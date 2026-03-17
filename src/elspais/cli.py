@@ -839,7 +839,7 @@ Associate configuration is written to .elspais.local.toml (gitignored).
     )
     associate_group = associate_parser.add_mutually_exclusive_group()
     associate_parser.add_argument(
-        "path",
+        "associate_path",
         nargs="?",
         default=None,
         help="Path to associate repo or name to search for",

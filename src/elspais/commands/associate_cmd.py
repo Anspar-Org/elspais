@@ -34,7 +34,7 @@ def run(args: argparse.Namespace) -> int:
         return cmd_unlink(args)
     elif getattr(args, "all", False):
         return cmd_all(args)
-    elif getattr(args, "path", None):
+    elif getattr(args, "associate_path", None):
         return cmd_link(args)
     else:
         print("Usage: elspais associate <path>", file=sys.stderr)
@@ -56,7 +56,7 @@ def cmd_link(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    path_str = args.path
+    path_str = args.associate_path
     repo_path = Path(path_str)
 
     # If it looks like a name (no path separators), search siblings
