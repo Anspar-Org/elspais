@@ -1,13 +1,13 @@
-# Master Plan: FederatedGraph — Core Wrapper and Single-Repo Path
+# Master Plan: FederatedGraph — Config and Multi-Repo Federation
 
 **Branch**: claude/cross-cutting-requirements-2Zd0c
 **Ticket**: CUR-1082
 **Status**: Not Started
+**Depends on**: MASTER_PLAN.md (Core Wrapper) must be complete first
 
-**Background**: The current architecture merges all repos into a single `TraceGraph` with one config. Post-parse operations (health checks, validation, render/save) silently apply the root repo's config to all nodes. This plan introduces `FederatedGraph` — a wrapper that pairs each repo's `TraceGraph` with its own config. This first plan establishes the core class, makes `build_graph()` always return `FederatedGraph`, and migrates all consumers. After this plan, the system works identically to today but through the `FederatedGraph` wrapper (federation of one).
+**Background**: With `FederatedGraph` established as the sole graph type (MASTER_PLAN.md), this plan adds the `[associates]` config section to `.elspais.toml`, builds separate `TraceGraph` instances per repo with config isolation, wires cross-graph edges, and detects ID conflicts. After this plan, elspais can build a federated graph from multiple repos with proper config isolation.
 
 **Spec**: `docs/superpowers/specs/2026-03-16-federated-graph-design.md`
-**Full plan**: `docs/superpowers/plans/2026-03-16-federated-graph.md`
 
 ## Execution Rules
 
@@ -19,114 +19,116 @@ Read `AGENT_DESIGN_PRINCIPLES.md` before starting the first task.
 
 ## Plan
 
-### Task 1: Create RepoEntry and FederatedGraph with read-only methods
+### Task 1: Add `[associates]` section to config loading
 
-Create `src/elspais/graph/federated.py` with `RepoEntry` dataclass and `FederatedGraph` class implementing all read-only TraceGraph methods: `find_by_id`, `iter_roots`, `all_nodes`, `node_count`, `root_count`, `has_root`, `nodes_by_kind`/`iter_by_kind`, `all_connected_nodes`, `orphaned_nodes`, `has_orphans`, `orphan_count`, `broken_references`, `has_broken_references`, `is_reachable_to_requirement`, `iter_unlinked`, `iter_structural_orphans`, `deleted_nodes`, `has_deletions`. Also `repo_for()`, `config_for()`, `iter_repos()`. Include `from_single()` classmethod for federation-of-one. Each method has a strategy comment (`# Strategy: by_id`, `# Strategy: aggregate`). Aggregate methods skip repos with `graph is None`. Include test for error-state repo being skipped.
+Add `get_associates_config(config: dict) -> dict[str, dict]` that reads `[associates.<name>]` sections from `.elspais.toml` with `path` (required, relative to root repo) and `git` (optional, for clone assistance) fields. Returns empty dict if no `[associates]` section. Config type is `dict` (the existing project convention, not a typed class).
 
-**TASK_FILE**: `FEDGRAPH_TASK_1.md`
+**TASK_FILE**: `FEDGRAPH_MP1_TASK_1.md`
 
-- [x] **Baseline**: confirm tests pass before any changes
-- [x] **Create TASK_FILE**: write the task description into it
-- [x] **Find assertions**: `discover_requirements("[relevant query]")` — record
+- [x] **Baseline**: 2728 passed
+- [x] **Create TASK_FILE**: FEDGRAPH_MP1_TASK_1.md
+- [x] **Find assertions**: REQ-d00202-A, B, C
+- [x] **Create assertions if missing**: Added REQ-d00202 to spec/07-graph-architecture.md
+- [x] **Write failing tests**: 4 tests in tests/core/test_associates_config.py
+- [x] **Implement**: `get_associates_config()` in `config/__init__.py`
+- [x] **Verify**: 2732 passed, lint clean
+- [x] **Update docs**: CHANGELOG.md
+- [x] **Bump version**: 0.104.28
+- [x] **Commit**: done
+
+---
+
+### Task 2: Detect transitive associates (hard error)
+
+When loading an associate's `.elspais.toml`, check if it has an `[associates]` section. If so, raise `FederationError`: "Associate 'X' declares its own associates — only the root repo may declare associates."
+
+**TASK_FILE**: `FEDGRAPH_MP1_TASK_2.md`
+
+- [ ] **Baseline**: confirm tests pass before any changes
+- [ ] **Create TASK_FILE**: write the task description into it
+- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
       `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [x] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [x] **Write failing tests** (use sub-agent):
+- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
+- [ ] **Write failing tests** (use sub-agent):
   - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
   - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
   - Confirm tests fail for the right reason (not syntax errors)
   - Append test summary to TASK_FILE
-- [x] **Implement**:
+- [ ] **Implement**:
   - Use existing code patterns and APIs — search before creating
   - Add `# Implements: REQ-xxx` comments to new/modified source
   - Append implementation summary to TASK_FILE
-- [x] **Verify**:
+- [ ] **Verify**:
   - All tests pass (no workarounds)
   - Lint clean
   - Append results to TASK_FILE
-- [x] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [x] **Bump version** in pyproject.toml
-- [x] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
+- [ ] **Bump version** in pyproject.toml
+- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 
-### Task 2: Add mutation methods and `target_graph` parameter
+### Task 3: Build per-repo TraceGraphs and construct FederatedGraph
 
-Add `target_graph` parameter to `TraceGraph.add_edge()` (internal API) for cross-graph resolution. Implement all mutation methods on `FederatedGraph`: by_id mutations (`rename_node`, `update_title`, `change_status`, `delete_requirement`, `add_assertion`, `delete_assertion`, `update_assertion`, `rename_assertion`, `rename_file`, `fix_broken_reference`), cross-graph mutations (`add_edge`, `delete_edge`, `change_edge_kind`, `change_edge_targets`, `move_node_to_file`), and special mutations (`add_requirement` with `target_repo` param, `clone` with federation-aware deep copy that rebuilds cross-graph edges). Implement unified mutation log: sub-graph records full entry, federated log records lightweight pointer with repo name. `undo_last()`/`undo_to()` read federated log and delegate to correct sub-graph. Each mutation updates `_ownership` when IDs change.
+When `[associates]` config is present in `factory.py`, create a separate `GraphBuilder` per repo, each with its own config-derived resolver and reference resolver. Build each repo's `TraceGraph` independently. Create `RepoEntry` per repo. Construct `FederatedGraph` from all entries. Missing associate path: create error-state `RepoEntry` (soft fail by default). Thread `--strict` flag through `build_graph()` to raise on missing associates instead of soft-failing.
 
-**TASK_FILE**: `FEDGRAPH_TASK_2.md`
+Test fixtures: create temp directory structures with two repos (root + associate), each with its own `.elspais.toml` and spec files using `pytest tmp_path`.
 
-- [x] **Baseline**: confirm tests pass before any changes
-- [x] **Create TASK_FILE**: write the task description into it
-- [x] **Find assertions**: `discover_requirements("[relevant query]")` — record
+**TASK_FILE**: `FEDGRAPH_MP1_TASK_3.md`
+
+- [ ] **Baseline**: confirm tests pass before any changes
+- [ ] **Create TASK_FILE**: write the task description into it
+- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
       `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [x] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [x] **Write failing tests** (use sub-agent):
+- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
+- [ ] **Write failing tests** (use sub-agent):
   - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
   - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
   - Confirm tests fail for the right reason (not syntax errors)
   - Append test summary to TASK_FILE
-- [x] **Implement**:
+- [ ] **Implement**:
   - Use existing code patterns and APIs — search before creating
   - Add `# Implements: REQ-xxx` comments to new/modified source
   - Append implementation summary to TASK_FILE
-- [x] **Verify**:
+- [ ] **Verify**:
   - All tests pass (no workarounds)
   - Lint clean
   - Append results to TASK_FILE
-- [x] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [x] **Bump version** in pyproject.toml
-- [x] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
+- [ ] **Bump version** in pyproject.toml
+- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 
-### Task 3: Make `build_graph()` return FederatedGraph and fix all consumers
+### Task 4: ID conflict detection and cross-graph edge wiring
 
-Modify `build_graph()` in `factory.py` to wrap its result in `FederatedGraph.from_single()`. Export `FederatedGraph` from `graph/__init__.py`. Update the test helper (`tests/core/graph_test_helpers.py`) `build_graph()` to return `FederatedGraph`. For `wire_file_parent()`, access the sub-graph via `graph.repo_for(...).graph` to get `_index` access. For tests that assert on internals (`_index`, `_roots`, `_orphaned_ids`, etc.), access through `repo_for(node_id).graph` — this is the standard escape hatch (not `_root_graph()`). Update all source type hints from `TraceGraph` to `FederatedGraph` across: `graph/analysis.py`, `graph/annotators.py`, `graph/link_suggest.py`, `graph/test_code_linker.py`, `graph/render.py`, `graph/serialize.py`, `commands/summary.py`, `commands/trace.py`, `commands/index.py`, `commands/health.py`, `commands/validate.py`, `server/app.py`, `mcp/server.py`, `html/generator.py`, `pdf/assembler.py`. Tests must be green before committing — do NOT commit with known failures.
+During `FederatedGraph.__init__()`, detect duplicate IDs across repos when building `_ownership` — raise `FederationError` on conflict. Add `_wire_cross_graph_edges()` method: collect `broken_references()` from each sub-graph, check if target_id exists in another sub-graph's index, if found call `source_graph.add_edge(source_id, target_id, edge_kind, target_graph=target_graph)` and remove the resolved broken reference. After wiring, remaining broken references are genuinely unresolvable.
 
-**TASK_FILE**: `FEDGRAPH_TASK_3.md`
+Test cross-graph wiring: associate has PRD, root has DEV implementing PRD — edge wires, DEV no longer orphaned. Test ID conflict: two repos define same ID — hard error. Test unresolvable reference: stays as broken ref. Test clone on multi-repo FederatedGraph preserves cross-graph edges.
 
-- [x] **Baseline**: confirm tests pass before any changes
-- [x] **Create TASK_FILE**: write the task description into it
-- [x] **Find assertions**: existing REQ-d00200 assertions cover this (consumer migration)
-- [x] **Create assertions if missing**: N/A — covered by existing assertions
-- [x] **Write failing tests** (use sub-agent): N/A — refactoring; verified via existing test suite
-- [x] **Implement**:
-  - Modified factory.py build_graph() to wrap in FederatedGraph.from_single()
-  - Updated 14 source files: type hints TraceGraph -> FederatedGraph
-  - Added FederatedGraph.empty() for error fallbacks
-  - Exported FederatedGraph from `graph/__init__.py`
-  - Fixed 1 test using _orphaned_ids to use public API
-- [x] **Verify**:
-  - All 2728 tests pass (no workarounds)
+**TASK_FILE**: `FEDGRAPH_MP1_TASK_4.md`
+
+- [ ] **Baseline**: confirm tests pass before any changes
+- [ ] **Create TASK_FILE**: write the task description into it
+- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
+      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
+- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
+- [ ] **Write failing tests** (use sub-agent):
+  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
+  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
+  - Confirm tests fail for the right reason (not syntax errors)
+  - Append test summary to TASK_FILE
+- [ ] **Implement**:
+  - Use existing code patterns and APIs — search before creating
+  - Add `# Implements: REQ-xxx` comments to new/modified source
+  - Append implementation summary to TASK_FILE
+- [ ] **Verify**:
+  - All tests pass (no workarounds)
   - Lint clean
-- [x] **Update docs** (use sub-agent): CHANGELOG.md updated
-- [x] **Bump version** in pyproject.toml
-- [x] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
-
----
-
-### Task 4: Make `render_save()` federation-aware
-
-`render_save()` is a free function in `graph/render.py`, not a TraceGraph method. Update it to accept `FederatedGraph` and iterate `fg.iter_repos()`, calling render per sub-graph with each repo's own `repo_root`. Only sub-graphs with pending mutations get written. Cross-repo references are persisted in the downstream repo's spec files (the repo whose node declares `Implements:`, `Refines:`, etc.).
-
-**TASK_FILE**: `FEDGRAPH_TASK_4.md`
-
-- [x] **Baseline**: confirm tests pass before any changes
-- [x] **Create TASK_FILE**: write the task description into it
-- [x] **Find assertions**: covered by REQ-d00132 (render-based save) + REQ-d00200 (federation)
-- [x] **Create assertions if missing**: N/A
-- [x] **Write failing tests**: N/A — refactoring verified via existing render_save test suite
-- [x] **Implement**:
-  - Made repo_root parameter optional (defaults to graph.repo_root)
-  - File path resolution uses owning repo's root via graph.repo_for()
-  - Rename path resolution uses owning repo's root
-  - Graceful fallback when called with bare TraceGraph (hasattr guard)
-- [x] **Verify**:
-  - All 2728 tests pass
-  - Lint clean
-- [x] **Update docs**: CHANGELOG.md updated
-- [x] **Bump version** in pyproject.toml
-- [x] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+  - Append results to TASK_FILE
+- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
+- [ ] **Bump version** in pyproject.toml
+- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
 
 ---
 
@@ -142,6 +144,6 @@ After `/clear` or context compaction:
 
 When ALL tasks are complete:
 
-- [ ] Move plan: `mv MASTER_PLAN.md ~/archive/2026-03-16/MASTER_PLAN_CUR-1082_FEDGRAPH_CORE.md`
+- [ ] Move plan: `mv MASTER_PLAN.md ~/archive/2026-03-16/MASTER_PLAN_CUR-1082_FEDGRAPH_CONFIG.md`
 - [ ] Move all TASK_FILEs to the same archive directory
-- [ ] Promote next queued plan if one exists: `mv MASTER_PLAN1.md MASTER_PLAN.md`
+- [ ] Promote next queued plan if one exists: `mv MASTER_PLAN2.md MASTER_PLAN.md`

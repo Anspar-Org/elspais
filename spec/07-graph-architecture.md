@@ -768,3 +768,26 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 *End* *FederatedGraph Mutation Delegation* | **Hash**: 00000000
 ---
+
+## REQ-d00202: Associates Config Loading
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00005
+
+The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml` to declare federated repository associations.
+
+## Assertions
+
+A. `get_associates_config(config)` SHALL read `[associates]` sections and return a `dict[str, dict]` mapping associate name to `{path: str, git: str | None}`.
+
+B. The `path` field SHALL be required for each associate. The `git` field SHALL be optional (for clone assistance).
+
+C. When no `[associates]` section exists in config, `get_associates_config()` SHALL return an empty dict.
+
+D. Associates declaring their own `[associates]` section SHALL be a hard error: "Associate 'X' declares its own associates -- only the root repo may declare associates."
+
+## Rationale
+
+Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
+
+*End* *Associates Config Loading* | **Hash**: 00000000
+---

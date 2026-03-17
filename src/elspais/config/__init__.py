@@ -1008,7 +1008,36 @@ __all__ = [
     "_try_parse_numeric",
     "_try_parse_env_value",
     "apply_cli_overrides",
+    "get_associates_config",
 ]
+
+
+# Implements: REQ-d00202-A+B+C
+def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
+    """Read [associates] sections from config.
+
+    Each associate entry has:
+    - path (str, required): relative path to the associate repo
+    - git (str | None, optional): remote URL for clone assistance
+
+    Args:
+        config: The project configuration dictionary.
+
+    Returns:
+        Dict mapping associate name to {"path": str, "git": str | None}.
+        Empty dict if no [associates] section exists.
+    """
+    associates = config.get("associates", {})
+    if not associates:
+        return {}
+    result: dict[str, dict] = {}
+    for name, entry in associates.items():
+        if isinstance(entry, dict):
+            result[name] = {
+                "path": entry["path"],
+                "git": entry.get("git"),
+            }
+    return result
 
 
 def get_status_roles(config: dict[str, Any]):
