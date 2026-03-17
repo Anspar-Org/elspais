@@ -1,5 +1,13 @@
 # Known Issues
 
+[x] Feature: Change the current auto-publish-on-merge-to-main.
+- Implemented: add the `publish` label to a PR before merging to trigger release + PyPI + Homebrew publish.
+- Merges without the label are silent (no publish, no spam).
+
+[ ] CONFIG_DESIGN.md
+
+[ ] LARK_PARSER_DESIGN.md
+
 [x] Chore: The elspais fix command output is confusing. It makes it look like errors have occured, rather than being fixed.
 
 [ ] Feature: **Declarative config schema and versioned migration**

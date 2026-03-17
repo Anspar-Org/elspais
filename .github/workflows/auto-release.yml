@@ -1,9 +1,9 @@
 name: Auto Release
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [main]
-    paths: [pyproject.toml]
 
 permissions:
   contents: write
@@ -12,42 +12,29 @@ permissions:
 jobs:
   release:
     name: Create Release
+    if: >-
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'publish')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      version: ${{ steps.version.outputs.new_version }}
+      version: ${{ steps.version.outputs.version }}
       released: ${{ steps.create_release.outputs.released }}
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
-      - name: Check if version changed
+      - name: Get version
         id: version
         run: |
-          # Current version
-          NEW_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-
-          # Previous version (from parent commit)
-          OLD_VERSION=$(git show HEAD~1:pyproject.toml 2>/dev/null | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/' || echo "")
-
-          echo "old_version=${OLD_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-
-          if [ "$NEW_VERSION" != "$OLD_VERSION" ] && [ -n "$OLD_VERSION" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Version changed: ${OLD_VERSION} -> ${NEW_VERSION}"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Version unchanged (${NEW_VERSION}), skipping release"
-          fi
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
 
       - name: Check if tag already exists
-        if: steps.version.outputs.changed == 'true'
         id: tag
         run: |
-          TAG="v${{ steps.version.outputs.new_version }}"
+          TAG="v${{ steps.version.outputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "Tag ${TAG} already exists, skipping"
@@ -57,10 +44,10 @@ jobs:
           fi
 
       - name: Extract changelog entry
-        if: steps.version.outputs.changed == 'true' && steps.tag.outputs.exists == 'false'
+        if: steps.tag.outputs.exists == 'false'
         id: changelog
         run: |
-          VERSION="${{ steps.version.outputs.new_version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           # Extract the changelog section for this version
           # Matches from ## [VERSION] to the next ## [ or end of file
           NOTES=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
@@ -75,12 +62,12 @@ jobs:
           cat /tmp/release-notes.md
 
       - name: Create GitHub Release
-        if: steps.version.outputs.changed == 'true' && steps.tag.outputs.exists == 'false'
+        if: steps.tag.outputs.exists == 'false'
         id: create_release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.version.outputs.new_version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file /tmp/release-notes.md \
