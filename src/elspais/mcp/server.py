@@ -68,7 +68,7 @@ from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
-from elspais.mcp.search import matches_node, parse_query, score_node
+from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.utilities.patterns import build_resolver
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1030,6 +1030,171 @@ def _discover_requirements(
             "pruned_count": len(pruned),
         },
     }
+
+
+def _discover_assertions(
+    graph: FederatedGraph,
+    query: str,
+    scope_id: str = "",
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    limit: int = 50,
+    edge_kinds: set[EdgeKind] | None = None,
+) -> dict[str, Any]:
+    """Search for assertions, returning them as top-level results with scores.
+
+    When scope_id is non-empty, delegates to _discover_requirements (scoped
+    search + minimize) with include_assertions=True, then flattens assertions
+    into top-level results.  When scope_id is empty, searches all requirements
+    globally (no scoping, no minimize — every requirement is a candidate).
+
+    Each surviving requirement contributes all its assertions to the result.
+    Assertions whose text directly matched the query receive a boosted score;
+    assertions that only inherited relevance from their parent requirement
+    receive the parent's score as a baseline.
+
+    Returns:
+        {"assertions": [...], "stats": {...}}
+        Each assertion entry: {id, label, text, requirement_id,
+        requirement_title, level, score, direct_match}.
+    """
+    if edge_kinds is None:
+        edge_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+
+    parsed = parse_query(query) if not regex else None
+
+    # --- Find matching requirements with assertion metadata ---
+    if scope_id:
+        disc_result = _discover_requirements(
+            graph,
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
+            include_assertions=True,
+            limit=limit,
+            edge_kinds=edge_kinds,
+        )
+        if "error" in disc_result:
+            return disc_result
+        matched_reqs = disc_result.get("results", [])
+    else:
+        # Global search: score all requirements, no scoping or minimize
+        matched_reqs = _search_with_assertions(graph, query, field, regex, limit, parsed)
+
+    # --- Flatten: promote assertions to top-level results ---
+    assertion_results: list[dict[str, Any]] = []
+
+    for req in matched_reqs:
+        req_score = req.get("score", 0.0)
+        req_id = req["id"]
+        req_title = req.get("title", "")
+        level = req.get("level", "")
+        directly_matched = {a["id"] for a in req.get("matched_assertions", [])}
+
+        # Find the actual requirement node to iterate ALL its assertions
+        req_node = graph.find_by_id(req_id)
+        if req_node is None:
+            continue
+
+        for child in req_node.iter_children():
+            if child.kind != NodeKind.ASSERTION:
+                continue
+
+            # Score: direct text match gets boosted, others get parent baseline
+            direct_match = child.id in directly_matched
+            if direct_match and parsed is not None:
+                assertion_score = req_score + score_node(child, parsed, field)
+            elif direct_match:
+                assertion_score = req_score + 10  # regex match bonus
+            else:
+                assertion_score = req_score
+
+            assertion_results.append(
+                {
+                    "id": child.id,
+                    "label": child.get_field("label"),
+                    "text": child.get_label(),
+                    "requirement_id": req_id,
+                    "requirement_title": req_title,
+                    "level": level,
+                    "score": assertion_score,
+                    "direct_match": direct_match,
+                }
+            )
+
+    # Sort by score descending, limit
+    assertion_results.sort(key=lambda a: a["score"], reverse=True)
+    assertion_results = assertion_results[:limit]
+
+    return {
+        "assertions": assertion_results,
+        "stats": {
+            "requirements_matched": len(matched_reqs),
+            "assertions_returned": len(assertion_results),
+        },
+    }
+
+
+def _search_with_assertions(
+    graph: FederatedGraph,
+    query: str,
+    field: str,
+    regex: bool,
+    limit: int,
+    parsed: ParsedQuery | None,
+) -> list[dict[str, Any]]:
+    """Global search across all requirements, including assertion matching.
+
+    Like _search() but also checks assertion text and returns
+    matched_assertions metadata on each result.
+    """
+    if regex:
+        try:
+            compiled_pattern = re.compile(query, re.IGNORECASE)
+        except re.error:
+            return []
+        results: list[dict[str, Any]] = []
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            node_matched = _matches_query(node, field, True, compiled_pattern)
+            matched_assertions = _match_assertions(
+                node,
+                True,
+                compiled_pattern=compiled_pattern,
+            )
+            if node_matched or matched_assertions:
+                entry = _serialize_requirement_summary(node)
+                entry["score"] = 1.0
+                if matched_assertions:
+                    entry["matched_assertions"] = matched_assertions
+                results.append(entry)
+                if len(results) >= limit:
+                    break
+        return results
+
+    if parsed is None or parsed.is_empty:
+        return []
+
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        node_score = score_node(node, parsed, field)
+        matched_assertions = _match_assertions(
+            node,
+            True,
+            parsed=parsed,
+            field=field,
+        )
+        if node_score > 0 or matched_assertions:
+            entry = _serialize_requirement_summary(node)
+            entry["score"] = node_score
+            if matched_assertions:
+                entry["matched_assertions"] = matched_assertions
+            scored.append((node_score, entry))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [entry for _, entry in scored[:limit]]
 
 
 def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
@@ -2938,6 +3103,7 @@ def _suggest_links_impl(
         working_dir,
         file_path=file_path,
         limit=limit,
+        discover_fn=_discover_assertions,
     )
     return {
         "suggestions": [s.to_dict() for s in suggestions],
@@ -3650,6 +3816,7 @@ The graph is the single source of truth - all tools read directly from it.
 5. `get_requirement(req_id)` - Get full details including assertions
 6. `get_hierarchy(req_id)` - Navigate parent/child relationships
 7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+8. `discover_assertions(query)` - Find assertions ranked by relevance
 
 ## Tools Overview
 
@@ -3675,6 +3842,11 @@ The graph is the single source of truth - all tools read directly from it.
   - Chains scoped_search with minimize_requirement_set
   - Returns only the most-specific matches within a subgraph
   - Pruned ancestors include superseded_by metadata
+- `discover_assertions(query, scope_id?, ...)` - Find assertions ranked by relevance
+  - Returns assertions as top-level scored results (not nested under requirements)
+  - Searches requirement titles/bodies AND assertion text
+  - Direct assertion text matches score higher than context-only matches
+  - scope_id="" (default) searches all requirements globally
 
 ### Workspace Context
 - `get_workspace_info(detail="default")` - Repo path, project name, version, configuration
@@ -4038,6 +4210,48 @@ def create_server(
             field,
             regex,
             include_assertions,
+            limit,
+            parsed_kinds,
+        )
+
+    @mcp.tool()
+    def discover_assertions(
+        query: str,
+        scope_id: str = "",
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        limit: int = 50,
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Search for assertions, returning them as top-level scored results.
+
+        Use when: finding which specific assertions a test or code change
+        relates to. Searches requirement titles, bodies, and assertion text,
+        then returns all assertions from matching requirements ranked by
+        relevance. Assertions whose text directly matched score higher than
+        siblings that were only pulled in by their parent requirement.
+
+        When scope_id is provided, searches within that subtree and minimizes
+        to the most-specific requirements first. When scope_id is empty
+        (default), searches all requirements globally.
+        """
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _discover_assertions(
+            _state["graph"],
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
             limit,
             parsed_kinds,
         )

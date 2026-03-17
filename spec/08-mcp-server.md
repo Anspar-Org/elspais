@@ -776,7 +776,7 @@ D. Global operations (workspace info, agent instructions, project summary) SHALL
 
 Without federation-aware config access, all MCP operations use the root repo's config regardless of which repo a node belongs to. Per-repo config access ensures correct ID pattern resolution and changelog settings for multi-repo operations. Federation info in workspace queries helps AI agents understand the multi-repo topology.
 
-*End* *MCP Federation Support* | **Hash**: 00000000
+*End* *MCP Federation Support* | **Hash**: ccc0ca12
 
 ---
 

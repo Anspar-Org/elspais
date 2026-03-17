@@ -504,4 +504,4 @@ D. Staleness info SHALL be informational only and SHALL NOT affect build or heal
 
 Multi-repo federation users need visibility into which repos are current and which are behind their remotes. The viewer/server surfaces this as informational metadata without gating builds on it.
 
-*End* *Server Federation and Staleness* | **Hash**: 00000000
+*End* *Server Federation and Staleness* | **Hash**: b4fae1d0

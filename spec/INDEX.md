@@ -20,7 +20,7 @@
 | REQ-p00010 | Review Git Integration                           | prd-elspais.md           | a410550e |
 | REQ-p00011 | Review Package Lifecycle                         | prd-elspais.md           | 0c09b663 |
 | REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
-| REQ-p00013 | Automated Testing                                | prd-elspais.md           | bedb66fd |
+| REQ-p00013 | Automated Testing                                | prd-elspais.md           | 3fc90ebc |
 | REQ-p00014 | Satisfies Relationship                           | prd-cross-cutting.md     | c3352c1a |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
@@ -105,6 +105,13 @@
 | REQ-d00132 | Render-Based Save Operation                                   | 07-graph-architecture.md | 7043f7af |
 | REQ-d00133 | MCP FILE Node Integration                                     | 08-mcp-server.md         | 4a81d28c |
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | 07-graph-architecture.md | 4772cbb4 |
+| REQ-d00200 | FederatedGraph Read-Only Delegation                           | 07-graph-architecture.md | 72471144 |
+| REQ-d00201 | FederatedGraph Mutation Delegation                            | 07-graph-architecture.md | 1a0942a4 |
+| REQ-d00202 | Associates Config Loading                                     | 07-graph-architecture.md | 479dcbb8 |
+| REQ-d00203 | Multi-Repo Build Pipeline                                     | 07-graph-architecture.md | 31e019a1 |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | 07-graph-architecture.md | 2313140d |
+| REQ-d00205 | MCP Federation Support                                        | 08-mcp-server.md         | ccc0ca12 |
+| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md  | b4fae1d0 |
 
 ## User Journeys
 

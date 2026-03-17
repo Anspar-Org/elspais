@@ -408,4 +408,4 @@ E. The project SHALL include MCP protocol tests that verify tool invocation, sea
 
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
-*End* *Automated Testing* | **Hash**: bedb66fd
+*End* *Automated Testing* | **Hash**: 3fc90ebc
