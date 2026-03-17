@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-D
+# Validates: REQ-d00085-A
 """End-to-end workflow tests for elspais CLI multi-command sequences.
 
 Each test invokes multiple elspais commands as subprocesses and validates
@@ -25,9 +25,9 @@ pytestmark = [
 
 
 class TestInitThenHealth:
-    """Validates REQ-p00013-D: init followed by health passes."""
+    """Validates REQ-d00085-A: init followed by health passes."""
 
-    def test_REQ_p00013_D_init_then_health_passes(self, tmp_path):
+    def test_REQ_d00085_A_init_then_health_passes(self, tmp_path):
         init_result = run_elspais("init", cwd=tmp_path)
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
 
@@ -39,9 +39,9 @@ class TestInitThenHealth:
 
 
 class TestHealthSummaryConsistency:
-    """Validates REQ-p00013-D: summary is consistent across runs."""
+    """Validates REQ-d00085-A: summary is consistent across runs."""
 
-    def test_REQ_p00013_D_health_summary_same_total(self):
+    def test_REQ_d00085_A_health_summary_same_total(self):
         health_result = run_elspais("health", "--format", "json", "--lenient")
         assert health_result.returncode == 0, f"health failed: {health_result.stderr}"
         health_data = json.loads(health_result.stdout)
@@ -69,9 +69,9 @@ class TestHealthSummaryConsistency:
 
 
 class TestTraceFormatConsistency:
-    """Validates REQ-p00013-D: trace JSON and CSV both produce valid output."""
+    """Validates REQ-d00085-A: trace JSON and CSV both produce valid output."""
 
-    def test_REQ_p00013_D_trace_json_csv_same_count(self, tmp_path):
+    def test_REQ_d00085_A_trace_json_csv_same_count(self, tmp_path):
         json_out = tmp_path / "trace_json"
         result_json = run_elspais("trace", "--format", "json", "--output", str(json_out))
         assert result_json.returncode == 0, f"trace json failed: {result_json.stderr}"
@@ -99,9 +99,9 @@ class TestTraceFormatConsistency:
 
 
 class TestInitTemplate:
-    """Validates REQ-p00013-D: init creates a valid config."""
+    """Validates REQ-d00085-A: init creates a valid config."""
 
-    def test_REQ_p00013_D_init_creates_valid_config(self, tmp_path):
+    def test_REQ_d00085_A_init_creates_valid_config(self, tmp_path):
         init_result = run_elspais("init", cwd=tmp_path)
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
 
@@ -113,9 +113,9 @@ class TestInitTemplate:
 
 
 class TestFixThenHealth:
-    """Validates REQ-p00013-D: fix corrects hashes, then health passes."""
+    """Validates REQ-d00085-A: fix corrects hashes, then health passes."""
 
-    def test_REQ_p00013_D_fix_then_health_on_fixture(self, tmp_path):
+    def test_REQ_d00085_A_fix_then_health_on_fixture(self, tmp_path):
         # Create minimal config
         config = tmp_path / ".elspais.toml"
         config.write_text('[patterns]\nprefix = "REQ"\n\n' '[paths]\nspec_dirs = ["spec"]\n')
@@ -146,9 +146,9 @@ class TestFixThenHealth:
 
 
 class TestSummaryIdempotent:
-    """Validates REQ-p00013-D: summary produces consistent results across runs."""
+    """Validates REQ-d00085-A: summary produces consistent results across runs."""
 
-    def test_REQ_p00013_D_summary_consistent_across_runs(self):
+    def test_REQ_d00085_A_summary_consistent_across_runs(self):
         result1 = run_elspais("summary", "--format", "json")
         assert result1.returncode == 0, f"summary run 1 failed: {result1.stderr}"
         data1 = json.loads(result1.stdout)

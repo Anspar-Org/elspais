@@ -728,10 +728,16 @@ def mcp_call(proc: subprocess.Popen, tool: str, args: dict, msg_id: int | None =
     response = _mcp_recv(proc)
     if "error" in response:
         return {"_error": response["error"]}
-    content = response["result"]["content"]
+    result = response["result"]
+    # FastMCP wraps tool errors in isError flag
+    if result.get("isError"):
+        return {"_error": result["content"][0]["text"] if result.get("content") else "unknown"}
+    content = result["content"]
     if not content:
         return None
     text = content[0]["text"]
+    if not text:
+        return None
     return json.loads(text)
 
 

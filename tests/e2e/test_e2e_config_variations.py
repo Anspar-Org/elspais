@@ -1,4 +1,4 @@
-# Validates: REQ-p00013
+# Validates: REQ-p00002
 """E2E tests focused on configuration variations.
 
 Tests various config permutations: ignore patterns, file patterns,

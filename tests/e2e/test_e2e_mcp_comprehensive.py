@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-E
+# Validates: REQ-p00060
 """Comprehensive MCP e2e tests.
 
 Each test builds a project, starts an MCP server, and exercises

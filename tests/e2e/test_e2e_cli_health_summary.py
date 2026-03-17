@@ -1,4 +1,4 @@
-# Validates: REQ-p00013
+# Validates: REQ-p00002, REQ-p00003, REQ-d00080
 """E2E tests for health, summary, trace, and doctor CLI commands.
 
 Each test builds a unique project from scratch in tmp_path with specific

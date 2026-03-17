@@ -1,4 +1,4 @@
-# Validates: REQ-p00013
+# Validates: REQ-p00002, REQ-p00060
 """Additional e2e tests for comprehensive feature coverage.
 
 Tests edge cases, deeper config validation, additional MCP scenarios,

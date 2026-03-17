@@ -590,9 +590,7 @@ class FederatedGraph:
         # Strategy: by_id
         """
         repo_name = self._ownership[assertion_id]
-        result = self._graph_for(assertion_id).delete_assertion(
-            assertion_id, compact, compact_style
-        )
+        result = self._graph_for(assertion_id).delete_assertion(assertion_id, compact)
         self._ownership.pop(assertion_id, None)
         self._record_mutation(repo_name, result)
         return result

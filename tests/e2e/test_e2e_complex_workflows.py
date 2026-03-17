@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-D
+# Validates: REQ-d00085-A
 """E2E tests for complex multi-command workflows.
 
 Each test exercises multiple commands in sequence, validating

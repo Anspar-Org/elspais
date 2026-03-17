@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-E
+# Validates: REQ-p00060
 """Extended MCP protocol tests for elspais.
 
 Starts the MCP server as a subprocess using stdio transport
@@ -145,31 +145,31 @@ def mcp():
 
 
 class TestMCPSearch:
-    """Validates REQ-p00013-E: MCP search tool calls."""
+    """Validates REQ-p00060: MCP search tool calls."""
 
-    def test_REQ_p00013_E_search_returns_results(self, mcp):
+    def test_REQ_p00060_A_search_returns_results(self, mcp):
         """Search for 'REQ' returns at least one result."""
         results = _call_tool_all(mcp, "search", {"query": "REQ"}, msg_id=2)
         assert len(results) >= 1, "Expected at least 1 search result"
         # Each result should have an id field
         assert "id" in results[0], f"Expected 'id' in result: {results[0]}"
 
-    def test_REQ_p00013_E_search_empty_query(self, mcp):
+    def test_REQ_p00060_A_search_empty_query(self, mcp):
         """Search for a nonsense string returns no results."""
         results = _call_tool_all(mcp, "search", {"query": "xyznonexistent12345"}, msg_id=2)
         assert len(results) == 0, f"Expected 0 results, got {len(results)}"
 
 
 class TestMCPGetRequirement:
-    """Validates REQ-p00013-E: MCP get_requirement tool calls."""
+    """Validates REQ-p00060: MCP get_requirement tool calls."""
 
-    def test_REQ_p00013_E_get_requirement_found(self, mcp):
+    def test_REQ_p00060_A_get_requirement_found(self, mcp):
         """get_requirement returns data for a known requirement."""
         result = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=2)
         assert "id" in result, f"Expected 'id' in result: {result}"
         assert result["id"] == "REQ-p00001"
 
-    def test_REQ_p00013_E_get_requirement_not_found(self, mcp):
+    def test_REQ_p00060_A_get_requirement_not_found(self, mcp):
         """get_requirement for a nonexistent ID signals not-found."""
         _send(
             mcp,
@@ -203,9 +203,9 @@ class TestMCPGetRequirement:
 
 
 class TestMCPHierarchy:
-    """Validates REQ-p00013-E: MCP get_hierarchy tool call."""
+    """Validates REQ-p00060: MCP get_hierarchy tool call."""
 
-    def test_REQ_p00013_E_get_hierarchy(self, mcp):
+    def test_REQ_p00060_A_get_hierarchy(self, mcp):
         """get_hierarchy returns ancestors and children for a known req."""
         result = _call_tool(mcp, "get_hierarchy", {"req_id": "REQ-p00001"}, msg_id=2)
         assert "ancestors" in result, f"Expected 'ancestors' key: {result}"
@@ -213,9 +213,9 @@ class TestMCPHierarchy:
 
 
 class TestMCPProjectSummary:
-    """Validates REQ-p00013-E: MCP get_project_summary tool call."""
+    """Validates REQ-p00060: MCP get_project_summary tool call."""
 
-    def test_REQ_p00013_E_project_summary(self, mcp):
+    def test_REQ_p00060_A_project_summary(self, mcp):
         """get_project_summary returns counts."""
         result = _call_tool(mcp, "get_project_summary", {}, msg_id=2)
         assert isinstance(result, dict), f"Expected dict, got {type(result)}"
@@ -224,9 +224,9 @@ class TestMCPProjectSummary:
 
 
 class TestMCPCursorPagination:
-    """Validates REQ-p00013-E: MCP cursor pagination protocol."""
+    """Validates REQ-p00060: MCP cursor pagination protocol."""
 
-    def test_REQ_p00013_E_cursor_open_and_next(self, mcp):
+    def test_REQ_p00060_A_cursor_open_and_next(self, mcp):
         """open_cursor + cursor_next advances through results."""
         # Open a cursor over search results
         open_result = _call_tool(
@@ -247,9 +247,9 @@ class TestMCPCursorPagination:
 
 
 class TestMCPMutationRoundtrip:
-    """Validates REQ-p00013-E: MCP mutation and undo round-trip."""
+    """Validates REQ-p00060: MCP mutation and undo round-trip."""
 
-    def test_REQ_p00013_E_mutation_undo_roundtrip(self, mcp):
+    def test_REQ_p00060_A_mutation_undo_roundtrip(self, mcp):
         """Mutate a title, undo, and verify reversion."""
         # 1. Get the original title
         original = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=2)
