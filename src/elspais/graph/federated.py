@@ -1,23 +1,102 @@
 # Implements: REQ-d00200-A+B+C+D+E+F+G+H
+# Implements: REQ-d00201-A+B+C+D+E+F+G
 """FederatedGraph — wraps one or more TraceGraphs with per-repo config.
 
-Provides a unified read-only API across multiple repository graphs,
+Provides a unified API across multiple repository graphs,
 delegating to the appropriate sub-graph based on node ownership.
 """
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
     from elspais.graph.builder import TraceGraph
     from elspais.graph.mutations import BrokenReference
+
+
+# Implements: REQ-d00201-B
+@dataclass
+class FederatedMutationPointer:
+    """Lightweight entry in the federated mutation log.
+
+    Points to a sub-graph's mutation by repo name and mutation ID.
+    """
+
+    repo_name: str
+    mutation_id: str
+
+
+class FederatedMutationLog:
+    """Unified mutation log across all repos in a federation.
+
+    Stores lightweight pointers to sub-graph mutations. The iter_entries()
+    method follows pointers to yield full MutationEntry objects from sub-graphs,
+    maintaining compatibility with existing consumers.
+    """
+
+    def __init__(self) -> None:
+        self._pointers: list[FederatedMutationPointer] = []
+        self._repos: dict[str, RepoEntry] = {}
+
+    def _bind_repos(self, repos: dict[str, RepoEntry]) -> None:
+        """Bind repo lookup for resolving pointers."""
+        self._repos = repos
+
+    def record(self, repo_name: str, mutation_id: str) -> None:
+        """Record a mutation pointer."""
+        self._pointers.append(FederatedMutationPointer(repo_name, mutation_id))
+
+    def pop(self) -> FederatedMutationPointer | None:
+        """Remove and return the most recent pointer."""
+        return self._pointers.pop() if self._pointers else None
+
+    def iter_entries(self) -> Iterator[MutationEntry]:
+        """Yield full MutationEntry objects from sub-graphs in federated order.
+
+        Compatible with existing MutationLog.iter_entries() consumers.
+        """
+        for ptr in self._pointers:
+            entry = self._repos.get(ptr.repo_name)
+            if entry and entry.graph:
+                found = entry.graph.mutation_log.find_by_id(ptr.mutation_id)
+                if found:
+                    yield found
+
+    def entries_since(self, mutation_id: str) -> list[FederatedMutationPointer]:
+        """Get all pointers since (and including) a specific mutation."""
+        for i, ptr in enumerate(self._pointers):
+            if ptr.mutation_id == mutation_id:
+                return list(self._pointers[i:])
+        raise ValueError(f"Mutation {mutation_id} not found in federated log")
+
+    def find_by_id(self, mutation_id: str) -> MutationEntry | None:
+        """Find a mutation entry by ID across all repos."""
+        for ptr in self._pointers:
+            if ptr.mutation_id == mutation_id:
+                entry = self._repos.get(ptr.repo_name)
+                if entry and entry.graph:
+                    return entry.graph.mutation_log.find_by_id(mutation_id)
+        return None
+
+    def clear(self) -> None:
+        """Clear all pointers and sub-graph logs."""
+        self._pointers.clear()
+        for entry in self._repos.values():
+            if entry.graph:
+                entry.graph.mutation_log.clear()
+
+    def __len__(self) -> int:
+        return len(self._pointers)
 
 
 # Implements: REQ-d00200-A
@@ -65,6 +144,9 @@ class FederatedGraph:
             if entry.graph is not None:
                 for node_id in entry.graph._index:
                     self._ownership[node_id] = entry.name
+        # Implements: REQ-d00201-B
+        self._federated_log = FederatedMutationLog()
+        self._federated_log._bind_repos(self._repos)
 
     # Implements: REQ-d00200-B
     @classmethod
@@ -319,3 +401,362 @@ class FederatedGraph:
         # Strategy: aggregate
         """
         return any(graph.has_deletions() for _name, graph in self._live_graphs())
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Mutation Infrastructure
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00201-F
+    @property
+    def mutation_log(self) -> FederatedMutationLog:
+        """Access the unified mutation log across all repos.
+
+        Returns a FederatedMutationLog whose iter_entries() yields full
+        MutationEntry objects from sub-graphs in federated order.
+        """
+        return self._federated_log
+
+    def _graph_for(self, node_id: str) -> TraceGraph:
+        """Get the sub-graph owning node_id. Raises KeyError if not found."""
+        repo_name = self._ownership.get(node_id)
+        if repo_name is None:
+            raise KeyError(f"Node '{node_id}' not found in any repo")
+        graph = self._repos[repo_name].graph
+        if graph is None:
+            raise KeyError(f"Repo '{repo_name}' has no graph (error state)")
+        return graph
+
+    def _record_mutation(self, repo_name: str, entry: MutationEntry) -> None:
+        """Record a mutation in the federated log."""
+        self._federated_log.record(repo_name, entry.id)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # by_id Mutation Methods
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00201-A
+    def rename_node(self, old_id: str, new_id: str) -> MutationEntry:
+        """Rename a node. Updates ownership mapping.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[old_id]
+        graph = self._graph_for(old_id)
+        result = graph.rename_node(old_id, new_id)
+        # Update ownership: remove old, add new
+        del self._ownership[old_id]
+        self._ownership[new_id] = repo_name
+        # Assertion children also get renamed — update their ownership
+        node = graph.find_by_id(new_id)
+        if node and node.kind == NodeKind.REQUIREMENT:
+            for child in node.iter_children():
+                if child.kind == NodeKind.ASSERTION:
+                    self._ownership[child.id] = repo_name
+                    # Remove old assertion ID if present
+                    old_assertion_id = child.id.replace(new_id, old_id)
+                    self._ownership.pop(old_assertion_id, None)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def update_title(self, node_id: str, new_title: str) -> MutationEntry:
+        """Update requirement title.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).update_title(node_id, new_title)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def change_status(self, node_id: str, new_status: str) -> MutationEntry:
+        """Change requirement status.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).change_status(node_id, new_status)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def delete_requirement(self, node_id: str, compact_assertions: bool = True) -> MutationEntry:
+        """Delete a requirement. Removes from ownership.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        graph = self._graph_for(node_id)
+        # Collect assertion IDs before deletion
+        node = graph.find_by_id(node_id)
+        assertion_ids = []
+        if node:
+            assertion_ids = [c.id for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+        result = graph.delete_requirement(node_id, compact_assertions)
+        # Remove from ownership
+        self._ownership.pop(node_id, None)
+        for aid in assertion_ids:
+            self._ownership.pop(aid, None)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
+        """Add an assertion to a requirement.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[req_id]
+        result = self._graph_for(req_id).add_assertion(req_id, label, text)
+        # New assertion gets ownership
+        assertion_id = f"{req_id}-{label}"
+        self._ownership[assertion_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def delete_assertion(
+        self,
+        assertion_id: str,
+        compact: bool = True,
+        compact_style: str = "letter",
+    ) -> MutationEntry:
+        """Delete an assertion.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[assertion_id]
+        result = self._graph_for(assertion_id).delete_assertion(
+            assertion_id, compact, compact_style
+        )
+        self._ownership.pop(assertion_id, None)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def update_assertion(self, assertion_id: str, new_text: str) -> MutationEntry:
+        """Update assertion text.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[assertion_id]
+        result = self._graph_for(assertion_id).update_assertion(assertion_id, new_text)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
+        """Rename an assertion label.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[old_id]
+        result = self._graph_for(old_id).rename_assertion(old_id, new_label)
+        # Update ownership with new ID
+        new_id = result.after_state.get("id", old_id)
+        if new_id != old_id:
+            self._ownership.pop(old_id, None)
+            self._ownership[new_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def rename_file(
+        self,
+        file_id: str,
+        new_relative_path: str,
+        repo_root: Path | None = None,
+    ) -> MutationEntry:
+        """Rename a FILE node.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[file_id]
+        graph = self._graph_for(file_id)
+        result = graph.rename_file(file_id, new_relative_path, repo_root)
+        # Update ownership with new file ID
+        new_id = result.after_state.get("id", file_id)
+        if new_id != file_id:
+            self._ownership.pop(file_id, None)
+            self._ownership[new_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-A
+    def fix_broken_reference(
+        self,
+        source_id: str,
+        old_target_id: str,
+        new_target_id: str,
+    ) -> MutationEntry:
+        """Fix a broken reference by redirecting to a valid target.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[source_id]
+        result = self._graph_for(source_id).fix_broken_reference(
+            source_id, old_target_id, new_target_id
+        )
+        self._record_mutation(repo_name, result)
+        return result
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Cross-Graph Mutation Methods
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00201-E
+    def add_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        edge_kind: EdgeKind,
+        assertion_targets: list[str] | None = None,
+    ) -> MutationEntry:
+        """Add an edge. Source and target may be in different repos.
+
+        # Strategy: cross-graph
+        """
+        repo_name = self._ownership[source_id]
+        graph = self._graph_for(source_id)
+        result = graph.add_edge(source_id, target_id, edge_kind, assertion_targets)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-E
+    def delete_edge(self, source_id: str, target_id: str) -> MutationEntry:
+        """Delete an edge.
+
+        # Strategy: cross-graph
+        """
+        repo_name = self._ownership[source_id]
+        result = self._graph_for(source_id).delete_edge(source_id, target_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-E
+    def change_edge_kind(
+        self,
+        source_id: str,
+        target_id: str,
+        new_kind: EdgeKind,
+    ) -> MutationEntry:
+        """Change edge type.
+
+        # Strategy: cross-graph
+        """
+        repo_name = self._ownership[source_id]
+        result = self._graph_for(source_id).change_edge_kind(source_id, target_id, new_kind)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-E
+    def change_edge_targets(
+        self,
+        source_id: str,
+        target_id: str,
+        assertion_targets: list[str],
+    ) -> MutationEntry:
+        """Change assertion targets on an edge.
+
+        # Strategy: cross-graph
+        """
+        repo_name = self._ownership[source_id]
+        result = self._graph_for(source_id).change_edge_targets(
+            source_id, target_id, assertion_targets
+        )
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-E
+    def move_node_to_file(self, node_id: str, target_file_id: str) -> MutationEntry:
+        """Move a node to a different FILE.
+
+        # Strategy: cross-graph
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).move_node_to_file(node_id, target_file_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Special Mutations
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00201-D
+    def add_requirement(
+        self,
+        req_id: str,
+        title: str,
+        level: str,
+        status: str = "Draft",
+        parent_id: str | None = None,
+        edge_kind: EdgeKind = EdgeKind.IMPLEMENTS,
+        target_repo: str | None = None,
+    ) -> MutationEntry:
+        """Add a new requirement to a specific repo.
+
+        # Strategy: special — target_repo specifies destination
+        """
+        repo_name = target_repo or self._root_repo
+        entry = self._repos.get(repo_name)
+        if entry is None or entry.graph is None:
+            raise KeyError(f"Repo '{repo_name}' not found or unavailable")
+        result = entry.graph.add_requirement(req_id, title, level, status, parent_id, edge_kind)
+        self._ownership[req_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00201-G
+    def clone(self) -> FederatedGraph:
+        """Create a deep copy of this federated graph.
+
+        # Strategy: special — deep copy all sub-graphs independently
+        """
+        return copy.deepcopy(self)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Undo Operations
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00201-C
+    def undo_last(self) -> MutationEntry | None:
+        """Undo the most recent mutation across all repos.
+
+        Reads the federated log to identify which repo was last mutated,
+        then delegates undo to that sub-graph.
+        """
+        ptr = self._federated_log.pop()
+        if ptr is None:
+            return None
+        entry = self._repos.get(ptr.repo_name)
+        if entry and entry.graph:
+            result = entry.graph.undo_last()
+            if result:
+                # Reverse any ownership changes
+                self._rebuild_ownership()
+            return result
+        return None
+
+    # Implements: REQ-d00201-C
+    def undo_to(self, mutation_id: str) -> list[MutationEntry]:
+        """Undo all mutations back to (and including) a specific mutation.
+
+        Reads the federated log and delegates undo to the correct sub-graphs.
+        """
+        pointers = self._federated_log.entries_since(mutation_id)
+        undone: list[MutationEntry] = []
+        # Undo in reverse order
+        for _ in range(len(pointers)):
+            result = self.undo_last()
+            if result:
+                undone.append(result)
+        return undone
+
+    def _rebuild_ownership(self) -> None:
+        """Rebuild the ownership map from all sub-graph indexes."""
+        self._ownership.clear()
+        for entry in self._repos.values():
+            if entry.graph is not None:
+                for node_id in entry.graph._index:
+                    self._ownership[node_id] = entry.name

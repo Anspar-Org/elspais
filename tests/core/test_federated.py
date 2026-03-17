@@ -16,6 +16,8 @@ from elspais.config import ConfigLoader
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import NodeKind
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
     make_code_ref,
@@ -317,3 +319,212 @@ class TestFederatedGraphReadOnly:
         req_node = fed.find_by_id("REQ-p00010")
         assert req_node is not None
         assert fed.is_reachable_to_requirement(req_node) is False
+
+
+# === Mutation Tests ===
+
+
+class TestFederatedGraphMutations:
+    """Tests for FederatedGraph mutation delegation.
+
+    Validates REQ-d00201-A: by_id mutations delegate to correct sub-graph
+    Validates REQ-d00201-B: unified mutation log records entries
+    Validates REQ-d00201-C: undo delegates to correct sub-graph
+    Validates REQ-d00201-D: add_requirement with target_repo
+    Validates REQ-d00201-E: cross-graph edge mutations
+    Validates REQ-d00201-F: mutation_log iter_entries yields MutationEntry
+    Validates REQ-d00201-G: clone creates independent copy
+    """
+
+    @pytest.fixture()
+    def fed_with_graph(self) -> FederatedGraph:
+        """Create a FederatedGraph with a PRD and DEV requirement."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Parent PRD", level="PRD"),
+            make_requirement(
+                "REQ-d00001",
+                title="Child DEV",
+                level="DEV",
+                implements=["REQ-p00001"],
+                source_path="spec/dev.md",
+            ),
+            repo_root=Path("/repo/core"),
+        )
+        config = ConfigLoader.from_dict({})
+        return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
+
+    @pytest.fixture()
+    def fed_with_unlinked(self) -> FederatedGraph:
+        """Create a FederatedGraph with a requirement and unlinked code node."""
+        graph = build_graph(
+            make_requirement("REQ-p00010", title="Feature", level="PRD"),
+            make_requirement(
+                "REQ-d00010",
+                title="Dev Feature",
+                level="DEV",
+                source_path="spec/dev.md",
+            ),
+            make_code_ref(["REQ-p00010"], source_path="src/feature.py"),
+            repo_root=Path("/repo/core"),
+        )
+        config = ConfigLoader.from_dict({})
+        return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
+
+    def test_REQ_d00201_A_rename_node_delegates_and_updates_ownership(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """rename_node delegates to sub-graph and updates _ownership map."""
+        fed = fed_with_graph
+        # Rename REQ-d00001 -> REQ-d00099
+        fed.rename_node("REQ-d00001", "REQ-d00099")
+
+        # Old ID should not be found
+        assert fed.find_by_id("REQ-d00001") is None
+        # New ID should be found
+        node = fed.find_by_id("REQ-d00099")
+        assert node is not None
+        assert node.id == "REQ-d00099"
+        # repo_for should work with new ID
+        entry = fed.repo_for("REQ-d00099")
+        assert entry.name == "root"
+
+    def test_REQ_d00201_A_update_title_delegates(self, fed_with_graph: FederatedGraph) -> None:
+        """update_title delegates to sub-graph, node label changes."""
+        fed = fed_with_graph
+        fed.update_title("REQ-p00001", "Updated Title")
+
+        node = fed.find_by_id("REQ-p00001")
+        assert node is not None
+        assert node.get_label() == "Updated Title"
+
+    def test_REQ_d00201_A_change_status_delegates(self, fed_with_graph: FederatedGraph) -> None:
+        """change_status delegates to sub-graph, status field changes."""
+        fed = fed_with_graph
+        fed.change_status("REQ-p00001", "Deprecated")
+
+        node = fed.find_by_id("REQ-p00001")
+        assert node is not None
+        assert node.get_field("status") == "Deprecated"
+
+    def test_REQ_d00201_A_delete_requirement_removes_ownership(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """delete_requirement removes node from graph and ownership map."""
+        fed = fed_with_graph
+        fed.delete_requirement("REQ-d00001")
+
+        assert fed.find_by_id("REQ-d00001") is None
+
+    def test_REQ_d00201_B_mutation_log_records_entries(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """After a mutation, mutation_log.iter_entries() yields entries."""
+        fed = fed_with_graph
+        fed.update_title("REQ-p00001", "New Title")
+
+        entries = list(fed.mutation_log.iter_entries())
+        assert len(entries) >= 1
+        # Most recent entry should be about the title update
+        last = entries[-1]
+        assert last.operation == "update_title"
+        assert last.target_id == "REQ-p00001"
+
+    def test_REQ_d00201_C_undo_last_delegates_to_subgraph(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """undo_last reverts the most recent mutation via the correct sub-graph."""
+        fed = fed_with_graph
+        original_title = fed.find_by_id("REQ-p00001").get_label()
+        fed.update_title("REQ-p00001", "Temporary Title")
+        assert fed.find_by_id("REQ-p00001").get_label() == "Temporary Title"
+
+        fed.undo_last()
+        assert fed.find_by_id("REQ-p00001").get_label() == original_title
+
+    def test_REQ_d00201_C_undo_to_reverts_multiple(self, fed_with_graph: FederatedGraph) -> None:
+        """undo_to reverts all mutations back to (and including) the specified one."""
+        fed = fed_with_graph
+        original_title = fed.find_by_id("REQ-p00001").get_label()
+
+        # First mutation
+        fed.update_title("REQ-p00001", "Title A")
+        entries = list(fed.mutation_log.iter_entries())
+        first_mutation_id = entries[-1].id
+
+        # Second mutation
+        fed.update_title("REQ-p00001", "Title B")
+        assert fed.find_by_id("REQ-p00001").get_label() == "Title B"
+
+        # Undo back to the first mutation (both should revert)
+        fed.undo_to(first_mutation_id)
+        assert fed.find_by_id("REQ-p00001").get_label() == original_title
+
+    def test_REQ_d00201_D_add_requirement_to_root_repo(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """add_requirement without target_repo adds to root repo."""
+        fed = fed_with_graph
+        fed.add_requirement("REQ-d00050", "New Requirement", level="DEV")
+
+        node = fed.find_by_id("REQ-d00050")
+        assert node is not None
+        assert node.get_label() == "New Requirement"
+        # Should be in root repo
+        entry = fed.repo_for("REQ-d00050")
+        assert entry.name == "root"
+
+    def test_REQ_d00201_E_add_edge_within_same_repo(
+        self, fed_with_unlinked: FederatedGraph
+    ) -> None:
+        """add_edge creates an edge between two nodes in the same repo."""
+        fed = fed_with_unlinked
+        # REQ-d00010 exists but has no implements edge — add one
+        fed.add_edge("REQ-d00010", "REQ-p00010", EdgeKind.IMPLEMENTS)
+
+        # Verify the edge exists by checking the node's parents
+        node = fed.find_by_id("REQ-d00010")
+        assert node is not None
+        parent_ids = {p.id for p in node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
+        assert "REQ-p00010" in parent_ids
+
+    def test_REQ_d00201_E_delete_edge_delegates(self, fed_with_graph: FederatedGraph) -> None:
+        """delete_edge removes an existing edge via delegation."""
+        fed = fed_with_graph
+        # REQ-d00001 implements REQ-p00001 — delete that edge
+        fed.delete_edge("REQ-d00001", "REQ-p00001")
+
+        node = fed.find_by_id("REQ-d00001")
+        assert node is not None
+        parent_ids = {p.id for p in node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
+        assert "REQ-p00001" not in parent_ids
+
+    def test_REQ_d00201_F_mutation_log_iter_entries_compatible(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """iter_entries yields MutationEntry objects with expected fields."""
+        fed = fed_with_graph
+        fed.update_title("REQ-p00001", "Check Entry Type")
+
+        entries = list(fed.mutation_log.iter_entries())
+        assert len(entries) >= 1
+        for entry in entries:
+            assert isinstance(entry, MutationEntry)
+            assert hasattr(entry, "id")
+            assert hasattr(entry, "operation")
+            assert hasattr(entry, "target_id")
+            assert hasattr(entry, "timestamp")
+
+    def test_REQ_d00201_G_clone_creates_independent_copy(
+        self, fed_with_graph: FederatedGraph
+    ) -> None:
+        """clone() creates an independent copy; mutations on clone don't affect original."""
+        fed = fed_with_graph
+        original_title = fed.find_by_id("REQ-p00001").get_label()
+
+        cloned = fed.clone()
+        cloned.update_title("REQ-p00001", "Cloned Title")
+
+        # Clone should have new title
+        assert cloned.find_by_id("REQ-p00001").get_label() == "Cloned Title"
+        # Original should be unchanged
+        assert fed.find_by_id("REQ-p00001").get_label() == original_title
