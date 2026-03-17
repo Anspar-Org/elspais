@@ -4202,7 +4202,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a requirement and its assertions. Requires confirm=True (safety guard)."""
+        """Delete a requirement and its assertions. Returns error unless confirm=True."""
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4223,7 +4223,10 @@ def create_server(
     def mutate_delete_assertion(
         assertion_id: str, compact: bool = True, confirm: bool = False
     ) -> dict[str, Any]:
-        """Delete an assertion (requires confirm=True). Labels re-sequenced if compact=True."""
+        """Delete an assertion. Returns error unless confirm=True.
+
+        Remaining labels re-sequenced if compact=True.
+        """
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
@@ -4273,7 +4276,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Remove a traceability relationship between nodes. Requires confirm=True."""
+        """Remove a traceability relationship between nodes. Returns error unless confirm=True."""
         return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
 
     @mcp.tool()
