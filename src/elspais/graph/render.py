@@ -427,7 +427,7 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
 # Implements: REQ-d00132-A, REQ-d00132-C
 def render_save(
     graph: FederatedGraph,
-    repo_root: Path,
+    repo_root: Path | None = None,
     consistency_check: bool = False,
     rebuild_fn: Any | None = None,
     resolver: Any | None = None,
@@ -436,11 +436,14 @@ def render_save(
 
     Identifies FILE nodes with pending mutations, renders each one's
     content by walking CONTAINS children in render_order, and writes
-    the result to disk.
+    the result to disk. For multi-repo federations, each file is resolved
+    against its owning repo's root path.
 
     Args:
-        graph: The traceability graph with pending mutations.
+        graph: The federated graph with pending mutations.
         repo_root: Repository root path for resolving relative paths.
+            Defaults to graph.repo_root. For multi-repo, each file uses
+            its owning repo's root.
         consistency_check: If True, rebuild graph from disk after save and
             compare to pre-save state. Requires rebuild_fn.
         rebuild_fn: Callable that rebuilds a TraceGraph from disk, returning
@@ -459,6 +462,10 @@ def render_save(
     files_modified: set[str] = set()
     skipped: list[str] = []
     saved_count = 0
+
+    # Default repo_root from graph if not provided
+    if repo_root is None:
+        repo_root = graph.repo_root
 
     # Ensure new requirements are wired to FILE nodes before rendering
     _wire_new_requirements_to_files(graph)
@@ -484,8 +491,16 @@ def render_save(
             old_rel = entry.before_state.get("relative_path", "")
             new_rel = entry.after_state.get("relative_path", "")
             if old_rel and new_rel:
-                old_path = repo_root / old_rel
-                new_path = repo_root / new_rel
+                # Resolve rename paths via owning repo's root
+                rename_root = repo_root
+                if hasattr(graph, "repo_for"):
+                    new_file_id = entry.after_state.get("id", "")
+                    try:
+                        rename_root = graph.repo_for(new_file_id).repo_root
+                    except KeyError:
+                        pass
+                old_path = rename_root / old_rel
+                new_path = rename_root / new_rel
                 if old_path.exists() and not new_path.exists():
                     new_path.parent.mkdir(parents=True, exist_ok=True)
                     old_path.rename(new_path)
@@ -502,9 +517,16 @@ def render_save(
             skipped.append(f"{file_id}: no relative_path")
             continue
 
+        # Resolve absolute path using owning repo's root
         abs_path = Path(rel_path)
         if not abs_path.is_absolute():
-            abs_path = repo_root / rel_path
+            file_root = repo_root
+            if hasattr(graph, "repo_for"):
+                try:
+                    file_root = graph.repo_for(file_id).repo_root
+                except KeyError:
+                    pass
+            abs_path = file_root / rel_path
 
         try:
             content = render_file(file_node)
