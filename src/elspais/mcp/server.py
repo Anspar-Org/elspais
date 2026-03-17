@@ -3892,12 +3892,18 @@ def create_server(
 
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
-        """Node counts by kind, orphan/broken-ref flags."""
+        """Quick health snapshot: requirement/assertion/test counts, orphan and broken-ref flags.
+
+        Use when: you need a fast overview of project health without running full checks.
+        """
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
     def refresh_graph(full: bool = False, path: str = "") -> dict[str, Any]:
-        """Rebuild graph from spec files.
+        """Reload the requirements graph from spec files on disk.
+
+        Use when: spec files were edited outside of mutation tools, or after
+        switching branches. Required after manual file edits to see changes.
 
         Args:
             full: If True, clear all caches before rebuild.
@@ -3930,15 +3936,26 @@ def create_server(
         regex: bool = False,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Search requirements by ID, title, or content.
+        """Find requirements by keyword, ID, or content. Returns ranked results.
 
-        Multi-term query syntax (when regex=False):
-        - Space-separated terms: implicit AND
-        - ``OR`` between terms: disjunctive matching
-        - ``(...)`` grouping: explicit precedence
-        - ``"..."`` phrases: exact contiguous substring
-        - ``-term``: exclude matching nodes
-        - ``=term``: exact keyword match (vs substring)
+        Use when: looking for requirements about a topic, finding a REQ by partial
+        ID, or answering "which requirement covers X?". For searching within a
+        specific subtree, use scoped_search() or discover_requirements() instead.
+
+        Query syntax (when regex=False):
+        - ``auth encryption`` — AND: both terms must match (default)
+        - ``auth OR encryption`` — OR: either term matches
+        - ``(auth OR login) encryption`` — grouping with parentheses
+        - ``"data at rest"`` — exact phrase match
+        - ``-deprecated`` — exclude results containing "deprecated"
+        - ``=security`` — exact keyword tag match (not substring)
+
+        Tip: space-separated terms are AND'd, which can be too restrictive.
+        Use OR between terms when you want broader results:
+        ``authentication OR login OR session`` finds any of those topics.
+
+        Results are scored by field: ID match (100), title (50),
+        keyword-exact (40), keyword-substring (25), body (10).
         """
         return _search(_state["graph"], query, field, regex, limit)
 
@@ -3947,7 +3964,11 @@ def create_server(
         req_ids: list[str],
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Prune to most-specific requirements, removing ancestors covered by descendants."""
+        """Remove ancestors superseded by more-specific descendants from a requirement ID list.
+
+        Use when: you have search results and want to eliminate redundant parent
+        requirements already covered by their children in the list.
+        """
         # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -3970,7 +3991,13 @@ def create_server(
         include_assertions: bool = False,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Search within a subgraph rooted at scope_id."""
+        """Search for requirements within a specific subtree only.
+
+        Use when: you know the parent requirement and want to find matching
+        descendants (or ancestors). Same query syntax as search().
+        Prefer discover_requirements() when you want only the most-specific
+        (leaf-level) matches with ancestors pruned out.
+        """
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
@@ -3986,7 +4013,13 @@ def create_server(
         limit: int = 50,
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Search within a subgraph and return only the most-specific matches."""
+        """Search within a subtree and return only the most-specific (leaf-level) matches.
+
+        Use when: finding which DEV/OPS requirements implement a concept under a
+        specific PRD. Combines scoped_search + minimize_requirement_set in one call:
+        searches descendants of scope_id, then prunes ancestor matches that are
+        superseded by more-specific descendants.
+        """
         # REQ-d00079-D: Parse edge_kinds and delegate
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -4011,12 +4044,20 @@ def create_server(
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
-        """Get full details for a single requirement."""
+        """Get full details for a single requirement.
+
+        Use when: you have a requirement ID and need its title, status, level,
+        assertions, parent/child relationships, code refs, and test coverage.
+        """
         return _get_requirement(_state["graph"], req_id)
 
     @mcp.tool()
     def get_node(node_id: str) -> dict[str, Any]:
-        """Get full details for any graph node by ID."""
+        """Get full details for any graph node by ID (requirement, assertion, test, code, file).
+
+        Use when: you have any node ID (not just requirements) and need its details.
+        For requirement IDs specifically, get_requirement() returns richer context.
+        """
         return _get_node(_state["graph"], node_id)
 
     @mcp.tool()
@@ -4029,12 +4070,16 @@ def create_server(
         actor: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Filter nodes by kind, keywords, level, status, or actor.
+        """List nodes filtered by structured criteria (kind, level, status, keywords).
+
+        Use when: you need to enumerate nodes by type or status rather than
+        free-text search. For example, "all Draft DEV requirements" or
+        "all test nodes with keyword 'auth'". For free-text search, use search().
 
         Args:
             kind: NodeKind value: requirement, journey, test, result, code.
-            keywords: Comma-separated keywords to search for.
-            match_all: True (default) = AND, False = OR for keywords.
+            keywords: Comma-separated keyword tags to match against.
+            match_all: True (default) = ALL keywords must match, False = ANY.
             level: PRD, OPS, DEV (requirements only).
             status: Requirement or test result status.
             actor: Journey actor.
@@ -4054,7 +4099,11 @@ def create_server(
 
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:
-        """Get requirement hierarchy (ancestors and children)."""
+        """Trace a requirement's position in the hierarchy: ancestors up to roots, direct children.
+
+        Use when: understanding where a requirement fits — what it implements (parents)
+        and what implements it (children). Shows the full chain from DEV up to PRD.
+        """
         return _get_hierarchy(_state["graph"], req_id)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4063,7 +4112,10 @@ def create_server(
 
     @mcp.tool()
     def get_workspace_info(detail: str = "default") -> dict[str, Any]:
-        """Workspace config, paths, and use-case-specific details.
+        """Project identity, configuration, and federation details.
+
+        Use when: understanding what project you're working with — name, ID patterns,
+        spec directories, hierarchy rules, test config, associate repos, coverage stats.
 
         Args:
             detail: Profile to return: 'default', 'testing', 'code-refs',
@@ -4078,17 +4130,28 @@ def create_server(
 
     @mcp.tool()
     def get_project_summary() -> dict[str, Any]:
-        """Requirement counts by level, coverage stats, change metrics."""
+        """Project overview: requirement counts by level, coverage percentages, change metrics.
+
+        Use when: you need a high-level status report of the project's requirements.
+        """
         return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     @mcp.tool()
     def get_changed_requirements() -> dict[str, Any]:
-        """Requirements with uncommitted, branch-changed, or moved status."""
+        """Detect which requirements have been modified since last commit or branch point.
+
+        Use when: checking what changed in the current working tree or feature branch,
+        reviewing spec modifications before commit, or finding moved requirements.
+        """
         return _get_changed_requirements(_state["graph"])
 
     @mcp.tool()
     def agent_instructions() -> dict[str, Any]:
-        """Project-specific authoring guidance for AI agents."""
+        """Content rules and authoring guidance configured for this project.
+
+        Use when: writing or editing requirements — tells you the project's
+        conventions for assertion format, keyword style, hash handling, etc.
+        """
         return _get_agent_instructions(_state["config"], _state["working_dir"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4097,12 +4160,12 @@ def create_server(
 
     @mcp.tool()
     def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
-        """Rename a requirement node."""
+        """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references."""
         return _mutate_rename_node(_state["graph"], old_id, new_id)
 
     @mcp.tool()
     def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
-        """Update a requirement's title."""
+        """Change a requirement's display title."""
         return _mutate_update_title(_state["graph"], node_id, new_title)
 
     @mcp.tool()
@@ -4123,10 +4186,13 @@ def create_server(
         parent_id: str | None = None,
         edge_kind: str | None = None,
     ) -> dict[str, Any]:
-        """Create a new requirement.
+        """Create a new requirement in the graph (in-memory until save_mutations).
 
         Args:
+            req_id: The new requirement ID (e.g., REQ-d00010).
+            title: Human-readable title.
             level: PRD, OPS, or DEV.
+            status: Initial status (default: Draft).
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
         """
@@ -4136,7 +4202,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a requirement."""
+        """Delete a requirement and its assertions. Requires confirm=True (safety guard)."""
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4145,24 +4211,24 @@ def create_server(
 
     @mcp.tool()
     def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
-        """Add an assertion to a requirement."""
+        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL."""
         return _mutate_add_assertion(_state["graph"], req_id, label, text)
 
     @mcp.tool()
     def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
-        """Update an assertion's text."""
+        """Rewrite an assertion's text (e.g., REQ-p00001-A)."""
         return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
 
     @mcp.tool()
     def mutate_delete_assertion(
         assertion_id: str, compact: bool = True, confirm: bool = False
     ) -> dict[str, Any]:
-        """Delete an assertion."""
+        """Delete an assertion (requires confirm=True). Labels re-sequenced if compact=True."""
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
     def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
-        """Rename an assertion's label."""
+        """Change an assertion's label (e.g., rename B to D). Updates all references."""
         return _mutate_rename_assertion(_state["graph"], old_id, new_label)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4176,7 +4242,7 @@ def create_server(
         edge_kind: str,
         assertion_targets: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add an edge between nodes.
+        """Add a traceability relationship (Implements, Refines, Validates) between nodes.
 
         source_id is the child (the requirement doing the implementing/refining).
         target_id is the parent (the requirement being implemented/refined).
@@ -4207,14 +4273,14 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete an edge between nodes."""
+        """Remove a traceability relationship between nodes. Requires confirm=True."""
         return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
 
     @mcp.tool()
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str
     ) -> dict[str, Any]:
-        """Fix a broken reference by redirecting to a valid target."""
+        """Repair a broken reference by redirecting it to a valid target node."""
         return _mutate_fix_broken_reference(
             _state["graph"], source_id, old_target_id, new_target_id
         )
@@ -4260,22 +4326,32 @@ def create_server(
 
     @mcp.tool()
     def undo_last_mutation() -> dict[str, Any]:
-        """Undo the most recent mutation."""
+        """Revert the most recent in-memory mutation (before save_mutations)."""
         return _undo_last_mutation(_state["graph"])
 
     @mcp.tool()
     def undo_to_mutation(mutation_id: str) -> dict[str, Any]:
-        """Undo all mutations back to a specific point (inclusive)."""
+        """Revert all in-memory mutations back to a specific point (inclusive).
+
+        Use get_mutation_log() to find mutation IDs.
+        """
         return _undo_to_mutation(_state["graph"], mutation_id)
 
     @mcp.tool()
     def get_mutation_log(limit: int = 50) -> dict[str, Any]:
-        """Get mutation history."""
+        """List pending in-memory mutations (not yet saved to disk).
+
+        Shows what save_mutations() will persist.
+        """
         return _get_mutation_log(_state["graph"], limit)
 
     @mcp.tool()
     def get_orphaned_nodes() -> dict[str, Any]:
-        """Structural orphans — nodes without any FILE ancestor."""
+        """Find requirements not contained in any spec file (structural orphans).
+
+        Use when: diagnosing graph health issues — orphaned nodes are typically
+        the result of failed parsing or manual graph manipulation.
+        """
         return _get_orphaned_nodes(_state["graph"])
 
     @mcp.tool()
@@ -4296,7 +4372,10 @@ def create_server(
 
     @mcp.tool()
     def get_broken_references() -> dict[str, Any]:
-        """Edges pointing to non-existent nodes."""
+        """Find Implements/Refines references that point to non-existent requirement IDs.
+
+        Use when: checking for broken links after renaming or deleting requirements.
+        """
         return _get_broken_references(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4308,12 +4387,19 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find requirements containing specified keywords."""
+        """Find requirements by curated keyword tags (from [keywords] metadata in specs).
+
+        Use when: filtering by explicit keyword annotations, not free-text content.
+        For free-text search across titles, bodies, and IDs, use search() instead.
+        """
         return _find_by_keywords(_state["graph"], keywords, match_all)
 
     @mcp.tool()
     def get_all_keywords() -> dict[str, Any]:
-        """Get all unique keywords from the graph."""
+        """List all keyword tags used across requirements.
+
+        Useful for discovering available filter terms for find_by_keywords().
+        """
         return _get_all_keywords(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4322,15 +4408,21 @@ def create_server(
 
     @mcp.tool()
     def get_test_coverage(req_id: str) -> dict[str, Any]:
-        """Get test coverage for a requirement."""
+        """Which tests validate a requirement and which assertions are covered/uncovered.
+
+        Use when: checking if a requirement has adequate test coverage, or finding
+        which specific assertions still need tests written.
+        """
         return _get_test_coverage(_state["graph"], req_id)
 
     @mcp.tool()
     def get_uncovered_assertions(req_id: str | None = None) -> dict[str, Any]:
-        """Assertions with no test coverage.
+        """Find assertions that have no tests validating them.
+
+        Use when: identifying test gaps — assertions that need tests written.
 
         Args:
-            req_id: Optional requirement ID. When None, scan all requirements.
+            req_id: Optional requirement ID to check. When None, scans ALL requirements.
         """
         return _get_uncovered_assertions(_state["graph"], req_id)
 
@@ -4339,7 +4431,11 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find assertions containing specified keywords."""
+        """Search assertion text for keywords (e.g., find all assertions mentioning "encrypt").
+
+        Use when: looking for specific obligations across all requirements.
+        Searches assertion text, not requirement titles — complements search().
+        """
         return _find_assertions_by_keywords(_state["graph"], keywords, match_all)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4408,7 +4504,10 @@ def create_server(
 
     @mcp.tool()
     def list_safety_branches() -> dict[str, Any]:
-        """List all safety branches."""
+        """List git safety branches created by save_mutations(save_branch=True).
+
+        Use for rollback via restore_from_safety_branch().
+        """
         return _list_safety_branches_impl(_state["working_dir"])
 
     @mcp.tool()
@@ -4487,7 +4586,11 @@ def create_server(
         file_path: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Suggest requirement links for unlinked test nodes."""
+        """Suggest which requirements an unlinked test or code file should reference.
+
+        Use when: a test file has no ``# Implements:`` comment and you want
+        recommendations based on function names, imports, and file proximity.
+        """
         return _suggest_links_impl(
             _state["graph"],
             _state["working_dir"],
@@ -4525,9 +4628,14 @@ def create_server(
         include_kinds: str = "",
         format: str = "markdown",
     ) -> dict[str, Any]:
-        """Extract a subgraph rooted at a given node.
+        """Extract a requirement subtree as markdown, flat JSON, or nested JSON.
+
+        Use when: providing context about a requirement and its descendants to a
+        sub-agent, generating a scoped view of the hierarchy, or exporting a
+        section of the traceability graph.
 
         Args:
+            root_id: ID of the root node to start from.
             depth: Max depth from root (0 = unlimited).
             include_kinds: Comma-separated NodeKind values to include.
                 Empty string uses conservative defaults per root kind.
@@ -4551,11 +4659,15 @@ def create_server(
         params: dict[str, Any] | None = None,
         batch_size: int = 1,
     ) -> dict[str, Any]:
-        """Open a cursor for incremental iteration over query results.
+        """Open a cursor for paginated iteration over any query result set.
+
+        Use when: a query might return many results and you want to process
+        them one at a time without loading everything. Use cursor_next() to
+        advance and cursor_info() to check position.
 
         Args:
             query: 'subtree', 'search', 'hierarchy', 'query_nodes',
-                'test_coverage', or 'uncovered_assertions'.
+                'test_coverage', 'uncovered_assertions', or 'scoped_search'.
             params: Query-specific parameters as a dict.
             batch_size: -1=assertions first-class, 0=nodes with inline
                 assertions, 1=nodes with children summaries.
@@ -4571,12 +4683,12 @@ def create_server(
     def cursor_next(
         count: int = 1,
     ) -> dict[str, Any]:
-        """Advance cursor and return next items."""
+        """Get next item(s) from an open cursor. Call after open_cursor()."""
         return _cursor_next(_state, count=count)
 
     @mcp.tool()
     def cursor_info() -> dict[str, Any]:
-        """Cursor position, total, and remaining count."""
+        """Check cursor state: current position, total items, and how many remain."""
         return _cursor_info(_state)
 
     return mcp
