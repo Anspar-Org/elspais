@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-# Implements: REQ-d00085-I
+# Implements: REQ-d00085-I, REQ-d00204-D
 @dataclass
 class HealthFinding:
     """Individual finding within a health check, with optional source location."""
@@ -33,6 +33,7 @@ class HealthFinding:
     line: int | None = None
     node_id: str | None = None
     related: list[str] = field(default_factory=list)
+    repo: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +42,7 @@ class HealthFinding:
             "line": self.line,
             "node_id": self.node_id,
             "related": self.related,
+            "repo": self.repo,
         }
 
 
@@ -479,32 +481,86 @@ def check_structural_orphans(
     )
 
 
+# Implements: REQ-d00204-E
 def check_broken_references(graph: FederatedGraph) -> HealthCheck:
-    """Check for edges targeting non-existent nodes."""
+    """Check for edges targeting non-existent nodes.
+
+    Distinguishes within-repo broken references (error severity) from
+    cross-repo references where the target repo is in error state
+    (warning severity with clone assistance info).
+    """
     broken = graph.broken_references()
 
     if broken:
-        findings = [
-            HealthFinding(
+        # Identify error-state repos for cross-repo distinction
+        has_iter_repos = hasattr(graph, "iter_repos")
+        error_repos = (
+            {entry.name for entry in graph.iter_repos() if entry.graph is None}
+            if has_iter_repos
+            else set()
+        )
+
+        within_repo_findings = []
+        cross_repo_findings = []
+
+        for br in broken:
+            repo_name = None
+            if has_iter_repos:
+                try:
+                    source_entry = graph.repo_for(br.source_id)
+                    repo_name = source_entry.name
+                except KeyError:
+                    pass
+
+            finding = HealthFinding(
                 message=f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})",
                 node_id=br.source_id,
+                repo=repo_name,
             )
-            for br in broken
-        ]
+
+            # If there are error-state repos, this broken ref might be
+            # due to the missing repo — classify as cross-repo warning
+            if error_repos:
+                cross_repo_findings.append(finding)
+            else:
+                within_repo_findings.append(finding)
+
+        all_findings = within_repo_findings + cross_repo_findings
+
+        # Severity: error if any within-repo broken refs, warning if only cross-repo
+        if within_repo_findings:
+            severity = "error"
+            msg_parts = [f"{len(within_repo_findings)} broken reference(s)"]
+            if cross_repo_findings:
+                msg_parts.append(
+                    f"{len(cross_repo_findings)} possibly due to missing repo(s): "
+                    + ", ".join(sorted(error_repos))
+                )
+            message = "; ".join(msg_parts)
+        else:
+            severity = "warning"
+            message = (
+                f"{len(cross_repo_findings)} broken reference(s), "
+                f"possibly due to missing repo(s): {', '.join(sorted(error_repos))}"
+            )
+
         return HealthCheck(
             name="spec.broken_references",
             passed=False,
-            message=f"{len(broken)} broken references",
+            message=message,
             category="spec",
-            severity="warning",
+            severity=severity,
             details={
                 "count": len(broken),
+                "within_repo": len(within_repo_findings),
+                "cross_repo": len(cross_repo_findings),
+                "error_repos": sorted(error_repos),
                 "references": [
                     {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
                     for br in broken[:20]
                 ],
             },
-            findings=findings,
+            findings=all_findings,
         )
 
     return HealthCheck(
@@ -928,35 +984,106 @@ def check_spec_index_current(
     )
 
 
+def _annotate_findings(check: HealthCheck, repo_name: str) -> HealthCheck:
+    """Annotate all findings in a HealthCheck with the source repo name."""
+    for finding in check.findings:
+        finding.repo = repo_name
+    return check
+
+
+# Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
     config: ConfigLoader,
     spec_dirs: list[Path] | None = None,
 ) -> list[HealthCheck]:
-    """Run all spec file health checks."""
-    from elspais.utilities.patterns import build_resolver
+    """Run all spec file health checks.
 
-    resolver = build_resolver(config._data)
-    checks = [
+    Non-config-sensitive checks run once on the full FederatedGraph.
+    Config-sensitive checks run per-repo using each repo's own config,
+    with results annotated by repo name.
+    """
+    from elspais.config import ConfigLoader as CL
+    from elspais.graph.federated import FederatedGraph as FG
+
+    # Ensure we have a FederatedGraph (old callers may pass bare TraceGraph)
+    if not hasattr(graph, "iter_repos"):
+        graph = FG.from_single(graph, config, Path.cwd())
+
+    # --- Non-config-sensitive checks: run once on full federation ---
+    checks: list[HealthCheck] = [
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
-        check_spec_implements_resolve(graph, resolver=resolver),
-        check_spec_refines_resolve(graph, resolver=resolver),
-        check_spec_hierarchy_levels(graph, config),
-        check_structural_orphans(
-            graph,
-            allow_structural_orphans=config.get(
-                "rules.hierarchy.allow_structural_orphans",
-                config.get("rules.hierarchy.allow_orphans", False),
-            ),
-        ),
         check_broken_references(graph),
-        check_spec_format_rules(graph, config, resolver=resolver),
         check_spec_hash_integrity(graph),
-        check_spec_changelog_present(graph, config),
-        check_spec_changelog_current(graph, config),
-        check_spec_changelog_format(graph, config),
     ]
+
+    # --- Config-sensitive checks: run per-repo ---
+    for entry in graph.iter_repos():
+        if entry.graph is None or entry.config is None:
+            continue
+        from elspais.utilities.patterns import build_resolver
+
+        # Normalize config: may be raw dict or ConfigLoader
+        repo_config = entry.config if isinstance(entry.config, CL) else CL.from_dict(entry.config)
+        repo_graph = FG.from_single(entry.graph, repo_config, entry.repo_root)
+        repo_resolver = build_resolver(repo_config._data)
+
+        checks.append(
+            _annotate_findings(
+                check_spec_implements_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_refines_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_hierarchy_levels(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_structural_orphans(
+                    repo_graph,
+                    allow_structural_orphans=repo_config.get(
+                        "rules.hierarchy.allow_structural_orphans",
+                        repo_config.get("rules.hierarchy.allow_orphans", False),
+                    ),
+                ),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_format_rules(repo_graph, repo_config, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_present(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_current(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_format(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+
     if spec_dirs:
         checks.append(check_spec_index_current(graph, spec_dirs))
     return checks

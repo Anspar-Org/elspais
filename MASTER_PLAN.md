@@ -49,7 +49,7 @@ Remove legacy YAML loading from `associates.py`, `Sponsor`/`SponsorsConfig` alia
 - [x] **Verify**: 2755 passed, doc sync clean
 - [x] **Update docs**: CHANGELOG.md, CLAUDE.md
 - [x] **Bump version**: 0.104.34
-- [ ] **Commit**: pending
+- [x] **Commit**: 8554c9a
 
 ---
 
@@ -59,27 +59,15 @@ Modify health check functions in `commands/health.py` to iterate `fg.iter_repos(
 
 **TASK_FILE**: `FEDGRAPH_MP2_TASK_3.md`
 
-- [ ] **Baseline**: confirm tests pass before any changes
-- [ ] **Create TASK_FILE**: write the task description into it
-- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
-      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [ ] **Write failing tests** (use sub-agent):
-  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
-  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
-  - Confirm tests fail for the right reason (not syntax errors)
-  - Append test summary to TASK_FILE
-- [ ] **Implement**:
-  - Use existing code patterns and APIs — search before creating
-  - Add `# Implements: REQ-xxx` comments to new/modified source
-  - Append implementation summary to TASK_FILE
-- [ ] **Verify**:
-  - All tests pass (no workarounds)
-  - Lint clean
-  - Append results to TASK_FILE
-- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [ ] **Bump version** in pyproject.toml
-- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [x] **Baseline**: 2755 passed
+- [x] **Create TASK_FILE**: FEDGRAPH_MP2_TASK_3.md
+- [x] **Find assertions**: Created REQ-d00204-A..F in spec/07-graph-architecture.md
+- [x] **Write failing tests**: 10 tests in tests/commands/test_health_per_repo.py
+- [x] **Implement**: per-repo delegation in run_spec_checks, enhanced check_broken_references
+- [x] **Verify**: 2765 passed (10 new), doc sync 68 passed
+- [x] **Update docs**: CHANGELOG.md
+- [x] **Bump version**: 0.104.35
+- [ ] **Commit**: pending
 
 ---
 

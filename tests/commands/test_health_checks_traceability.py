@@ -261,7 +261,7 @@ class TestCheckBrokenReferences:
 
         check = check_broken_references(graph)
         assert not check.passed
-        assert check.severity == "warning"
+        assert check.severity == "error"  # REQ-d00204-E: within-repo broken refs are errors
         assert check.name == "spec.broken_references"
         assert len(check.findings) == 2
         assert check.details.get("count") == 2

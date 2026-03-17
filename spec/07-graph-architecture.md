@@ -815,4 +815,30 @@ E. The root repo and all valid associates SHALL be combined into a single `Feder
 Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
 
 *End* *Multi-Repo Build Pipeline* | **Hash**: 00000000
+
+## REQ-d00204: Per-Repo Health Check Delegation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00002, REQ-d00200
+
+Health checks that depend on per-repo configuration SHALL run once per federated repo using that repo's own config, ensuring config isolation in multi-repo federations.
+
+## Assertions
+
+A. Config-sensitive health checks (hierarchy levels, format rules, reference resolution, structural orphans, changelog checks) SHALL run per-repo using each repo's own `ConfigLoader` from `RepoEntry.config`.
+
+B. Non-config-sensitive health checks (file parseability, duplicate IDs, hash integrity, index staleness) SHALL run once on the full `FederatedGraph`.
+
+C. Per-repo check results SHALL be merged into a single `HealthCheck` per check type, with `HealthFinding` entries annotated with a `repo` field identifying the source repository.
+
+D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
+
+E. `check_broken_references` SHALL distinguish within-repo broken references (error severity) from cross-repo broken references where the target repo is in error state (warning severity with clone assistance info).
+
+F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
+
+## Rationale
+
+Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
+
+*End* *Per-Repo Health Check Delegation* | **Hash**: 00000000
 ---

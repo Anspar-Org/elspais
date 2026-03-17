@@ -112,6 +112,7 @@ class TestHealthFindingSerialization:
             "line": 7,
             "node_id": "REQ-d00010-B",
             "related": ["REQ-p00001"],
+            "repo": None,
         }
 
     def test_REQ_d00085_I_report_to_dict_includes_findings(self) -> None:
