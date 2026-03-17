@@ -51,7 +51,7 @@ def coverage_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A", "text": "SHALL encrypt all data at rest"}
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -59,7 +59,7 @@ def coverage_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B", "text": "SHALL use TLS 1.3 for transit"}
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     assertion_c = GraphNode(
         id="REQ-p00001-C",
@@ -67,7 +67,7 @@ def coverage_graph():
         label="SHALL validate input parameters",
     )
     assertion_c._content = {"label": "C", "text": "SHALL validate input parameters"}
-    req_node.add_child(assertion_c)
+    req_node.link(assertion_c, EdgeKind.STRUCTURES)
 
     # Create TEST node that references assertion A
     test_node = GraphNode(
@@ -87,7 +87,7 @@ def coverage_graph():
         label="passed",
     )
     result_node._content = {"status": "passed", "duration": 0.5}
-    test_node.add_child(result_node)
+    test_node.link(result_node, EdgeKind.YIELDS)
 
     # Add second requirement with no test coverage
     req_node2 = GraphNode(
@@ -107,7 +107,7 @@ def coverage_graph():
         label="SHALL respond within 100ms",
     )
     assertion_d._content = {"label": "A", "text": "SHALL respond within 100ms"}
-    req_node2.add_child(assertion_d)
+    req_node2.link(assertion_d, EdgeKind.STRUCTURES)
 
     # Register all nodes
     graph._index = {

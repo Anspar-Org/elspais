@@ -191,11 +191,18 @@ class TestMarkdownRenderer:
         assert "\033[" not in result
 
     def test_render_preserves_blank_lines(self):
-        """Blank lines in content should be preserved."""
+        """Blank lines between paragraphs should be preserved."""
         content = "# Title\n\nParagraph one.\n\nParagraph two."
         result = render_markdown(content, use_color=False)
-        # Should have blank lines between content
-        assert "\n\n" in result or result.count("\n") >= 4
+        # Find both paragraphs and verify a blank line separates them
+        lines = result.split("\n")
+        p1_idx = next(i for i, line in enumerate(lines) if "Paragraph one" in line)
+        p2_idx = next(i for i, line in enumerate(lines) if "Paragraph two" in line)
+        # There should be at least one empty line between the two paragraphs
+        between = lines[p1_idx + 1 : p2_idx]
+        assert any(
+            line.strip() == "" for line in between
+        ), f"Expected blank line between paragraphs at lines {p1_idx} and {p2_idx}"
 
 
 class TestCLIIntegration:

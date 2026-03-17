@@ -1,0 +1,81 @@
+// Partial: _help-mode.js.j2 — Help bar that replaces native tooltips
+// Implements: REQ-p00006-A
+
+// =====================================================================
+// Help Mode — Replace browser tooltips with fixed help bar
+// =====================================================================
+
+var helpModeState = {
+    active: false,
+    savedTitles: new Map()
+};
+
+function toggleHelpMode() {
+    if (helpModeState.active) {
+        deactivateHelpMode();
+    } else {
+        activateHelpMode();
+    }
+}
+
+function activateHelpMode() {
+    helpModeState.active = true;
+    var bar = document.getElementById('help-bar');
+    var btn = document.getElementById('help-mode-btn');
+    if (bar) { bar.classList.remove('hidden'); }
+    if (btn) { btn.classList.add('active'); }
+
+    // Store and remove all title attributes to prevent native tooltips
+    helpModeState.savedTitles.clear();
+    document.querySelectorAll('[title]').forEach(function(el) {
+        helpModeState.savedTitles.set(el, el.getAttribute('title'));
+        el.removeAttribute('title');
+    });
+
+    // Add mouseover listener for data-help attributes
+    document.addEventListener('mouseover', helpModeHandler);
+    document.addEventListener('mouseout', helpModeOutHandler);
+}
+
+function deactivateHelpMode() {
+    helpModeState.active = false;
+    var bar = document.getElementById('help-bar');
+    var btn = document.getElementById('help-mode-btn');
+    if (bar) { bar.classList.add('hidden'); }
+    if (btn) { btn.classList.remove('active'); }
+
+    // Restore all title attributes
+    helpModeState.savedTitles.forEach(function(title, el) {
+        if (el.isConnected) {
+            el.setAttribute('title', title);
+        }
+    });
+    helpModeState.savedTitles.clear();
+
+    // Remove listeners
+    document.removeEventListener('mouseover', helpModeHandler);
+    document.removeEventListener('mouseout', helpModeOutHandler);
+
+    // Clear help text
+    var text = document.getElementById('help-bar-text');
+    if (text) { text.textContent = 'Hover over any control to see its description.'; }
+}
+
+function helpModeHandler(e) {
+    var target = e.target.closest('[data-help]');
+    if (!target) return;
+    var helpText = target.getAttribute('data-help');
+    var text = document.getElementById('help-bar-text');
+    if (text && helpText) {
+        text.textContent = helpText;
+    }
+}
+
+function helpModeOutHandler(e) {
+    var target = e.target.closest('[data-help]');
+    if (!target) return;
+    var text = document.getElementById('help-bar-text');
+    if (text) {
+        text.textContent = 'Hover over any control to see its description.';
+    }
+}

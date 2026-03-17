@@ -136,9 +136,9 @@ class TestResolveSpecDirInfo:
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
             '[project]\nname = "my-project"\n\n'
-            "[patterns.types]\n"
-            'prd = { id = "p", name = "PRD", level = 1 }\n'
-            'dev = { id = "d", name = "DEV", level = 3 }\n'
+            "[id-patterns.types]\n"
+            'prd = { level = 1, aliases = { letter = "p" } }\n'
+            'dev = { level = 3, aliases = { letter = "d" } }\n'
         )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -332,9 +332,9 @@ class TestRegenerateIndexAlignment:
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
             '[project]\nname = "test"\n\n'
-            "[patterns.types]\n"
-            'PRD = { id = "p", name = "PRD", level = 1 }\n'
-            'DEV = { id = "d", name = "DEV", level = 3 }\n'
+            "[id-patterns.types]\n"
+            'PRD = { level = 1, aliases = { letter = "p" } }\n'
+            'DEV = { level = 3, aliases = { letter = "d" } }\n'
         )
         graph = build_graph(
             make_requirement(

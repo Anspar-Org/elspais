@@ -94,7 +94,7 @@ A. Node mutations SHALL include: rename, update_title, change_status, add_requir
 
 B. Assertion mutations SHALL include: add_assertion, update_assertion, delete_assertion, rename_assertion.
 
-C. Edge mutations SHALL include: add_edge, change_edge_kind, delete_edge, fix_broken_reference.
+C. Edge mutations SHALL include: add_edge, change_edge_kind, change_edge_targets, delete_edge, fix_broken_reference.
 
 D. All mutations SHALL delegate to TraceGraph mutation methods, not implement mutation logic directly.
 
@@ -108,7 +108,7 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
-*End* *MCP Graph Mutation Tools* | **Hash**: bed69e43
+*End* *MCP Graph Mutation Tools* | **Hash**: 064271fb
 
 ---
 
@@ -725,6 +725,58 @@ D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds
 Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
 
 *End* *Discover Requirements Implementation* | **Hash**: 8498aa7c
+
+---
+
+## REQ-d00133: MCP FILE Node Integration
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-o00067, REQ-d00060, REQ-d00061
+
+MCP tools SHALL be aware of FILE nodes without exposing them where they do not belong.
+
+## Assertions
+
+A. `_get_subtree()` starting from a FILE node SHALL walk CONTAINS edges (producing the file's physical contents view), using `iter_children(edge_kinds={EdgeKind.CONTAINS})` at each BFS level.
+
+B. `_get_subtree()` starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), using `iter_children(edge_kinds={EdgeKind.IMPLEMENTS, EdgeKind.REFINES, EdgeKind.STRUCTURES})` at each BFS level.
+
+C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
+
+D. `_search()` SHALL NOT return FILE nodes in search results for requirement queries.
+
+E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dict (already satisfied by iterating all NodeKind values).
+
+F. MCP serialization of requirement and assertion nodes SHALL produce identical `file` and `line` fields as before the FILE node migration, using `file_node()` and `parse_line`.
+
+## Rationale
+
+FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
+
+*End* *MCP FILE Node Integration* | **Hash**: 4a81d28c
+
+---
+
+## REQ-d00205: MCP Federation Support
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00061, REQ-d00200
+
+The MCP server SHALL leverage FederatedGraph's per-repo config access for federation-aware operation.
+
+## Assertions
+
+A. `get_workspace_info()` SHALL include federation details when multiple repos are present: repo names, paths, error states, and git origins from `iter_repos()`.
+
+B. `refresh_graph()` SHALL sync `_state["config"]` with the rebuilt federation's root repo config to prevent config staleness.
+
+C. Node-specific config operations (assertion target normalization, edge mutation config) SHALL use `graph.config_for(node_id)` instead of global `_state["config"]`.
+
+D. Global operations (workspace info, agent instructions, project summary) SHALL continue to use root repo config from `_state["config"]`.
+
+## Rationale
+
+Without federation-aware config access, all MCP operations use the root repo's config regardless of which repo a node belongs to. Per-repo config access ensures correct ID pattern resolution and changelog settings for multi-repo operations. Federation info in workspace queries helps AI agents understand the multi-repo topology.
+
+*End* *MCP Federation Support* | **Hash**: ccc0ca12
 
 ---
 

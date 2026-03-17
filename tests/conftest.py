@@ -14,6 +14,27 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+# Test run metadata sidecar for elspais health visibility.
+# Any test runner can produce this format; this is the pytest implementation.
+_REPO_ROOT = Path(__file__).parent.parent
+_RUN_META_PATH = _REPO_ROOT / "test-run-meta.json"
+
+
+def pytest_deselected(items):
+    """Write deselected test metadata to sidecar JSON for elspais."""
+    import json
+
+    _RUN_META_PATH.write_text(
+        json.dumps(
+            {
+                "runner": "pytest",
+                "deselected_count": len(items),
+                "deselected": [item.nodeid for item in items],
+            },
+            indent=2,
+        )
+    )
+
 
 @pytest.fixture
 def fixtures_dir() -> Path:
@@ -76,6 +97,30 @@ def assertions_fixture() -> Path:
 
 
 @pytest.fixture
+def hht_resolver():
+    """Return an IdResolver configured for the standard HHT-like pattern."""
+    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+    config = IdPatternConfig.from_dict(
+        {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
+                "aliases": {"short": "{type.letter}{component}"},
+                "types": {
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase", "max_count": 26},
+            },
+        }
+    )
+    return IdResolver(config)
+
+
+@pytest.fixture
 def temp_project(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary project directory for testing."""
     project_dir = tmp_path / "test-project"
@@ -109,24 +154,21 @@ def sample_config_dict() -> dict:
         "project": {
             "name": "test-project",
             "type": "core",
+            "namespace": "REQ",
         },
         "directories": {
             "spec": "spec",
             "docs": "docs",
         },
-        "patterns": {
-            "id_template": "{prefix}-{type}{id}",
-            "prefix": "REQ",
+        "id-patterns": {
+            "canonical": "{namespace}-{type.letter}{component}",
+            "aliases": {"short": "{type.letter}{component}"},
             "types": {
-                "prd": {"id": "p", "level": 1},
-                "ops": {"id": "o", "level": 2},
-                "dev": {"id": "d", "level": 3},
+                "prd": {"level": 1, "aliases": {"letter": "p"}},
+                "ops": {"level": 2, "aliases": {"letter": "o"}},
+                "dev": {"level": 3, "aliases": {"letter": "d"}},
             },
-            "id_format": {
-                "style": "numeric",
-                "digits": 5,
-                "leading_zeros": True,
-            },
+            "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
         },
         "rules": {
             "hierarchy": {
@@ -136,7 +178,7 @@ def sample_config_dict() -> dict:
                     "prd -> prd",
                 ],
                 "allow_circular": False,
-                "allow_orphans": False,
+                "allow_structural_orphans": False,
             },
             "format": {
                 "require_hash": True,

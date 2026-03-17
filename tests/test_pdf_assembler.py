@@ -16,7 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.relations import EdgeKind
 from elspais.pdf.assembler import MarkdownAssembler
 
 # ---------------------------------------------------------------------------
@@ -154,18 +155,22 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         (spec_dir / "dev-login.md").write_text(_DEV_LOGIN_MD, encoding="utf-8")
         (spec_dir / "dev-session.md").write_text(_DEV_SESSION_MD, encoding="utf-8")
 
+    from tests.core.graph_test_helpers import wire_file_parent
+
     # PRD requirement in prd-auth.md (root, depth 0)
     prd = GraphNode(
         id="REQ-p00001",
         kind=NodeKind.REQUIREMENT,
         label="Authentication",
-        source=SourceLocation(path="spec/prd-auth.md", line=7),
     )
     prd._content = {
         "level": "PRD",
         "status": "Active",
         "hash": "aaa11111",
+        "parse_line": 7,
+        "parse_end_line": None,
     }
+    wire_file_parent(prd, "spec/prd-auth.md", line=7, graph=graph)
     graph._index["REQ-p00001"] = prd
     graph._roots.append(prd)
 
@@ -174,18 +179,16 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         id="REQ-p00001-A",
         kind=NodeKind.ASSERTION,
         label="The tool SHALL authenticate users.",
-        source=SourceLocation(path="spec/prd-auth.md", line=19),
     )
-    prd_assert._content = {"label": "A"}
+    prd_assert._content = {"label": "A", "parse_line": 19, "parse_end_line": None}
     graph._index["REQ-p00001-A"] = prd_assert
-    prd.add_child(prd_assert)
+    prd.link(prd_assert, EdgeKind.STRUCTURES)
 
     # Rationale section child of PRD
     rationale = GraphNode(
         id="REQ-p00001:section:0",
         kind=NodeKind.REMAINDER,
         label="Rationale",
-        source=SourceLocation(path="spec/prd-auth.md", line=12),
     )
     rationale._content = {
         "heading": "Rationale",
@@ -193,48 +196,51 @@ def _make_graph(base_dir: Path | None = None) -> TraceGraph:
         "order": 0,
     }
     graph._index["REQ-p00001:section:0"] = rationale
-    prd.add_child(rationale)
+    prd.link(rationale, EdgeKind.STRUCTURES)
 
     # DEV requirement in dev-login.md (child of PRD, depth 1)
     dev = GraphNode(
         id="REQ-d00001",
         kind=NodeKind.REQUIREMENT,
         label="Login Form",
-        source=SourceLocation(path="spec/dev-login.md", line=5),
     )
     dev._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "bbb22222",
+        "parse_line": 5,
+        "parse_end_line": None,
     }
+    wire_file_parent(dev, "spec/dev-login.md", line=5, graph=graph)
     graph._index["REQ-d00001"] = dev
-    prd.add_child(dev)
+    prd.link(dev, EdgeKind.STRUCTURES)
 
     # DEV assertion
     dev_assert = GraphNode(
         id="REQ-d00001-A",
         kind=NodeKind.ASSERTION,
         label="Login form SHALL validate email.",
-        source=SourceLocation(path="spec/dev-login.md", line=13),
     )
-    dev_assert._content = {"label": "A"}
+    dev_assert._content = {"label": "A", "parse_line": 13, "parse_end_line": None}
     graph._index["REQ-d00001-A"] = dev_assert
-    dev.add_child(dev_assert)
+    dev.link(dev_assert, EdgeKind.STRUCTURES)
 
     # Second DEV requirement in dev-session.md (also depth 1)
     dev2 = GraphNode(
         id="REQ-d00002",
         kind=NodeKind.REQUIREMENT,
         label="Session Management",
-        source=SourceLocation(path="spec/dev-session.md", line=5),
     )
     dev2._content = {
         "level": "DEV",
         "status": "Active",
         "hash": "ccc33333",
+        "parse_line": 5,
+        "parse_end_line": None,
     }
+    wire_file_parent(dev2, "spec/dev-session.md", line=5, graph=graph)
     graph._index["REQ-d00002"] = dev2
-    prd.add_child(dev2)
+    prd.link(dev2, EdgeKind.STRUCTURES)
 
     return graph
 
@@ -253,21 +259,35 @@ def _make_overview_graph(base_dir: Path | None = None) -> TraceGraph:
         id="REQ-o00001",
         kind=NodeKind.REQUIREMENT,
         label="Deployment Pipeline",
-        source=SourceLocation(path="spec/ops-deploy.md", line=5),
     )
-    ops._content = {"level": "OPS", "status": "Active", "hash": "ddd44444"}
+    from tests.core.graph_test_helpers import wire_file_parent
+
+    ops._content = {
+        "level": "OPS",
+        "status": "Active",
+        "hash": "ddd44444",
+        "parse_line": 5,
+        "parse_end_line": None,
+    }
+    wire_file_parent(ops, "spec/ops-deploy.md", line=5, graph=graph)
     graph._index["REQ-o00001"] = ops
     prd = graph.find_by_id("REQ-p00001")
-    prd.add_child(ops)
+    prd.link(ops, EdgeKind.STRUCTURES)
 
-    # Associated-repo PRD (root, depth 0) — detected by PatternValidator
+    # Associated-repo PRD (root, depth 0) — detected by namespace pattern
     assoc = GraphNode(
         id="REQ-CAL-p00001",
         kind=NodeKind.REQUIREMENT,
         label="Callisto Auth",
-        source=SourceLocation(path="spec/assoc-prd.md", line=5),
     )
-    assoc._content = {"level": "PRD", "status": "Active", "hash": "eee55555"}
+    assoc._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "eee55555",
+        "parse_line": 5,
+        "parse_end_line": None,
+    }
+    wire_file_parent(assoc, "spec/assoc-prd.md", line=5, graph=graph)
     graph._index["REQ-CAL-p00001"] = assoc
     graph._roots.append(assoc)
 
@@ -294,9 +314,16 @@ class TestFileGrouping:
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
             label="Second PRD",
-            source=SourceLocation(path="spec/prd-auth.md", line=50),
         )
-        node2._content = {"level": "PRD", "status": "Active"}
+        from tests.core.graph_test_helpers import wire_file_parent
+
+        node2._content = {
+            "level": "PRD",
+            "status": "Active",
+            "parse_line": 50,
+            "parse_end_line": None,
+        }
+        wire_file_parent(node2, "spec/prd-auth.md", line=50, graph=graph)
         graph._index["REQ-p00002"] = node2
         asm = MarkdownAssembler(graph)
         groups = asm._group_by_file()
@@ -498,12 +525,20 @@ class TestOverviewMode:
             id="REQ-p00002",
             kind=NodeKind.REQUIREMENT,
             label="Child Feature",
-            source=SourceLocation(path="spec/prd-child.md", line=7),
         )
-        prd2._content = {"level": "PRD", "status": "Active", "hash": "fff66666"}
+        from tests.core.graph_test_helpers import wire_file_parent
+
+        prd2._content = {
+            "level": "PRD",
+            "status": "Active",
+            "hash": "fff66666",
+            "parse_line": 7,
+            "parse_end_line": None,
+        }
+        wire_file_parent(prd2, "spec/prd-child.md", line=7, graph=graph)
         graph._index["REQ-p00002"] = prd2
         prd = graph.find_by_id("REQ-p00001")
-        prd.add_child(prd2)
+        prd.link(prd2, EdgeKind.STRUCTURES)
 
         # max_depth=1 means only depth 0
         asm = MarkdownAssembler(graph, overview=True, max_depth=1)

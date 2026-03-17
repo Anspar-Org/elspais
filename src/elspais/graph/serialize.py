@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import csv
 import io
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -31,18 +32,24 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         "kind": node.kind.name,
         "label": node.get_label(),
         "uuid": node.uuid,
-        "content": node.get_all_content(),
+        "content": {
+            k: v.value if isinstance(v, Enum) else v for k, v in node.get_all_content().items()
+        },
     }
 
-    # Include source location if present
-    if node.source:
+    # Implements: REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
+    # Include source location from FILE parent and parse_line fields
+    _fn = node.file_node()
+    _parse_line = node.get_field("parse_line")
+    if _fn or _parse_line is not None:
         result["source"] = {
-            "path": node.source.path,
-            "line": node.source.line,
-            "end_line": node.source.end_line,
+            "path": _fn.get_field("relative_path") if _fn else None,
+            "line": _parse_line,
+            "end_line": node.get_field("parse_end_line"),
         }
-        if node.source.repo:
-            result["source"]["repo"] = node.source.repo
+        _repo = _fn.get_field("repo") if _fn else None
+        if _repo:
+            result["source"]["repo"] = _repo
 
     # Include child IDs
     children = list(node.iter_children())
@@ -79,7 +86,7 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
     return result
 
 
-def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
+def serialize_graph(graph: FederatedGraph) -> dict[str, Any]:
     """Serialize a TraceGraph to a JSON-compatible dict.
 
     Args:
@@ -110,7 +117,7 @@ def serialize_graph(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def to_markdown(graph: TraceGraph) -> str:
+def to_markdown(graph: FederatedGraph) -> str:
     """Generate a markdown traceability matrix from graph.
 
     Args:
@@ -156,7 +163,7 @@ def to_markdown(graph: TraceGraph) -> str:
     return "\n".join(lines)
 
 
-def to_csv(graph: TraceGraph) -> str:
+def to_csv(graph: FederatedGraph) -> str:
     """Generate a CSV export from graph.
 
     Args:
@@ -189,8 +196,9 @@ def to_csv(graph: TraceGraph) -> str:
     requirements.sort(key=lambda n: n.id)
 
     for node in requirements:
-        file_path = node.source.path if node.source else ""
-        line = node.source.line if node.source else ""
+        _fn = node.file_node()
+        file_path = _fn.get_field("relative_path") if _fn else ""
+        line = node.get_field("parse_line") or ""
 
         # Get implements from incoming edges (what this node implements)
         implements = []

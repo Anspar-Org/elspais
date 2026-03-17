@@ -133,6 +133,7 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
 [project]
 name = "{associated_prefix.lower()}-project"
 type = "associated"
+namespace = "REQ"
 
 [associated]
 prefix = "{associated_prefix}"
@@ -147,24 +148,25 @@ spec = "spec"
 docs = "docs"
 code = ["src", "lib"]
 
-[patterns]
-id_template = "{{prefix}}-{{associated}}{{type}}{{id}}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{{namespace}}-{{type.letter}}{{component}}"
+aliases = {{ short = "{{type.letter}}{{component}}" }}
 
-[patterns.types]
-prd = {{ id = "p", name = "Product Requirement", level = 1 }}
-ops = {{ id = "o", name = "Operations Requirement", level = 2 }}
-dev = {{ id = "d", name = "Development Requirement", level = 3 }}
+[id-patterns.types]
+prd = {{ level = 1, aliases = {{ letter = "p" }} }}
+ops = {{ level = 2, aliases = {{ letter = "o" }} }}
+dev = {{ level = 3, aliases = {{ letter = "d" }} }}
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
+[id-patterns.associated]
 enabled = true
-length = 3
+position = "after_prefix"
 format = "uppercase"
+length = 3
 separator = "-"
 
 [rules.hierarchy]
@@ -172,7 +174,7 @@ dev = ["dev", "ops", "prd"]
 ops = ["ops", "prd"]
 prd = ["prd"]
 cross_repo_implements = true
-allow_orphans = true  # More permissive for associated development
+allow_structural_orphans = true  # More permissive for associated development
 
 [rules.format]
 require_hash = true
@@ -189,33 +191,28 @@ require_assertions = true
 [project]
 name = "my-project"
 type = "core"
+namespace = "REQ"
 
 [directories]
 spec = "spec"
 docs = "docs"
 code = ["src", "apps", "packages"]
 
-[patterns]
-id_template = "{{prefix}}-{{type}}{{id}}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{{namespace}}-{{type.letter}}{{component}}"
+aliases = {{ short = "{{type.letter}}{{component}}" }}
 
-[patterns.types]
-prd = {{ id = "p", name = "Product Requirement", level = 1 }}
-ops = {{ id = "o", name = "Operations Requirement", level = 2 }}
-dev = {{ id = "d", name = "Development Requirement", level = 3 }}
+[id-patterns.types]
+prd = {{ level = 1, aliases = {{ letter = "p" }} }}
+ops = {{ level = 2, aliases = {{ letter = "o" }} }}
+dev = {{ level = 3, aliases = {{ letter = "d" }} }}
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
-enabled = true
-length = 3
-format = "uppercase"
-separator = "-"
-
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
 # max_count = 26           # Defaults to style maximum (26 for uppercase, 100 for numeric)
 # zero_pad = false         # For numeric styles: "01" vs "1"
@@ -224,17 +221,12 @@ label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 [rules.hierarchy]
 dev = ["dev", "ops", "prd"]
 ops = ["ops", "prd"]
 prd = ["prd"]
 allow_circular = false
-allow_orphans = false
+allow_structural_orphans = false
 
 [rules.format]
 require_hash = true
@@ -242,6 +234,17 @@ require_rationale = false
 require_assertions = true
 require_status = true
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+# Status role classification (determines behavior in metrics/viewer)
+# active: committed, normative — counted in all metrics
+# provisional: in-progress toward active — excluded from coverage, in analysis
+# aspirational: future/planning — excluded from coverage and analysis
+# retired: concluded — excluded from everything, hidden by default in viewer
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future"]
+retired = ["Deprecated", "Superseded"]
 
 # Associate repositories for combined validation (uncomment to enable)
 # Relative paths resolve from canonical repo root (worktree-safe).
@@ -264,6 +267,7 @@ test_dirs = ["tests"]
 patterns = ["test_*.py", "*_test.py"]
 # result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
 reference_keyword = "Validates"
+# prescan_command = ""  # External command for non-Python test structure discovery
 
 [references.defaults]
 # Separator characters accepted between ID components

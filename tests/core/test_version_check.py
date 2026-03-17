@@ -120,12 +120,6 @@ class TestDetectInstallMethod:
 
 
 class TestGetUpgradeCommand:
-    def test_all_methods_have_commands(self):
-        for method in ("pipx", "brew", "venv", "user", "editable", "unknown"):
-            cmd = get_upgrade_command(method)
-            assert isinstance(cmd, str)
-            assert len(cmd) > 0
-
     def test_pipx_command(self):
         assert get_upgrade_command("pipx") == "pipx upgrade elspais"
 

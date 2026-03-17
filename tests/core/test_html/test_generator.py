@@ -44,14 +44,15 @@ class TestHTMLGeneratorBasic:
     """Basic tests for HTMLGenerator."""
 
     def test_generate_returns_html(self, sample_graph):
-        """Generates HTML string."""
+        """Generates valid HTML document structure."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert isinstance(result, str)
         assert "<html" in result.lower()
         assert "</html>" in result.lower()
+        assert "<head" in result.lower()
+        assert "<body" in result.lower()
 
     def test_generate_includes_title(self, sample_graph):
         """Includes title in HTML."""
@@ -74,12 +75,13 @@ class TestHTMLGeneratorBasic:
         assert 'id="node-index"' in result
 
     def test_generate_includes_styles(self, sample_graph):
-        """Includes CSS styles."""
+        """Includes CSS styles with application-specific classes."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        assert "<style>" in result or "css" in result.lower()
+        assert "<style>" in result
+        assert "nav-tree-container" in result
 
     def test_generate_includes_package_version(self, sample_graph):
         """Includes actual elspais package version, not hardcoded 'v1'."""
@@ -107,28 +109,31 @@ class TestHTMLGeneratorEmbedContent:
     """Tests for embedded content mode."""
 
     def test_embed_content_includes_json(self, sample_graph):
-        """Embedded mode includes JSON data."""
+        """Embedded mode includes node-index JSON data element."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Should have embedded data
-        assert "requirement-content" in result or "data-" in result
+        assert 'id="node-index"' in result
+        assert "application/json" in result
 
 
 class TestHTMLGeneratorHierarchy:
     """Tests for hierarchy display."""
 
     def test_shows_hierarchy_structure(self, sample_graph):
-        """Shows requirement hierarchy."""
+        """Shows requirement hierarchy with tree structure and level counts."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # All levels should be present
-        assert "PRD" in result or "prd" in result.lower()
-        assert "OPS" in result or "ops" in result.lower()
-        assert "DEV" in result or "dev" in result.lower()
+        # Tree structural elements proving hierarchy rendering
+        assert "tree-toggle" in result
+        assert "data-parent" in result
+        # Level counts in the stats header prove all hierarchy levels are present
+        assert "PRD:" in result
+        assert "OPS:" in result
+        assert "DEV:" in result
 
     def test_shows_requirement_titles(self, sample_graph):
         """Shows requirement titles."""
@@ -208,15 +213,16 @@ class TestHTMLGeneratorCoverage:
         assert 'id="coverage-index"' in result
 
     def test_coverage_values(self, sample_graph):
-        """Coverage has valid values."""
+        """Coverage filter dropdown has None/Partial/Full options."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Should have coverage filter options
-        assert "none" in result.lower()
-        assert "partial" in result.lower()
-        assert "full" in result.lower()
+        # Assert the specific coverage filter dropdown and its options
+        assert 'id="edit-filter-coverage"' in result
+        assert '<option value="none">None</option>' in result
+        assert '<option value="partial">Partial</option>' in result
+        assert '<option value="full">Full</option>' in result
 
 
 class TestHTMLGeneratorFiltering:
@@ -329,15 +335,17 @@ class TestHTMLGeneratorGitIntegration:
     """Tests for git change detection integration."""
 
     def test_REQ_d00052_D_git_state_in_embedded_json(self, sample_graph):
-        """Git state data is in embedded node-index JSON."""
+        """Git state data is in embedded node-index JSON with requirement properties."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Git data attributes were on table rows; now in embedded node-index JSON
+        # Node-index JSON contains serialized node data with requirement properties
         assert 'id="node-index"' in result
-        # The node-index contains serialized node data including git state
-        assert "application/json" in result
+        # The JSON includes requirement-specific fields (level, status, hash)
+        assert '"level": "PRD"' in result
+        assert '"status": "Active"' in result
+        assert '"hash": "abc12345"' in result
 
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
         """Includes git filter buttons in toolbar."""

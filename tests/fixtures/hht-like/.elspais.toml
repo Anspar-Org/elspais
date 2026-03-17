@@ -4,6 +4,7 @@
 [project]
 name = "hht-like-fixture"
 type = "core"
+namespace = "REQ"
 
 [directories]
 spec = "spec"
@@ -12,21 +13,21 @@ database = "database"
 code = ["apps", "packages", "server", "tools"]
 ignore = ["node_modules", ".git", "build", "dist"]
 
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+ops = { level = 2, aliases = { letter = "o" } }
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[patterns.associated]
+[id-patterns.associated]
 enabled = true
 position = "after_prefix"
 format = "uppercase"
@@ -37,11 +38,6 @@ separator = "-"
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 [rules.hierarchy]
 allowed_implements = [
     "dev -> ops, prd",
@@ -49,7 +45,7 @@ allowed_implements = [
     "prd -> prd",
 ]
 allow_circular = false
-allow_orphans = false
+allow_structural_orphans = false
 
 [rules.format]
 require_hash = true

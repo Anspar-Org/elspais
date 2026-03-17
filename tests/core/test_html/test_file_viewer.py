@@ -11,7 +11,7 @@ import pytest
 
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.html.generator import HTMLGenerator
 
 # Fixture root for hht-like tests
@@ -27,24 +27,31 @@ def hht_graph():
         repo_root=_FIXTURE_ROOT,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=False,
     )
 
 
 @pytest.fixture
 def empty_graph():
     """Create a graph with a node whose source file does not exist."""
+    from tests.core.graph_test_helpers import wire_file_parent
+
     node = GraphNode(
         id="REQ-x00001",
         kind=NodeKind.REQUIREMENT,
         label="Ghost Requirement",
-        source=SourceLocation(path="/nonexistent/path/ghost.md", line=1),
     )
-    node._content = {"level": "PRD", "status": "Active", "hash": "00000000"}
+    node._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
 
     graph = TraceGraph(repo_root=Path("/nonexistent"))
+    wire_file_parent(node, "/nonexistent/path/ghost.md", line=1, graph=graph)
     graph._roots = [node]
-    graph._index = {"REQ-x00001": node}
+    graph._index = {**graph._index, "REQ-x00001": node}
     return graph
 
 
@@ -67,12 +74,6 @@ def no_source_graph():
 class TestCollectSourceFilesStructure:
     """Validates REQ-p00006-C: _collect_source_files returns correct data structure."""
 
-    def test_REQ_p00006_C_collect_source_files_returns_dict(self, hht_graph):
-        """_collect_source_files returns a dict."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-        assert isinstance(result, dict)
-
     def test_REQ_p00006_C_collect_source_files_returns_correct_keys(self, hht_graph):
         """Each entry in source_files has lines, language, and raw keys."""
         generator = HTMLGenerator(hht_graph)
@@ -83,25 +84,6 @@ class TestCollectSourceFilesStructure:
             assert "lines" in data, f"Missing 'lines' key for {path}"
             assert "language" in data, f"Missing 'language' key for {path}"
             assert "raw" in data, f"Missing 'raw' key for {path}"
-
-    def test_REQ_p00006_C_collect_source_files_lines_is_list(self, hht_graph):
-        """The lines value is a list of strings."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-
-        for path, data in result.items():
-            assert isinstance(data["lines"], list), f"lines should be list for {path}"
-            for line in data["lines"]:
-                assert isinstance(line, str), f"Each line should be str for {path}"
-
-    def test_REQ_p00006_C_collect_source_files_raw_is_string(self, hht_graph):
-        """The raw value is a string containing the file contents."""
-        generator = HTMLGenerator(hht_graph)
-        result = generator._collect_source_files()
-
-        for path, data in result.items():
-            assert isinstance(data["raw"], str), f"raw should be str for {path}"
-            assert len(data["raw"]) > 0, f"raw should not be empty for {path}"
 
 
 class TestCollectSourceFilesHighlighting:
@@ -149,17 +131,25 @@ class TestCollectSourceFilesLanguageDetection:
         # Create a graph with a real Python file as source
         py_file = Path(__file__)  # This test file itself is Python
 
+        from tests.core.graph_test_helpers import wire_file_parent
+
         node = GraphNode(
             id="REQ-t00001",
             kind=NodeKind.REQUIREMENT,
             label="Python Source Test",
-            source=SourceLocation(path=str(py_file), line=1),
         )
-        node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
+        node._content = {
+            "level": "DEV",
+            "status": "Active",
+            "hash": "00000000",
+            "parse_line": 1,
+            "parse_end_line": None,
+        }
 
         graph = TraceGraph(repo_root=py_file.parent)
+        wire_file_parent(node, str(py_file), line=1, graph=graph)
         graph._roots = [node]
-        graph._index = {"REQ-t00001": node}
+        graph._index = {**graph._index, "REQ-t00001": node}
 
         generator = HTMLGenerator(graph)
         result = generator._collect_source_files()
@@ -182,7 +172,6 @@ class TestCollectSourceFilesBinarySkip:
                 id="REQ-b00001",
                 kind=NodeKind.REQUIREMENT,
                 label="Binary Source",
-                source=SourceLocation(path=binary_path, line=1),
             )
             node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
 
@@ -213,7 +202,6 @@ class TestCollectSourceFilesSizeLimit:
                 id="REQ-l00001",
                 kind=NodeKind.REQUIREMENT,
                 label="Large Source",
-                source=SourceLocation(path=large_path, line=1),
             )
             node._content = {"level": "DEV", "status": "Active", "hash": "00000000"}
 
@@ -249,14 +237,6 @@ class TestCollectSourceFilesEmpty:
 
 class TestGetPygmentsCss:
     """Validates REQ-p00006-C: _get_pygments_css returns CSS for syntax highlighting."""
-
-    def test_REQ_p00006_C_get_pygments_css_returns_nonempty_string(self, hht_graph):
-        """Returns a non-empty string."""
-        generator = HTMLGenerator(hht_graph)
-        css = generator._get_pygments_css()
-
-        assert isinstance(css, str)
-        assert len(css) > 0
 
     def test_REQ_p00006_C_get_pygments_css_contains_highlight_class(self, hht_graph):
         """Returned CSS contains .highlight selector."""

@@ -11,6 +11,7 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -39,7 +40,7 @@ def keyword_graph(tmp_path):
     )
     a1._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = a1
-    req1.add_child(a1)
+    req1.link(a1, EdgeKind.STRUCTURES)
 
     # Requirement 2: API
     req2 = GraphNode(

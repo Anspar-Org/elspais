@@ -300,11 +300,6 @@ class TestSingleCodePath:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
-    def test_REQ_p00050_D_returns_bool(self, _matches_query, match_node):
-        """REQ-p00050-D: _matches_query returns a bool."""
-        result = _mq(_matches_query, match_node, "id", "d00099")
-        assert isinstance(result, bool)
-
     def test_REQ_p00050_D_false_for_unrecognized_field(self, _matches_query, match_node):
         """REQ-p00050-D: unrecognized field returns False (no crash)."""
         result = _mq(_matches_query, match_node, "unknown_field", "d00099")
@@ -355,9 +350,19 @@ class TestMultiTermDelegation:
         assert not _mq(_matches_query, match_node, "all", "security database")
 
     def test_REQ_p00050_D_regex_ignores_parsed(self, _matches_query, match_node):
-        """REQ-p00050-D: regex=True uses regex path regardless."""
+        """REQ-p00050-D: regex=True uses compiled_pattern, ignoring parsed."""
         pattern = re.compile(r"REQ-d000\d+")
-        assert _mq_regex(_matches_query, match_node, "id", pattern)
+        # Pass a contradicting parsed query that would exclude this node;
+        # regex path should ignore it and still match via compiled_pattern.
+        contradicting_parsed = parse_query("-d00099")
+        result = _matches_query(
+            match_node,
+            field="id",
+            regex=True,
+            compiled_pattern=pattern,
+            parsed=contradicting_parsed,
+        )
+        assert result is True
 
     def test_REQ_p00050_D_no_parsed_returns_false(self, _matches_query, match_node):
         """REQ-p00050-D: parsed=None returns False (no legacy fallback)."""

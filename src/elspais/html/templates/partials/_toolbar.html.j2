@@ -28,14 +28,14 @@
             <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
             <span>Leaf Only</span>
         </label>
+        {% for status in statuses %}
         <label class="toggle-item">
-            <input type="checkbox" id="edit-toggle-deprecated" onchange="toggleEditFilter('deprecated')">
-            <span>Hide Deprecated</span>
+            <input type="checkbox" id="edit-toggle-status-{{ status | lower }}"
+                   {% if status in default_hidden_statuses %}checked{% endif %}
+                   onchange="toggleStatusFilter('{{ status }}')">
+            <span>Hide {{ status }} <span class="status-count" id="count-{{ status | lower }}"></span></span>
         </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="edit-toggle-roadmap" onchange="toggleEditFilter('roadmap')">
-            <span>Hide Roadmap</span>
-        </label>
+        {% endfor %}
         <label class="toggle-item">
             <input type="checkbox" id="edit-toggle-hide-filtered" onchange="toggleEditFilter('hideFiltered')">
             <span>Hide Filtered</span>

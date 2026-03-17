@@ -66,12 +66,16 @@ class TestCalculateHash:
     def test_sha1_algorithm(self):
         content = "Test content"
         hash_val = calculate_hash(content, algorithm="sha1")
-        assert len(hash_val) == 8
+        assert hash_val == "bca20547"
+        # Verify it differs from default sha256
+        assert hash_val != calculate_hash(content)
 
     def test_md5_algorithm(self):
         content = "Test content"
         hash_val = calculate_hash(content, algorithm="md5")
-        assert len(hash_val) == 8
+        assert hash_val == "8bfa8e06"
+        # Verify it differs from default sha256
+        assert hash_val != calculate_hash(content)
 
     def test_invalid_algorithm_raises(self):
         with pytest.raises(ValueError, match="Unsupported hash algorithm"):

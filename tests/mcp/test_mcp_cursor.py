@@ -58,7 +58,7 @@ def cursor_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A", "text": "SHALL encrypt all data at rest"}
-    req_prd.add_child(assertion_a)
+    req_prd.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -66,7 +66,7 @@ def cursor_graph():
         label="SHALL use TLS for transit",
     )
     assertion_b._content = {"label": "B", "text": "SHALL use TLS for transit"}
-    req_prd.add_child(assertion_b)
+    req_prd.link(assertion_b, EdgeKind.STRUCTURES)
 
     # --- OPS requirement ---
     req_ops = GraphNode(
@@ -83,10 +83,10 @@ def cursor_graph():
         label="SHALL rotate keys monthly",
     )
     assertion_c._content = {"label": "C", "text": "SHALL rotate keys monthly"}
-    req_ops.add_child(assertion_c)
+    req_ops.link(assertion_c, EdgeKind.STRUCTURES)
 
     # OPS implements PRD (parent-child + typed edge)
-    req_prd.add_child(req_ops)
+    req_prd.link(req_ops, EdgeKind.STRUCTURES)
     req_ops.link(req_prd, EdgeKind.IMPLEMENTS)
 
     # --- DEV requirement ---
@@ -104,7 +104,7 @@ def cursor_graph():
         label="SHALL use AES-256",
     )
     assertion_d._content = {"label": "D", "text": "SHALL use AES-256"}
-    req_dev.add_child(assertion_d)
+    req_dev.link(assertion_d, EdgeKind.STRUCTURES)
 
     assertion_e = GraphNode(
         id="REQ-d00020-E",
@@ -112,10 +112,10 @@ def cursor_graph():
         label="SHALL support key rotation API",
     )
     assertion_e._content = {"label": "E", "text": "SHALL support key rotation API"}
-    req_dev.add_child(assertion_e)
+    req_dev.link(assertion_e, EdgeKind.STRUCTURES)
 
     # DEV implements OPS (parent-child + typed edge)
-    req_ops.add_child(req_dev)
+    req_ops.link(req_dev, EdgeKind.STRUCTURES)
     req_dev.link(req_ops, EdgeKind.IMPLEMENTS)
 
     # --- TEST node linked to assertion A for coverage ---

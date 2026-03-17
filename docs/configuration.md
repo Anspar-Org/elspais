@@ -85,12 +85,6 @@ format_guide = "requirements-format.md"
 # Files to skip during validation
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-# Map file patterns to requirement types
-[spec.file_patterns]
-"prd-*.md" = "prd"
-"ops-*.md" = "ops"
-"dev-*.md" = "dev"
-
 #──────────────────────────────────────────────────────────────────────────────
 # PATTERNS - Requirement ID Format
 #──────────────────────────────────────────────────────────────────────────────
@@ -224,8 +218,9 @@ allowed_implements = [
 # Forbid circular dependency chains (A -> B -> A)
 allow_circular = false
 
-# Require all requirements to implement something (except root PRD)
-allow_orphans = false
+# Allow nodes without a FILE ancestor (structural orphans)
+# Replaces deprecated `allow_orphans` (still accepted for backward compatibility)
+allow_structural_orphans = false
 
 # Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
@@ -246,6 +241,18 @@ require_status = true
 
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+# Status role classification — determines behavior in metrics and viewer
+# Each role controls how requirements with that status are treated:
+#   active:       Counted in coverage and analysis, shown in viewer
+#   provisional:  Excluded from coverage, included in analysis, shown in viewer
+#   aspirational: Excluded from coverage and analysis, shown in viewer
+#   retired:      Excluded from everything, hidden by default in viewer
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future"]
+retired = ["Deprecated", "Superseded"]
 
 # Assertion format rules (new in v0.9.0)
 # Require ## Assertions section in requirements
@@ -368,6 +375,14 @@ reference_patterns = [
     '(?:IMPLEMENTS|Implements|implements)[:\\s]+(?:REQ[-_])?([pod]\\d{5})(?:-[A-Z])?',
     '\\bREQ[-_]([pod]\\d{5})(?:-[A-Z])?\\b',
 ]
+
+# External command for test structure discovery (optional).
+# If not set, uses built-in Python AST scanner for .py files and
+# text-based scanning for other extensions.
+# The command receives test file paths on stdin (one per line) and
+# outputs a JSON array on stdout:
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+# prescan_command = "dart run tool/list_tests.dart"
 
 #──────────────────────────────────────────────────────────────────────────────
 # GIT HOOKS

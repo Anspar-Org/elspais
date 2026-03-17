@@ -58,10 +58,10 @@ def run(args: argparse.Namespace) -> int:
     # Assemble Markdown from graph
     from elspais.config import get_config
     from elspais.pdf.assembler import MarkdownAssembler
-    from elspais.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import build_resolver
 
-    config = get_config(config_path, repo_root)
-    pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    config = get_config(config_path, repo_root, overrides=getattr(args, "config_overrides", None))
+    resolver = build_resolver(config)
 
     title = getattr(args, "title", None)
     cover = getattr(args, "cover", None)
@@ -72,7 +72,7 @@ def run(args: argparse.Namespace) -> int:
         title=title,
         overview=overview,
         max_depth=max_depth,
-        pattern_config=pattern_config,
+        resolver=resolver,
     )
     markdown_content = assembler.assemble()
 

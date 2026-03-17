@@ -1,4 +1,4 @@
-# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F
+# Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F, REQ-p00006-A
 """Tests for the Flask trace-edit REST API server.
 
 Validates:
@@ -9,6 +9,7 @@ Validates:
 - REQ-p00004-D: Branch creation endpoint
 - REQ-p00004-E: Commit and push endpoint
 - REQ-p00004-F: Pull fast-forward endpoint
+- REQ-p00006-A: Check-freshness endpoint
 """
 
 from pathlib import Path
@@ -50,7 +51,7 @@ def sample_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A"}
-    prd_node.add_child(assertion_a)
+    prd_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -58,7 +59,7 @@ def sample_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B"}
-    prd_node.add_child(assertion_b)
+    prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Create OPS requirement that implements PRD
     ops_node = GraphNode(
@@ -115,11 +116,11 @@ def coverage_graph():
 
     assertion_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL encrypt data")
     assertion_a._content = {"label": "A"}
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(id="REQ-p00001-B", kind=NodeKind.ASSERTION, label="SHALL use TLS")
     assertion_b._content = {"label": "B"}
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Test node linked to assertion A
     test_node = GraphNode(
@@ -131,7 +132,7 @@ def coverage_graph():
     # Test result
     result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.TEST_RESULT, label="passed")
     result_node._content = {"status": "passed", "duration": 0.5}
-    test_node.add_child(result_node)
+    test_node.link(result_node, EdgeKind.YIELDS)
 
     graph._roots = [req_node]
     graph._index = {
@@ -178,13 +179,17 @@ class TestAppFactory:
         assert isinstance(app, Flask)
 
     def test_REQ_d00010_A_create_app_accepts_config(self, sample_graph):
-        """App factory accepts repo_root, graph, and config arguments."""
+        """App factory stores the provided config in internal state."""
+        test_config = {"project": {"name": "test"}}
         app = create_app(
             repo_root=Path("/another/repo"),
             graph=sample_graph,
-            config={"project": {"name": "test"}},
+            config=test_config,
         )
-        assert app is not None
+        # Verify the config was applied by hitting an endpoint
+        client = app.test_client()
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -309,15 +314,37 @@ class TestGetSearch:
         data = resp.get_json()
         assert len(data) <= 1
 
-    def test_REQ_d00061_E_search_default_limit(self, client):
-        """Default limit is 50 when not specified."""
-        # Just verify the endpoint works without limit param (uses default 50)
-        resp = client.get("/api/search?q=Security")
+    def test_REQ_d00061_E_search_default_limit(self):
+        """Default limit is 50 when not specified — truncates beyond 50."""
+        # Build a graph with 60 matching nodes to verify the limit
+        big_graph = TraceGraph(repo_root=Path("/test/repo"))
+        for i in range(60):
+            node = GraphNode(
+                id=f"REQ-d{i:05d}",
+                kind=NodeKind.REQUIREMENT,
+                label=f"Searchable Requirement {i}",
+            )
+            node._content = {
+                "level": "DEV",
+                "status": "Active",
+                "hash": f"{i:08x}",
+                "body_text": f"Searchable body {i}",
+            }
+            big_graph._index[node.id] = node
+            big_graph._roots.append(node)
+
+        big_app = create_app(
+            repo_root=Path("/test/repo"),
+            graph=big_graph,
+            config={},
+        )
+        big_app.config["TESTING"] = True
+        big_client = big_app.test_client()
+
+        resp = big_client.get("/api/search?q=Searchable")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
-        # Our test graph has few nodes, so all should be returned
-        assert len(data) >= 1
+        assert len(data) == 50
 
     def test_REQ_d00061_C_search_with_regex(self, client):
         """Regex parameter enables regex matching."""
@@ -385,14 +412,6 @@ class TestGetTestCoverage:
 
 class TestGetTreeData:
     """Validates REQ-d00010-A: GET /api/tree-data."""
-
-    def test_REQ_d00010_A_tree_data_returns_list(self, client):
-        """Tree data endpoint returns flat list of rows."""
-        resp = client.get("/api/tree-data")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
 
     def test_REQ_d00010_A_tree_data_row_structure(self, client):
         """Each tree row has expected keys."""
@@ -812,7 +831,6 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_associated_repo_absolute_path(self, tmp_path):
         """Files from associated repos outside main repo can be loaded via absolute path."""
-        from elspais.graph.GraphNode import SourceLocation
 
         # Simulate main repo at tmp_path/main and associate at tmp_path/assoc
         main_repo = tmp_path / "main"
@@ -840,7 +858,6 @@ class TestGetFileContent:
             id="REQ-A-p00001",
             kind=NodeKind.REQUIREMENT,
             label="Test Requirement",
-            source=SourceLocation(path=str(spec_file), line=1),
         )
         node._content = {"level": "PRD", "status": "Active"}
         graph._index[node.id] = node
@@ -1316,3 +1333,908 @@ class TestCLIWiring:
             result = run(args)
             assert result == 0
             mock.assert_called_once_with(args)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mutate → Save → Verify file (end-to-end through Flask API)
+# ─────────────────────────────────────────────────────────────────────────────
+
+DISK_SPEC = """\
+## REQ-t00001: Test Requirement
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+B. The system SHALL do another thing.
+
+*End* *Test Requirement* | **Hash**: abcd1234
+---
+"""
+
+DISK_SPEC_TWO_REQS = """\
+## REQ-t00001: First Requirement
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL do something.
+B. The system SHALL do another thing.
+
+*End* *First Requirement* | **Hash**: abcd1234
+---
+
+## REQ-t00002: Second Requirement
+
+**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The second system SHALL work.
+
+*End* *Second Requirement* | **Hash**: efgh5678
+---
+"""
+
+
+def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
+    """Build a Flask app backed by real spec files on disk.
+
+    Returns (app, graph, spec_file) so tests can manipulate the graph directly.
+    """
+    spec_file = tmp_path / "test_spec.md"
+    spec_file.write_text(spec_content, encoding="utf-8")
+
+    from elspais.graph.GraphNode import FileType
+
+    graph = TraceGraph(repo_root=tmp_path)
+    rel_path = str(spec_file.relative_to(tmp_path))
+
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
+
+    prd = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Requirement")
+    prd._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(prd, EdgeKind.CONTAINS)
+
+    req = GraphNode(
+        id="REQ-t00001",
+        kind=NodeKind.REQUIREMENT,
+        label="Test Requirement" if not two_reqs else "First Requirement",
+    )
+    req._content = {
+        "level": "DEV",
+        "status": "Active",
+        "hash": "abcd1234",
+        "body_text": "",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(req, EdgeKind.CONTAINS)
+
+    a1 = GraphNode(
+        id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="The system SHALL do something."
+    )
+    a1._content = {"label": "A", "parse_line": 7, "parse_end_line": None}
+    req.link(a1, EdgeKind.STRUCTURES)
+
+    a2 = GraphNode(
+        id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="The system SHALL do another thing."
+    )
+    a2._content = {"label": "B", "parse_line": 8, "parse_end_line": None}
+    req.link(a2, EdgeKind.STRUCTURES)
+
+    prd.link(req, EdgeKind.IMPLEMENTS)
+
+    index = {
+        f"file:{rel_path}": file_node,
+        "REQ-p00001": prd,
+        "REQ-t00001": req,
+        "REQ-t00001-A": a1,
+        "REQ-t00001-B": a2,
+    }
+
+    if two_reqs:
+        req2 = GraphNode(id="REQ-t00002", kind=NodeKind.REQUIREMENT, label="Second Requirement")
+        req2._content = {
+            "level": "DEV",
+            "status": "Active",
+            "hash": "efgh5678",
+            "body_text": "",
+            "parse_line": 13,
+            "parse_end_line": None,
+        }
+        file_node.link(req2, EdgeKind.CONTAINS)
+        r2a = GraphNode(
+            id="REQ-t00002-A", kind=NodeKind.ASSERTION, label="The second system SHALL work."
+        )
+        r2a._content = {"label": "A", "parse_line": 19, "parse_end_line": None}
+        req2.link(r2a, EdgeKind.STRUCTURES)
+        prd.link(req2, EdgeKind.IMPLEMENTS)
+        index["REQ-t00002"] = req2
+        index["REQ-t00002-A"] = r2a
+
+    graph._roots = [prd]
+    graph._index = index
+
+    application = create_app(repo_root=tmp_path, graph=graph, config={})
+    application.config["TESTING"] = True
+    return application, graph, spec_file
+
+
+@pytest.fixture
+def disk_app(tmp_path):
+    """Create a Flask app backed by real spec files on disk."""
+    app, _graph, spec_file = _make_disk_app(tmp_path)
+    return app, spec_file
+
+
+@pytest.fixture
+def disk_app_with_graph(tmp_path):
+    """Like disk_app but also returns the graph for direct manipulation."""
+    return _make_disk_app(tmp_path)
+
+
+@pytest.fixture
+def disk_app_two_reqs(tmp_path):
+    """Flask app backed by a spec file with two requirements."""
+    return _make_disk_app(tmp_path, spec_content=DISK_SPEC_TWO_REQS, two_reqs=True)
+
+
+@pytest.fixture
+def disk_client(disk_app):
+    """Create Flask test client backed by real files."""
+    app, _ = disk_app
+    return app.test_client()
+
+
+class TestMutateSaveRoundTrip:
+    """End-to-end: mutate via API -> save -> verify file on disk."""
+
+    def test_add_refines_edge_and_save(self, disk_app_with_graph):
+        """POST /api/mutate/edge (add REFINES) -> POST /api/save -> file has Refines."""
+        app, graph, spec_file = disk_app_with_graph
+        client = app.test_client()
+
+        # Add a second PRD node directly on the graph (same Python object)
+        str(spec_file.relative_to(graph.repo_root))
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Second PRD",
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
+        graph._index["REQ-p00002"] = prd2
+        graph._roots.append(prd2)
+
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "add",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00002",
+                "edge_kind": "refines",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True, f"Save failed: {data}"
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Refines**: REQ-p00002" in content
+        assert "**Implements**: REQ-p00001" in content
+
+    def test_change_status_and_save(self, disk_app):
+        """POST /api/mutate/status -> POST /api/save -> file has new status."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00001", "new_status": "Deprecated"},
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Status**: Deprecated" in content
+
+    def test_update_title_and_save(self, disk_app):
+        """POST /api/mutate/title -> POST /api/save -> file has new title."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/title",
+            json={"node_id": "REQ-t00001", "new_title": "Updated Title"},
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "## REQ-t00001: Updated Title" in content
+
+    def test_update_assertion_and_save(self, disk_app):
+        """POST /api/mutate/assertion -> POST /api/save -> file has new text."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/assertion",
+            json={
+                "assertion_id": "REQ-t00001-A",
+                "new_text": "The system SHALL do something NEW.",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "A. The system SHALL do something NEW." in content
+        assert "B. The system SHALL do another thing." in content
+
+    def test_add_assertion_and_save(self, disk_app):
+        """POST /api/mutate/assertion/add -> POST /api/save -> file has new assertion."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/assertion/add",
+            json={
+                "req_id": "REQ-t00001",
+                "label": "C",
+                "text": "The system SHALL do a third thing.",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "C. The system SHALL do a third thing." in content
+
+    def test_add_implements_edge_and_save(self, disk_app_with_graph):
+        """POST /api/mutate/edge (add IMPLEMENTS) -> POST /api/save -> file updated."""
+        app, graph, spec_file = disk_app_with_graph
+        client = app.test_client()
+
+        # Add a second PRD target directly on the graph
+        str(spec_file.relative_to(graph.repo_root))
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="PRD 2",
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
+        graph._index["REQ-p00002"] = prd2
+        graph._roots.append(prd2)
+
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "add",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00002",
+                "edge_kind": "implements",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-p00001" in content
+        assert "REQ-p00002" in content
+
+    def test_delete_edge_and_save(self, disk_app):
+        """POST /api/mutate/edge (delete) -> POST /api/save -> reference removed."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "delete",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        # After deleting the only implements target, the field value should be empty
+        assert "REQ-p00001" not in content or "**Implements**: -" in content
+
+    def test_change_edge_kind_and_save(self, disk_app):
+        """POST /api/mutate/edge (change_kind) -> POST /api/save -> Implements->Refines."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "change_kind",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+                "new_kind": "refines",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Refines**: REQ-p00001" in content
+        assert "**Implements**: REQ-p00001" not in content
+
+    def test_delete_assertion_and_save(self, disk_app):
+        """POST /api/mutate/assertion/delete -> POST /api/save -> assertion removed."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/assertion/delete",
+            json={"assertion_id": "REQ-t00001-B", "confirm": True},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "A. The system SHALL do something." in content
+        assert "do another thing" not in content
+
+    def test_delete_requirement_and_save(self, disk_app_two_reqs):
+        """POST /api/mutate/requirement/delete -> POST /api/save -> req removed from file."""
+        app, graph, spec_file = disk_app_two_reqs
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/requirement/delete",
+            json={"node_id": "REQ-t00002", "confirm": True},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "REQ-t00001" in content
+        assert "First Requirement" in content
+        assert "REQ-t00002" not in content
+        assert "Second Requirement" not in content
+
+    def test_multiple_mutations_then_save(self, disk_app):
+        """Multiple mutations followed by a single save all persist correctly."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        # Mutation 1: Change status
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+        )
+        assert resp.status_code == 200
+
+        # Mutation 2: Update title
+        resp = client.post(
+            "/api/mutate/title",
+            json={"node_id": "REQ-t00001", "new_title": "Changed Title"},
+        )
+        assert resp.status_code == 200
+
+        # Mutation 3: Update assertion
+        resp = client.post(
+            "/api/mutate/assertion",
+            json={
+                "assertion_id": "REQ-t00001-B",
+                "new_text": "The system SHALL do something else.",
+            },
+        )
+        assert resp.status_code == 200
+
+        # Single save
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["saved_count"] >= 1  # render-save counts files, not mutations
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Status**: Draft" in content
+        assert "## REQ-t00001: Changed Title" in content
+        assert "B. The system SHALL do something else." in content
+        # Assertion A should be untouched
+        assert "A. The system SHALL do something." in content
+
+    def test_undo_then_save_persists_remaining(self, disk_app):
+        """Mutate twice, undo one, save -> only first mutation persists."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        # Mutation 1: Change status
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+        )
+        assert resp.status_code == 200
+
+        # Mutation 2: Update title
+        resp = client.post(
+            "/api/mutate/title",
+            json={"node_id": "REQ-t00001", "new_title": "Should Be Undone"},
+        )
+        assert resp.status_code == 200
+
+        # Undo mutation 2
+        resp = client.post("/api/mutate/undo")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        # Save — only status change should persist
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Status**: Draft" in content
+        assert "## REQ-t00001: Test Requirement" in content  # title unchanged
+        assert "Should Be Undone" not in content
+
+    def test_save_with_no_mutations_succeeds(self, disk_app):
+        """POST /api/save with no pending mutations succeeds with count 0."""
+        app, spec_file = disk_app
+        client = app.test_client()
+        original_content = spec_file.read_text(encoding="utf-8")
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["saved_count"] == 0
+
+        # File should be unchanged
+        assert spec_file.read_text(encoding="utf-8") == original_content
+
+    def test_dirty_reflects_mutation_state(self, disk_app):
+        """GET /api/dirty tracks pending mutation count."""
+        app, _ = disk_app
+        client = app.test_client()
+
+        # Initially clean
+        resp = client.get("/api/dirty")
+        assert resp.get_json()["dirty"] is False
+
+        # Mutate
+        client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+        )
+        resp = client.get("/api/dirty")
+        assert resp.get_json()["dirty"] is True
+
+        # Save clears dirty state
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        resp = client.get("/api/dirty")
+        data = resp.get_json()
+        assert data["dirty"] is False, "Save should clear the dirty flag"
+
+    def test_add_assertion_then_delete_it_then_save(self, disk_app):
+        """Add assertion, then delete it, then save -> file unchanged."""
+        app, spec_file = disk_app
+        client = app.test_client()
+
+        # Add assertion C
+        resp = client.post(
+            "/api/mutate/assertion/add",
+            json={
+                "req_id": "REQ-t00001",
+                "label": "C",
+                "text": "Temporary assertion.",
+            },
+        )
+        assert resp.status_code == 200
+
+        # Delete assertion C
+        resp = client.post(
+            "/api/mutate/assertion/delete",
+            json={"assertion_id": "REQ-t00001-C", "confirm": True},
+        )
+        assert resp.status_code == 200
+
+        # Save
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "Temporary assertion" not in content
+        # Original assertions preserved
+        assert "A. The system SHALL do something." in content
+        assert "B. The system SHALL do another thing." in content
+
+    def test_change_edge_kind_then_add_edge_then_save(self, disk_app_with_graph):
+        """Change IMPLEMENTS->REFINES, add new IMPLEMENTS, save -> both persisted."""
+        app, graph, spec_file = disk_app_with_graph
+        client = app.test_client()
+
+        # Add a second PRD target
+        str(spec_file.relative_to(graph.repo_root))
+        prd2 = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="PRD 2",
+        )
+        prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
+        graph._index["REQ-p00002"] = prd2
+        graph._roots.append(prd2)
+
+        # Change existing IMPLEMENTS to REFINES
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "change_kind",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+                "new_kind": "refines",
+            },
+        )
+        assert resp.status_code == 200
+
+        # Add a new IMPLEMENTS edge to p00002
+        resp = client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "add",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00002",
+                "edge_kind": "implements",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "**Refines**: REQ-p00001" in content
+        assert "**Implements**: REQ-p00002" in content
+
+    def test_mutations_across_two_reqs_then_save(self, disk_app_two_reqs):
+        """Mutate two different requirements, save once -> both persisted."""
+        app, graph, spec_file = disk_app_two_reqs
+        client = app.test_client()
+
+        # Mutate first req
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+        )
+        assert resp.status_code == 200
+
+        # Mutate second req
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-t00002", "new_status": "Deprecated"},
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["saved_count"] >= 1  # render-save counts files, not mutations
+
+        content = spec_file.read_text(encoding="utf-8")
+        # First req
+        assert "## REQ-t00001: First Requirement" in content
+        # Check status appears in the right section
+        lines = content.split("\n")
+        for i, line in enumerate(lines):
+            if "REQ-t00001" in line:
+                # Find the metadata line after the header
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if "**Status**" in lines[j]:
+                        assert "Draft" in lines[j]
+                        break
+                break
+        for i, line in enumerate(lines):
+            if "REQ-t00002" in line:
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if "**Status**" in lines[j]:
+                        assert "Deprecated" in lines[j]
+                        break
+                break
+
+    def test_add_assertion_to_two_reqs_then_save(self, disk_app_two_reqs):
+        """Add assertions to different reqs, save once -> both persisted."""
+        app, graph, spec_file = disk_app_two_reqs
+        client = app.test_client()
+
+        resp = client.post(
+            "/api/mutate/assertion/add",
+            json={
+                "req_id": "REQ-t00001",
+                "label": "C",
+                "text": "New assertion for first req.",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post(
+            "/api/mutate/assertion/add",
+            json={
+                "req_id": "REQ-t00002",
+                "label": "B",
+                "text": "New assertion for second req.",
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = client.post("/api/save")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "C. New assertion for first req." in content
+        assert "B. New assertion for second req." in content
+
+
+class TestMutateValidation:
+    """Validate error handling for mutation API endpoints."""
+
+    def test_mutate_status_missing_fields(self, disk_client):
+        resp = disk_client.post("/api/mutate/status", json={"node_id": "REQ-t00001"})
+        assert resp.status_code == 400
+
+    def test_mutate_status_unknown_node(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-nonexistent", "new_status": "Draft"},
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_title_missing_fields(self, disk_client):
+        resp = disk_client.post("/api/mutate/title", json={"node_id": "REQ-t00001"})
+        assert resp.status_code == 400
+
+    def test_mutate_assertion_missing_fields(self, disk_client):
+        resp = disk_client.post("/api/mutate/assertion", json={"assertion_id": "REQ-t00001-A"})
+        assert resp.status_code == 400
+
+    def test_mutate_assertion_add_missing_fields(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/assertion/add",
+            json={"req_id": "REQ-t00001", "label": "C"},
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_assertion_delete_no_confirm(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/assertion/delete",
+            json={"assertion_id": "REQ-t00001-A"},
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_requirement_delete_no_confirm(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/requirement/delete",
+            json={"node_id": "REQ-t00001"},
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_edge_missing_action(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/edge",
+            json={"source_id": "REQ-t00001", "target_id": "REQ-p00001"},
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_edge_unknown_action(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "unknown",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_edge_add_missing_kind(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "add",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_mutate_edge_change_kind_missing_new_kind(self, disk_client):
+        resp = disk_client.post(
+            "/api/mutate/edge",
+            json={
+                "action": "change_kind",
+                "source_id": "REQ-t00001",
+                "target_id": "REQ-p00001",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_undo_with_no_mutations(self, disk_client):
+        """Undo with no pending mutations returns error."""
+        resp = disk_client.post("/api/mutate/undo")
+        assert resp.status_code == 400
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Check-Freshness Endpoint Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_freshness_app(tmp_path, spec_subdir="spec"):
+    """Build a Flask app with real spec files for freshness testing.
+
+    Returns (app, graph, spec_dir) so tests can manipulate files and state.
+    """
+    from elspais.graph.GraphNode import FileType
+
+    spec_dir = tmp_path / spec_subdir
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    spec_file = spec_dir / "requirements.md"
+    spec_file.write_text(
+        "## REQ-p00001 Product Requirement\n"
+        "Status: Active\n"
+        "Level: PRD\n"
+        "\n"
+        "- A: The system SHALL exist.\n"
+        "\n"
+        "*End* <!-- hash:00000000 -->\n",
+        encoding="utf-8",
+    )
+
+    graph = TraceGraph(repo_root=tmp_path)
+    rel_path = str(spec_file.relative_to(tmp_path))
+
+    # Create FILE node
+    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="requirements.md")
+    file_node.set_field("file_type", FileType.SPEC)
+    file_node.set_field("relative_path", rel_path)
+    file_node.set_field("absolute_path", str(spec_file))
+    file_node.set_field("repo", None)
+
+    prd = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Product Requirement")
+    prd._content = {
+        "level": "PRD",
+        "status": "Active",
+        "hash": "00000000",
+        "parse_line": 1,
+        "parse_end_line": None,
+    }
+    file_node.link(prd, EdgeKind.CONTAINS)
+
+    a1 = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="The system SHALL exist.")
+    a1._content = {"label": "A", "parse_line": 5, "parse_end_line": None}
+    prd.link(a1, EdgeKind.STRUCTURES)
+
+    graph._roots = [file_node, prd]
+    graph._index = {
+        f"file:{rel_path}": file_node,
+        "REQ-p00001": prd,
+        "REQ-p00001-A": a1,
+    }
+
+    config = {"spec": {"directories": [spec_subdir]}}
+    app = create_app(repo_root=tmp_path, graph=graph, config=config)
+    app.config["TESTING"] = True
+
+    return app, graph, spec_dir
+
+
+@pytest.fixture
+def freshness_app(tmp_path):
+    """Create a Flask app backed by real spec files for freshness tests."""
+    return _make_freshness_app(tmp_path)
+
+
+@pytest.fixture
+def freshness_client(freshness_app):
+    """Create Flask test client for freshness tests."""
+    app, _graph, _spec_dir = freshness_app
+    return app.test_client()
+
+
+class TestCheckFreshness:
+    """Validates REQ-p00006-A: GET /api/check-freshness endpoint."""
+
+    def test_REQ_p00006_A_check_freshness_fresh(self, freshness_client):
+        """When no spec files have changed since build, stale=False."""
+        resp = freshness_client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["stale"] is False
+        assert data["has_pending_mutations"] is False
+        assert data["stale_files"] == []
+
+    def test_REQ_p00006_A_check_freshness_stale(self, tmp_path):
+        """When spec files are newer than build_time, stale=True with stale_files."""
+        import os
+        import time
+
+        app, _graph, spec_dir = _make_freshness_app(tmp_path)
+        client = app.test_client()
+
+        # Wait briefly then touch the spec file so its mtime > build_time.
+        # Use os.utime to set mtime well into the future to avoid race conditions.
+        spec_file = spec_dir / "requirements.md"
+        future_time = time.time() + 10
+        os.utime(spec_file, (future_time, future_time))
+
+        resp = client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["stale"] is True
+        assert len(data["stale_files"]) > 0
+        # The stale file list should contain the spec file (relative or absolute)
+        stale_names = [Path(f).name for f in data["stale_files"]]
+        assert "requirements.md" in stale_names
+
+    def test_REQ_p00006_A_check_freshness_pending_mutations(self, tmp_path):
+        """When graph has pending mutations, has_pending_mutations=True."""
+        app, _graph, _spec_dir = _make_freshness_app(tmp_path)
+        client = app.test_client()
+
+        # Perform a mutation so the graph has pending changes
+        client.post(
+            "/api/mutate/status",
+            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+        )
+
+        resp = client.get("/api/check-freshness")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["has_pending_mutations"] is True

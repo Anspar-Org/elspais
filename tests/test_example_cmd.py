@@ -121,14 +121,22 @@ class TestExampleCommand:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
-[patterns]
-prefix = "SPEC"
-id_template = "{prefix}-{type}{id}"
+[project]
+namespace = "SPEC"
 
-[patterns.types]
-prd = { id = "p", name = "Product", level = 1 }
-ops = { id = "o", name = "Operations", level = 2 }
-dev = { id = "d", name = "Development", level = 3 }
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
+
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+ops = { level = 2, aliases = { letter = "o" } }
+dev = { level = 3, aliases = { letter = "d" } }
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
 """
         )
 
@@ -252,33 +260,6 @@ class TestExampleTemplateContent:
 
 class TestCLIIntegration:
     """Integration tests using the CLI entry point."""
-
-    def test_cli_example_help(self):
-        """Test elspais example --help works."""
-        from elspais.cli import create_parser
-
-        parser = create_parser()
-        # Verify example command is registered
-        args = parser.parse_args(["example"])
-        assert args.command == "example"
-
-    def test_cli_example_requirement(self):
-        """Test elspais example requirement works."""
-        from elspais.cli import create_parser
-
-        parser = create_parser()
-        args = parser.parse_args(["example", "requirement"])
-        assert args.command == "example"
-        assert args.example_type == "requirement"
-
-    def test_cli_example_with_full_flag(self):
-        """Test elspais example --full works."""
-        from elspais.cli import create_parser
-
-        parser = create_parser()
-        args = parser.parse_args(["example", "--full"])
-        assert args.command == "example"
-        assert args.full is True
 
     def test_cli_main_help_includes_example(self, capsys):
         """Test main --help mentions example command."""

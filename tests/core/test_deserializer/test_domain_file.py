@@ -7,28 +7,13 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.utilities.patterns import PatternConfig
 
 
 @pytest.fixture
-def hht_config():
-    return PatternConfig(
-        id_template="{prefix}-{type}{id}",
-        prefix="REQ",
-        types={
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
-        },
-        id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
-    )
-
-
-@pytest.fixture
-def parser_registry(hht_config):
+def parser_registry(hht_resolver):
     registry = ParserRegistry()
     registry.register(CommentsParser())
-    registry.register(RequirementParser(hht_config))
+    registry.register(RequirementParser(hht_resolver))
     registry.register(RemainderParser())
     return registry
 
@@ -152,3 +137,28 @@ class TestDomainFile:
         # But should contain the original prd.md and ops.md
         assert any("prd.md" in s for s in source_paths)
         assert any("ops.md" in s for s in source_paths)
+
+    def test_skip_dirs_multi_segment_path(self, temp_spec_dir):
+        """Test that skip_dirs supports multi-segment paths like 'regulations/fda'."""
+        # Create nested directory: regulations/fda/ with a file
+        fda_dir = temp_spec_dir / "regulations" / "fda"
+        fda_dir.mkdir(parents=True)
+        (fda_dir / "prd-fda.md").write_text("# REQ-p80001: FDA\n\nContent.")
+
+        # Create regulations/other/ which should NOT be skipped
+        other_dir = temp_spec_dir / "regulations" / "other"
+        other_dir.mkdir(parents=True)
+        (other_dir / "prd-other.md").write_text("# REQ-p90001: Other\n\nContent.")
+
+        # skip_dirs with multi-segment path should skip regulations/fda but not regulations/other
+        deserializer = DomainFile(
+            temp_spec_dir,
+            patterns=["*.md"],
+            recursive=True,
+            skip_dirs=["regulations/fda"],
+        )
+        sources = list(deserializer.iterate_sources())
+        source_paths = [ctx.source_id for ctx, _ in sources]
+
+        assert not any("prd-fda.md" in s for s in source_paths), "Should exclude regulations/fda/"
+        assert any("prd-other.md" in s for s in source_paths), "Should include regulations/other/"

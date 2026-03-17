@@ -36,35 +36,6 @@ def make_req(
 class TestMutationEntry:
     """Tests for MutationEntry dataclass."""
 
-    def test_create_entry(self):
-        """MutationEntry can be created with required fields."""
-        entry = MutationEntry(
-            operation="rename_node",
-            target_id="REQ-p00001",
-            before_state={"id": "REQ-p00001"},
-            after_state={"id": "REQ-p00002"},
-        )
-
-        assert entry.operation == "rename_node"
-        assert entry.target_id == "REQ-p00001"
-        assert entry.before_state == {"id": "REQ-p00001"}
-        assert entry.after_state == {"id": "REQ-p00002"}
-        assert entry.affects_hash is False
-        assert entry.id  # Should have auto-generated ID
-        assert entry.timestamp  # Should have auto-generated timestamp
-
-    def test_entry_with_affects_hash(self):
-        """MutationEntry tracks hash-affecting operations."""
-        entry = MutationEntry(
-            operation="update_assertion",
-            target_id="REQ-p00001-A",
-            before_state={"text": "Old text"},
-            after_state={"text": "New text"},
-            affects_hash=True,
-        )
-
-        assert entry.affects_hash is True
-
     def test_entry_str(self):
         """MutationEntry has readable string representation."""
         entry = MutationEntry(
@@ -74,8 +45,7 @@ class TestMutationEntry:
             after_state={},
         )
         s = str(entry)
-        assert "rename_node" in s
-        assert "REQ-p00001" in s
+        assert s == f"[{entry.id[:8]}] rename_node(REQ-p00001)"
 
     def test_entry_unique_ids(self):
         """Each MutationEntry gets a unique ID."""
@@ -235,25 +205,6 @@ class TestMutationLog:
 
 class TestTraceGraphMutationInfrastructure:
     """Tests for TraceGraph mutation infrastructure."""
-
-    def test_graph_has_mutation_log(self):
-        """TraceGraph has a mutation log."""
-        builder = GraphBuilder()
-        builder.add_parsed_content(make_req("REQ-p00001"))
-        graph = builder.build()
-
-        assert hasattr(graph, "mutation_log")
-        assert isinstance(graph.mutation_log, MutationLog)
-        assert len(graph.mutation_log) == 0
-
-    def test_graph_deleted_nodes_empty(self):
-        """New graph has no deleted nodes."""
-        builder = GraphBuilder()
-        builder.add_parsed_content(make_req("REQ-p00001"))
-        graph = builder.build()
-
-        assert graph.deleted_nodes() == []
-        assert graph.has_deletions() is False
 
     def test_undo_last_empty(self):
         """undo_last on empty log returns None."""

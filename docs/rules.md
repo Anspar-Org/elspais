@@ -66,13 +66,13 @@ REQ-d00002 implements REQ-d00003
 REQ-d00003 implements REQ-d00001  ✗ Circular!
 ```text
 
-### `allow_orphans`
+### `allow_structural_orphans`
 
-Control orphaned requirements:
+Control orphaned requirements (requirements with no traceability parent):
 
 ```toml
 [rules.hierarchy]
-allow_orphans = false  # All DEV/OPS must implement something
+allow_structural_orphans = false  # All DEV/OPS must implement something
 ```text
 
 When `false`:
@@ -394,7 +394,7 @@ Associated repositories can override core rules:
 
 ```toml
 [rules.hierarchy]
-allow_orphans = false
+allow_structural_orphans = false
 allow_circular = false
 
 [rules.format]
@@ -406,7 +406,7 @@ require_assertions = true
 
 ```toml
 [rules.hierarchy]
-allow_orphans = true  # Allow experimental requirements
+allow_structural_orphans = true  # Allow experimental requirements
 
 [rules.format]
 require_rationale = false  # Not required during development

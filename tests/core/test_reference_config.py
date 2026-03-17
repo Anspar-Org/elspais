@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from elspais.utilities.reference_config import (
     ReferenceConfig,
     ReferenceOverride,
@@ -32,20 +32,25 @@ def default_ref_config() -> ReferenceConfig:
 
 
 @pytest.fixture
-def default_pattern_config() -> PatternConfig:
-    """Default pattern configuration for testing."""
-    return PatternConfig.from_dict(
+def default_pattern_config() -> IdResolver:
+    """Default IdResolver for testing."""
+    config = IdPatternConfig.from_dict(
         {
-            "prefix": "REQ",
-            "types": {
-                "prd": {"id": "p", "name": "PRD", "level": 1},
-                "ops": {"id": "o", "name": "OPS", "level": 2},
-                "dev": {"id": "d", "name": "DEV", "level": 3},
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type.letter}{component}",
+                "aliases": {"short": "{type.letter}{component}"},
+                "types": {
+                    "prd": {"level": 1, "aliases": {"letter": "p"}},
+                    "ops": {"level": 2, "aliases": {"letter": "o"}},
+                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase", "max_count": 26},
             },
-            "id_format": {"style": "numeric", "digits": 5},
-            "assertions": {"label_style": "uppercase"},
         }
     )
+    return IdResolver(config)
 
 
 @pytest.fixture
@@ -326,7 +331,7 @@ class TestBuildIdPattern:
     """Tests for build_id_pattern function."""
 
     def test_REQ_p00001_A_basic_pattern(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test basic ID pattern matches standard IDs."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -337,7 +342,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ-o00003")
 
     def test_REQ_p00001_B_pattern_with_assertion(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test ID pattern matches IDs with assertion suffix."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -347,7 +352,7 @@ class TestBuildIdPattern:
         assert match.group("assertion") == "A"
 
     def test_REQ_p00001_C_case_insensitive(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern is case-insensitive by default."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -356,7 +361,7 @@ class TestBuildIdPattern:
         assert pattern.search("req-p00001")
         assert pattern.search("Req-P00001")
 
-    def test_REQ_d00082_D_case_sensitive(self, default_pattern_config: PatternConfig) -> None:
+    def test_REQ_d00082_D_case_sensitive(self, default_pattern_config: IdResolver) -> None:
         """Test pattern respects case_sensitive setting."""
         ref_config = ReferenceConfig(case_sensitive=True)
         pattern = build_id_pattern(default_pattern_config, ref_config)
@@ -364,7 +369,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ-p00001")
         assert not pattern.search("req-p00001")
 
-    def test_REQ_d00082_E_underscore_separator(self, default_pattern_config: PatternConfig) -> None:
+    def test_REQ_d00082_E_underscore_separator(self, default_pattern_config: IdResolver) -> None:
         """Test pattern matches underscore separator."""
         ref_config = ReferenceConfig(separators=["_"])
         pattern = build_id_pattern(default_pattern_config, ref_config)
@@ -373,7 +378,7 @@ class TestBuildIdPattern:
         assert not pattern.search("REQ-p00001")
 
     def test_REQ_d00082_F_both_separators(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches both dash and underscore."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -382,7 +387,7 @@ class TestBuildIdPattern:
         assert pattern.search("REQ_p00001")
 
     def test_REQ_d00082_G_extracts_components(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern captures ID components."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -398,7 +403,7 @@ class TestBuildCommentPattern:
     """Tests for build_comment_pattern function."""
 
     def test_REQ_p00001_A_implements_comment(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches # Implements: comment."""
         pattern = build_comment_pattern(default_pattern_config, default_ref_config, "implements")
@@ -408,7 +413,7 @@ class TestBuildCommentPattern:
         assert "REQ-p00001" in match.group("refs")
 
     def test_REQ_p00001_B_validates_comment(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches # Validates: comment."""
         pattern = build_comment_pattern(default_pattern_config, default_ref_config, "validates")
@@ -417,7 +422,7 @@ class TestBuildCommentPattern:
         assert pattern.search("# Tests: REQ-p00001")
 
     def test_REQ_p00001_C_multiple_refs(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern captures multiple comma-separated refs."""
         pattern = build_comment_pattern(default_pattern_config, default_ref_config, "implements")
@@ -429,7 +434,7 @@ class TestBuildCommentPattern:
         assert "REQ-p00002" in refs
 
     def test_REQ_d00082_D_different_comment_styles(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches different comment styles."""
         pattern = build_comment_pattern(default_pattern_config, default_ref_config, "implements")
@@ -438,9 +443,7 @@ class TestBuildCommentPattern:
         assert pattern.search("// Implements: REQ-p00001")
         assert pattern.search("-- Implements: REQ-p00001")
 
-    def test_REQ_d00082_E_limited_comment_styles(
-        self, default_pattern_config: PatternConfig
-    ) -> None:
+    def test_REQ_d00082_E_limited_comment_styles(self, default_pattern_config: IdResolver) -> None:
         """Test pattern respects configured comment styles."""
         ref_config = ReferenceConfig(comment_styles=["//"])
         pattern = build_comment_pattern(default_pattern_config, ref_config, "implements")
@@ -473,7 +476,7 @@ class TestBuildBlockRefPattern:
     """Tests for build_block_ref_pattern function."""
 
     def test_REQ_p00001_A_block_ref(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches block reference line."""
         pattern = build_block_ref_pattern(default_pattern_config, default_ref_config)
@@ -483,7 +486,7 @@ class TestBuildBlockRefPattern:
         assert match.group("ref") == "REQ-p00001"
 
     def test_REQ_p00001_B_block_ref_with_assertion(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test pattern matches block reference with assertion."""
         pattern = build_block_ref_pattern(default_pattern_config, default_ref_config)
@@ -497,7 +500,7 @@ class TestExtractIdsFromText:
     """Tests for extract_ids_from_text function."""
 
     def test_REQ_p00001_A_single_id(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test extracts single ID from text."""
         text = "This implements REQ-p00001 requirement"
@@ -508,7 +511,7 @@ class TestExtractIdsFromText:
         assert "REQ-p00001" in ids[0]
 
     def test_REQ_p00001_B_multiple_ids(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test extracts multiple IDs from text."""
         text = "Implements REQ-p00001 and REQ-p00002-A"
@@ -518,7 +521,7 @@ class TestExtractIdsFromText:
         assert len(ids) == 2
 
     def test_REQ_p00001_C_no_ids(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test returns empty list when no IDs found."""
         text = "This is just regular text"
@@ -532,7 +535,7 @@ class TestNormalizeExtractedId:
     """Tests for normalize_extracted_id function."""
 
     def test_REQ_p00001_A_basic_normalization(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test normalizes ID to canonical format."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)
@@ -543,7 +546,7 @@ class TestNormalizeExtractedId:
         assert normalized == "REQ-p00001"
 
     def test_REQ_p00001_B_with_assertion(
-        self, default_pattern_config: PatternConfig, default_ref_config: ReferenceConfig
+        self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
         """Test normalizes ID with assertion."""
         pattern = build_id_pattern(default_pattern_config, default_ref_config)

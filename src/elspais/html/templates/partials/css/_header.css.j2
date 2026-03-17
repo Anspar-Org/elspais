@@ -329,3 +329,55 @@
 }
 .filter-toggle-btn:hover { opacity: 1; }
 .filter-toggle-btn.dimmed { opacity: 0.3; }
+
+/* Stale banner */
+.stale-banner {
+    background: var(--warning-bg, #fff3cd);
+    color: var(--warning-text, #664d03);
+    border-bottom: 1px solid var(--warning-border, #ffecb5);
+    padding: 6px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+.stale-banner.hidden { display: none; }
+.stale-banner .btn-sm {
+    padding: 2px 10px;
+    font-size: 0.8rem;
+}
+.stale-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    opacity: 0.6;
+}
+.stale-dismiss:hover { opacity: 1; }
+
+/* Help bar */
+.help-bar {
+    background: var(--info-bg, #cff4fc);
+    color: var(--info-text, #055160);
+    border-bottom: 1px solid var(--info-border, #b6effb);
+    padding: 6px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+.help-bar.hidden { display: none; }
+.help-bar-label {
+    font-weight: 600;
+    white-space: nowrap;
+}
+.help-bar-text {
+    flex: 1;
+}
+#help-mode-btn.active {
+    background: var(--info-bg, #cff4fc);
+    font-weight: 600;
+}

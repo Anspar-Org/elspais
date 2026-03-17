@@ -121,7 +121,15 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-*End* *Change Detection and Auditability* | **Hash**: fa53cb96
+G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
+
+H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
+
+I. The tool SHALL switch to an existing local or remote git branch, refusing if in-memory mutations are pending, and falling back from remote checkout to local checkout when the local branch already exists.
+
+J. The tool SHALL re-read configuration from disk when reloading the graph, ensuring branch switches with different configurations produce correct rebuilds.
+
+*End* *Change Detection and Auditability* | **Hash**: f8ff5509
 ---
 
 # REQ-p00005: Multi-Repository Requirements
@@ -398,4 +406,6 @@ D. The project SHALL include multi-command workflow tests that verify cross-comm
 
 E. The project SHALL include MCP protocol tests that verify tool invocation, search, cursor pagination, and mutation roundtrips via the stdio transport.
 
-*End* *Automated Testing* | **Hash**: bedb66fd
+F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
+
+*End* *Automated Testing* | **Hash**: 3fc90ebc

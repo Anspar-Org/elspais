@@ -18,7 +18,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
 from elspais.graph.metrics import RollupMetrics
@@ -26,15 +26,16 @@ from elspais.graph.metrics import RollupMetrics
 
 # Implements: REQ-d00085-A
 def render_section(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     args: argparse.Namespace,
+    config: dict | None = None,
 ) -> tuple[str, int]:
     """Render coverage as a composed report section.
 
     Returns (formatted_output, exit_code).
     """
     fmt = getattr(args, "format", "text") or "text"
-    data = _collect_coverage(graph)
+    data = _collect_coverage(graph, config=config)
     content = _render(data, fmt)
     return content.rstrip("\n"), 0
 
@@ -47,7 +48,12 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
+    from elspais.config import get_config
+
+    raw_config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+
     graph = build_graph(
+        config=raw_config,
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         canonical_root=canonical_root,
@@ -55,19 +61,22 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "text") or "text"
 
-    data = _collect_coverage(graph)
+    data = _collect_coverage(graph, config=raw_config)
     content = _render(data, fmt)
     sys.stdout.write(content)
 
     return 0
 
 
-def _collect_coverage(graph: TraceGraph) -> dict:
+def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict:
     """Collect coverage data from the graph.
 
     Uses pre-computed RollupMetrics from annotate_coverage().
     """
-    exclude_status = {"Draft", "Deprecated"}
+    from elspais.config import get_status_roles
+
+    roles = get_status_roles(config or {})
+    exclude_status = roles.coverage_excluded_statuses()
 
     # Group requirements by level manually (node.level is lowercase)
     level_groups: dict[str, list] = {"prd": [], "ops": [], "dev": []}

@@ -61,8 +61,11 @@ directories = ["specs"]
 
             config = load_config(Path(f.name))
 
-            # Should have default values merged in
+            # Should have the explicitly-set value
             assert config.get("patterns.prefix") == "REQ"
+            # Should also have default values NOT in the toml file
+            assert config.get("testing.enabled") is False
+            assert config.get("spec.directories") == ["spec"]
 
 
 class TestLocalConfigOverride:

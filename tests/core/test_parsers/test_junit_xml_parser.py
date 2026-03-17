@@ -221,20 +221,26 @@ class TestJUnitXMLParserCustomConfig:
 
     def test_REQ_d00082_K_custom_prefix_spec(self):
         """REQ-d00082-K: Parser with custom prefix 'SPEC' extracts correct IDs."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "SPEC",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "SPEC"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
-        parser = JUnitXMLParser(pattern_config=pattern_config)
+        parser = JUnitXMLParser(resolver=resolver)
 
         xml = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="TestCustom" tests="1">
@@ -247,61 +253,73 @@ class TestJUnitXMLParserCustomConfig:
         assert "SPEC-p00102" in results[0]["validates"]
 
     def test_REQ_d00082_K_instantiation_with_pattern_config_and_resolver(self):
-        """REQ-d00082-K: Parser instantiation with PatternConfig and ReferenceResolver."""
+        """REQ-d00082-K: Parser instantiation with IdResolver and ReferenceResolver."""
         from pathlib import Path
 
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
         from elspais.utilities.reference_config import (
             ReferenceConfig,
             ReferenceResolver,
         )
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        id_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "REQ"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         ref_config = ReferenceConfig(
             separators=["-", "_"],
             case_sensitive=False,
         )
-        resolver = ReferenceResolver(ref_config)
+        ref_resolver = ReferenceResolver(ref_config)
         base_path = Path(".")
 
         # Verify instantiation succeeds with all parameters
         parser = JUnitXMLParser(
-            pattern_config=pattern_config,
-            reference_resolver=resolver,
+            resolver=id_resolver,
+            reference_resolver=ref_resolver,
             base_path=base_path,
         )
 
-        assert parser._pattern_config == pattern_config
-        assert parser._reference_resolver == resolver
+        assert parser._resolver == id_resolver
+        assert parser._reference_resolver == ref_resolver
         assert parser._base_path == base_path
 
     def test_REQ_d00082_K_extracts_custom_prefix_ids(self):
         """REQ-d00082-K: Parser extracts custom prefix IDs from test names."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "TASK",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "TASK"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
-        parser = JUnitXMLParser(pattern_config=pattern_config)
+        parser = JUnitXMLParser(resolver=resolver)
 
         xml = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="TestTask" tests="1">

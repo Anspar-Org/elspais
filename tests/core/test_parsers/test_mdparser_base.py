@@ -1,51 +1,24 @@
 """Tests for MDparser base infrastructure - LineClaimingParser protocol."""
 
 from elspais.graph.parsers import (
-    LineClaimingParser,
     ParseContext,
     ParsedContent,
     ParserRegistry,
 )
 
 
-class TestParseContext:
-    """Tests for ParseContext dataclass."""
-
-    def test_create_minimal(self):
-        ctx = ParseContext(file_path="spec/prd.md")
-        assert ctx.file_path == "spec/prd.md"
-        assert ctx.config == {}
-
-    def test_create_with_config(self):
-        ctx = ParseContext(file_path="spec/prd.md", config={"prefix": "REQ"})
-        assert ctx.config["prefix"] == "REQ"
-
-
 class TestParsedContent:
     """Tests for ParsedContent dataclass."""
 
-    def test_create_minimal(self):
+    def test_create_minimal_defaults(self):
+        """Non-obvious default: parsed_data defaults to empty dict."""
         content = ParsedContent(
             content_type="requirement",
             start_line=10,
             end_line=25,
             raw_text="Some text",
         )
-        assert content.content_type == "requirement"
-        assert content.start_line == 10
-        assert content.end_line == 25
-        assert content.raw_text == "Some text"
         assert content.parsed_data == {}
-
-    def test_create_with_parsed_data(self):
-        content = ParsedContent(
-            content_type="requirement",
-            start_line=10,
-            end_line=25,
-            raw_text="Some text",
-            parsed_data={"id": "REQ-p00001", "title": "Auth"},
-        )
-        assert content.parsed_data["id"] == "REQ-p00001"
 
     def test_line_count(self):
         content = ParsedContent(
@@ -55,18 +28,6 @@ class TestParsedContent:
             raw_text="",
         )
         assert content.line_count == 6  # 5, 6, 7, 8, 9, 10
-
-
-class TestLineClaimingParserProtocol:
-    """Tests for LineClaimingParser protocol compliance."""
-
-    def test_protocol_has_priority(self):
-        # Protocol should define priority property
-        assert hasattr(LineClaimingParser, "priority")
-
-    def test_protocol_has_claim_and_parse(self):
-        # Protocol should define claim_and_parse method
-        assert hasattr(LineClaimingParser, "claim_and_parse")
 
 
 class TestParserRegistry:

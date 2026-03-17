@@ -19,9 +19,9 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
-from elspais.config import get_project_name
+from elspais.config import get_project_name, get_status_roles
 from elspais.graph import NodeKind
-from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.html.theme import get_catalog
 from elspais.mcp.server import (
     _get_assertion_code_map,
@@ -34,10 +34,13 @@ from elspais.mcp.server import (
     _mutate_add_assertion,
     _mutate_add_edge,
     _mutate_change_edge_kind,
+    _mutate_change_edge_targets,
     _mutate_change_status,
     _mutate_delete_assertion,
     _mutate_delete_edge,
     _mutate_delete_requirement,
+    _mutate_move_node_to_file,
+    _mutate_rename_file,
     _mutate_update_assertion,
     _mutate_update_title,
     _query_nodes,
@@ -48,7 +51,7 @@ from elspais.mcp.server import (
 
 def create_app(
     repo_root: Path,
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: dict[str, Any],
 ) -> Flask:
     """Create the Flask application with REST API routes.
@@ -139,6 +142,8 @@ def create_app(
             stats.journey_count = len(journeys)
             statuses = sorted(gen._collect_unique_values("status"))
             topics = sorted(gen._collect_unique_values("topic"))
+            roles = get_status_roles(_state["config"])
+            default_hidden = roles.default_hidden_statuses()
 
             return render_template(
                 "trace_unified.html.j2",
@@ -147,6 +152,7 @@ def create_app(
                 journeys=journeys,
                 statuses=statuses,
                 topics=topics,
+                default_hidden_statuses=sorted(default_hidden),
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
                 repo_name=get_project_name(_state["config"]),
@@ -167,19 +173,63 @@ def create_app(
 
     @app.route("/api/status")
     def api_status():
-        """GET /api/status - Graph status with associated repos info."""
+        """GET /api/status - Graph status with federation repo info."""
         result = _get_graph_status(_state["graph"])
-        # Include associated repos metadata for badge display
-        try:
-            from elspais.associates import load_associates_config
-
-            assoc_config = load_associates_config(_state["config"], _state["working_dir"])
-            result["associated_repos"] = [
-                {"code": a.code, "name": a.name} for a in assoc_config.associates if a.enabled
-            ]
-        except Exception:
-            result["associated_repos"] = []
+        # Implements: REQ-d00206-C
+        # Include federation repo metadata from iter_repos()
+        graph = _state["graph"]
+        if hasattr(graph, "iter_repos"):
+            repos_info = []
+            for entry in graph.iter_repos():
+                repo_info = {
+                    "name": entry.name,
+                    "path": str(entry.repo_root),
+                    "status": "error" if entry.graph is None else "ok",
+                }
+                if entry.git_origin:
+                    repo_info["git_origin"] = entry.git_origin
+                if entry.error:
+                    repo_info["error"] = entry.error
+                repos_info.append(repo_info)
+            result["repos"] = repos_info
+        else:
+            result["repos"] = []
         return jsonify(result)
+
+    # Implements: REQ-d00206-A, REQ-d00206-B
+    @app.route("/api/repos")
+    def api_repos():
+        """GET /api/repos - Federation repo info with optional staleness."""
+        graph = _state["graph"]
+        repos = []
+        if hasattr(graph, "iter_repos"):
+            for entry in graph.iter_repos():
+                repo_info: dict = {
+                    "name": entry.name,
+                    "path": str(entry.repo_root),
+                    "status": "error" if entry.graph is None else "ok",
+                }
+                if entry.git_origin:
+                    repo_info["git_origin"] = entry.git_origin
+                if entry.error:
+                    repo_info["error"] = entry.error
+
+                # REQ-d00206-B: Staleness info for repos with git_origin
+                if entry.git_origin and entry.graph is not None:
+                    try:
+                        from elspais.utilities.git import git_status_summary
+
+                        summary = git_status_summary(entry.repo_root)
+                        repo_info["staleness"] = {
+                            "branch": summary.get("branch"),
+                            "remote_diverged": summary.get("remote_diverged", False),
+                            "fast_forward_possible": summary.get("fast_forward_possible", False),
+                        }
+                    except Exception:
+                        repo_info["staleness"] = None
+
+                repos.append(repo_info)
+        return jsonify({"repos": repos})
 
     @app.route("/api/requirement/<req_id>")
     def api_requirement(req_id: str):
@@ -291,8 +341,10 @@ def create_app(
             rp = node.get_metric("repo_prefix", "")
             if rp and rp != "CORE":
                 return True
-            # Definitive: source location from a different repo
-            if node.source and node.source.repo:
+            # Implements: REQ-d00129-F
+            # Definitive: FILE node from a different repo
+            _fn = node.file_node()
+            if _fn and _fn.get_field("repo"):
                 return True
             # Explicit field marker
             return bool(node.get_field("associated", False))
@@ -303,9 +355,11 @@ def create_app(
             rp = node.get_metric("repo_prefix", "")
             if rp and rp != "CORE":
                 return rp
-            # Check source location repo marker
-            if node.source and node.source.repo:
-                return node.source.repo
+            # Implements: REQ-d00129-F
+            # Check FILE node repo marker
+            _fn = node.file_node()
+            if _fn and _fn.get_field("repo"):
+                return _fn.get_field("repo")
             # Extract from ID pattern (e.g., REQ-CAL-d00001 → CAL)
             m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
             if m:
@@ -365,20 +419,24 @@ def create_app(
                 }
             )
 
-            # Recurse into requirement children only
-            for child in node.iter_children():
-                if child.kind == NodeKind.REQUIREMENT:
-                    _walk(child, depth + 1, node.id)
+            # Recurse into requirement children only (sorted by ID)
+            req_children = sorted(
+                (c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT),
+                key=lambda n: n.id,
+            )
+            for child in req_children:
+                _walk(child, depth + 1, node.id)
 
-        # Start from roots
-        for root in g.iter_roots():
+        # Start from roots (sorted by ID for stable display order)
+        for root in sorted(g.iter_roots(), key=lambda n: n.id):
             if root.kind == NodeKind.REQUIREMENT:
                 _walk(root, 0, None)
 
-        # Add USER_JOURNEY nodes as root-level rows
-        for node in g.nodes_by_kind(NodeKind.USER_JOURNEY):
-            source_file = node.source.path if node.source else ""
-            source_line = node.source.line if node.source else 0
+        # Add USER_JOURNEY nodes as root-level rows (sorted by ID)
+        for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
+            _fn = node.file_node()
+            source_file = _fn.get_field("relative_path") if _fn else ""
+            source_line = node.get_field("parse_line") or 0
             rows.append(
                 {
                     "id": node.id,
@@ -454,7 +512,7 @@ def create_app(
 
         # Check which nodes in the mutation log are sourced from this file
         g = _state["graph"]
-        mutation_log: MutationLog = g._mutation_log
+        mutation_log: MutationLog = g.mutation_log
         affected_node_ids: set[str] = set()
         for entry in mutation_log.iter_entries():
             # Each entry has node_id in before_state or after_state
@@ -464,15 +522,18 @@ def create_app(
             if not node_id:
                 continue
             node = g.find_by_id(node_id)
-            if node and node.source and node.source.path:
-                source_path = Path(node.source.path)
-                node_path = (
-                    source_path
-                    if source_path.is_absolute()
-                    else (_state["working_dir"] / source_path)
-                ).resolve()
-                if node_path == abs_path:
-                    affected_node_ids.add(node_id)
+            if node:
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                if _rp:
+                    source_path = Path(_rp)
+                    node_path = (
+                        source_path
+                        if source_path.is_absolute()
+                        else (_state["working_dir"] / source_path)
+                    ).resolve()
+                    if node_path == abs_path:
+                        affected_node_ids.add(node_id)
 
         return jsonify(
             {
@@ -493,6 +554,39 @@ def create_app(
         log = _get_mutation_log(_state["graph"], limit=1)
         count = log.get("count", 0)
         return jsonify({"dirty": count > 0, "mutation_count": count})
+
+    @app.route("/api/check-freshness")
+    def api_check_freshness():
+        # Implements: REQ-p00006-A
+        """GET /api/check-freshness - Check if spec files changed since last build."""
+        import os
+
+        build_time = _state.get("build_time", 0)
+        spec_dirs = _state["config"].get("spec", {}).get("directories", ["spec"])
+        working_dir = _state["working_dir"]
+
+        stale_files: list[str] = []
+        for spec_dir in spec_dirs:
+            spec_path = Path(working_dir) / spec_dir
+            if not spec_path.is_dir():
+                continue
+            for md_file in spec_path.rglob("*.md"):
+                try:
+                    if os.path.getmtime(md_file) > build_time:
+                        stale_files.append(str(md_file.relative_to(working_dir)))
+                except OSError:
+                    continue
+
+        log = _get_mutation_log(_state["graph"], limit=1)
+        has_pending = log.get("count", 0) > 0
+
+        return jsonify(
+            {
+                "stale": len(stale_files) > 0,
+                "has_pending_mutations": has_pending,
+                "stale_files": sorted(stale_files),
+            }
+        )
 
     # ─────────────────────────────────────────────────────────────────
     # Mutation POST endpoints
@@ -579,11 +673,12 @@ def create_app(
 
     @app.route("/api/mutate/edge", methods=["POST"])
     def api_mutate_edge():
-        """POST /api/mutate/edge - Edge mutations (add/change_kind/delete).
+        """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete).
 
         The ``action`` field in the JSON body determines the operation:
         - "add": requires source_id, target_id, edge_kind
         - "change_kind": requires source_id, target_id, new_kind
+        - "change_targets": requires source_id, target_id, assertion_targets
         - "delete": requires source_id, target_id
         """
         data = request.get_json(force=True)
@@ -602,7 +697,12 @@ def create_app(
                 return jsonify({"success": False, "error": "edge_kind required for add"}), 400
             assertion_targets = data.get("assertion_targets")
             result = _mutate_add_edge(
-                _state["graph"], source_id, target_id, edge_kind, assertion_targets
+                _state["graph"],
+                source_id,
+                target_id,
+                edge_kind,
+                assertion_targets,
+                config=_state.get("config"),
             )
         elif action == "change_kind":
             new_kind = data.get("new_kind", "")
@@ -612,11 +712,59 @@ def create_app(
                     400,
                 )
             result = _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
+        elif action == "change_targets":
+            targets = data.get("assertion_targets", [])
+            result = _mutate_change_edge_targets(_state["graph"], source_id, target_id, targets)
         elif action == "delete":
             result = _mutate_delete_edge(_state["graph"], source_id, target_id, confirm=True)
         else:
             return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
 
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/move-to-file", methods=["POST"])
+    def api_mutate_move_to_file():
+        """POST /api/mutate/move-to-file - Move node to a different file."""
+        data = request.get_json(force=True)
+        node_id = data.get("node_id", "")
+        target_file_id = data.get("target_file_id", "")
+        if not node_id or not target_file_id:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "node_id and target_file_id required",
+                    }
+                ),
+                400,
+            )
+        result = _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
+        status_code = 200 if result.get("success") else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/mutate/rename-file", methods=["POST"])
+    def api_mutate_rename_file():
+        """POST /api/mutate/rename-file - Rename a FILE node."""
+        data = request.get_json(force=True)
+        file_id = data.get("file_id", "")
+        new_relative_path = data.get("new_relative_path", "")
+        if not file_id or not new_relative_path:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "file_id and new_relative_path required",
+                    }
+                ),
+                400,
+            )
+        result = _mutate_rename_file(
+            _state["graph"],
+            file_id,
+            new_relative_path,
+            _state.get("repo_root"),
+        )
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
 
@@ -651,12 +799,14 @@ def create_app(
     @app.route("/api/save", methods=["POST"])
     def api_save():
         """POST /api/save - Persist mutations to spec files on disk."""
-        from elspais.server.persistence import replay_mutations_to_disk
+        # Implements: REQ-d00132-A
+        from elspais.graph.render import render_save
+        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
 
-        result = replay_mutations_to_disk(
+        result = render_save(
             _state["graph"],
             _state["working_dir"],
-            build_time=_state.get("build_time"),
+            resolver=_build_resolver_for_save(_state["config"]),
         )
         status_code = 200 if result.get("success") else 409
         # Update build_time after successful save
@@ -683,10 +833,18 @@ def create_app(
 
     @app.route("/api/reload", methods=["POST"])
     def api_reload():
-        """POST /api/reload - Reload graph from disk (same as revert)."""
+        # Implements: REQ-p00004-J
+        """POST /api/reload - Reload graph from disk with fresh config."""
+        from elspais.config import load_config
         from elspais.graph.factory import build_graph
 
         try:
+            # Re-read config from disk so branch switches pick up changes
+            config_path = Path(_state["working_dir"]) / ".elspais.toml"
+            if config_path.exists():
+                loader = load_config(config_path)
+                _state["config"] = loader.get_raw()
+
             new_graph = build_graph(
                 config=_state["config"],
                 repo_root=_state["working_dir"],
@@ -751,5 +909,81 @@ def create_app(
         result = sync_branch(_state["working_dir"])
         status_code = 200 if result.get("success") else 400
         return jsonify(result), status_code
+
+    @app.route("/api/git/branches")
+    def api_git_branches():
+        # Implements: REQ-p00004-H
+        """GET /api/git/branches - List local and remote git branches."""
+        from elspais.utilities.git import list_branches
+
+        result = list_branches(_state["working_dir"])
+        return jsonify(result)
+
+    @app.route("/api/git/checkout", methods=["POST"])
+    def api_git_checkout():
+        # Implements: REQ-p00004-I
+        """POST /api/git/checkout - Switch to an existing git branch."""
+        import subprocess
+
+        from elspais.utilities.git import _clean_git_env
+
+        data = request.get_json(force=True)
+        branch = data.get("branch", "").strip()
+        is_remote = data.get("is_remote", False)
+
+        if not branch:
+            return jsonify({"success": False, "error": "branch name required"}), 400
+
+        # Refuse if in-memory mutations are pending
+        log = _get_mutation_log(_state["graph"], limit=1)
+        if log.get("count", 0) > 0:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Save or revert changes before switching branches",
+                    }
+                ),
+                409,
+            )
+
+        env = _clean_git_env()
+        repo = _state["working_dir"]
+
+        try:
+            if is_remote:
+                # Try creating a local tracking branch from origin
+                result = subprocess.run(
+                    ["git", "checkout", "-b", branch, f"origin/{branch}"],
+                    cwd=repo,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0 and "already exists" in result.stderr:
+                    # Local branch already exists — fall back to plain checkout
+                    result = subprocess.run(
+                        ["git", "checkout", branch],
+                        cwd=repo,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+            else:
+                result = subprocess.run(
+                    ["git", "checkout", branch],
+                    cwd=repo,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+
+            if result.returncode != 0:
+                return jsonify({"success": False, "error": result.stderr.strip()}), 400
+
+            return jsonify({"success": True, "branch": branch})
+
+        except FileNotFoundError:
+            return jsonify({"success": False, "error": "git not found"}), 500
 
     return app

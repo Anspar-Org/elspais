@@ -10,13 +10,16 @@ This document defines operations and deployment requirements.
 
 The system SHALL be deployable to production environments with zero downtime.
 
-**Rationale**: Business continuity requires uninterrupted service.
+## Assertions
 
-**Acceptance Criteria**:
-- Blue-green deployment supported
-- Rollback within 5 minutes
-- Health checks before traffic routing
-- Automated smoke tests post-deployment
+A. The system SHALL support blue-green deployment.
+B. The system SHALL support rollback within 5 minutes.
+C. The system SHALL perform health checks before routing traffic.
+D. The system SHALL run automated smoke tests post-deployment.
+
+## Rationale
+
+Business continuity requires uninterrupted service.
 
 *End* *Production Deployment* | **Hash**: 14f50e4d
 ---
@@ -27,13 +30,16 @@ The system SHALL be deployable to production environments with zero downtime.
 
 The system SHALL implement automated backup and recovery procedures.
 
-**Rationale**: Data protection requires reliable backup mechanisms.
+## Assertions
 
-**Acceptance Criteria**:
-- Daily automated backups
-- Point-in-time recovery support
-- Backup verification tests
-- Recovery time objective: 4 hours
+A. The system SHALL perform daily automated backups.
+B. The system SHALL support point-in-time recovery.
+C. The system SHALL run backup verification tests.
+D. The system SHALL meet a recovery time objective of 4 hours.
+
+## Rationale
+
+Data protection requires reliable backup mechanisms.
 
 *End* *Backup Strategy* | **Hash**: c4e85cd1
 ---

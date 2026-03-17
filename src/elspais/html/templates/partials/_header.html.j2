@@ -17,7 +17,8 @@
             <span class="stat-sep repo-sep" id="repo-sep" style="display:none;">|</span>
             <span id="repo-badges-container"></span>
             <span class="stat-sep">|</span>
-            <button class="btn filter-toggle-btn" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar">&#9881;</button>
+            <button class="btn filter-toggle-btn" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar"
+                data-help="Show or hide the filter toolbar. Filters let you narrow the tree by level, status, or text search.">&#9881;</button>
         </div>
     </div>
 
@@ -30,7 +31,8 @@
 
     <div class="header-right">
         {% if mode == 'edit' %}
-        <span class="branch-badge" id="branch-badge" title="Current git branch">
+        <span class="branch-badge" id="branch-badge" onclick="showBranchPickerModal()"
+              title="Click to switch branch" style="cursor: pointer;">
             <span class="branch-status-dot" id="branch-status-dot"></span>
             <span id="branch-name">...</span>
             <span class="branch-warning hidden" id="branch-warning"
@@ -38,21 +40,25 @@
         </span>
         <button class="btn btn-sync hidden" id="btn-sync" onclick="doGitSync()"
                 title="Sync: merge remote changes and rebase on main">&#x21bb; Sync</button>
-        <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode">
+        <button class="edit-toggle" id="edit-toggle" onclick="toggleEditMode()" title="Toggle edit mode"
+                data-help="Enable or disable edit mode. When active, you can modify requirement titles, statuses, assertions, and relationships directly in the cards.">
             <span class="edit-toggle-indicator"></span>
             <span>Edit Mode</span>
         </button>
 
-        <button class="btn" id="btn-undo" onclick="doUndo()" disabled title="Undo last change">
+        <button class="btn" id="btn-undo" onclick="doUndo()" disabled title="Undo last change"
+                data-help="Undo the most recent in-memory mutation. Mutations are not saved to disk until you click Save.">
             Undo
         </button>
 
-        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save mutations to disk">
+        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save mutations to disk"
+                data-help="Persist all pending in-memory mutations to spec files on disk. The badge shows the number of unsaved changes.">
             Save
             <span class="unsaved-badge hidden" id="unsaved-badge">0</span>
         </button>
 
-        <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes">
+        <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes"
+                data-help="Discard ALL pending in-memory mutations and reload the graph from disk. This cannot be undone.">
             Revert
         </button>
 
@@ -60,11 +66,21 @@
                 title="Commit and push spec changes">
             Push
         </button>
+
+        <button class="btn" id="btn-refresh-disk" onclick="refreshFromDisk()"
+                title="Reload graph from disk"
+                data-help="Reload the requirement graph from spec files on disk. Use after editing spec files externally.">
+            Refresh
+        </button>
+
         {% endif %}
 
         <div class="hamburger-menu" id="hamburger-menu">
             <button class="btn hamburger-btn" onclick="toggleHamburgerMenu()" title="Options">&#9776;</button>
             <div class="hamburger-dropdown" id="hamburger-dropdown">
+                <button class="hamburger-item" id="help-mode-btn" onclick="toggleHelpMode(); closeHamburgerMenu()">
+                    ? Help
+                </button>
                 <button class="hamburger-item" onclick="toggleLegend(); closeHamburgerMenu()">
                     &#8505; Legend
                 </button>
@@ -87,3 +103,14 @@
         </div>
     </div>
 </header>
+
+<div class="stale-banner hidden" id="stale-banner">
+    <span>Spec files have changed on disk.</span>
+    <button class="btn btn-sm" onclick="refreshFromDisk()">Refresh Now</button>
+    <button class="btn btn-sm stale-dismiss" onclick="dismissStaleBanner()">&times;</button>
+</div>
+
+<div class="help-bar hidden" id="help-bar">
+    <span class="help-bar-label">Help:</span>
+    <span class="help-bar-text" id="help-bar-text">Hover over any control to see its description.</span>
+</div>

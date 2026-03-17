@@ -7,21 +7,9 @@ from elspais.graph.parsers.requirement import RequirementParser
 
 
 @pytest.fixture
-def parser():
+def parser(hht_resolver):
     """Create a RequirementParser with default HHT-style config."""
-    from elspais.utilities.patterns import PatternConfig
-
-    config = PatternConfig(
-        id_template="{prefix}-{type}{id}",
-        prefix="REQ",
-        types={
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
-        },
-        id_format={"style": "numeric", "digits": 5, "leading_zeros": True},
-    )
-    return RequirementParser(config)
+    return RequirementParser(hht_resolver)
 
 
 class TestRequirementParserPriority:

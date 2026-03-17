@@ -34,7 +34,7 @@ def run(args: argparse.Namespace) -> int:
         return cmd_unlink(args)
     elif getattr(args, "all", False):
         return cmd_all(args)
-    elif getattr(args, "path", None):
+    elif getattr(args, "associate_path", None):
         return cmd_link(args)
     else:
         print("Usage: elspais associate <path>", file=sys.stderr)
@@ -56,7 +56,7 @@ def cmd_link(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    path_str = args.path
+    path_str = args.associate_path
     repo_path = Path(path_str)
 
     # If it looks like a name (no path separators), search siblings
@@ -161,7 +161,9 @@ def cmd_list(args: argparse.Namespace) -> int:
     from elspais.config import get_config
 
     config_path = _get_config_path(args)
-    config = get_config(config_path=config_path, quiet=True)
+    config = get_config(
+        config_path=config_path, quiet=True, overrides=getattr(args, "config_overrides", None)
+    )
 
     paths = config.get("associates", {}).get("paths", [])
 

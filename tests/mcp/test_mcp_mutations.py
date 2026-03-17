@@ -1,10 +1,12 @@
 # Validates REQ-p00060-D, REQ-p00060-E
 # Validates REQ-o00062-A, REQ-o00062-B, REQ-o00062-C, REQ-o00062-D
 # Validates REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
+# Validates REQ-o00063-A
 # Validates REQ-d00065-A, REQ-d00065-B, REQ-d00065-C, REQ-d00065-D, REQ-d00065-E
 """Tests for MCP mutation tools.
 
 Tests REQ-o00062: MCP Graph Mutation Tools
+Tests REQ-o00063: File Mutation Tools
 Tests REQ-d00065: Mutation Tool Delegation
 
 All mutation tools must:
@@ -52,7 +54,7 @@ def mutation_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A", "text": "SHALL encrypt all data at rest"}
-    prd_node.add_child(assertion_a)
+    prd_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -60,7 +62,7 @@ def mutation_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B", "text": "SHALL use TLS 1.3 for transit"}
-    prd_node.add_child(assertion_b)
+    prd_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     # Create OPS requirement that implements PRD
     ops_node = GraphNode(
@@ -442,6 +444,57 @@ class TestMutateAddEdge:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_edge"
 
+    def test_normalizes_full_assertion_ids_to_bare_labels(self, mutation_graph):
+        """Full assertion IDs like REQ-o00001-A are normalized to bare labels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_edge
+
+        # Setup: add assertion to target so the ID is valid
+        target = mutation_graph.find_by_id("REQ-o00001")
+        target.set_field("assertions", {"A": "Test assertion"})
+
+        dev_node = GraphNode(
+            id="REQ-d00003",
+            kind=NodeKind.REQUIREMENT,
+            label="DEV with assertion ref",
+        )
+        dev_node._content = {"level": "DEV", "status": "Draft"}
+        mutation_graph._index["REQ-d00003"] = dev_node
+
+        # Config matching the default REQ-{type}{component} pattern
+        config = {
+            "project": {"namespace": "REQ"},
+            "id-patterns": {
+                "canonical": "{namespace}-{type}{component}",
+                "types": {
+                    "p": {"level": 1},
+                    "o": {"level": 2},
+                    "d": {"level": 3},
+                },
+                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                "assertions": {"label_style": "uppercase"},
+            },
+        }
+
+        result = _mutate_add_edge(
+            mutation_graph,
+            source_id="REQ-d00003",
+            target_id="REQ-o00001",
+            edge_kind="IMPLEMENTS",
+            assertion_targets=["REQ-o00001-A"],
+            config=config,
+        )
+
+        assert result["success"] is True
+        # Verify the edge has bare label "A", not the full "REQ-o00001-A"
+        edges = [
+            e
+            for e in target.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-d00003"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+
 
 class TestMutateChangeEdgeKind:
     """Tests for mutate_change_edge_kind() tool."""
@@ -465,6 +518,55 @@ class TestMutateChangeEdgeKind:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "change_edge_kind"
+
+
+class TestMutateChangeEdgeTargets:
+    """Tests for mutate_change_edge_targets() tool.
+
+    Validates REQ-o00062-C: Edge mutation tools include change_targets action.
+    """
+
+    def test_REQ_o00062_C_delegates_to_graph_change_edge_targets(self, mutation_graph):
+        """REQ-o00062-C: Delegates to graph.change_edge_targets()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        # REQ-o00001 implements REQ-p00001 (edge exists from fixture)
+        # Change assertion targets to just ["A"]
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["A"])
+
+        assert result["success"] is True
+        # Verify the edge's assertion_targets is ["A"]
+        parent = mutation_graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-o00001"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+
+    def test_REQ_o00062_E_returns_mutation_entry(self, mutation_graph):
+        """REQ-o00062-E: Returns MutationEntry for audit."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["B"])
+
+        assert "mutation" in result
+        mutation = result["mutation"]
+        assert mutation["operation"] == "change_edge_targets"
+
+    def test_change_edge_targets_error_no_edge(self, mutation_graph):
+        """Returns error when no edge exists between nodes."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        # REQ-p00001-A is an assertion, no edge from it to REQ-o00001
+        result = _mutate_change_edge_targets(mutation_graph, "REQ-p00001-A", "REQ-o00001", ["A"])
+
+        assert result["success"] is False
+        assert "error" in result
 
 
 class TestMutateDeleteEdge:
@@ -539,6 +641,114 @@ class TestMutateFixBrokenReference:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "fix_broken_reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: File Mutations - REQ-o00063
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestMutateMoveNodeToFile:
+    """Tests for mutate_move_node_to_file() tool.
+
+    Validates REQ-o00063: File mutation tools include move_node_to_file action.
+    """
+
+    @pytest.fixture
+    def file_graph(self, mutation_graph):
+        """Extend mutation_graph with FILE nodes and CONTAINS wiring."""
+        graph = mutation_graph
+
+        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1.set_field("relative_path", "spec/main.md")
+        graph._index["file:spec/main.md"] = file1
+        graph._roots.append(file1)
+
+        req = graph.find_by_id("REQ-p00001")
+        edge = file1.link(req, EdgeKind.CONTAINS)
+        edge.metadata["render_order"] = 0.0
+
+        file2 = GraphNode("file:spec/other.md", NodeKind.FILE, label="other.md")
+        file2.set_field("relative_path", "spec/other.md")
+        graph._index["file:spec/other.md"] = file2
+        graph._roots.append(file2)
+
+        return graph
+
+    def test_REQ_o00063_A_delegates_to_graph_move_node_to_file(self, file_graph):
+        """REQ-o00063-A: Delegates to graph.move_node_to_file()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_move_node_to_file
+
+        result = _mutate_move_node_to_file(file_graph, "REQ-p00001", "file:spec/other.md")
+
+        assert result["success"] is True
+        assert "mutation" in result
+        # Verify req is now under the target file
+        req = file_graph.find_by_id("REQ-p00001")
+        assert req.file_node().id == "file:spec/other.md"
+
+    def test_REQ_o00063_A_move_error_no_file_parent(self, file_graph):
+        """REQ-o00063-A: Moving a node without a FILE parent returns error."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_move_node_to_file
+
+        # Create a standalone node with no FILE ancestor
+        orphan = GraphNode("REQ-d00099", NodeKind.REQUIREMENT, label="Orphan")
+        orphan._content = {"level": "DEV", "status": "Draft"}
+        file_graph._index["REQ-d00099"] = orphan
+
+        result = _mutate_move_node_to_file(file_graph, "REQ-d00099", "file:spec/other.md")
+
+        assert result["success"] is False
+        assert "error" in result
+
+
+class TestMutateRenameFile:
+    """Tests for mutate_rename_file() tool.
+
+    Validates REQ-o00063: File mutation tools include rename_file action.
+    """
+
+    @pytest.fixture
+    def file_graph(self, mutation_graph):
+        """Extend mutation_graph with a FILE node."""
+        graph = mutation_graph
+
+        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1.set_field("relative_path", "spec/main.md")
+        graph._index["file:spec/main.md"] = file1
+        graph._roots.append(file1)
+
+        req = graph.find_by_id("REQ-p00001")
+        edge = file1.link(req, EdgeKind.CONTAINS)
+        edge.metadata["render_order"] = 0.0
+
+        return graph
+
+    def test_REQ_o00063_A_delegates_to_graph_rename_file(self, file_graph):
+        """REQ-o00063-A: Delegates to graph.rename_file()."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(file_graph, "file:spec/main.md", "spec/renamed.md")
+
+        assert result["success"] is True
+        assert "mutation" in result
+        # Verify the new ID is findable
+        assert file_graph.find_by_id("file:spec/renamed.md") is not None
+        # Old ID should be gone
+        assert file_graph.find_by_id("file:spec/main.md") is None
+
+    def test_REQ_o00063_A_rename_error_not_found(self, file_graph):
+        """REQ-o00063-A: Renaming a nonexistent file returns error."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(file_graph, "file:spec/nonexistent.md", "spec/new.md")
+
+        assert result["success"] is False
+        assert "error" in result
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -87,7 +87,7 @@ def run(
             config_path=config_path,
             canonical_root=canonical_root,
         )
-        config_dict = get_config(config_path)
+        config_dict = get_config(config_path, overrides=getattr(args, "config_overrides", None))
         config = ConfigLoader.from_dict(config_dict)
 
     outputs: list[str] = []
@@ -132,7 +132,8 @@ def _render_section(
     elif name == "summary":
         from elspais.commands.summary import render_section
 
-        return render_section(graph, args)
+        raw_config = config.get_raw() if config is not None else None
+        return render_section(graph, args, config=raw_config)
     elif name == "trace":
         from elspais.commands.trace import render_section
 

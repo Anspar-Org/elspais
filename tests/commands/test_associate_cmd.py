@@ -47,7 +47,7 @@ class TestAssociateLinkByPath:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=str(assoc),
+            associate_path=str(assoc),
             all=False,
             list=False,
             unlink=None,
@@ -81,7 +81,7 @@ class TestAssociateLinkByPath:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=str(assoc),
+            associate_path=str(assoc),
             all=False,
             list=False,
             unlink=None,
@@ -105,7 +105,7 @@ class TestAssociateLinkByPath:
 
         # Link first associate
         args = argparse.Namespace(
-            path=str(assoc1),
+            associate_path=str(assoc1),
             all=False,
             list=False,
             unlink=None,
@@ -117,7 +117,7 @@ class TestAssociateLinkByPath:
         run(args)
 
         # Link second associate
-        args.path = str(assoc2)
+        args.associate_path = str(assoc2)
         run(args)
 
         # Both should be in the config
@@ -136,7 +136,7 @@ class TestAssociateLinkByPath:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=str(assoc),
+            associate_path=str(assoc),
             all=False,
             list=False,
             unlink=None,
@@ -171,7 +171,7 @@ class TestAssociateLinkByName:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path="callisto",
+            associate_path="callisto",
             all=False,
             list=False,
             unlink=None,
@@ -198,7 +198,7 @@ class TestAssociateErrors:
         monkeypatch.chdir(core)
 
         args = argparse.Namespace(
-            path="/nonexistent/repo",
+            associate_path="/nonexistent/repo",
             all=False,
             list=False,
             unlink=None,
@@ -223,7 +223,7 @@ class TestAssociateErrors:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=str(no_config),
+            associate_path=str(no_config),
             all=False,
             list=False,
             unlink=None,
@@ -249,7 +249,7 @@ class TestAssociateErrors:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=str(wrong_type),
+            associate_path=str(wrong_type),
             all=False,
             list=False,
             unlink=None,
@@ -272,7 +272,7 @@ class TestAssociateErrors:
         monkeypatch.chdir(core)
 
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="nonexistent",
@@ -303,7 +303,7 @@ class TestAssociateAll:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=True,
             list=False,
             unlink=None,
@@ -336,7 +336,7 @@ class TestAssociateAll:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=True,
             list=False,
             unlink=None,
@@ -374,7 +374,7 @@ class TestAssociateAll:
         # cwd is the worktree, NOT the canonical root
         monkeypatch.chdir(worktree_cwd)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=True,
             list=False,
             unlink=None,
@@ -411,7 +411,7 @@ class TestAssociateList:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=True,
             unlink=None,
@@ -435,7 +435,7 @@ class TestAssociateList:
         monkeypatch.chdir(core)
 
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=True,
             unlink=None,
@@ -460,7 +460,7 @@ class TestAssociateList:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=True,
             unlink=None,
@@ -497,7 +497,7 @@ class TestAssociateUnlink:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="callisto",
@@ -530,7 +530,7 @@ class TestAssociateUnlink:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="callisto",
@@ -567,7 +567,7 @@ class TestAssociateUnlink:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="callisto",
@@ -595,7 +595,7 @@ class TestAssociateUnlink:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="CAL",
@@ -635,7 +635,7 @@ class TestAssociateUnlink:
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            path=None,
+            associate_path=None,
             all=False,
             list=False,
             unlink="callisto",

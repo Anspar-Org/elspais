@@ -63,7 +63,6 @@ A. The system SHALL do another thing.
         repo_root=tmp_path,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=False,
     )
 
     return graph, [spec_dir]

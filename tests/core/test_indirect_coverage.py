@@ -14,7 +14,7 @@ REQUIREMENT <- (IMPLEMENTS) <- CODE <- (VALIDATES) <- TEST <- (CONTAINS) <- TEST
 
 from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
@@ -488,7 +488,7 @@ class TestTransitiveCoverageThroughCode:
         The chain uses:
         - req.link(code, IMPLEMENTS, assertion_targets) for REQ->CODE edge
         - code.link(test, VALIDATES) for CODE->TEST edge
-        - test.add_child(result) for TEST->TEST_RESULT containment
+        - test.link(result, EdgeKind.YIELDS) for TEST->TEST_RESULT containment
 
         Returns (graph, req_node, code_node, test_node, result_node_or_None)
         """
@@ -504,18 +504,17 @@ class TestTransitiveCoverageThroughCode:
         assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL authenticate")
         assert_a.set_field("label", "A")
         graph._index[assert_a.id] = assert_a
-        req.add_child(assert_a)
+        req.link(assert_a, EdgeKind.STRUCTURES)
 
         assert_b = GraphNode(id="REQ-p00001-B", kind=NodeKind.ASSERTION, label="SHALL log attempts")
         assert_b.set_field("label", "B")
         graph._index[assert_b.id] = assert_b
-        req.add_child(assert_b)
+        req.link(assert_b, EdgeKind.STRUCTURES)
 
         # CODE implements requirement (with or without assertion_targets)
         code = GraphNode(
             id="code:src/auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=10),
         )
         code.set_field("function_name", "authenticate")
         graph._index[code.id] = code
@@ -525,7 +524,6 @@ class TestTransitiveCoverageThroughCode:
         test = GraphNode(
             id="test:tests/test_auth.py::test_authenticate",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=5),
         )
         graph._index[test.id] = test
         code.link(test, EdgeKind.VALIDATES)
@@ -539,7 +537,7 @@ class TestTransitiveCoverageThroughCode:
             )
             result.set_field("status", result_status)
             graph._index[result.id] = result
-            test.add_child(result)
+            test.link(result, EdgeKind.YIELDS)
             result_node = result
 
         return graph, req, code, test, result_node
@@ -609,7 +607,6 @@ class TestTransitiveCoverageThroughCode:
         direct_test = GraphNode(
             id="test:tests/test_auth.py::test_auth_direct",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=20),
         )
         graph._index[direct_test.id] = direct_test
         req.link(direct_test, EdgeKind.VALIDATES, assertion_targets=["A"])
@@ -621,7 +618,7 @@ class TestTransitiveCoverageThroughCode:
         )
         direct_result.set_field("status", "passed")
         graph._index[direct_result.id] = direct_result
-        direct_test.add_child(direct_result)
+        direct_test.link(direct_result, EdgeKind.YIELDS)
 
         annotate_coverage(graph)
 
@@ -648,12 +645,11 @@ class TestTransitiveCoverageThroughCode:
         assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL do X")
         assert_a.set_field("label", "A")
         graph._index[assert_a.id] = assert_a
-        req.add_child(assert_a)
+        req.link(assert_a, EdgeKind.STRUCTURES)
 
         code = GraphNode(
             id="code:src/mod.py:5",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/mod.py", line=5),
         )
         graph._index[code.id] = code
         # REFINES, not IMPLEMENTS -- should not count
@@ -662,7 +658,6 @@ class TestTransitiveCoverageThroughCode:
         test = GraphNode(
             id="test:tests/test_mod.py::test_func",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_mod.py", line=1),
         )
         graph._index[test.id] = test
         code.link(test, EdgeKind.VALIDATES)
@@ -698,14 +693,13 @@ class TestTransitiveCoverageThroughCode:
         assert_a = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION, label="SHALL X")
         assert_a.set_field("label", "A")
         graph._index[assert_a.id] = assert_a
-        req.add_child(assert_a)
+        req.link(assert_a, EdgeKind.STRUCTURES)
 
         # Two CODE nodes, each implementing the requirement
         for i in range(2):
             code = GraphNode(
                 id=f"code:src/mod{i}.py:1",
                 kind=NodeKind.CODE,
-                source=SourceLocation(path=f"src/mod{i}.py", line=1),
             )
             graph._index[code.id] = code
             req.link(code, EdgeKind.IMPLEMENTS)
@@ -713,7 +707,6 @@ class TestTransitiveCoverageThroughCode:
             test = GraphNode(
                 id=f"test:tests/test_mod{i}.py::test_func",
                 kind=NodeKind.TEST,
-                source=SourceLocation(path=f"tests/test_mod{i}.py", line=1),
             )
             graph._index[test.id] = test
             code.link(test, EdgeKind.VALIDATES)
@@ -791,7 +784,6 @@ class TestFactoryIntegration:
         graph = factory_build_graph(
             config_path=config_file,
             repo_root=tmp_path,
-            scan_sponsors=False,
         )
 
         # Check that the graph was built (may or may not have transitive edges
@@ -843,7 +835,6 @@ class TestFactoryIntegration:
             config_path=config_file,
             repo_root=tmp_path,
             scan_tests=False,
-            scan_sponsors=False,
         )
 
         assert graph is not None
@@ -900,7 +891,6 @@ class TestFactoryIntegration:
             config_path=config_file,
             repo_root=tmp_path,
             scan_code=False,
-            scan_sponsors=False,
         )
 
         assert graph is not None

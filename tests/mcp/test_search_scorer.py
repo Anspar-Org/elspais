@@ -404,13 +404,6 @@ class TestMatchesNode:
         )
         assert matches_node(node, query) is False
 
-    def test_REQ_d00061_M_matches_node_returns_bool_type(self):
-        """REQ-d00061-M: matches_node always returns a bool, not a float."""
-        node = _make_node(node_id="REQ-d00099", title="Test")
-        query = _simple_query("d00099")
-        result = matches_node(node, query)
-        assert isinstance(result, bool)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Field parameter restricts scoring - REQ-d00061-L

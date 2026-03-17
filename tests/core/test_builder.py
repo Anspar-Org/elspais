@@ -308,7 +308,11 @@ class TestBuilderContentTypes:
 
         result = graph.find_by_id("orphan-result")
         assert result is not None
-        assert result.parent_count() == 0
+        # FILE parent exists from build_graph, but no domain parent (TEST via YIELDS)
+        from elspais.graph.GraphNode import NodeKind as NK
+
+        domain_parents = [p for p in result.iter_parents() if p.kind != NK.FILE]
+        assert len(domain_parents) == 0
 
 
 class TestTestToRequirementLinking:
@@ -559,7 +563,7 @@ class TestGeneralizedOrphanDetection:
         assert "test:tests/test_foo.py::test_something" not in orphan_ids
 
     def test_result_without_parent_test_is_orphan(self):
-        """TEST_RESULT whose CONTAINS target doesn't exist is an orphan + broken ref."""
+        """TEST_RESULT whose YIELDS target doesn't exist is an orphan + broken ref."""
         graph = build_graph(
             make_test_result(
                 "result-orphan",
@@ -623,7 +627,7 @@ class TestGeneralizedOrphanDetection:
         assert "REQ-o00001" not in orphan_ids
 
     def test_result_linked_to_existing_test_not_orphan(self):
-        """TEST_RESULT with resolved CONTAINS edge is not an orphan."""
+        """TEST_RESULT with resolved YIELDS edge is not an orphan."""
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
@@ -710,7 +714,7 @@ class TestGeneralizedOrphanDetection:
                 source_path="tests/test_standalone.py",
                 function_name="test_standalone_func",
             ),
-            # Create a TEST_RESULT that links to the TEST via CONTAINS
+            # Create a TEST_RESULT that links to the TEST via YIELDS
             make_test_result(
                 "result-standalone",
                 status="passed",
@@ -1044,8 +1048,12 @@ class TestAddressesEdges:
         jny_node = graph.find_by_id("JNY-Dev-02")
         assert jny_node is not None
 
-        # Should have no incoming edges since target doesn't exist
-        assert jny_node.parent_count() == 0
+        # Should have no domain incoming edges since target doesn't exist
+        # (FILE parent exists from build_graph)
+        from elspais.graph.GraphNode import NodeKind as NK
+
+        domain_parents = [p for p in jny_node.iter_parents() if p.kind != NK.FILE]
+        assert len(domain_parents) == 0
 
         # Should have a broken reference recorded
         assert graph.has_broken_references()

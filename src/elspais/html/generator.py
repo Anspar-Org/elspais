@@ -16,9 +16,10 @@ from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
 from elspais.html.theme import get_catalog
+from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -173,15 +174,17 @@ class HTMLGenerator:
 
     def __init__(
         self,
-        graph: TraceGraph,
+        graph: FederatedGraph,
         base_path: str = "",
         version: str | None = None,
         repo_name: str | None = None,
+        namespace: str = "REQ",
     ) -> None:
         self.graph = graph
         self.base_path = base_path
         self.version = version if version is not None else __version__
         self.repo_name = repo_name
+        self.namespace = namespace
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
@@ -252,6 +255,7 @@ class HTMLGenerator:
                 self.repo_name or (Path(self.base_path).name if self.base_path else "elspais")
             ),
             catalog=get_catalog(),
+            default_hidden_statuses=[],
         )
 
         return html_content
@@ -281,17 +285,26 @@ class HTMLGenerator:
         - Path outside the base_path (different repo)
         - Or marked with an associated field
         """
-        # Check if ID has associated prefix pattern (e.g., REQ-CAL-p00001)
-        # Associated IDs have format: PREFIX-ASSOC-type where ASSOC is 2-4 uppercase letters
+        # Check if ID has a different namespace than the core project.
+        # Associated IDs have a different prefix (e.g., REQ-CAL-p00001 when
+        # core namespace is "REQ"). Detect by checking if the ID starts with
+        # "{namespace}-" followed by an uppercase segment (the associate prefix).
         import re
 
-        if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
-            return True
+        core_prefix = f"{self.namespace}-"
+        if node.id.startswith(core_prefix):
+            after_prefix = node.id[len(core_prefix) :]
+            # Associated: namespace-ASSOC-type (ASSOC is 2+ uppercase letters)
+            if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
+                return True
 
-        if not node.source:
+        # Implements: REQ-d00129-D
+        _fn = node.file_node()
+        if not _fn:
             return False
 
-        path = node.source.path.lower()
+        _rp = _fn.get_field("relative_path") or ""
+        path = _rp.lower()
         # Check for common associated repo patterns
         if "sponsor" in path or "associated" in path:
             return True
@@ -300,7 +313,7 @@ class HTMLGenerator:
         if self.base_path:
             try:
                 # If the source path doesn't start with base_path, it's from a different repo
-                source_path = Path(node.source.path).resolve()
+                source_path = Path(_rp).resolve()
                 base = Path(self.base_path).resolve()
                 if not str(source_path).startswith(str(base)):
                     return True
@@ -380,9 +393,10 @@ class HTMLGenerator:
 
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""
-            if not node.source:
+            _fn = node.file_node()
+            if not _fn:
                 return ""
-            path = node.source.path
+            path = _fn.get_field("relative_path") or ""
             # Extract filename without extension
             # e.g., "spec/prd-system.md" -> "prd-system" -> "system"
             filename = Path(path).stem
@@ -394,9 +408,10 @@ class HTMLGenerator:
 
         def is_roadmap(node: GraphNode) -> bool:
             """Check if node is from a roadmap file."""
-            if not node.source:
+            _fn = node.file_node()
+            if not _fn:
                 return False
-            return "roadmap" in node.source.path.lower()
+            return "roadmap" in (_fn.get_field("relative_path") or "").lower()
 
         def compute_coverage(node: GraphNode) -> tuple[str, str, bool]:
             """Get coverage status and failure flag from pre-computed metrics.
@@ -521,8 +536,8 @@ class HTMLGenerator:
             )
 
             # Get source location
-            source_file = node.source.path if node.source else ""
-            source_line = node.source.line if node.source else 0
+            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
+            source_line = node.get_field("parse_line") or 0
 
             # Get result status for TEST_RESULT nodes
             result_status = ""
@@ -657,8 +672,8 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.source.path if node.source else ""
-            source_line = node.source.line if node.source else 0
+            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
+            source_line = node.get_field("parse_line") or 0
 
             row = TreeRow(
                 id=f"{node.id}_0_root",
@@ -691,8 +706,10 @@ class HTMLGenerator:
             # Render TEST_RESULT children under this TEST node
             for child in node.iter_children():
                 if child.kind == NodeKind.TEST_RESULT:
-                    child_source_file = child.source.path if child.source else ""
-                    child_source_line = child.source.line if child.source else 0
+                    child_source_file = (
+                        child.file_node().get_field("relative_path") if child.file_node() else ""
+                    )
+                    child_source_line = child.get_field("parse_line") or 0
                     child_result_status = (child.get_field("status", "") or "").lower()
 
                     child_row = TreeRow(
@@ -728,8 +745,8 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.source.path if node.source else ""
-            source_line = node.source.line if node.source else 0
+            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
+            source_line = node.get_field("parse_line") or 0
             result_status = (node.get_field("status", "") or "").lower()
 
             # Create a short display ID from test name
@@ -740,7 +757,11 @@ class HTMLGenerator:
             elif classname:
                 display_id = classname.split(".")[-1]
             else:
-                display_id = node.id.split("::")[-1] if "::" in node.id else node.id[-30:]
+                display_id = (
+                    node.id.split(INSTANCE_SEPARATOR)[-1]
+                    if INSTANCE_SEPARATOR in node.id
+                    else node.id[-30:]
+                )
 
             row = TreeRow(
                 id=f"{node.id}_0_root",
@@ -789,9 +810,10 @@ class HTMLGenerator:
 
     def _get_topic_for_node(self, node: GraphNode) -> str:
         """Extract topic from file path."""
-        if not node.source:
+        _fn = node.file_node()
+        if not _fn:
             return ""
-        path = node.source.path
+        path = _fn.get_field("relative_path") or ""
         filename = Path(path).stem
         for prefix in ("prd-", "ops-", "dev-"):
             if filename.lower().startswith(prefix):
@@ -815,8 +837,10 @@ class HTMLGenerator:
                 "validation_color": vc,
                 "validation_tip": vt,
                 "source": {
-                    "path": node.source.path if node.source else None,
-                    "line": node.source.line if node.source else None,
+                    "path": (
+                        node.file_node().get_field("relative_path") if node.file_node() else None
+                    ),
+                    "line": node.get_field("parse_line"),
                 },
             }
         return data
@@ -875,13 +899,17 @@ class HTMLGenerator:
         # Collect unique source paths from all nodes
         paths: set[str] = set()
         for node in self.graph.all_nodes():
-            if node.source and node.source.path:
-                paths.add(node.source.path)
+            _fn = node.file_node()
+            _rp = _fn.get_field("relative_path") if _fn else None
+            if _rp:
+                paths.add(_rp)
 
         result: dict[str, Any] = {}
         for path in sorted(paths):
             try:
                 file_path = Path(path)
+                if not file_path.is_absolute() and self.graph.repo_root:
+                    file_path = self.graph.repo_root / file_path
                 if not file_path.is_file():
                     continue
 
@@ -949,10 +977,12 @@ class HTMLGenerator:
             if match:
                 descriptor = match.group(1)
 
-            # Extract file from source path
+            # Extract file from FILE parent node
             file = ""
-            if node.source:
-                file = Path(node.source.path).name
+            _fn = node.file_node()
+            if _fn:
+                _rp = _fn.get_field("relative_path") or ""
+                file = Path(_rp).name if _rp else ""
 
             # Extract referenced requirements from incoming ADDRESSES edges
             referenced_reqs = sorted(

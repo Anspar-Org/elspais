@@ -132,7 +132,12 @@ class TestMultipleSectionsConcatenated:
                 patch.stopall()
 
         captured = capsys.readouterr()
-        assert "\n\n" in captured.out
+        # Blank line separator must fall between the two section markers
+        health_end = captured.out.find("All checks passed.")
+        coverage_start = captured.out.find("=== Coverage Report ===")
+        assert health_end != -1 and coverage_start != -1
+        between = captured.out[health_end:coverage_start]
+        assert "\n\n" in between, "Blank-line separator must appear between sections"
 
 
 # ===========================================================================
@@ -477,14 +482,12 @@ class TestCLIDispatch:
 class TestComposableSections:
     """Validates REQ-d00085-A: The set of composable sections."""
 
-    def test_REQ_d00085_A_composable_sections_tuple(self):
-        """COMPOSABLE_SECTIONS contains the expected section names."""
-        assert COMPOSABLE_SECTIONS == ("health", "summary", "trace", "changed")
-
-    def test_REQ_d00085_A_all_sections_in_format_support(self):
-        """Every composable section has a FORMAT_SUPPORT entry."""
-        for section in COMPOSABLE_SECTIONS:
-            assert section in FORMAT_SUPPORT
+    def test_REQ_d00085_A_composable_sections_has_minimum_set(self):
+        """COMPOSABLE_SECTIONS includes the core composable section names."""
+        for name in ("health", "summary", "trace", "changed"):
+            assert name in COMPOSABLE_SECTIONS
+            assert name in FORMAT_SUPPORT
+            assert isinstance(FORMAT_SUPPORT[name], set)
 
 
 # ===========================================================================
@@ -528,4 +531,4 @@ class TestIntegrationWithSpecDir:
         assert output_file.exists()
         content = output_file.read_text()
         # Both sections should appear
-        assert "Coverage Summary" in content or "REQ-p00001" in content
+        assert "Coverage Summary" in content and "checks passed" in content

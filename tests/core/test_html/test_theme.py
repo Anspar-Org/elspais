@@ -11,6 +11,8 @@ class TestGetCatalog:
     def test_REQ_p00006_A_returns_legend_catalog(self):
         catalog = get_catalog()
         assert isinstance(catalog, LegendCatalog)
+        assert len(catalog.themes) > 0
+        assert len(catalog.grouped_entries()) > 0
 
     def test_REQ_p00006_A_caches_result(self):
         a = get_catalog()

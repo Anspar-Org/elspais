@@ -73,14 +73,11 @@ def run(args: argparse.Namespace) -> int:
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    scan_sponsors = mode == "combined"
-
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
-        scan_sponsors=scan_sponsors,
         canonical_root=canonical_root,
     )
 
@@ -103,8 +100,8 @@ def run(args: argparse.Namespace) -> int:
                 "level": node.get_field("level", ""),
                 "status": node.get_field("status", ""),
                 "hash": node.get_field("hash", ""),
-                "file": node.source.path if node.source else "",
-                "line": node.source.line if node.source else 0,
+                "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
+                "line": node.get_field("parse_line") or 0,
                 "assertions": assertions,
             }
         print(json.dumps(export_dict, indent=2))
@@ -116,10 +113,12 @@ def run(args: argparse.Namespace) -> int:
     fixable = []  # Issues that can be auto-fixed
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
-    if scan_sponsors:
+    if mode == "combined":
         from elspais.config import get_config
 
-        config_dict = get_config(config_path, start_path=repo_root)
+        config_dict = get_config(
+            config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+        )
         associate_paths = config_dict.get("associates", {}).get("paths", [])
         if associate_paths:
             from elspais.associates import discover_associate_from_path
@@ -182,13 +181,28 @@ def run(args: argparse.Namespace) -> int:
     else:
         has_external_parent = set()
 
+    # Check allow_structural_orphans config (with backward compat fallback)
+    from elspais.config import get_config
+
+    validate_config = get_config(
+        config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+    )
+    hierarchy_rules = validate_config.get("rules", {}).get("hierarchy", {})
+    allow_orphans = hierarchy_rules.get(
+        "allow_structural_orphans", hierarchy_rules.get("allow_orphans", False)
+    )
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         # Implements: REQ-p00002-B
-        # Check for orphan requirements (no parents except roots)
-        if node.parent_count() == 0 and node.level not in ("PRD", "prd"):
+        # Check for orphan requirements (no traceability parents except roots)
+        # Implements: REQ-d00128-I
+        # FILE parents via CONTAINS edges don't count — orphan detection uses
+        # traceability parents only (IMPLEMENTS, REFINES, etc.)
+        traceability_parents = sum(1 for p in node.iter_parents() if p.kind != NodeKind.FILE)
+        if traceability_parents == 0 and node.level not in ("PRD", "prd"):
             if node.id in has_external_parent:
                 pass  # Cross-repo parent — expected in associate mode
-            else:
+            elif not allow_orphans:
                 warnings.append(
                     {
                         "rule": "hierarchy.orphan",
@@ -213,7 +227,11 @@ def run(args: argparse.Namespace) -> int:
                     "fixable": True,
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
-                    "file": str(repo_root / node.source.path) if node.source else None,
+                    "file": (
+                        str(repo_root / node.file_node().get_field("relative_path"))
+                        if node.file_node()
+                        else None
+                    ),
                 }
                 errors.append(issue)
                 if issue["file"]:
@@ -228,7 +246,11 @@ def run(args: argparse.Namespace) -> int:
                     "fixable": True,
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
-                    "file": str(repo_root / node.source.path) if node.source else None,
+                    "file": (
+                        str(repo_root / node.file_node().get_field("relative_path"))
+                        if node.file_node()
+                        else None
+                    ),
                 }
                 errors.append(issue)
                 if issue["file"]:
@@ -246,9 +268,13 @@ def run(args: argparse.Namespace) -> int:
     # Check assertion line spacing per source file
     checked_files: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if not node.source or not node.source.path:
+        # Implements: REQ-d00129-D
+        _fn = node.file_node()
+        if not _fn:
             continue
-        file_path = node.source.path
+        file_path = _fn.get_field("relative_path") or ""
+        if not file_path:
+            continue
         if file_path in checked_files:
             continue
         checked_files.add(file_path)
@@ -347,20 +373,30 @@ def run(args: argparse.Namespace) -> int:
                 if fixed_count > 0:
                     print(f"Fixed {fixed_count} issue(s)")
 
-        for err in errors:
+        # Separate fixed issues from remaining errors/warnings
+        if fix_mode and not dry_run:
+            fixed_ids = {(f["id"], f["rule"]) for f in fixable}
+            unfixed_errors = [e for e in errors if (e["id"], e["rule"]) not in fixed_ids]
+            unfixed_warnings = [w for w in warnings if not w.get("fixable")]
+            # Show what was fixed (informational, not alarming)
+            for f in fixable:
+                print(f"FIXED [{f['rule']}] {f['id']}: {f['message']}")
+        else:
+            unfixed_errors = errors
+            unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
+
+        for err in unfixed_errors:
             print(f"ERROR [{err['rule']}] {err['id']}: {err['message']}", file=sys.stderr)
 
-        # Only show unfixed warnings
-        unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
         for warn in unfixed_warnings:
             print(
                 f"WARNING [{warn['rule']}] {warn['id']}: {warn['message']}",
                 file=sys.stderr,
             )
 
-        if errors:
+        if unfixed_errors:
             print(
-                f"\n{len(errors)} errors, {len(unfixed_warnings)} warnings",
+                f"\n{len(unfixed_errors)} errors, {len(unfixed_warnings)} warnings",
                 file=sys.stderr,
             )
         elif unfixed_warnings:

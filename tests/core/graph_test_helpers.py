@@ -10,10 +10,83 @@ from pathlib import Path
 
 from elspais.graph import GraphNode
 from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
 
 # === Constants ===
+
+
+def make_node_with_file(
+    node_id: str,
+    kind: NodeKind,
+    label: str = "",
+    path: str = "spec/test.md",
+    line: int = 1,
+    end_line: int | None = None,
+    repo: str | None = None,
+    file_node: GraphNode | None = None,
+) -> GraphNode:
+    """Create a GraphNode with a FILE parent and parse_line fields.
+
+    This replaces the old pattern of ``GraphNode(..., source=SourceLocation(...))``.
+    Creates a FILE node and wires a CONTAINS edge from FILE to the content node.
+    If ``file_node`` is provided, reuses it instead of creating a new one.
+
+    Returns the content node (not the FILE node).
+    """
+    node = GraphNode(id=node_id, kind=kind, label=label)
+    node.set_field("parse_line", line)
+    node.set_field("parse_end_line", end_line)
+
+    # Create or reuse FILE node for this path
+    if file_node is None:
+        file_id = f"file:{path}"
+        file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(path).name)
+        file_node.set_field("file_type", FileType.SPEC)
+        file_node.set_field("relative_path", path)
+        file_node.set_field("absolute_path", f"/repo/{path}")
+        file_node.set_field("repo", repo)
+
+    file_node.link(node, EdgeKind.CONTAINS)
+    return node
+
+
+def wire_file_parent(
+    node: GraphNode,
+    path: str = "spec/test.md",
+    line: int = 1,
+    end_line: int | None = None,
+    repo: str | None = None,
+    graph: TraceGraph | None = None,
+) -> GraphNode:
+    """Wire an existing node to a FILE parent (for test migration).
+
+    Creates a FILE node, sets parse_line/parse_end_line on the content node,
+    and wires a CONTAINS edge. Optionally registers the FILE node in a graph index.
+
+    Returns the FILE node (not the content node).
+    """
+    node.set_field("parse_line", line)
+    node.set_field("parse_end_line", end_line)
+
+    file_id = f"file:{path}"
+    # Check if FILE already exists in graph index
+    existing = graph._index.get(file_id) if graph else None
+    if existing and existing.kind == NodeKind.FILE:
+        file_node = existing
+    else:
+        file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(path).name)
+        file_node.set_field("file_type", FileType.SPEC)
+        file_node.set_field("relative_path", path)
+        file_node.set_field("absolute_path", f"/repo/{path}")
+        file_node.set_field("repo", repo)
+        if graph is not None:
+            graph._index[file_id] = file_node
+
+    file_node.link(node, EdgeKind.CONTAINS)
+    return file_node
+
 
 VALID_LEVELS = {"PRD", "OPS", "DEV"}
 
@@ -38,6 +111,7 @@ def make_requirement(
     status: str = "Active",
     implements: list[str] | None = None,
     refines: list[str] | None = None,
+    satisfies: list[str] | None = None,
     assertions: list[dict] | None = None,
     source_path: str = "spec/test.md",
     start_line: int = 1,
@@ -53,6 +127,7 @@ def make_requirement(
         status: Requirement status (Active, Deprecated, etc.)
         implements: List of IDs this requirement implements
         refines: List of IDs this requirement refines
+        satisfies: List of IDs this requirement satisfies (cross-cutting)
         assertions: List of assertion dicts with "label" and "text"
         source_path: Source file path
         start_line: Start line in source
@@ -80,6 +155,7 @@ def make_requirement(
             "status": status,
             "implements": implements or [],
             "refines": refines or [],
+            "satisfies": satisfies or [],
             "assertions": assertions or [],
             "hash": hash_value,
         },
@@ -298,6 +374,7 @@ def build_graph(
     """Build a TraceGraph from multiple ParsedContent items.
 
     Convenience wrapper around GraphBuilder that eliminates boilerplate.
+    Automatically creates FILE nodes from source_context paths.
 
     Args:
         *contents: ParsedContent items to add to the graph
@@ -307,8 +384,26 @@ def build_graph(
         Constructed TraceGraph
     """
     builder = GraphBuilder(repo_root=repo_root)
+
+    # Create FILE nodes from source contexts (like factory.py does)
+    file_nodes: dict[str, GraphNode] = {}
     for content in contents:
-        builder.add_parsed_content(content)
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else None
+        file_node = None
+        if source_path and source_path not in file_nodes:
+            file_id = f"file:{source_path}"
+            file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(source_path).name)
+            file_node.set_field("file_type", FileType.SPEC)
+            file_node.set_field("relative_path", source_path)
+            file_node.set_field("absolute_path", str(Path(repo_root or ".") / source_path))
+            file_node.set_field("repo", None)
+            file_nodes[source_path] = file_node
+            builder.register_file_node(file_node)
+        elif source_path:
+            file_node = file_nodes[source_path]
+        builder.add_parsed_content(content, file_node=file_node)
+
     return builder.build()
 
 

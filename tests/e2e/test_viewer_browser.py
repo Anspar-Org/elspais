@@ -1,7 +1,7 @@
-# Validates: REQ-p00013-B
+# Validates: REQ-d00010
 """Playwright-based browser tests for the elspais viewer command.
 
-Validates REQ-p00013-B: viewer command serves the traceability UI
+Validates REQ-d00010: viewer command serves the traceability UI
 and exposes API endpoints for graph exploration.
 """
 
@@ -113,9 +113,9 @@ def page(viewer_url):
 
 
 class TestViewerPageLoad:
-    """Validates REQ-p00013-B: viewer page loads correctly in a browser."""
+    """Validates REQ-d00010: viewer page loads correctly in a browser."""
 
-    def test_REQ_p00013_B_page_loads_without_js_errors(self, page, viewer_url):
+    def test_REQ_d00010_A_page_loads_without_js_errors(self, page, viewer_url):
         js_errors = []
         page.on("pageerror", lambda err: js_errors.append(str(err)))
 
@@ -128,7 +128,7 @@ class TestViewerPageLoad:
             "elspais" in title.lower() or len(body_text.strip()) > 0
         ), "Page has no title or body content"
 
-    def test_REQ_p00013_B_page_has_content(self, page, viewer_url):
+    def test_REQ_d00010_A_page_has_content(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
         body_text = page.text_content("body") or ""
@@ -138,9 +138,9 @@ class TestViewerPageLoad:
 
 
 class TestViewerAPI:
-    """Validates REQ-p00013-B: viewer API endpoints return correct data."""
+    """Validates REQ-d00010: viewer API endpoints return correct data."""
 
-    def test_REQ_p00013_B_api_status_returns_json(self, page, viewer_url):
+    def test_REQ_d00010_A_api_status_returns_json(self, page, viewer_url):
         resp = page.request.get(f"{viewer_url}/api/status")
         assert resp.ok, f"GET /api/status returned {resp.status}"
 
@@ -149,7 +149,7 @@ class TestViewerAPI:
             "node_counts" in data
         ), f"Expected 'node_counts' in status response, got keys: {list(data.keys())}"
 
-    def test_REQ_p00013_B_api_search_returns_results(self, page, viewer_url):
+    def test_REQ_d00010_A_api_search_returns_results(self, page, viewer_url):
         resp = page.request.get(f"{viewer_url}/api/search?q=REQ")
         assert resp.ok, f"GET /api/search returned {resp.status}"
 
@@ -160,9 +160,9 @@ class TestViewerAPI:
 
 
 class TestViewerInteraction:
-    """Validates REQ-p00013-B: viewer UI interactions work correctly."""
+    """Validates REQ-d00010: viewer UI interactions work correctly."""
 
-    def test_REQ_p00013_B_search_filters_tree(self, page, viewer_url):
+    def test_REQ_d00010_A_search_filters_tree(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
         search_input = page.query_selector(
@@ -179,7 +179,7 @@ class TestViewerInteraction:
         body_text = page.text_content("body") or ""
         assert "REQ" in body_text, "Tree did not update after search"
 
-    def test_REQ_p00013_B_requirement_click_shows_detail(self, page, viewer_url):
+    def test_REQ_d00010_A_requirement_click_shows_detail(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
         # Find a visible clickable element whose text contains a REQ ID

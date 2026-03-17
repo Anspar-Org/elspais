@@ -102,9 +102,9 @@ def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
     raw = config.get_raw()
     missing = []
 
-    patterns = raw.get("patterns", {})
-    if not patterns.get("types"):
-        missing.append("patterns.types (requirement type definitions)")
+    id_patterns = raw.get("id-patterns", {})
+    if not id_patterns.get("types"):
+        missing.append("id-patterns.types (requirement type definitions)")
 
     spec = raw.get("spec", {})
     if not spec.get("directories"):
@@ -135,25 +135,30 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
     """Validate that the ID pattern template uses valid placeholders."""
     import re
 
-    template = config.get("patterns.id_template", "")
-    valid_tokens = {"{prefix}", "{type}", "{id}", "{associated}"}
+    template = config.get("id-patterns.canonical", "")
+    valid_tokens = {"{namespace}", "{type}", "{component}"}
+    # Also allow {type.<alias>} tokens
+    type_alias_re = re.compile(r"\{type\.\w+\}")
 
     found_tokens = set(re.findall(r"\{[^}]+\}", template))
 
-    invalid = found_tokens - valid_tokens
+    invalid = set()
+    for tok in found_tokens:
+        if tok not in valid_tokens and not type_alias_re.match(tok):
+            invalid.add(tok)
     if invalid:
         return HealthCheck(
             name="config.pattern_tokens",
             passed=False,
             message=(
                 f"ID pattern has unrecognized placeholders: {', '.join(invalid)}. "
-                f"Valid ones are: {', '.join(sorted(valid_tokens))}"
+                f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{type.<alias>}}"
             ),
             category="config",
             details={"invalid_tokens": list(invalid), "valid_tokens": list(valid_tokens)},
         )
 
-    required = {"{prefix}", "{id}"}
+    required = {"{component}"}
     missing = required - found_tokens
     if missing:
         return HealthCheck(
@@ -175,7 +180,7 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
 def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
     hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("patterns.types", {})
+    types = config.get("id-patterns.types", {})
 
     if not isinstance(hierarchy, dict):
         return HealthCheck(
@@ -194,7 +199,13 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
         )
 
     issues = []
-    non_level_keys = {"allowed_implements", "allow_circular", "allow_orphans", "allowed"}
+    non_level_keys = {
+        "allowed_implements",
+        "allow_circular",
+        "allow_orphans",
+        "allow_structural_orphans",
+        "allowed",
+    }
 
     for level, allowed_parents in hierarchy.items():
         if level in non_level_keys:
@@ -652,7 +663,9 @@ def run(args: argparse.Namespace) -> int:
     config = None
     config_dict = {}
     try:
-        config_dict = get_config(config_path, start_path=start_path)
+        config_dict = get_config(
+            config_path, start_path=start_path, overrides=getattr(args, "config_overrides", None)
+        )
         config = ConfigLoader.from_dict(config_dict)
         for check in run_config_checks(config_path, config, start_path):
             report.add(check)

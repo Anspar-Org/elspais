@@ -3,6 +3,7 @@
 
 from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.test import TestParser as _TestParser
+from tests.fixtures import fake_reqs
 
 
 class TestTestParserPriority:
@@ -44,7 +45,8 @@ class TestTestParserBasic:
         assert len(results) == 1
         assert "REQ-p00001" in results[0].parsed_data["validates"]
 
-    def test_no_test_refs_returns_empty(self):
+    def test_no_test_refs_emits_unlinked_test(self):
+        """Test functions without requirement refs still emit as unlinked tests."""
         parser = _TestParser()
         lines = [
             (1, "def test_unrelated():"),
@@ -54,7 +56,9 @@ class TestTestParserBasic:
 
         results = list(parser.claim_and_parse(lines, ctx))
 
-        assert len(results) == 0
+        assert len(results) == 1
+        assert results[0].parsed_data["function_name"] == "test_unrelated"
+        assert results[0].parsed_data["validates"] == []
 
     def test_REQ_d00066_D_validates_assertion_level_reference(self):
         """REQ-d00066-D: Test names with assertion labels are validated."""
@@ -76,7 +80,7 @@ class TestTestParserBasic:
         """REQ-d00066-D: Test names with multiple assertion labels are validated."""
         parser = _TestParser()
         lines = [
-            (1, "def test_REQ_d00060_A_B_combined_test():"),
+            fake_reqs.PARSER_INPUT_MULTI_ASSERTION,
             (2, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_mcp.py")
@@ -98,20 +102,26 @@ class TestTestParserCustomConfig:
 
     def test_REQ_d00082_J_custom_prefix_spec(self):
         """REQ-d00082-J: Parser with custom prefix 'SPEC' instead of 'REQ'."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "SPEC",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "SPEC"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
-        parser = _TestParser(pattern_config=pattern_config)
+        parser = _TestParser(resolver=resolver)
         lines = [
             (1, "def test_SPEC_d00101_custom_spec():"),
             (2, "    assert True"),
@@ -125,22 +135,28 @@ class TestTestParserCustomConfig:
 
     def test_REQ_d00082_J_custom_comment_styles_with_resolver(self):
         """REQ-d00082-J: Parser uses custom comment styles from ReferenceResolver."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
         from elspais.utilities.reference_config import (
             ReferenceConfig,
             ReferenceResolver,
         )
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        id_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "REQ"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         # Custom config with only C-style block comments
@@ -152,8 +168,8 @@ class TestTestParserCustomConfig:
                 "validates": ["Tests", "Validates"],
             },
         )
-        resolver = ReferenceResolver(ref_config)
-        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        ref_resolver = ReferenceResolver(ref_config)
+        parser = _TestParser(resolver=id_resolver, reference_resolver=ref_resolver)
 
         lines = [
             (1, "def test_something():"),
@@ -166,24 +182,30 @@ class TestTestParserCustomConfig:
 
         # Note: block comment style matching is limited in inline context,
         # so verify parser instantiation works with the config
-        assert parser._pattern_config == pattern_config
-        assert parser._reference_resolver == resolver
+        assert parser._resolver == id_resolver
+        assert parser._reference_resolver == ref_resolver
 
     def test_REQ_d00082_J_validates_underscore_separators(self):
         """REQ-d00082-J: Parser accepts underscore separators in test names."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        id_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "REQ"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         # Config that accepts both - and _ as separators
@@ -191,8 +213,8 @@ class TestTestParserCustomConfig:
             separators=["-", "_"],
             case_sensitive=False,
         )
-        resolver = ReferenceResolver(ref_config)
-        parser = _TestParser(pattern_config=pattern_config, reference_resolver=resolver)
+        ref_resolver = ReferenceResolver(ref_config)
+        parser = _TestParser(resolver=id_resolver, reference_resolver=ref_resolver)
 
         lines = [
             (1, "def test_REQ_d00082_J_custom_feature():"),
@@ -315,3 +337,228 @@ class TestTestParserFunctionTracking:
         assert results[0].parsed_data["function_name"] == "test_something"
         assert results[0].parsed_data["class_name"] == "TestFoo"
         assert "REQ-d00001" in results[0].parsed_data["validates"]
+
+
+class TestAstPrescan:
+    """Tests for AST-based pre-scan accuracy in TestParser.
+
+    REQ-d00054-A: AST prescan provides accurate class/function context
+    even when multiline strings, decorators, or async defs are present.
+    """
+
+    def test_REQ_d00054_A_class_context_preserved_through_multiline_string(self):
+        """Multiline string with unindented content must not break class context."""
+        parser = _TestParser()
+        lines = [
+            (1, "class TestWidget:"),
+            (2, "    def test_something(self):"),
+            (3, '        text = """'),
+            (4, "## REQ-d00001:"),
+            (5, "Some content at column 0"),
+            (6, '"""'),
+            (7, "        assert True"),
+            (8, ""),
+            (9, "    def test_other(self):"),
+            (10, "        # Tests REQ-p00001"),
+            (11, "        pass"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        # test_other has an inline comment ref; test_something has no ref so emitted as unlinked
+        by_func = {r.parsed_data["function_name"]: r for r in results}
+        assert "test_something" in by_func
+        assert "test_other" in by_func
+        # Both must have class_name == "TestWidget" (the key bug fix)
+        assert by_func["test_something"].parsed_data["class_name"] == "TestWidget"
+        assert by_func["test_other"].parsed_data["class_name"] == "TestWidget"
+
+    def test_REQ_d00054_A_async_test_function(self):
+        """async def test_foo() should be recognized by AST prescan."""
+        parser = _TestParser()
+        lines = [
+            (1, "import asyncio"),
+            (2, ""),
+            (3, "async def test_async_thing():"),
+            (4, "    # Tests REQ-p00001"),
+            (5, "    await asyncio.sleep(0)"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        ref_results = [r for r in results if r.parsed_data["validates"]]
+        assert len(ref_results) == 1
+        assert ref_results[0].parsed_data["function_name"] == "test_async_thing"
+        assert ref_results[0].parsed_data["class_name"] is None
+
+    def test_REQ_d00054_A_nested_class_ignored(self):
+        """A nested class inside a test class should not confuse the scanner."""
+        parser = _TestParser()
+        lines = [
+            (1, "class TestOuter:"),
+            (2, "    class Helper:"),
+            (3, "        pass"),
+            (4, ""),
+            (5, "    def test_REQ_p00001_works(self):"),
+            (6, "        assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        ref_results = [r for r in results if r.parsed_data["validates"]]
+        assert len(ref_results) == 1
+        assert ref_results[0].parsed_data["class_name"] == "TestOuter"
+        assert ref_results[0].parsed_data["function_name"] == "test_REQ_p00001_works"
+
+    def test_REQ_d00054_A_decorated_test_function(self):
+        """Decorators like @pytest.mark.parametrize should not break context."""
+        parser = _TestParser()
+        lines = [
+            (1, "import pytest"),
+            (2, ""),
+            (3, "class TestDecorated:"),
+            (4, '    @pytest.mark.parametrize("x", [1, 2])'),
+            (5, "    def test_REQ_p00001_param(self, x):"),
+            (6, "        assert x > 0"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        ref_results = [r for r in results if r.parsed_data["validates"]]
+        assert len(ref_results) == 1
+        assert ref_results[0].parsed_data["class_name"] == "TestDecorated"
+        assert ref_results[0].parsed_data["function_name"] == "test_REQ_p00001_param"
+
+    def test_REQ_d00054_A_ast_fallback_on_syntax_error(self):
+        """Invalid Python syntax should fall back to text-based prescan."""
+        parser = _TestParser()
+        # Intentionally broken Python syntax
+        lines = [
+            (1, "def test_REQ_p00001_broken(:"),
+            (2, "    assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        # Should not raise - falls back to text prescan
+        results = list(parser.claim_and_parse(lines, context))
+
+        # Text-based prescan won't match the broken def, but the parser
+        # should still run without error
+        assert isinstance(results, list)
+
+    def test_REQ_d00054_A_module_level_test_functions(self):
+        """Module-level test functions should have class_name=None."""
+        parser = _TestParser()
+        lines = [
+            (1, "def test_REQ_p00001_standalone():"),
+            (2, "    assert True"),
+            (3, ""),
+            (4, "def test_REQ_p00002_another():"),
+            (5, "    assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 2
+        for r in results:
+            assert r.parsed_data["class_name"] is None
+
+
+class TestExternalPrescan:
+    """Tests for externally-provided prescan data in TestParser.
+
+    REQ-d00054-A: External prescan data (from prescan_command) overrides
+    AST/text-based scanning for test structure.
+    """
+
+    def test_REQ_d00054_A_external_prescan_overrides_ast(self):
+        """When prescan_data is provided for a file, it should be used instead of AST."""
+        prescan_data = {
+            "tests/test_example.py": [
+                {"function": "test_alpha", "class": "TestSuite", "line": 5},
+            ],
+        }
+        parser = _TestParser(prescan_data=prescan_data)
+        lines = [
+            (1, "# module header"),
+            (2, ""),
+            (3, "class TestSuite:"),
+            (4, ""),
+            (5, "    def test_alpha(self):"),
+            (6, "        # Tests REQ-p00001"),
+            (7, "        assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        ref_results = [r for r in results if r.parsed_data["validates"]]
+        assert len(ref_results) == 1
+        assert ref_results[0].parsed_data["function_name"] == "test_alpha"
+        assert ref_results[0].parsed_data["class_name"] == "TestSuite"
+
+    def test_REQ_d00054_A_external_prescan_class_context(self):
+        """External prescan data with class names produces correct class_name."""
+        prescan_data = {
+            "tests/test_example.py": [
+                {"function": "test_one", "class": "TestGroupA", "line": 3},
+                {"function": "test_two", "class": "TestGroupB", "line": 8},
+            ],
+        }
+        parser = _TestParser(prescan_data=prescan_data)
+        lines = [
+            (1, "# header"),
+            (2, ""),
+            (3, "    def test_one(self):"),
+            (4, "        # Tests REQ-p00001"),
+            (5, "        pass"),
+            (6, ""),
+            (7, ""),
+            (8, "    def test_two(self):"),
+            (9, "        # Tests REQ-p00002"),
+            (10, "        pass"),
+        ]
+        context = ParseContext(file_path="tests/test_example.py")
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        ref_results = sorted(
+            [r for r in results if r.parsed_data["validates"]],
+            key=lambda r: r.start_line,
+        )
+        assert len(ref_results) == 2
+        assert ref_results[0].parsed_data["class_name"] == "TestGroupA"
+        assert ref_results[0].parsed_data["function_name"] == "test_one"
+        assert ref_results[1].parsed_data["class_name"] == "TestGroupB"
+        assert ref_results[1].parsed_data["function_name"] == "test_two"
+
+
+class TestPrescanFallback:
+    """Tests for prescan method selection and fallback behavior.
+
+    REQ-d00054-A: Non-Python files use text-based prescan; Python files
+    use AST with text-based fallback on SyntaxError.
+    """
+
+    def test_REQ_d00054_A_non_python_file_uses_text_prescan(self):
+        """A non-.py file should use text-based prescan (not AST)."""
+        parser = _TestParser()
+        # Dart-like test file with def-style test declarations
+        lines = [
+            (1, "def test_REQ_p00001_widget():"),
+            (2, "    assert True"),
+        ]
+        context = ParseContext(file_path="tests/test_widget.dart")
+
+        # Should work without error (text prescan, not AST)
+        results = list(parser.claim_and_parse(lines, context))
+
+        # Text prescan should still find the test function
+        assert len(results) == 1
+        assert results[0].parsed_data["function_name"] == "test_REQ_p00001_widget"
+        assert "REQ-p00001" in results[0].parsed_data["validates"]

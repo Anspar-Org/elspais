@@ -13,6 +13,9 @@
             <button class="file-viewer-mode-btn" data-mode="source" onclick="setFileViewMode('source')">Source</button>
         </div>
         <a class="file-viewer-btn" id="fv-vscode" href="#" title="Open in VS Code" style="display:none;">VS Code</a>
+        {% if mode == 'edit' %}
+        <button class="file-viewer-btn fv-rename-btn" id="fv-rename" onclick="onRenameFile()" title="Rename file" style="display:none;">Rename</button>
+        {% endif %}
         <button class="file-viewer-close-btn" onclick="closeFileViewer()" title="Close">&times;</button>
     </div>
     <div class="file-viewer-body" id="fv-body">

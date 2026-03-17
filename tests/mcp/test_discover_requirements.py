@@ -43,7 +43,7 @@ def _add_implements_edge(child: GraphNode, parent: GraphNode) -> None:
     manually creates an outgoing edge from child to parent for
     _minimize_requirement_set() which walks iter_outgoing_edges().
     """
-    parent.add_child(child)
+    parent.link(child, EdgeKind.STRUCTURES)
     edge = Edge(source=child, target=parent, kind=EdgeKind.IMPLEMENTS)
     child._outgoing_edges.append(edge)
     parent._incoming_edges.append(edge)
@@ -100,8 +100,8 @@ def discover_graph():
     _add_implements_edge(dev_pipeline, ops_data)
 
     # Attach assertions as children of OPS-auth (tree only, no typed edge)
-    ops_auth.add_child(assert_a)
-    ops_auth.add_child(assert_b)
+    ops_auth.link(assert_a, EdgeKind.STRUCTURES)
+    ops_auth.link(assert_b, EdgeKind.STRUCTURES)
 
     graph._roots = [prd_root]
     graph._index = {

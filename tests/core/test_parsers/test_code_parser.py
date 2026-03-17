@@ -67,22 +67,27 @@ class TestCodeParserCustomPatternConfig:
 
     def test_REQ_d00082_I_custom_prefix_spec(self):
         """Test that parser uses custom prefix (SPEC instead of REQ)."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        # Create PatternConfig with "SPEC" prefix
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "SPEC",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
-                },
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "SPEC"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                            "ops": {"level": 2, "aliases": {"letter": "o"}},
+                            "dev": {"level": 3, "aliases": {"letter": "d"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
-        parser = CodeParser(pattern_config=pattern_config)
+        parser = CodeParser(resolver=resolver)
         lines = [
             (1, "def authenticate():"),
             (2, "    # Implements: SPEC-p00001-A"),
@@ -98,17 +103,25 @@ class TestCodeParserCustomPatternConfig:
 
     def test_REQ_d00082_I_custom_prefix_ignores_default(self):
         """Test that parser with custom prefix ignores REQ-style IDs."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "SPEC",
-                "types": {"prd": {"id": "p", "name": "PRD"}},
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "SPEC"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
-        parser = CodeParser(pattern_config=pattern_config)
+        parser = CodeParser(resolver=resolver)
         lines = [
             (1, "def authenticate():"),
             (2, "    # Implements: REQ-p00001-A"),  # Should NOT match
@@ -551,15 +564,23 @@ class TestCodeParserContextConfig:
     """
 
     def test_REQ_d00082_I_pattern_config_from_context(self):
-        """Test that PatternConfig can be passed via context.config."""
-        from elspais.utilities.patterns import PatternConfig
+        """Test that IdResolver can be passed via context.config."""
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        pattern_config = PatternConfig.from_dict(
-            {
-                "prefix": "TASK",
-                "types": {"feature": {"id": "f", "name": "Feature"}},
-                "id_format": {"style": "numeric", "digits": 3},
-            }
+        resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "TASK"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "feature": {"level": 1, "aliases": {"letter": "f"}},
+                        },
+                        "component": {"style": "numeric", "digits": 3, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
         parser = CodeParser()  # No instance config
@@ -570,7 +591,7 @@ class TestCodeParserContextConfig:
         ]
         ctx = ParseContext(
             file_path="src/task.py",
-            config={"pattern_config": pattern_config},
+            config={"resolver": resolver},
         )
 
         results = list(parser.claim_and_parse(lines, ctx))
@@ -608,24 +629,40 @@ class TestCodeParserContextConfig:
 
     def test_REQ_d00082_I_instance_config_takes_precedence(self):
         """Test that instance config takes precedence over context config."""
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
-        instance_config = PatternConfig.from_dict(
-            {
-                "prefix": "INSTANCE",
-                "types": {"prd": {"id": "p", "name": "PRD"}},
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        instance_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "INSTANCE"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
-        context_config = PatternConfig.from_dict(
-            {
-                "prefix": "CONTEXT",
-                "types": {"prd": {"id": "p", "name": "PRD"}},
-                "id_format": {"style": "numeric", "digits": 5},
-            }
+        context_resolver = IdResolver(
+            IdPatternConfig.from_dict(
+                {
+                    "project": {"namespace": "CONTEXT"},
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type.letter}{component}",
+                        "aliases": {"short": "{type.letter}{component}"},
+                        "types": {
+                            "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        },
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
 
-        parser = CodeParser(pattern_config=instance_config)
+        parser = CodeParser(resolver=instance_resolver)
         lines = [
             (1, "def test():"),
             (2, "    # Implements: INSTANCE-p00001"),
@@ -633,7 +670,7 @@ class TestCodeParserContextConfig:
         ]
         ctx = ParseContext(
             file_path="src/test.py",
-            config={"pattern_config": context_config},
+            config={"resolver": context_resolver},
         )
 
         results = list(parser.claim_and_parse(lines, ctx))

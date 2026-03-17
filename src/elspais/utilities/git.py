@@ -236,7 +236,7 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
         repo_root: Repository root for relativizing paths (uses graph.repo_root if None).
 
     Returns:
-        Dict mapping REQ ID (just the suffix, e.g., 'd00001') to relative file path.
+        Dict mapping full canonical REQ ID (e.g., 'REQ-d00001') to relative file path.
     """
     from elspais.graph.GraphNode import NodeKind
 
@@ -246,22 +246,19 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
     if repo_root is None:
         repo_root = getattr(graph, "repo_root", None)
 
+    # Implements: REQ-d00129-D
     for node in graph.all_nodes():
-        if node.kind == NodeKind.REQUIREMENT and node.source:
-            # Extract just the suffix (e.g., 'd00001' from 'REQ-d00001')
+        if node.kind == NodeKind.REQUIREMENT:
+            fn = node.file_node()
+            if not fn:
+                continue
+            # Use the full canonical node ID as the key.
+            # This avoids hardcoded prefix stripping and works with any
+            # namespace/type pattern configured via [id-patterns].
             req_id = node.id
-            if req_id.startswith("REQ-"):
-                # Handle possible associated prefix like "REQ-CAL-d00001"
-                parts = req_id[4:].split("-")
-                if len(parts) >= 2 and len(parts[0]) > 1 and parts[0].isupper():
-                    # Has associated prefix (e.g., "CAL-d00001"), use last part
-                    req_id = parts[-1]
-                else:
-                    # No prefix, just use what's after "REQ-"
-                    req_id = parts[-1]
 
-            # Get source path and make it relative if needed
-            source_path = node.source.path
+            # Get source path from FILE node and make it relative if needed
+            source_path = fn.get_field("relative_path") or ""
             if repo_root:
                 try:
                     # If path is absolute, make it relative to repo_root
@@ -280,7 +277,6 @@ def _extract_req_locations_from_graph(graph: Any, repo_root: Path | None = None)
 # Implements: REQ-p00004-B
 def get_req_locations_from_graph(
     repo_root: Path,
-    scan_sponsors: bool = False,
 ) -> dict[str, str]:
     """Get REQ ID -> file path mapping from a graph built at the given path.
 
@@ -289,10 +285,9 @@ def get_req_locations_from_graph(
 
     Args:
         repo_root: Path to repository root (or worktree path).
-        scan_sponsors: Whether to include sponsor/associated repos.
 
     Returns:
-        Dict mapping REQ ID (e.g., 'd00001') to relative file path.
+        Dict mapping full canonical REQ ID (e.g., 'REQ-d00001') to relative file path.
     """
     from elspais.graph.factory import build_graph
 
@@ -301,7 +296,6 @@ def get_req_locations_from_graph(
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=scan_sponsors,
     )
 
     return _extract_req_locations_from_graph(graph, repo_root)
@@ -433,6 +427,30 @@ def get_current_branch(repo_root: Path) -> str | None:
         return None
 
 
+# Implements: REQ-d00128-C
+def get_current_commit(repo_root: Path) -> str | None:
+    """Get the current git commit hash (short form).
+
+    Args:
+        repo_root: Path to repository root
+
+    Returns:
+        Short commit hash, or None if not in a git repo
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip() or None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 # Implements: REQ-p00004-C
 def git_status_summary(
     repo_root: Path,
@@ -534,6 +552,84 @@ def git_status_summary(
         "fast_forward_possible": fast_forward_possible,
         "main_diverged": main_diverged,
     }
+
+
+# Implements: REQ-p00004-H
+def list_branches(repo_root: Path) -> dict[str, Any]:
+    """List local and remote git branches.
+
+    Runs ``git branch --list`` for local branches and ``git branch -r --list``
+    for remote branches.  Strips whitespace, ``*`` prefix, and
+    ``origin/HEAD -> ...`` entries.  Remote branch names have the ``origin/``
+    prefix removed and are deduplicated against local branches.
+
+    Args:
+        repo_root: Path to repository root.
+
+    Returns:
+        Dict with ``local`` (list[str]), ``remote`` (list[str]),
+        and ``current`` (str | None).
+    """
+    env = _clean_git_env()
+    current: str | None = None
+
+    # --- local branches ---
+    try:
+        local_out = subprocess.run(
+            ["git", "branch", "--list", "--no-color"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {"local": [], "remote": [], "current": None}
+
+    local_names: list[str] = []
+    for line in local_out.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("* "):
+            name = stripped[2:].strip()
+            current = name
+        else:
+            name = stripped
+        local_names.append(name)
+
+    local_set = set(local_names)
+
+    # --- remote branches ---
+    try:
+        remote_out = subprocess.run(
+            ["git", "branch", "-r", "--list", "--no-color"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return {"local": local_names, "remote": [], "current": current}
+
+    remote_names: list[str] = []
+    for line in remote_out.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip HEAD pointer entries like "origin/HEAD -> origin/main"
+        if "->" in stripped:
+            continue
+        # Only include origin/ branches (checkout hardcodes origin/)
+        if not stripped.startswith("origin/"):
+            continue
+        name = stripped[len("origin/") :]
+        # Deduplicate: skip if already in local
+        if name not in local_set:
+            remote_names.append(name)
+
+    return {"local": local_names, "remote": remote_names, "current": current}
 
 
 # Implements: REQ-p00004-D

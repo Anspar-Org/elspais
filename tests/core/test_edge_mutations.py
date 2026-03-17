@@ -1,4 +1,4 @@
-# Validates REQ-o00062-C, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
+# Validates REQ-o00062-C, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
 """Tests for edge mutation operations (add, change_kind, delete, fix_broken)."""
 from __future__ import annotations
 
@@ -114,10 +114,10 @@ class TestAddEdge:
 
         # Check edge has assertion targets
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert len(edges) == 1
-        assert "A" in edges[0].assertion_targets
-        assert "B" in edges[0].assertion_targets
+        impl_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(impl_edges) == 1
+        assert "A" in impl_edges[0].assertion_targets
+        assert "B" in impl_edges[0].assertion_targets
 
     def test_add_edge_source_not_found(self):
         """Adding edge with non-existent source raises KeyError."""
@@ -316,8 +316,9 @@ class TestChangeEdgeKind:
 
         # Edge still has assertion targets
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert "A" in edges[0].assertion_targets
+        refines_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.REFINES]
+        assert len(refines_edges) == 1
+        assert "A" in refines_edges[0].assertion_targets
 
     def test_change_edge_kind_logs_mutation(self):
         """Change edge kind is logged."""
@@ -343,6 +344,124 @@ class TestChangeEdgeKind:
 
         edges = list(child.iter_incoming_edges())
         assert edges[0].kind == EdgeKind.IMPLEMENTS
+
+
+class TestChangeEdgeTargets:
+    """Tests for TraceGraph.change_edge_targets().
+
+    Validates REQ-o00062-C: change_edge_targets mutation
+    Validates REQ-o00062-E: mutation entry structure
+    Validates REQ-o00062-G: undo support
+    """
+
+    def test_REQ_o00062_C_change_edge_targets_req_to_assertion(self):
+        """REQ-o00062-C: Change a REQ->REQ edge to target specific assertions."""
+        graph = build_graph_with_assertions()
+
+        # Add a whole-req edge (no assertion targets)
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        # Change to target specific assertions
+        graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A", "B"])
+
+        # Verify edge now has assertion targets
+        child = graph.find_by_id("REQ-p00002")
+        edges = [
+            e
+            for e in child.iter_incoming_edges()
+            if e.source.id == "REQ-p00001" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A", "B"]
+
+    def test_REQ_o00062_C_change_edge_targets_assertion_to_req(self):
+        """REQ-o00062-C: Change assertion-targeted edge back to whole-req."""
+        graph = build_graph_with_assertions()
+
+        # Add edge targeting assertion A
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, ["A"])
+
+        # Change to whole-req (empty targets)
+        graph.change_edge_targets("REQ-p00002", "REQ-p00001", [])
+
+        # Verify edge has no assertion targets
+        child = graph.find_by_id("REQ-p00002")
+        edges = [
+            e
+            for e in child.iter_incoming_edges()
+            if e.source.id == "REQ-p00001" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == []
+
+    def test_REQ_o00062_E_change_edge_targets_returns_mutation_entry(self):
+        """REQ-o00062-E: Returned MutationEntry has correct structure."""
+        graph = build_graph_with_assertions()
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, ["A"])
+
+        entry = graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A", "B"])
+
+        assert entry.operation == "change_edge_targets"
+        assert entry.before_state["assertion_targets"] == ["A"]
+        assert entry.after_state["assertion_targets"] == ["A", "B"]
+
+    def test_REQ_o00062_G_change_edge_targets_undo(self):
+        """REQ-o00062-G: Undo restores original assertion targets."""
+        graph = build_graph_with_assertions()
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, ["A"])
+
+        graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A", "B"])
+
+        # Verify changed
+        child = graph.find_by_id("REQ-p00002")
+        edges = [
+            e
+            for e in child.iter_incoming_edges()
+            if e.source.id == "REQ-p00001" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert edges[0].assertion_targets == ["A", "B"]
+
+        # Undo
+        graph.undo_last()
+
+        # Verify restored
+        edges = [
+            e
+            for e in child.iter_incoming_edges()
+            if e.source.id == "REQ-p00001" and e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert edges[0].assertion_targets == ["A"]
+
+    def test_change_edge_targets_no_edge_raises(self):
+        """ValueError if no edge exists between the two nodes."""
+        graph = build_disconnected_graph()
+
+        with pytest.raises(ValueError, match="No IMPLEMENTS/REFINES edge exists"):
+            graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A"])
+
+    def test_change_edge_targets_source_not_found(self):
+        """KeyError if source_id not found."""
+        graph = build_disconnected_graph()
+
+        with pytest.raises(KeyError, match="not found"):
+            graph.change_edge_targets("REQ-nonexistent", "REQ-p00001", ["A"])
+
+    def test_change_edge_targets_target_not_found(self):
+        """KeyError if target_id not found."""
+        graph = build_disconnected_graph()
+
+        with pytest.raises(KeyError, match="not found"):
+            graph.change_edge_targets("REQ-p00002", "REQ-nonexistent", ["A"])
+
+    def test_change_edge_targets_logs_mutation(self):
+        """Mutation log contains the change_edge_targets entry."""
+        graph = build_graph_with_assertions()
+        graph.add_edge("REQ-p00002", "REQ-p00001", EdgeKind.IMPLEMENTS, ["A"])
+
+        graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A", "B"])
+
+        entry = graph.mutation_log.last()
+        assert entry.operation == "change_edge_targets"
 
 
 class TestDeleteEdge:
@@ -464,9 +583,9 @@ class TestDeleteEdge:
         graph.undo_last()
 
         parent = graph.find_by_id("REQ-p00001")
-        edges = list(parent.iter_outgoing_edges())
-        assert len(edges) == 1
-        assert "A" in edges[0].assertion_targets
+        impl_edges = [e for e in parent.iter_outgoing_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(impl_edges) == 1
+        assert "A" in impl_edges[0].assertion_targets
 
     def test_delete_edge_undo_removes_orphan_status(self):
         """Undo removes orphan status if node became orphan after delete."""

@@ -43,6 +43,11 @@ B. The system SHALL NOT do something prohibited.
   **Implements**: Parent requirement ID(s), comma-separated
                   Multi-assertion: REQ-p00001-A+B+C (uses + separator)
   **Refines**:    Parent ID when adding detail without claiming coverage
+  **Satisfies**:  Template requirement ID(s) this requirement complies with
+                  (e.g., cross-cutting PRD). The template's REQ subtree is
+                  cloned as instance nodes under the declaring requirement.
+                  Use "REQ-xxx-Y SHALL be NOT APPLICABLE" to exclude
+                  template assertions from coverage.
 
 ## Hash
 

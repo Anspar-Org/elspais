@@ -6,94 +6,112 @@
 
 ## PRD
 
-| ID         | Title                                                             | File                     | Hash     |
-| ---------- | ----------------------------------------------------------------- | ------------------------ | -------- |
-| REQ-p00001 | Requirements Management Tool                                      | prd-elspais.md           | 3cddd08e |
-| REQ-p00002 | Requirements Validation                                           | prd-elspais.md           | e8f0e4eb |
-| REQ-p00003 | Traceability Matrix Generation                                    | prd-elspais.md           | b935bd53 |
-| REQ-p00004 | Change Detection and Auditability                                 | prd-elspais.md           | fa53cb96 |
-| REQ-p00005 | Multi-Repository Requirements                                     | prd-elspais.md           | 7964180f |
-| REQ-p00006 | Interactive Traceability Viewer                                   | prd-elspais.md           | b3dd4d1a |
-| REQ-p00007 | Collaborative Review System                                       | prd-elspais.md           | f275694a |
-| REQ-p00008 | Review User Interface                                             | prd-elspais.md           | 2c550af9 |
-| REQ-p00009 | Review Data Model                                                 | prd-elspais.md           | 8967dc31 |
-| REQ-p00010 | Review Git Integration                                            | prd-elspais.md           | a410550e |
-| REQ-p00011 | Review Package Lifecycle                                          | prd-elspais.md           | 0c09b663 |
-| REQ-p00012 | Review Backend Services                                           | prd-elspais.md           | c1ec12e5 |
-| REQ-p00013 | Automated Testing                                                 | prd-elspais.md           | bedb66fd |
-| REQ-p00050 | Unified Graph Architecture                                        | 07-graph-architecture.md | 4a1e5d0b |
-| REQ-p00060 | MCP Server for AI-Driven Requirements Management                  | 08-mcp-server.md         | 3ebc237a |
-| REQ-p00080 | Spec-to-PDF Compilation                                           | prd-pdf-generation.md    | bfc0cadf |
+| ID         | Title                                            | File                     | Hash     |
+| ---------- | ------------------------------------------------ | ------------------------ | -------- |
+| REQ-p00001 | Requirements Management Tool                     | prd-elspais.md           | 3cddd08e |
+| REQ-p00002 | Requirements Validation                          | prd-elspais.md           | e8f0e4eb |
+| REQ-p00003 | Traceability Matrix Generation                   | prd-elspais.md           | b935bd53 |
+| REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | f8ff5509 |
+| REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | 7964180f |
+| REQ-p00006 | Interactive Traceability Viewer                  | prd-elspais.md           | b3dd4d1a |
+| REQ-p00007 | Collaborative Review System                      | prd-elspais.md           | f275694a |
+| REQ-p00008 | Review User Interface                            | prd-elspais.md           | 2c550af9 |
+| REQ-p00009 | Review Data Model                                | prd-elspais.md           | 8967dc31 |
+| REQ-p00010 | Review Git Integration                           | prd-elspais.md           | a410550e |
+| REQ-p00011 | Review Package Lifecycle                         | prd-elspais.md           | 0c09b663 |
+| REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
+| REQ-p00013 | Automated Testing                                | prd-elspais.md           | 3fc90ebc |
+| REQ-p00014 | Satisfies Relationship                           | prd-cross-cutting.md     | c3352c1a |
+| REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
+| REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
+| REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |
 
 ## OPS
 
-| ID         | Title                                                             | File                     | Hash     |
-| ---------- | ----------------------------------------------------------------- | ------------------------ | -------- |
-| REQ-o00050 | Graph Builder as Single Entry Point                               | 07-graph-architecture.md | cf6ace9c |
-| REQ-o00051 | Composable Annotation Design                                      | 07-graph-architecture.md | c73a6e32 |
-| REQ-o00060 | MCP Core Query Tools                                              | 08-mcp-server.md         | 73c31134 |
-| REQ-o00061 | MCP Workspace Context Tools                                       | 08-mcp-server.md         | 0aa9dff4 |
-| REQ-o00062 | MCP Graph Mutation Tools                                          | 08-mcp-server.md         | bed69e43 |
-| REQ-o00063 | MCP File Mutation Tools                                           | 08-mcp-server.md         | dee88649 |
-| REQ-o00064 | MCP Test Coverage Analysis Tools                                  | 08-mcp-server.md         | 82d8f37e |
-| REQ-o00065 | Agent-Assisted Link Suggestion                                    | 07-graph-architecture.md | 7c449e0c |
-| REQ-o00066 | CI/CD Pipeline Enforcement                                        | ops-cicd.md              | 909c62a1 |
-| REQ-o00067 | MCP Subtree Extraction Tool                                       | 08-mcp-server.md         | ab29e315 |
-| REQ-o00068 | MCP Cursor Protocol                                               | 08-mcp-server.md         | 743877c3 |
-| REQ-o00069 | MCP Minimize Requirement Set Tool                                 | 08-mcp-server.md         | c667abd2 |
-| REQ-o00070 | MCP Scoped Search Tool                                            | 08-mcp-server.md         | e1cb96d9 |
-| REQ-o00071 | MCP Discover Requirements Tool                                    | 08-mcp-server.md         | fea647ee |
+| ID         | Title                               | File                     | Hash     |
+| ---------- | ----------------------------------- | ------------------------ | -------- |
+| REQ-o00050 | Graph Builder as Single Entry Point | 07-graph-architecture.md | e3a0add2 |
+| REQ-o00051 | Composable Annotation Design        | 07-graph-architecture.md | c73a6e32 |
+| REQ-o00060 | MCP Core Query Tools                | 08-mcp-server.md         | 73c31134 |
+| REQ-o00061 | MCP Workspace Context Tools         | 08-mcp-server.md         | 0aa9dff4 |
+| REQ-o00062 | MCP Graph Mutation Tools            | 08-mcp-server.md         | 064271fb |
+| REQ-o00063 | MCP File Mutation Tools             | 08-mcp-server.md         | dee88649 |
+| REQ-o00064 | MCP Test Coverage Analysis Tools    | 08-mcp-server.md         | 82d8f37e |
+| REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
+| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
+| REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
+| REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 743877c3 |
+| REQ-o00069 | MCP Minimize Requirement Set Tool   | 08-mcp-server.md         | c667abd2 |
+| REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | e1cb96d9 |
+| REQ-o00071 | MCP Discover Requirements Tool      | 08-mcp-server.md         | fea647ee |
 
 ## DEV
 
-| ID         | Title                                                             | File                     | Hash     |
-| ---------- | ----------------------------------------------------------------- | ------------------------ | -------- |
-| REQ-d00001 | Review Package Management                                         | dev-traceview-review.md  | 8d2f827b |
-| REQ-d00002 | Review Storage Architecture                                       | dev-traceview-review.md  | 9ba72e6f |
-| REQ-d00003 | Review Package Archival                                           | dev-traceview-review.md  | 458be109 |
-| REQ-d00004 | Review Git Audit Trail                                            | dev-traceview-review.md  | f1829e0a |
-| REQ-d00005 | Review Archive Viewer                                             | dev-traceview-review.md  | 0bcf8525 |
-| REQ-d00006 | Review Threads and Comments                                       | dev-traceview-review.md  | 74becc99 |
-| REQ-d00007 | Review Storage Operations                                         | dev-traceview-review.md  | bffc007d |
-| REQ-d00008 | Position Resolution                                               | dev-traceview-review.md  | ad27b8e5 |
-| REQ-d00009 | Git Branch Management                                             | dev-traceview-review.md  | ec2a7171 |
-| REQ-d00010 | Review API Server                                                 | dev-traceview-review.md  | 41715183 |
-| REQ-d00011 | Status Modifier                                                   | dev-traceview-review.md  | 3e581bc6 |
-| REQ-d00012 | Review UI Framework                                               | dev-traceview-review.md  | 448be3b9 |
-| REQ-d00050 | Node Annotator Functions                                          | 07-graph-architecture.md | 35713bbd |
-| REQ-d00051 | Graph Aggregate Functions                                         | 07-graph-architecture.md | bdf07870 |
-| REQ-d00052 | Output Generators Consume Graph Directly                          | 07-graph-architecture.md | a3575fcc |
-| REQ-d00054 | Annotation Pipeline Pattern                                       | 07-graph-architecture.md | 0256df47 |
-| REQ-d00055 | Node Metrics as Extension Point                                   | 07-graph-architecture.md | 86ea9541 |
-| REQ-d00060 | Graph Status Tool Implementation                                  | 08-mcp-server.md         | 4e2277cc |
-| REQ-d00061 | Requirement Search Tool Implementation                            | 08-mcp-server.md         | 0183195b |
-| REQ-d00062 | Requirement Detail Tool Implementation                            | 08-mcp-server.md         | 51985ec1 |
-| REQ-d00063 | Hierarchy Navigation Tool Implementation                          | 08-mcp-server.md         | 2b1d284b |
-| REQ-d00064 | Serializer Functions                                              | 08-mcp-server.md         | 6d8ffacb |
-| REQ-d00065 | Mutation Tool Delegation                                          | 08-mcp-server.md         | 8b1002b9 |
-| REQ-d00066 | Test Coverage Tool Implementation                                 | 08-mcp-server.md         | 6ac6b51f |
-| REQ-d00067 | Uncovered Assertions Tool Implementation                          | 08-mcp-server.md         | 7044d63d |
-| REQ-d00068 | Assertion Keyword Search Tool Implementation                      | 08-mcp-server.md         | c9d5ad87 |
-| REQ-d00069 | Indirect Coverage Source                                          | 07-graph-architecture.md | 168446ae |
-| REQ-d00070 | Indirect Coverage Toggle Display                                  | 07-graph-architecture.md | d483becb |
-| REQ-d00071 | Unified Root vs Orphan Classification                             | 07-graph-architecture.md | 46d2a3e2 |
-| REQ-d00072 | Link Suggestion Core Engine                                       | 07-graph-architecture.md | 2cd50cdc |
-| REQ-d00073 | Link Suggestion CLI Command                                       | 07-graph-architecture.md | 44fd54e9 |
-| REQ-d00074 | MCP Link Suggestion Tools                                         | 08-mcp-server.md         | e438ff5e |
-| REQ-d00075 | Subtree Extraction Implementation                                 | 08-mcp-server.md         | a53f60cc |
-| REQ-d00076 | Cursor Protocol Implementation                                    | 08-mcp-server.md         | 753def07 |
-| REQ-d00077 | Minimize Requirement Set Implementation                           | 08-mcp-server.md         | a4977d0f |
-| REQ-d00078 | Scoped Search Implementation                                      | 08-mcp-server.md         | 51b2219c |
-| REQ-d00079 | Discover Requirements Implementation                              | 08-mcp-server.md         | 8498aa7c |
-| REQ-d00080 | Diagnostic Command Exit Code Contract                             | dev-exit-codes.md        | ada92a29 |
-| REQ-d00081 | Multi-Assertion Reference Expansion                               | dev-multi-assertion.md   | 2474ef93 |
-| REQ-d00082 | Unified Reference Configuration                                   | dev-reference-config.md  | 89956cd7 |
-| REQ-d00083 | Validate Command                                                  | dev-cli-validate.md      | eddb3a52 |
-| REQ-d00084 | Trace Command                                                     | dev-cli-trace.md         | f8d407a5 |
-| REQ-d00085 | Unified Report Composition                                        | dev-cli-report.md        | 82d76f1a |
-| REQ-d00086 | Coverage Report Section                                           | dev-cli-coverage.md      | 12e1ecaf |
-| REQ-d00124 | Graph Analysis Engine                                             | dev-cli-analysis.md      | 26d62350 |
-| REQ-d00125 | Analysis CLI Command                                              | dev-cli-analysis.md      | 3cd66dbe |
+| ID         | Title                                                         | File                     | Hash     |
+| ---------- | ------------------------------------------------------------- | ------------------------ | -------- |
+| REQ-d00001 | Review Package Management                                     | dev-traceview-review.md  | 557e0c13 |
+| REQ-d00002 | Review Storage Architecture                                   | dev-traceview-review.md  | 6e485776 |
+| REQ-d00003 | Review Package Archival                                       | dev-traceview-review.md  | e2e12ef2 |
+| REQ-d00004 | Review Git Audit Trail                                        | dev-traceview-review.md  | 8eff4c13 |
+| REQ-d00005 | Review Archive Viewer                                         | dev-traceview-review.md  | c31ada6e |
+| REQ-d00006 | Review Threads and Comments                                   | dev-traceview-review.md  | 682ff5d5 |
+| REQ-d00007 | Review Storage Operations                                     | dev-traceview-review.md  | 4916717c |
+| REQ-d00008 | Position Resolution                                           | dev-traceview-review.md  | a9128928 |
+| REQ-d00009 | Git Branch Management                                         | dev-traceview-review.md  | 6181ebb6 |
+| REQ-d00010 | Review API Server                                             | dev-traceview-review.md  | b647ec64 |
+| REQ-d00011 | Status Modifier                                               | dev-traceview-review.md  | 3e581bc6 |
+| REQ-d00012 | Review UI Framework                                           | dev-traceview-review.md  | 448be3b9 |
+| REQ-d00050 | Node Annotator Functions                                      | 07-graph-architecture.md | 35713bbd |
+| REQ-d00051 | Graph Aggregate Functions                                     | 07-graph-architecture.md | bdf07870 |
+| REQ-d00052 | Output Generators Consume Graph Directly                      | 07-graph-architecture.md | a3575fcc |
+| REQ-d00054 | Annotation Pipeline Pattern                                   | 07-graph-architecture.md | 0256df47 |
+| REQ-d00055 | Node Metrics as Extension Point                               | 07-graph-architecture.md | 86ea9541 |
+| REQ-d00060 | Graph Status Tool Implementation                              | 08-mcp-server.md         | 4e2277cc |
+| REQ-d00061 | Requirement Search Tool Implementation                        | 08-mcp-server.md         | 0183195b |
+| REQ-d00062 | Requirement Detail Tool Implementation                        | 08-mcp-server.md         | 51985ec1 |
+| REQ-d00063 | Hierarchy Navigation Tool Implementation                      | 08-mcp-server.md         | 2b1d284b |
+| REQ-d00064 | Serializer Functions                                          | 08-mcp-server.md         | 6d8ffacb |
+| REQ-d00065 | Mutation Tool Delegation                                      | 08-mcp-server.md         | 8b1002b9 |
+| REQ-d00066 | Test Coverage Tool Implementation                             | 08-mcp-server.md         | 6ac6b51f |
+| REQ-d00067 | Uncovered Assertions Tool Implementation                      | 08-mcp-server.md         | 7044d63d |
+| REQ-d00068 | Assertion Keyword Search Tool Implementation                  | 08-mcp-server.md         | c9d5ad87 |
+| REQ-d00069 | Indirect Coverage Source                                      | 07-graph-architecture.md | 114709f5 |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | 07-graph-architecture.md | d483becb |
+| REQ-d00071 | Unified Root vs Orphan Classification                         | 07-graph-architecture.md | 46d2a3e2 |
+| REQ-d00072 | Link Suggestion Core Engine                                   | 07-graph-architecture.md | 2cd50cdc |
+| REQ-d00073 | Link Suggestion CLI Command                                   | 07-graph-architecture.md | 44fd54e9 |
+| REQ-d00074 | MCP Link Suggestion Tools                                     | 08-mcp-server.md         | e438ff5e |
+| REQ-d00075 | Subtree Extraction Implementation                             | 08-mcp-server.md         | a53f60cc |
+| REQ-d00076 | Cursor Protocol Implementation                                | 08-mcp-server.md         | 753def07 |
+| REQ-d00077 | Minimize Requirement Set Implementation                       | 08-mcp-server.md         | a4977d0f |
+| REQ-d00078 | Scoped Search Implementation                                  | 08-mcp-server.md         | 51b2219c |
+| REQ-d00079 | Discover Requirements Implementation                          | 08-mcp-server.md         | 8498aa7c |
+| REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-exit-codes.md        | ada92a29 |
+| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-multi-assertion.md   | 2474ef93 |
+| REQ-d00082 | Unified Reference Configuration                               | dev-reference-config.md  | 89956cd7 |
+| REQ-d00083 | Validate Command                                              | dev-cli-validate.md      | eddb3a52 |
+| REQ-d00084 | Trace Command                                                 | dev-cli-trace.md         | f8d407a5 |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli-report.md        | 82d76f1a |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli-coverage.md      | 12e1ecaf |
+| REQ-d00124 | Graph Analysis Engine                                         | dev-cli-analysis.md      | 26d62350 |
+| REQ-d00125 | Analysis CLI Command                                          | dev-cli-analysis.md      | 3cd66dbe |
+| REQ-d00126 | FILE Node Data Model                                          | 07-graph-architecture.md | 664d3990 |
+| REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | 07-graph-architecture.md | 12964863 |
+| REQ-d00128 | FILE Node Creation in Build Pipeline                          | 07-graph-architecture.md | 166358a3 |
+| REQ-d00129 | SourceLocation Removal and Consumer Migration                 | 07-graph-architecture.md | 8bd81196 |
+| REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | 07-graph-architecture.md | f56f8527 |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | 07-graph-architecture.md | cc025b1a |
+| REQ-d00132 | Render-Based Save Operation                                   | 07-graph-architecture.md | 7043f7af |
+| REQ-d00133 | MCP FILE Node Integration                                     | 08-mcp-server.md         | 4a81d28c |
+| REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | 07-graph-architecture.md | 4772cbb4 |
+| REQ-d00200 | FederatedGraph Read-Only Delegation                           | 07-graph-architecture.md | 72471144 |
+| REQ-d00201 | FederatedGraph Mutation Delegation                            | 07-graph-architecture.md | 1a0942a4 |
+| REQ-d00202 | Associates Config Loading                                     | 07-graph-architecture.md | 479dcbb8 |
+| REQ-d00203 | Multi-Repo Build Pipeline                                     | 07-graph-architecture.md | 31e019a1 |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | 07-graph-architecture.md | 2313140d |
+| REQ-d00205 | MCP Federation Support                                        | 08-mcp-server.md         | ccc0ca12 |
+| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md  | b4fae1d0 |
 
 ## User Journeys
 

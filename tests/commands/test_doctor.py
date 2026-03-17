@@ -58,7 +58,12 @@ class TestDoctorConfigChecks:
         )
         results = run_config_checks(None, config, tmp_path)
         assert isinstance(results, list)
+        assert len(results) >= 5, f"Expected at least 5 config checks, got {len(results)}"
         assert all(r.category == "config" for r in results)
+        check_names = {r.name for r in results}
+        assert "config.exists" in check_names
+        assert "config.syntax" in check_names
+        assert "config.required_fields" in check_names
 
 
 class TestDoctorWorktreeCheck:
@@ -184,9 +189,13 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
-            "[patterns.types.prd]\nlevel = 1\n"
-            '[spec]\ndirectories = ["spec"]\n'
+            '[project]\nnamespace = "REQ"\n\n'
+            "[id-patterns]\n"
+            'canonical = "{namespace}-{type}{component}"\n\n'
+            "[id-patterns.types.prd]\nlevel = 1\n\n"
+            "[id-patterns.component]\n"
+            'style = "numeric"\ndigits = 5\n\n'
+            '[spec]\ndirectories = ["spec"]\n\n'
             "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()

@@ -29,6 +29,8 @@
 # Implements: REQ-o00068-E, REQ-o00068-F
 # Implements: REQ-d00076-A, REQ-d00076-B, REQ-d00076-C, REQ-d00076-D
 # Implements: REQ-d00076-E, REQ-d00076-F, REQ-d00076-G
+# Implements: REQ-d00133-A, REQ-d00133-B, REQ-d00133-C, REQ-d00133-D
+# Implements: REQ-d00133-E, REQ-d00133-F
 """elspais.mcp.server - MCP server implementation.
 
 Creates and runs the MCP server exposing elspais functionality.
@@ -61,29 +63,31 @@ from elspais.graph.annotators import (
     count_by_level,
     count_with_code_refs,
 )
-from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
-from elspais.mcp.search import matches_node, parse_query, score_node
+from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
+from elspais.utilities.patterns import build_resolver
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source path helper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _relative_source_path(node: Any, graph: TraceGraph) -> str:
+def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
     """Return the node's source file path, relative to repo root.
 
-    Some parsers (notably CodeRefParser) store absolute paths in
-    ``node.source.path``.  The REST layer and UI expect repo-relative
-    paths so that ``/api/file-content?path=…`` can safely join them
-    with the working directory.  This helper normalises the value.
+    Implements: REQ-d00129-D
+    Navigates to the FILE parent node to get the repo-relative path.
+    Some parsers (notably CodeRefParser) may store absolute paths;
+    this helper normalises the value.
     """
-    if not node.source:
+    fn = node.file_node()
+    if not fn:
         return ""
-    raw = node.source.path
+    raw = fn.get_field("relative_path") or ""
     if not raw:
         return ""
     p = Path(raw)
@@ -146,7 +150,7 @@ def _iter_assertion_coverage(
             yield target, [label]
 
 
-def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
+def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified TEST-node serializer (superset of all consumers).
 
     Returns::
@@ -163,20 +167,20 @@ def _serialize_test_info(test_node: Any, graph: TraceGraph) -> dict[str, Any]:
                     "status": child.get_field("status", "unknown"),
                     "duration": child.get_field("duration", 0.0),
                     "file": _relative_source_path(child, graph),
-                    "line": child.source.line if child.source else 0,
+                    "line": child.get_field("parse_line") or 0,
                 }
             )
     return {
         "id": test_node.id,
         "label": test_node.get_label(),
         "file": _relative_source_path(test_node, graph),
-        "line": test_node.source.line if test_node.source else 0,
+        "line": test_node.get_field("parse_line") or 0,
         "name": test_node.get_field("name", ""),
         "results": results,
     }
 
 
-def _serialize_code_info(code_node: Any, graph: TraceGraph) -> dict[str, Any]:
+def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified CODE-node serializer.
 
     Returns::
@@ -187,7 +191,7 @@ def _serialize_code_info(code_node: Any, graph: TraceGraph) -> dict[str, Any]:
         "id": code_node.id,
         "label": code_node.get_label(),
         "file": _relative_source_path(code_node, graph),
-        "line": code_node.source.line if code_node.source else 0,
+        "line": code_node.get_field("parse_line") or 0,
     }
 
 
@@ -219,7 +223,7 @@ def _serialize_assertion(node: Any) -> dict[str, Any]:
     }
 
 
-def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[str, Any]:
+def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> dict[str, Any]:
     """Serialize any graph node to full format with kind-specific properties.
 
     Returns a common envelope (id, kind, title, source, parents, children,
@@ -242,7 +246,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "id": child.id,
                     "label": child.get_field("label"),
                     "text": child.get_label(),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
         elif child.kind == NodeKind.REMAINDER:
@@ -252,7 +256,7 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "id": child.id,
                     "heading": child.get_field("heading"),
                     "text": child.get_field("text"),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
         else:
@@ -261,14 +265,15 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                     "kind": child.kind.value,
                     "id": child.id,
                     "title": child.get_label(),
-                    "line": child.source.line if child.source else None,
+                    "line": child.get_field("parse_line"),
                 }
             )
 
     # ── Common: parents with edge_kind and assertion_targets ──
     parents = []
+    # Implements: REQ-d00069-G
     for edge in node.iter_incoming_edges():
-        if edge.kind in (EK.IMPLEMENTS, EK.REFINES):
+        if edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES, EK.INSTANCE):
             parent = edge.source
             if parent.kind == NodeKind.REQUIREMENT:
                 ref_id = parent.id
@@ -288,7 +293,13 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
     links = []
     for edge in node.iter_incoming_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+        if edge.kind not in (
+            EK.IMPLEMENTS,
+            EK.REFINES,
+            EK.SATISFIES,
+            EK.INSTANCE,
+            EK.CONTAINS,
+        ):
             links.append(
                 {
                     "id": edge.source.id,
@@ -298,7 +309,13 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
                 }
             )
     for edge in node.iter_outgoing_edges():
-        if edge.kind not in (EK.IMPLEMENTS, EK.REFINES, EK.CONTAINS):
+        if edge.kind not in (
+            EK.IMPLEMENTS,
+            EK.REFINES,
+            EK.SATISFIES,
+            EK.INSTANCE,
+            EK.CONTAINS,
+        ):
             links.append(
                 {
                     "id": edge.target.id,
@@ -314,11 +331,15 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
     # ── Kind-specific properties ──
     properties: dict[str, Any] = {}
     if kind == NodeKind.REQUIREMENT:
+        from elspais.graph.relations import Stereotype
+
+        stereotype = node.get_field("stereotype", Stereotype.CONCRETE)
         properties = {
             "level": node.get_field("level"),
             "status": node.get_field("status"),
             "hash": node.get_field("hash"),
             "body_text": node.get_field("body_text"),
+            "stereotype": stereotype.value if isinstance(stereotype, Stereotype) else stereotype,
         }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
@@ -368,9 +389,9 @@ def _serialize_node_generic(node: Any, graph: TraceGraph | None = None) -> dict[
             "path": (
                 _relative_source_path(node, graph)
                 if graph
-                else (node.source.path if node.source else None)
+                else (node.file_node().get_field("relative_path") if node.file_node() else None)
             ),
-            "line": node.source.line if node.source else None,
+            "line": node.get_field("parse_line"),
         },
         "keywords": keywords,
         "parents": parents,
@@ -437,7 +458,7 @@ def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
+def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
     """Get graph status.
 
     REQ-d00060-A: Returns is_stale from metadata.
@@ -461,7 +482,7 @@ def _get_graph_status(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _get_active_mutated_reqs(graph: TraceGraph) -> set[str]:
+def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
     """Return IDs of Active requirements that have pending mutations."""
     from elspais.graph import NodeKind
 
@@ -486,7 +507,7 @@ def _get_active_mutated_reqs(graph: TraceGraph) -> set[str]:
 
 
 def _add_changelog_for_active_mutations(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     config: dict,
     message: str,
@@ -510,10 +531,13 @@ def _add_changelog_for_active_mutations(
 
     for req_id in active_ids:
         node = graph.find_by_id(req_id)
-        if node is None or node.source is None:
+        if node is None:
+            continue
+        _fn = node.file_node()
+        if _fn is None:
             continue
         computed = compute_hash_for_node(node, graph.hash_mode)
-        file_path = repo_root / node.source.path
+        file_path = repo_root / _fn.get_field("relative_path")
         entry = {
             "date": date.today().isoformat(),
             "hash": computed or node.hash or "________",
@@ -529,7 +553,7 @@ def _refresh_graph(
     repo_root: Path,
     full: bool = False,
     canonical_root: Path | None = None,
-) -> tuple[dict[str, Any], TraceGraph]:
+) -> tuple[dict[str, Any], FederatedGraph]:
     """Rebuild the graph from spec files.
 
     REQ-o00060-B: Forces graph rebuild.
@@ -543,12 +567,38 @@ def _refresh_graph(
         Tuple of (result dict, new TraceGraph).
     """
     # Build fresh graph
-    new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+    try:
+        new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+    except (ValueError, Exception) as e:
+        error_msg = str(e)
+        if ".elspais.toml" in error_msg:
+            # Config parse error — return a descriptive error, not a stack trace
+            from elspais.graph.federated import FederatedGraph
+
+            return {
+                "success": False,
+                "message": f"CONFIG ERROR: {error_msg}",
+                "node_count": 0,
+            }, FederatedGraph.empty()
+        raise
+
+    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync
+    root_config = None
+    if hasattr(new_graph, "iter_repos"):
+        for entry in new_graph.iter_repos():
+            if entry.config is not None:
+                from elspais.config import ConfigLoader
+
+                root_config = (
+                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
+                )
+                break
 
     return {
         "success": True,
         "message": "Graph refreshed successfully",
         "node_count": new_graph.node_count(),
+        "config": root_config,
     }, new_graph
 
 
@@ -605,7 +655,7 @@ def _matches_query(
 
 
 def _search(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     field: str = "all",
     regex: bool = False,
@@ -652,7 +702,7 @@ def _search(
 
 
 def _minimize_requirement_set(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_ids: list[str],
     edge_kinds: set[EdgeKind],
 ) -> dict[str, Any]:
@@ -741,7 +791,7 @@ def _minimize_requirement_set(
 
 
 def _collect_scope_ids(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     scope_id: str,
     direction: str,
 ) -> set[str] | None:
@@ -801,7 +851,7 @@ def _match_assertions(
 
 
 def _scoped_search_regex(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     compiled_pattern: re.Pattern[str],
     scope_ids: set[str],
     scope_id: str,
@@ -832,7 +882,7 @@ def _scoped_search_regex(
 
 
 def _scoped_search(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     scope_id: str,
     direction: str = "descendants",
@@ -910,7 +960,7 @@ def _scoped_search(
 
 
 def _discover_requirements(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     query: str,
     scope_id: str,
     direction: str = "descendants",
@@ -982,7 +1032,172 @@ def _discover_requirements(
     }
 
 
-def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
+def _discover_assertions(
+    graph: FederatedGraph,
+    query: str,
+    scope_id: str = "",
+    direction: str = "descendants",
+    field: str = "all",
+    regex: bool = False,
+    limit: int = 50,
+    edge_kinds: set[EdgeKind] | None = None,
+) -> dict[str, Any]:
+    """Search for assertions, returning them as top-level results with scores.
+
+    When scope_id is non-empty, delegates to _discover_requirements (scoped
+    search + minimize) with include_assertions=True, then flattens assertions
+    into top-level results.  When scope_id is empty, searches all requirements
+    globally (no scoping, no minimize — every requirement is a candidate).
+
+    Each surviving requirement contributes all its assertions to the result.
+    Assertions whose text directly matched the query receive a boosted score;
+    assertions that only inherited relevance from their parent requirement
+    receive the parent's score as a baseline.
+
+    Returns:
+        {"assertions": [...], "stats": {...}}
+        Each assertion entry: {id, label, text, requirement_id,
+        requirement_title, level, score, direct_match}.
+    """
+    if edge_kinds is None:
+        edge_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+
+    parsed = parse_query(query) if not regex else None
+
+    # --- Find matching requirements with assertion metadata ---
+    if scope_id:
+        disc_result = _discover_requirements(
+            graph,
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
+            include_assertions=True,
+            limit=limit,
+            edge_kinds=edge_kinds,
+        )
+        if "error" in disc_result:
+            return disc_result
+        matched_reqs = disc_result.get("results", [])
+    else:
+        # Global search: score all requirements, no scoping or minimize
+        matched_reqs = _search_with_assertions(graph, query, field, regex, limit, parsed)
+
+    # --- Flatten: promote assertions to top-level results ---
+    assertion_results: list[dict[str, Any]] = []
+
+    for req in matched_reqs:
+        req_score = req.get("score", 0.0)
+        req_id = req["id"]
+        req_title = req.get("title", "")
+        level = req.get("level", "")
+        directly_matched = {a["id"] for a in req.get("matched_assertions", [])}
+
+        # Find the actual requirement node to iterate ALL its assertions
+        req_node = graph.find_by_id(req_id)
+        if req_node is None:
+            continue
+
+        for child in req_node.iter_children():
+            if child.kind != NodeKind.ASSERTION:
+                continue
+
+            # Score: direct text match gets boosted, others get parent baseline
+            direct_match = child.id in directly_matched
+            if direct_match and parsed is not None:
+                assertion_score = req_score + score_node(child, parsed, field)
+            elif direct_match:
+                assertion_score = req_score + 10  # regex match bonus
+            else:
+                assertion_score = req_score
+
+            assertion_results.append(
+                {
+                    "id": child.id,
+                    "label": child.get_field("label"),
+                    "text": child.get_label(),
+                    "requirement_id": req_id,
+                    "requirement_title": req_title,
+                    "level": level,
+                    "score": assertion_score,
+                    "direct_match": direct_match,
+                }
+            )
+
+    # Sort by score descending, limit
+    assertion_results.sort(key=lambda a: a["score"], reverse=True)
+    assertion_results = assertion_results[:limit]
+
+    return {
+        "assertions": assertion_results,
+        "stats": {
+            "requirements_matched": len(matched_reqs),
+            "assertions_returned": len(assertion_results),
+        },
+    }
+
+
+def _search_with_assertions(
+    graph: FederatedGraph,
+    query: str,
+    field: str,
+    regex: bool,
+    limit: int,
+    parsed: ParsedQuery | None,
+) -> list[dict[str, Any]]:
+    """Global search across all requirements, including assertion matching.
+
+    Like _search() but also checks assertion text and returns
+    matched_assertions metadata on each result.
+    """
+    if regex:
+        try:
+            compiled_pattern = re.compile(query, re.IGNORECASE)
+        except re.error:
+            return []
+        results: list[dict[str, Any]] = []
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            node_matched = _matches_query(node, field, True, compiled_pattern)
+            matched_assertions = _match_assertions(
+                node,
+                True,
+                compiled_pattern=compiled_pattern,
+            )
+            if node_matched or matched_assertions:
+                entry = _serialize_requirement_summary(node)
+                entry["score"] = 1.0
+                if matched_assertions:
+                    entry["matched_assertions"] = matched_assertions
+                results.append(entry)
+                if len(results) >= limit:
+                    break
+        return results
+
+    if parsed is None or parsed.is_empty:
+        return []
+
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        node_score = score_node(node, parsed, field)
+        matched_assertions = _match_assertions(
+            node,
+            True,
+            parsed=parsed,
+            field=field,
+        )
+        if node_score > 0 or matched_assertions:
+            entry = _serialize_requirement_summary(node)
+            entry["score"] = node_score
+            if matched_assertions:
+                entry["matched_assertions"] = matched_assertions
+            scored.append((node_score, entry))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [entry for _, entry in scored[:limit]]
+
+
+def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
     Returns the generic node envelope with kind-specific properties.
@@ -1001,7 +1216,7 @@ def _get_node(graph: TraceGraph, node_id: str) -> dict[str, Any]:
     return _serialize_node_generic(node, graph)
 
 
-def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get single requirement details.
 
     Thin wrapper around _get_node() with a kind == REQUIREMENT guard.
@@ -1024,7 +1239,7 @@ def _get_requirement(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     return _serialize_node_generic(node, graph)
 
 
-def _get_hierarchy(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_hierarchy(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get requirement hierarchy.
 
     REQ-d00063-A: Returns ancestors by walking iter_parents() recursively.
@@ -1107,7 +1322,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         local_config_exists = local_path.is_file()
 
     config_summary = {
-        "prefix": config.get("patterns", {}).get("prefix", "REQ"),
+        "prefix": config.get("project", {}).get("namespace", "REQ"),
         "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
         "testing_enabled": config.get("testing", {}).get("enabled", False),
         "project_type": config.get("project", {}).get("type"),
@@ -1130,25 +1345,26 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
 def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Build ID pattern info from config."""
-    patterns = config.get("patterns", {})
-    prefix = patterns.get("prefix", "REQ")
-    template = patterns.get("id_template", "{prefix}-{type}{id}")
-    id_format = patterns.get("id_format", {})
-    types = patterns.get("types", {})
+    namespace = config.get("project", {}).get("namespace", "REQ")
+    id_patterns = config.get("id-patterns", {})
+    canonical = id_patterns.get("canonical", "{namespace}-{type.letter}{component}")
+    component = id_patterns.get("component", {})
+    types = id_patterns.get("types", {})
 
     # Synthesize example IDs for each type
-    digits = id_format.get("digits", 5)
-    leading_zeros = id_format.get("leading_zeros", True)
+    digits = component.get("digits", 5)
+    leading_zeros = component.get("leading_zeros", True)
     example_num = "0" * (digits - 1) + "1" if leading_zeros else "1"
     examples = {}
     for type_key, type_def in types.items():
-        type_id = type_def.get("id", type_key[0])
-        examples[type_key] = f"{prefix}-{type_id}{example_num}"
+        aliases = type_def.get("aliases", {})
+        type_letter = aliases.get("letter", type_key[0])
+        examples[type_key] = f"{namespace}-{type_letter}{example_num}"
 
     return {
-        "prefix": prefix,
-        "template": template,
-        "id_format": dict(id_format) if id_format else {},
+        "prefix": namespace,
+        "template": canonical,
+        "id_format": dict(component) if component else {},
         "types": {k: dict(v) for k, v in types.items()},
         "examples": examples,
     }
@@ -1156,33 +1372,33 @@ def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
 def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     """Build assertion format info from config."""
-    patterns = config.get("patterns", {})
-    assertions = patterns.get("assertions", {})
-    prefix = patterns.get("prefix", "REQ")
-    types = patterns.get("types", {})
+    namespace = config.get("project", {}).get("namespace", "REQ")
+    id_patterns = config.get("id-patterns", {})
+    assertions = id_patterns.get("assertions", {})
+    types = id_patterns.get("types", {})
 
     # Pick first type for the example
-    first_type_id = "p"
+    first_type_letter = "p"
     for _key, type_def in types.items():
-        first_type_id = type_def.get("id", "p")
+        aliases = type_def.get("aliases", {})
+        first_type_letter = aliases.get("letter", _key[0])
         break
 
-    digits = patterns.get("id_format", {}).get("digits", 5)
+    digits = id_patterns.get("component", {}).get("digits", 5)
     example_num = "0" * (digits - 1) + "1"
 
-    # Read multi-assertion separator from references config (default: "+")
-    refs = config.get("references", {}).get("defaults", {})
-    ma_sep = refs.get("multi_assertion_separator", "+")
+    # Read multi-assertion separator from id-patterns assertions (default: "+")
+    ma_sep = assertions.get("multi_separator", "+")
 
     return {
         "label_style": assertions.get("label_style", "uppercase"),
         "max_count": assertions.get("max_count", 26),
-        "example": f"{prefix}-{first_type_id}{example_num}-A",
+        "example": f"{namespace}-{first_type_letter}{example_num}-A",
         "multi_assertion_syntax": (
-            f"{prefix}-{first_type_id}{example_num}-A{ma_sep}B{ma_sep}C expands to "
-            f"{prefix}-{first_type_id}{example_num}-A, "
-            f"{prefix}-{first_type_id}{example_num}-B, "
-            f"{prefix}-{first_type_id}{example_num}-C"
+            f"{namespace}-{first_type_letter}{example_num}-A{ma_sep}B{ma_sep}C expands to "
+            f"{namespace}-{first_type_letter}{example_num}-A, "
+            f"{namespace}-{first_type_letter}{example_num}-B, "
+            f"{namespace}-{first_type_letter}{example_num}-C"
         ),
     }
 
@@ -1205,12 +1421,14 @@ def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
     return {"allowed_implements": list(allowed)}
 
 
-def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> dict[str, Any]:
+def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) -> dict[str, Any]:
     """Build coverage statistics from graph."""
     if graph is None:
         return {"error": "graph not available"}
 
-    exclude = {"Draft"}
+    from elspais.config import get_status_roles
+
+    exclude = get_status_roles(config).coverage_excluded_statuses()
     return {
         "by_coverage": count_by_coverage(graph, exclude_status=exclude),
         "by_level": count_by_level(graph, config=config),
@@ -1221,35 +1439,35 @@ def _build_coverage_stats(graph: TraceGraph | None, config: dict[str, Any]) -> d
 def _build_associates_info(
     config: dict[str, Any], working_dir: Path, include_paths: bool = False
 ) -> dict[str, Any]:
-    """Build associates info from config. Lazily imports associates module."""
+    """Build associates info from [associates] TOML config."""
     try:
-        from elspais.associates import load_associates_config
+        from elspais.config import get_associates_config
 
-        associates_cfg = load_associates_config(config, working_dir)
+        assoc_map = get_associates_config(config)
     except Exception:
         return {"count": 0, "associates": [], "config_file": None}
 
     result = []
-    for a in associates_cfg.associates:
-        entry: dict[str, Any] = {
-            "name": a.name,
-            "code": a.code,
-            "enabled": a.enabled,
+    for name, entry in assoc_map.items():
+        info: dict[str, Any] = {
+            "name": name,
+            "code": name,
+            "enabled": True,
         }
         if include_paths:
-            entry["path"] = a.path
-            entry["local_path"] = a.local_path
-            entry["spec_path"] = a.spec_path
-        result.append(entry)
+            info["path"] = entry.get("path", "")
+            info["local_path"] = None
+            info["spec_path"] = "spec"
+        result.append(info)
 
     return {
         "count": len(result),
         "associates": result,
-        "config_file": associates_cfg.config_file or None,
+        "config_file": None,
     }
 
 
-def _build_change_metrics(graph: TraceGraph | None) -> dict[str, Any]:
+def _build_change_metrics(graph: FederatedGraph | None) -> dict[str, Any]:
     """Build change metrics from graph."""
     if graph is None:
         return {"error": "graph not available"}
@@ -1265,7 +1483,7 @@ def _workspace_profile_testing(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for writing/updating tests with REQ references."""
     result = dict(base)
@@ -1288,7 +1506,7 @@ def _workspace_profile_code_refs(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for adding code references (# Implements: comments)."""
     result = dict(base)
@@ -1313,7 +1531,7 @@ def _workspace_profile_coverage(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for sign-off/coverage reporting."""
     result = dict(base)
@@ -1329,7 +1547,7 @@ def _workspace_profile_retrofit(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for systematically adding traceability to existing code."""
     result = dict(base)
@@ -1366,7 +1584,7 @@ def _workspace_profile_manager(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for manager quick status/health check."""
     result = dict(base)
@@ -1388,7 +1606,7 @@ def _workspace_profile_worktree(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for bulk changes across repos (renumbering, worktree ops)."""
     result = dict(base)
@@ -1408,7 +1626,7 @@ def _workspace_profile_all(
     base: dict[str, Any],
     working_dir: Path,
     config: dict[str, Any],
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile returning all available information."""
     result = dict(base)
@@ -1466,16 +1684,19 @@ _WORKSPACE_PROFILE_DISPATCH: dict[str, Any] = {
 }
 
 
+# Implements: REQ-d00205-A, REQ-d00205-D
 def _get_workspace_info(
     working_dir: Path,
     config: dict[str, Any] | None = None,
-    graph: TraceGraph | None = None,
+    graph: FederatedGraph | None = None,
     detail: str = "default",
 ) -> dict[str, Any]:
     """Get workspace information with use-case-driven detail levels.
 
     REQ-o00061-A: Returns repository path, project name, and configuration summary.
     REQ-o00061-D: Reads configuration from unified config system.
+    REQ-d00205-A: Includes federation details when multiple repos present.
+    REQ-d00205-D: Derives root config from graph when config not provided.
 
     Args:
         working_dir: The repository root directory.
@@ -1486,10 +1707,37 @@ def _get_workspace_info(
     Returns:
         Workspace information dict with profile-specific sections.
     """
+    # REQ-d00205-D: Derive root config from graph when not provided
+    if config is None and graph is not None and hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.config is not None:
+                from elspais.config import ConfigLoader
+
+                config = (
+                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
+                )
+                break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)
 
     base = _build_base_workspace_info(working_dir, config)
+
+    # REQ-d00205-A: Include federation details when multi-repo graph present
+    if graph is not None and hasattr(graph, "iter_repos"):
+        repos_info = []
+        for entry in graph.iter_repos():
+            repo_info: dict[str, Any] = {
+                "name": entry.name,
+                "path": str(entry.repo_root),
+                "status": "error" if entry.graph is None else "ok",
+            }
+            if entry.git_origin:
+                repo_info["git_origin"] = entry.git_origin
+            if entry.error:
+                repo_info["error"] = entry.error
+            repos_info.append(repo_info)
+        if len(repos_info) > 1:
+            base["federation"] = {"repos": repos_info, "root_repo": graph._root_repo}
 
     if detail == "default":
         return base
@@ -1503,7 +1751,7 @@ def _get_workspace_info(
 
 
 def _get_project_summary(
-    graph: TraceGraph, working_dir: Path, config: dict[str, Any] | None = None
+    graph: FederatedGraph, working_dir: Path, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Get project summary statistics.
 
@@ -1520,7 +1768,10 @@ def _get_project_summary(
     """
     # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph, config=config)
-    coverage_stats = count_by_coverage(graph, exclude_status={"Draft"})
+    from elspais.config import get_status_roles
+
+    coverage_exclude = get_status_roles(config or {}).coverage_excluded_statuses()
+    coverage_stats = count_by_coverage(graph, exclude_status=coverage_exclude)
     # Annotate git state before counting (idempotent, safe to call multiple times)
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
@@ -1535,7 +1786,7 @@ def _get_project_summary(
     }
 
 
-def _get_changed_requirements(graph: TraceGraph) -> dict[str, Any]:
+def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
     """Get requirements with git changes.
 
     Annotates the graph with git state, then filters for requirement nodes
@@ -1612,7 +1863,7 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_rename_node(graph: TraceGraph, old_id: str, new_id: str) -> dict[str, Any]:
+def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict[str, Any]:
     """Rename a node.
 
     REQ-d00065-A: Delegates to graph.rename_node().
@@ -1629,7 +1880,7 @@ def _mutate_rename_node(graph: TraceGraph, old_id: str, new_id: str) -> dict[str
         return {"success": False, "error": str(e)}
 
 
-def _mutate_update_title(graph: TraceGraph, node_id: str, new_title: str) -> dict[str, Any]:
+def _mutate_update_title(graph: FederatedGraph, node_id: str, new_title: str) -> dict[str, Any]:
     """Update requirement title.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1646,7 +1897,7 @@ def _mutate_update_title(graph: TraceGraph, node_id: str, new_title: str) -> dic
         return {"success": False, "error": str(e)}
 
 
-def _mutate_change_status(graph: TraceGraph, node_id: str, new_status: str) -> dict[str, Any]:
+def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) -> dict[str, Any]:
     """Change requirement status.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1664,7 +1915,7 @@ def _mutate_change_status(graph: TraceGraph, node_id: str, new_status: str) -> d
 
 
 def _mutate_add_requirement(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_id: str,
     title: str,
     level: str,
@@ -1701,7 +1952,7 @@ def _mutate_add_requirement(
 
 
 def _mutate_delete_requirement(
-    graph: TraceGraph, node_id: str, confirm: bool = False
+    graph: FederatedGraph, node_id: str, confirm: bool = False
 ) -> dict[str, Any]:
     """Delete a requirement.
 
@@ -1731,7 +1982,9 @@ def _mutate_delete_requirement(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_add_assertion(graph: TraceGraph, req_id: str, label: str, text: str) -> dict[str, Any]:
+def _mutate_add_assertion(
+    graph: FederatedGraph, req_id: str, label: str, text: str
+) -> dict[str, Any]:
     """Add assertion to requirement.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1748,7 +2001,9 @@ def _mutate_add_assertion(graph: TraceGraph, req_id: str, label: str, text: str)
         return {"success": False, "error": str(e)}
 
 
-def _mutate_update_assertion(graph: TraceGraph, assertion_id: str, new_text: str) -> dict[str, Any]:
+def _mutate_update_assertion(
+    graph: FederatedGraph, assertion_id: str, new_text: str
+) -> dict[str, Any]:
     """Update assertion text.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1766,7 +2021,7 @@ def _mutate_update_assertion(graph: TraceGraph, assertion_id: str, new_text: str
 
 
 def _mutate_delete_assertion(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     assertion_id: str,
     compact: bool = True,
     confirm: bool = False,
@@ -1793,7 +2048,7 @@ def _mutate_delete_assertion(
         return {"success": False, "error": str(e)}
 
 
-def _mutate_rename_assertion(graph: TraceGraph, old_id: str, new_label: str) -> dict[str, Any]:
+def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str) -> dict[str, Any]:
     """Rename assertion label.
 
     REQ-d00065-D: Only parameter validation and delegation.
@@ -1815,12 +2070,33 @@ def _mutate_rename_assertion(graph: TraceGraph, old_id: str, new_label: str) -> 
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _normalize_assertion_targets(
+    targets: list[str], target_id: str, config: dict[str, Any]
+) -> list[str]:
+    """Normalize assertion targets to bare labels using IdResolver.
+
+    Callers may pass full assertion IDs like "REQ-p00044-E"; the Edge
+    contract expects bare labels like "E".  Uses IdResolver.parse() to
+    extract the assertion label when a full ID is provided.
+    """
+    resolver = build_resolver(config)
+    normalized: list[str] = []
+    for at in targets:
+        parsed = resolver.parse(at)
+        if parsed and parsed.assertions and parsed.fqn == target_id:
+            normalized.extend(parsed.assertions)
+        else:
+            normalized.append(at)
+    return normalized
+
+
 def _mutate_add_edge(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     edge_kind: str,
     assertion_targets: list[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add an edge between nodes.
 
@@ -1828,6 +2104,8 @@ def _mutate_add_edge(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        if assertion_targets and config:
+            assertion_targets = _normalize_assertion_targets(assertion_targets, target_id, config)
         edge_kind_enum = EdgeKind[edge_kind.upper()]
         entry = graph.add_edge(
             source_id=source_id,
@@ -1845,7 +2123,7 @@ def _mutate_add_edge(
 
 
 def _mutate_change_edge_kind(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     new_kind: str,
@@ -1867,8 +2145,36 @@ def _mutate_change_edge_kind(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-C
+def _mutate_change_edge_targets(
+    graph: FederatedGraph,
+    source_id: str,
+    target_id: str,
+    assertion_targets: list[str],
+) -> dict[str, Any]:
+    """Change assertion targets on an edge.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    REQ-o00062-E: Returns MutationEntry for audit.
+    """
+    try:
+        entry = graph.change_edge_targets(source_id, target_id, assertion_targets)
+        if assertion_targets:
+            targets_display = ", ".join(assertion_targets)
+        else:
+            targets_display = "(whole requirement)"
+        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}"
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": msg,
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
 def _mutate_delete_edge(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     target_id: str,
     confirm: bool = False,
@@ -1896,7 +2202,7 @@ def _mutate_delete_edge(
 
 
 def _mutate_fix_broken_reference(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     source_id: str,
     old_target_id: str,
     new_target_id: str,
@@ -1917,12 +2223,56 @@ def _mutate_fix_broken_reference(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00063
+def _mutate_move_node_to_file(
+    graph: FederatedGraph,
+    node_id: str,
+    target_file_id: str,
+) -> dict[str, Any]:
+    """Move a content node to a different FILE.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    try:
+        entry = graph.move_node_to_file(node_id, target_file_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Moved {node_id} to {target_file_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-o00063
+def _mutate_rename_file(
+    graph: FederatedGraph,
+    file_id: str,
+    new_relative_path: str,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Rename a FILE node.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    try:
+        entry = graph.rename_file(file_id, new_relative_path, repo_root)
+        new_id = entry.after_state.get("id", "")
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Renamed {file_id} to {new_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Undo Operations (REQ-o00062-G)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _undo_last_mutation(graph: TraceGraph) -> dict[str, Any]:
+def _undo_last_mutation(graph: FederatedGraph) -> dict[str, Any]:
     """Undo the most recent mutation.
 
     REQ-o00062-G: Reverses mutations using graph.undo_last().
@@ -1938,7 +2288,7 @@ def _undo_last_mutation(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _undo_to_mutation(graph: TraceGraph, mutation_id: str) -> dict[str, Any]:
+def _undo_to_mutation(graph: FederatedGraph, mutation_id: str) -> dict[str, Any]:
     """Undo all mutations back to a specific point.
 
     REQ-o00062-G: Reverses mutations using graph.undo_to().
@@ -1955,7 +2305,7 @@ def _undo_to_mutation(graph: TraceGraph, mutation_id: str) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
+def _get_mutation_log(graph: FederatedGraph, limit: int = 50) -> dict[str, Any]:
     """Get mutation history.
 
     Returns the most recent mutations from the log.
@@ -1977,11 +2327,11 @@ def _get_mutation_log(graph: TraceGraph, limit: int = 50) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
-    """Get all orphaned nodes (nodes with no parents).
+def _get_orphaned_nodes(graph: FederatedGraph) -> dict[str, Any]:
+    """Get structural orphans — nodes without any FILE ancestor.
 
-    Returns nodes that have been orphaned — parentless nodes that are
-    not roots. Includes all node kinds (REQUIREMENT, TEST, TEST_RESULT, CODE).
+    Structural orphans indicate build pipeline bugs where nodes failed
+    to wire into the file structure. Excludes FILE and INSTANCE nodes.
     """
     orphans: list[dict[str, Any]] = []
     by_kind: dict[str, list[dict[str, Any]]] = {}
@@ -1995,8 +2345,10 @@ def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
                 "kind": node.kind.value,
                 "label": node.get_label(),
             }
-            if node.source:
-                entry["source"] = f"{node.source.path}:{node.source.line}"
+            _fn = node.file_node()
+            _line = node.get_field("parse_line")
+            if _fn and _line is not None:
+                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
         entry["kind"] = node.kind.value
         orphans.append(entry)
 
@@ -2012,7 +2364,58 @@ def _get_orphaned_nodes(graph: TraceGraph) -> dict[str, Any]:
     }
 
 
-def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
+def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[str, Any]:
+    """Get unlinked nodes — nodes with a FILE parent but no requirement link.
+
+    Unlinked nodes are structurally sound (have a FILE parent via CONTAINS)
+    but have no path to any REQUIREMENT through traceability edges.
+
+    Args:
+        graph: The trace graph to inspect.
+        kind: Optional filter — "test" or "code". If None, returns both.
+
+    Returns:
+        Dictionary with unlinked nodes grouped by kind with counts.
+    """
+    kinds_to_check: list[NodeKind] = []
+    if kind is None:
+        kinds_to_check = [NodeKind.TEST, NodeKind.CODE]
+    elif kind == "test":
+        kinds_to_check = [NodeKind.TEST]
+    elif kind == "code":
+        kinds_to_check = [NodeKind.CODE]
+
+    unlinked: list[dict[str, Any]] = []
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+
+    for nk in kinds_to_check:
+        for node in graph.iter_unlinked(nk):
+            entry: dict[str, Any] = {
+                "id": node.id,
+                "kind": node.kind.value,
+                "label": node.get_label(),
+            }
+            _fn = node.file_node()
+            _line = node.get_field("parse_line")
+            if _fn and _line is not None:
+                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
+            elif _fn:
+                entry["source"] = _fn.get_field("relative_path")
+            unlinked.append(entry)
+
+            kind_name = node.kind.value
+            if kind_name not in by_kind:
+                by_kind[kind_name] = []
+            by_kind[kind_name].append(entry)
+
+    return {
+        "unlinked": unlinked,
+        "count": len(unlinked),
+        "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
+    }
+
+
+def _get_broken_references(graph: FederatedGraph) -> dict[str, Any]:
     """Get all broken references.
 
     Returns edges that point to non-existent nodes.
@@ -2031,7 +2434,7 @@ def _get_broken_references(graph: TraceGraph) -> dict[str, Any]:
 
 
 def _find_by_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     keywords: list[str],
     match_all: bool = True,
     kind: str | None = None,
@@ -2067,7 +2470,7 @@ def _find_by_keywords(
     }
 
 
-def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
+def _get_all_keywords(graph: FederatedGraph) -> dict[str, Any]:
     """Get all unique keywords from the graph.
 
     Args:
@@ -2088,7 +2491,7 @@ def _get_all_keywords(graph: TraceGraph) -> dict[str, Any]:
 
 
 def _query_nodes(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     kind: str | None = None,
     keywords: list[str] | None = None,
     match_all: bool = True,
@@ -2156,7 +2559,7 @@ def _query_nodes(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get test coverage information for a requirement.
 
     REQ-d00066-A: SHALL accept req_id parameter identifying the target requirement.
@@ -2233,7 +2636,7 @@ def _get_test_coverage(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     }
 
 
-def _get_assertion_test_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion test coverage map for a requirement.
 
     Returns a structure mapping each assertion label to its tests and their
@@ -2293,7 +2696,7 @@ def _get_assertion_test_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
     }
 
 
-def _get_assertion_code_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion code implementation map for a requirement.
 
     Returns a structure mapping each assertion label to its CODE nodes,
@@ -2354,7 +2757,7 @@ def _get_assertion_code_map(graph: TraceGraph, req_id: str) -> dict[str, Any]:
 
 
 def _get_uncovered_assertions(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     req_id: str | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
@@ -2461,7 +2864,7 @@ def _get_uncovered_assertions(
 
 
 def _find_assertions_by_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     keywords: list[str],
     match_all: bool = True,
 ) -> dict[str, Any]:
@@ -2683,7 +3086,7 @@ def _list_safety_branches_impl(repo_root: Path) -> dict[str, Any]:
 
 
 def _suggest_links_impl(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     working_dir: Path,
     file_path: str | None = None,
     limit: int = 50,
@@ -2700,6 +3103,7 @@ def _suggest_links_impl(
         working_dir,
         file_path=file_path,
         limit=limit,
+        discover_fn=_discover_assertions,
     )
     return {
         "suggestions": [s.to_dict() for s in suggestions],
@@ -2754,13 +3158,21 @@ def _apply_link_impl(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Subtree Extraction (REQ-o00067, REQ-d00075)
+# Subtree Extraction (REQ-o00067, REQ-d00075, REQ-d00133)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Conservative kind defaults per root kind (REQ-d00075-F)
+# Conservative kind defaults per root kind (REQ-d00075-F, REQ-d00133-C)
 _SUBTREE_KIND_DEFAULTS: dict[NodeKind, set[NodeKind]] = {
     NodeKind.REQUIREMENT: {NodeKind.REQUIREMENT, NodeKind.ASSERTION},
     NodeKind.USER_JOURNEY: {NodeKind.USER_JOURNEY},
+    NodeKind.FILE: {NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER},
+}
+
+# Implements: REQ-d00133-A, REQ-d00133-B
+# Edge-kind filters per root kind for filtered traversal
+_SUBTREE_EDGE_DEFAULTS: dict[NodeKind, set[EdgeKind]] = {
+    NodeKind.FILE: {EdgeKind.CONTAINS},
+    NodeKind.REQUIREMENT: {EdgeKind.IMPLEMENTS, EdgeKind.REFINES, EdgeKind.STRUCTURES},
 }
 
 
@@ -2794,7 +3206,7 @@ def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
 
 
 def _collect_subtree(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
     depth: int = 0,
     include_kinds: set[NodeKind] | None = None,
@@ -2805,6 +3217,8 @@ def _collect_subtree(
     REQ-o00067-A: BFS traversal from root.
     REQ-o00067-B: depth=0 means unlimited, depth=N limits to N levels.
     REQ-o00067-E: Deduplicates via visited set.
+    REQ-d00133-A: FILE roots walk CONTAINS edges.
+    REQ-d00133-B: REQUIREMENT roots walk domain edges.
 
     Returns:
         List of (node, depth_level) tuples in BFS order.
@@ -2813,7 +3227,7 @@ def _collect_subtree(
     if root_node is None:
         return []
 
-    # Determine kind filter (REQ-o00067-C, REQ-d00075-F)
+    # Determine kind filter (REQ-o00067-C, REQ-d00075-F, REQ-d00133-C)
     if include_kinds is None:
         include_kinds = _SUBTREE_KIND_DEFAULTS.get(
             root_node.kind,
@@ -2822,6 +3236,9 @@ def _collect_subtree(
         # Always include ASSERTION when REQUIREMENT is present
         if NodeKind.REQUIREMENT in include_kinds:
             include_kinds = include_kinds | {NodeKind.ASSERTION}
+
+    # Determine edge-kind filter (REQ-d00133-A, REQ-d00133-B)
+    edge_filter = _SUBTREE_EDGE_DEFAULTS.get(root_node.kind)
 
     visited: set[str] = {root_id}
     result: list[tuple[Any, int]] = [(root_node, 0)]
@@ -2834,7 +3251,7 @@ def _collect_subtree(
         if depth > 0 and current_depth >= depth:
             continue
 
-        for child in current.iter_children():
+        for child in current.iter_children(edge_kinds=edge_filter):
             if child.id in visited:
                 continue
             if child.kind not in include_kinds:
@@ -2848,7 +3265,7 @@ def _collect_subtree(
 
 def _subtree_to_markdown(
     collected: list[tuple[Any, int]],
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> str:
     """Render subtree as indented markdown.
 
@@ -2885,7 +3302,7 @@ def _subtree_to_markdown(
 
 def _subtree_to_flat(
     collected: list[tuple[Any, int]],
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
 ) -> dict[str, Any]:
     """Render subtree as flat JSON structure.
@@ -2945,13 +3362,16 @@ def _subtree_to_nested(
     node: Any,
     depth_limit: int,
     kind_filter: set[NodeKind],
-    graph: TraceGraph,
+    graph: FederatedGraph,
     _current_depth: int = 0,
     _visited: set[str] | None = None,
+    _edge_filter: set[EdgeKind] | None = None,
 ) -> dict[str, Any]:
     """Render subtree as recursive nested JSON.
 
     REQ-d00075-E: Recursive JSON with children arrays.
+    REQ-d00133-A: FILE roots walk CONTAINS edges.
+    REQ-d00133-B: REQUIREMENT roots walk domain edges.
     """
     if _visited is None:
         _visited = set()
@@ -2974,7 +3394,7 @@ def _subtree_to_nested(
     # Recurse into children
     children: list[dict[str, Any]] = []
     if depth_limit == 0 or _current_depth < depth_limit:
-        for child in node.iter_children():
+        for child in node.iter_children(edge_kinds=_edge_filter):
             if child.id in _visited:
                 continue
             if child.kind not in kind_filter:
@@ -2987,6 +3407,7 @@ def _subtree_to_nested(
                     graph,
                     _current_depth + 1,
                     _visited,
+                    _edge_filter,
                 )
             )
     entry["children"] = children
@@ -2994,7 +3415,7 @@ def _subtree_to_nested(
 
 
 def _get_subtree(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     root_id: str,
     depth: int = 0,
     include_kinds: str = "",
@@ -3028,7 +3449,9 @@ def _get_subtree(
             )
             if NodeKind.REQUIREMENT in kind_set:
                 kind_set = kind_set | {NodeKind.ASSERTION}
-        result = _subtree_to_nested(root_node, depth, kind_set, graph)
+        # REQ-d00133-A, REQ-d00133-B: edge filter per root kind
+        edge_filter = _SUBTREE_EDGE_DEFAULTS.get(root_node.kind)
+        result = _subtree_to_nested(root_node, depth, kind_set, graph, _edge_filter=edge_filter)
         return {"format": "nested", "root_id": root_id, "tree": result}
 
     # BFS-based formats: markdown and flat
@@ -3079,7 +3502,7 @@ class CursorState:
 def _reshape_for_batch_size(
     nodes: list[tuple[Any, int]],
     batch_size: int,
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> list[dict[str, Any]]:
     """Reshape collected nodes based on batch_size semantics.
 
@@ -3177,7 +3600,7 @@ def _materialize_cursor_items(
     query: str,
     params: dict[str, Any],
     batch_size: int,
-    graph: TraceGraph,
+    graph: FederatedGraph,
 ) -> list[dict[str, Any]]:
     """Run query and reshape results for cursor iteration.
 
@@ -3393,6 +3816,7 @@ The graph is the single source of truth - all tools read directly from it.
 5. `get_requirement(req_id)` - Get full details including assertions
 6. `get_hierarchy(req_id)` - Navigate parent/child relationships
 7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+8. `discover_assertions(query)` - Find assertions ranked by relevance
 
 ## Tools Overview
 
@@ -3418,6 +3842,11 @@ The graph is the single source of truth - all tools read directly from it.
   - Chains scoped_search with minimize_requirement_set
   - Returns only the most-specific matches within a subgraph
   - Pruned ancestors include superseded_by metadata
+- `discover_assertions(query, scope_id?, ...)` - Find assertions ranked by relevance
+  - Returns assertions as top-level scored results (not nested under requirements)
+  - Searches requirement titles/bodies AND assertion text
+  - Direct assertion text matches score higher than context-only matches
+  - scope_id="" (default) searches all requirements globally
 
 ### Workspace Context
 - `get_workspace_info(detail="default")` - Repo path, project name, version, configuration
@@ -3583,7 +4012,7 @@ Use `save_mutations()` after making in-memory changes with `mutate_*` tools to p
 
 
 def create_server(
-    graph: TraceGraph | None = None,
+    graph: FederatedGraph | None = None,
     working_dir: Path | None = None,
 ) -> FastMCP:
     """Create the MCP server with all tools registered.
@@ -3610,7 +4039,13 @@ def create_server(
 
     # Build initial graph if not provided
     if graph is None:
-        graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+        try:
+            graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+        except ValueError as e:
+            import sys
+
+            print(f"CONFIG ERROR: {e}", file=sys.stderr)
+            graph = FederatedGraph.empty()
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
@@ -3629,12 +4064,18 @@ def create_server(
 
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
-        """Node counts by kind, orphan/broken-ref flags."""
+        """Quick health snapshot: requirement/assertion/test counts, orphan and broken-ref flags.
+
+        Use when: you need a fast overview of project health without running full checks.
+        """
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
     def refresh_graph(full: bool = False, path: str = "") -> dict[str, Any]:
-        """Rebuild graph from spec files.
+        """Reload the requirements graph from spec files on disk.
+
+        Use when: spec files were edited outside of mutation tools, or after
+        switching branches. Required after manual file edits to see changes.
 
         Args:
             full: If True, clear all caches before rebuild.
@@ -3654,6 +4095,9 @@ def create_server(
             canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
+        # REQ-d00205-B: Sync config from rebuilt graph's root repo
+        if result.get("config") is not None:
+            _state["config"] = result["config"]
         result["working_dir"] = str(_state["working_dir"])
         return result
 
@@ -3664,15 +4108,26 @@ def create_server(
         regex: bool = False,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Search requirements by ID, title, or content.
+        """Find requirements by keyword, ID, or content. Returns ranked results.
 
-        Multi-term query syntax (when regex=False):
-        - Space-separated terms: implicit AND
-        - ``OR`` between terms: disjunctive matching
-        - ``(...)`` grouping: explicit precedence
-        - ``"..."`` phrases: exact contiguous substring
-        - ``-term``: exclude matching nodes
-        - ``=term``: exact keyword match (vs substring)
+        Use when: looking for requirements about a topic, finding a REQ by partial
+        ID, or answering "which requirement covers X?". For searching within a
+        specific subtree, use scoped_search() or discover_requirements() instead.
+
+        Query syntax (when regex=False):
+        - ``auth encryption`` — AND: both terms must match (default)
+        - ``auth OR encryption`` — OR: either term matches
+        - ``(auth OR login) encryption`` — grouping with parentheses
+        - ``"data at rest"`` — exact phrase match
+        - ``-deprecated`` — exclude results containing "deprecated"
+        - ``=security`` — exact keyword tag match (not substring)
+
+        Tip: space-separated terms are AND'd, which can be too restrictive.
+        Use OR between terms when you want broader results:
+        ``authentication OR login OR session`` finds any of those topics.
+
+        Results are scored by field: ID match (100), title (50),
+        keyword-exact (40), keyword-substring (25), body (10).
         """
         return _search(_state["graph"], query, field, regex, limit)
 
@@ -3681,7 +4136,11 @@ def create_server(
         req_ids: list[str],
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Prune to most-specific requirements, removing ancestors covered by descendants."""
+        """Remove ancestors superseded by more-specific descendants from a requirement ID list.
+
+        Use when: you have search results and want to eliminate redundant parent
+        requirements already covered by their children in the list.
+        """
         # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -3704,7 +4163,13 @@ def create_server(
         include_assertions: bool = False,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Search within a subgraph rooted at scope_id."""
+        """Search for requirements within a specific subtree only.
+
+        Use when: you know the parent requirement and want to find matching
+        descendants (or ancestors). Same query syntax as search().
+        Prefer discover_requirements() when you want only the most-specific
+        (leaf-level) matches with ancestors pruned out.
+        """
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
@@ -3720,7 +4185,13 @@ def create_server(
         limit: int = 50,
         edge_kinds: str = "implements,refines",
     ) -> dict[str, Any]:
-        """Search within a subgraph and return only the most-specific matches."""
+        """Search within a subtree and return only the most-specific (leaf-level) matches.
+
+        Use when: finding which DEV/OPS requirements implement a concept under a
+        specific PRD. Combines scoped_search + minimize_requirement_set in one call:
+        searches descendants of scope_id, then prunes ancestor matches that are
+        superseded by more-specific descendants.
+        """
         # REQ-d00079-D: Parse edge_kinds and delegate
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
@@ -3744,13 +4215,63 @@ def create_server(
         )
 
     @mcp.tool()
+    def discover_assertions(
+        query: str,
+        scope_id: str = "",
+        direction: str = "descendants",
+        field: str = "all",
+        regex: bool = False,
+        limit: int = 50,
+        edge_kinds: str = "implements,refines",
+    ) -> dict[str, Any]:
+        """Search for assertions, returning them as top-level scored results.
+
+        Use when: finding which specific assertions a test or code change
+        relates to. Searches requirement titles, bodies, and assertion text,
+        then returns all assertions from matching requirements ranked by
+        relevance. Assertions whose text directly matched score higher than
+        siblings that were only pulled in by their parent requirement.
+
+        When scope_id is provided, searches within that subtree and minimizes
+        to the most-specific requirements first. When scope_id is empty
+        (default), searches all requirements globally.
+        """
+        parsed_kinds: set[EdgeKind] = set()
+        for kind_str in edge_kinds.split(","):
+            kind_str = kind_str.strip().lower()
+            try:
+                parsed_kinds.add(EdgeKind(kind_str))
+            except ValueError:
+                pass
+        if not parsed_kinds:
+            parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+        return _discover_assertions(
+            _state["graph"],
+            query,
+            scope_id,
+            direction,
+            field,
+            regex,
+            limit,
+            parsed_kinds,
+        )
+
+    @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
-        """Get full details for a single requirement."""
+        """Get full details for a single requirement.
+
+        Use when: you have a requirement ID and need its title, status, level,
+        assertions, parent/child relationships, code refs, and test coverage.
+        """
         return _get_requirement(_state["graph"], req_id)
 
     @mcp.tool()
     def get_node(node_id: str) -> dict[str, Any]:
-        """Get full details for any graph node by ID."""
+        """Get full details for any graph node by ID (requirement, assertion, test, code, file).
+
+        Use when: you have any node ID (not just requirements) and need its details.
+        For requirement IDs specifically, get_requirement() returns richer context.
+        """
         return _get_node(_state["graph"], node_id)
 
     @mcp.tool()
@@ -3763,12 +4284,16 @@ def create_server(
         actor: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Filter nodes by kind, keywords, level, status, or actor.
+        """List nodes filtered by structured criteria (kind, level, status, keywords).
+
+        Use when: you need to enumerate nodes by type or status rather than
+        free-text search. For example, "all Draft DEV requirements" or
+        "all test nodes with keyword 'auth'". For free-text search, use search().
 
         Args:
             kind: NodeKind value: requirement, journey, test, result, code.
-            keywords: Comma-separated keywords to search for.
-            match_all: True (default) = AND, False = OR for keywords.
+            keywords: Comma-separated keyword tags to match against.
+            match_all: True (default) = ALL keywords must match, False = ANY.
             level: PRD, OPS, DEV (requirements only).
             status: Requirement or test result status.
             actor: Journey actor.
@@ -3788,7 +4313,11 @@ def create_server(
 
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:
-        """Get requirement hierarchy (ancestors and children)."""
+        """Trace a requirement's position in the hierarchy: ancestors up to roots, direct children.
+
+        Use when: understanding where a requirement fits — what it implements (parents)
+        and what implements it (children). Shows the full chain from DEV up to PRD.
+        """
         return _get_hierarchy(_state["graph"], req_id)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3797,7 +4326,10 @@ def create_server(
 
     @mcp.tool()
     def get_workspace_info(detail: str = "default") -> dict[str, Any]:
-        """Workspace config, paths, and use-case-specific details.
+        """Project identity, configuration, and federation details.
+
+        Use when: understanding what project you're working with — name, ID patterns,
+        spec directories, hierarchy rules, test config, associate repos, coverage stats.
 
         Args:
             detail: Profile to return: 'default', 'testing', 'code-refs',
@@ -3812,17 +4344,28 @@ def create_server(
 
     @mcp.tool()
     def get_project_summary() -> dict[str, Any]:
-        """Requirement counts by level, coverage stats, change metrics."""
+        """Project overview: requirement counts by level, coverage percentages, change metrics.
+
+        Use when: you need a high-level status report of the project's requirements.
+        """
         return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     @mcp.tool()
     def get_changed_requirements() -> dict[str, Any]:
-        """Requirements with uncommitted, branch-changed, or moved status."""
+        """Detect which requirements have been modified since last commit or branch point.
+
+        Use when: checking what changed in the current working tree or feature branch,
+        reviewing spec modifications before commit, or finding moved requirements.
+        """
         return _get_changed_requirements(_state["graph"])
 
     @mcp.tool()
     def agent_instructions() -> dict[str, Any]:
-        """Project-specific authoring guidance for AI agents."""
+        """Content rules and authoring guidance configured for this project.
+
+        Use when: writing or editing requirements — tells you the project's
+        conventions for assertion format, keyword style, hash handling, etc.
+        """
         return _get_agent_instructions(_state["config"], _state["working_dir"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3831,12 +4374,12 @@ def create_server(
 
     @mcp.tool()
     def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
-        """Rename a requirement node."""
+        """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references."""
         return _mutate_rename_node(_state["graph"], old_id, new_id)
 
     @mcp.tool()
     def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
-        """Update a requirement's title."""
+        """Change a requirement's display title."""
         return _mutate_update_title(_state["graph"], node_id, new_title)
 
     @mcp.tool()
@@ -3857,10 +4400,13 @@ def create_server(
         parent_id: str | None = None,
         edge_kind: str | None = None,
     ) -> dict[str, Any]:
-        """Create a new requirement.
+        """Create a new requirement in the graph (in-memory until save_mutations).
 
         Args:
+            req_id: The new requirement ID (e.g., REQ-d00010).
+            title: Human-readable title.
             level: PRD, OPS, or DEV.
+            status: Initial status (default: Draft).
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
         """
@@ -3870,7 +4416,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a requirement."""
+        """Delete a requirement and its assertions. Returns error unless confirm=True."""
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3879,24 +4425,27 @@ def create_server(
 
     @mcp.tool()
     def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
-        """Add an assertion to a requirement."""
+        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL."""
         return _mutate_add_assertion(_state["graph"], req_id, label, text)
 
     @mcp.tool()
     def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
-        """Update an assertion's text."""
+        """Rewrite an assertion's text (e.g., REQ-p00001-A)."""
         return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
 
     @mcp.tool()
     def mutate_delete_assertion(
         assertion_id: str, compact: bool = True, confirm: bool = False
     ) -> dict[str, Any]:
-        """Delete an assertion."""
+        """Delete an assertion. Returns error unless confirm=True.
+
+        Remaining labels re-sequenced if compact=True.
+        """
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
     def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
-        """Rename an assertion's label."""
+        """Change an assertion's label (e.g., rename B to D). Updates all references."""
         return _mutate_rename_assertion(_state["graph"], old_id, new_label)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3910,13 +4459,25 @@ def create_server(
         edge_kind: str,
         assertion_targets: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add an edge between nodes.
+        """Add a traceability relationship (Implements, Refines, Validates) between nodes.
+
+        source_id is the child (the requirement doing the implementing/refining).
+        target_id is the parent (the requirement being implemented/refined).
 
         Args:
             edge_kind: 'IMPLEMENTS' or 'REFINES'.
-            assertion_targets: Optional list of assertion IDs to target.
+            assertion_targets: Optional list of assertion labels or full assertion
+                IDs to target (e.g. ["A", "B"] or ["REQ-p00044-A", "REQ-p00044-B"]).
+                Full IDs are automatically normalized to bare labels.
         """
-        return _mutate_add_edge(_state["graph"], source_id, target_id, edge_kind, assertion_targets)
+        return _mutate_add_edge(
+            _state["graph"],
+            source_id,
+            target_id,
+            edge_kind,
+            assertion_targets,
+            config=_state.get("config"),
+        )
 
     @mcp.tool()
     def mutate_change_edge_kind(source_id: str, target_id: str, new_kind: str) -> dict[str, Any]:
@@ -3929,16 +4490,51 @@ def create_server(
 
     @mcp.tool()
     def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete an edge between nodes."""
+        """Remove a traceability relationship between nodes. Returns error unless confirm=True."""
         return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
 
     @mcp.tool()
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str
     ) -> dict[str, Any]:
-        """Fix a broken reference by redirecting to a valid target."""
+        """Repair a broken reference by redirecting it to a valid target node."""
         return _mutate_fix_broken_reference(
             _state["graph"], source_id, old_target_id, new_target_id
+        )
+
+    @mcp.tool()
+    def mutate_change_edge_targets(
+        source_id: str, target_id: str, assertion_targets: list[str]
+    ) -> dict[str, Any]:
+        """Change assertion targets on an IMPLEMENTS/REFINES edge.
+
+        Args:
+            source_id: The child/source node ID.
+            target_id: The parent/target node ID.
+            assertion_targets: Assertion labels to target (empty = whole req).
+        """
+        return _mutate_change_edge_targets(_state["graph"], source_id, target_id, assertion_targets)
+
+    @mcp.tool()
+    def mutate_move_node_to_file(node_id: str, target_file_id: str) -> dict[str, Any]:
+        """Move a content node to a different FILE.
+
+        Args:
+            node_id: The node to move.
+            target_file_id: The target FILE node ID (e.g. "file:spec/other.md").
+        """
+        return _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
+
+    @mcp.tool()
+    def mutate_rename_file(file_id: str, new_relative_path: str) -> dict[str, Any]:
+        """Rename a FILE node and its on-disk path.
+
+        Args:
+            file_id: Current FILE node ID (e.g. "file:spec/main.md").
+            new_relative_path: New repo-relative path (e.g. "spec/renamed.md").
+        """
+        return _mutate_rename_file(
+            _state["graph"], file_id, new_relative_path, _state.get("repo_root")
         )
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3947,27 +4543,56 @@ def create_server(
 
     @mcp.tool()
     def undo_last_mutation() -> dict[str, Any]:
-        """Undo the most recent mutation."""
+        """Revert the most recent in-memory mutation (before save_mutations)."""
         return _undo_last_mutation(_state["graph"])
 
     @mcp.tool()
     def undo_to_mutation(mutation_id: str) -> dict[str, Any]:
-        """Undo all mutations back to a specific point (inclusive)."""
+        """Revert all in-memory mutations back to a specific point (inclusive).
+
+        Use get_mutation_log() to find mutation IDs.
+        """
         return _undo_to_mutation(_state["graph"], mutation_id)
 
     @mcp.tool()
     def get_mutation_log(limit: int = 50) -> dict[str, Any]:
-        """Get mutation history."""
+        """List pending in-memory mutations (not yet saved to disk).
+
+        Shows what save_mutations() will persist.
+        """
         return _get_mutation_log(_state["graph"], limit)
 
     @mcp.tool()
     def get_orphaned_nodes() -> dict[str, Any]:
-        """Nodes with no parent relationships."""
+        """Find requirements not contained in any spec file (structural orphans).
+
+        Use when: diagnosing graph health issues — orphaned nodes are typically
+        the result of failed parsing or manual graph manipulation.
+        """
         return _get_orphaned_nodes(_state["graph"])
 
     @mcp.tool()
+    def get_unlinked_nodes(kind: str | None = None) -> dict[str, Any]:
+        """Unlinked nodes — have a FILE parent but no requirement link.
+
+        These are TEST or CODE nodes that exist in the file structure but
+        are not connected to any requirement through traceability edges.
+
+        Args:
+            kind: Optional filter — "test" or "code". If omitted, returns both.
+        """
+        if kind is not None:
+            kind = kind.lower()
+            if kind not in ("test", "code"):
+                return {"error": f"Invalid kind '{kind}'. Must be 'test' or 'code'."}
+        return _get_unlinked_nodes(_state["graph"], kind)
+
+    @mcp.tool()
     def get_broken_references() -> dict[str, Any]:
-        """Edges pointing to non-existent nodes."""
+        """Find Implements/Refines references that point to non-existent requirement IDs.
+
+        Use when: checking for broken links after renaming or deleting requirements.
+        """
         return _get_broken_references(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3979,12 +4604,19 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find requirements containing specified keywords."""
+        """Find requirements by curated keyword tags (from [keywords] metadata in specs).
+
+        Use when: filtering by explicit keyword annotations, not free-text content.
+        For free-text search across titles, bodies, and IDs, use search() instead.
+        """
         return _find_by_keywords(_state["graph"], keywords, match_all)
 
     @mcp.tool()
     def get_all_keywords() -> dict[str, Any]:
-        """Get all unique keywords from the graph."""
+        """List all keyword tags used across requirements.
+
+        Useful for discovering available filter terms for find_by_keywords().
+        """
         return _get_all_keywords(_state["graph"])
 
     # ─────────────────────────────────────────────────────────────────────
@@ -3993,15 +4625,21 @@ def create_server(
 
     @mcp.tool()
     def get_test_coverage(req_id: str) -> dict[str, Any]:
-        """Get test coverage for a requirement."""
+        """Which tests validate a requirement and which assertions are covered/uncovered.
+
+        Use when: checking if a requirement has adequate test coverage, or finding
+        which specific assertions still need tests written.
+        """
         return _get_test_coverage(_state["graph"], req_id)
 
     @mcp.tool()
     def get_uncovered_assertions(req_id: str | None = None) -> dict[str, Any]:
-        """Assertions with no test coverage.
+        """Find assertions that have no tests validating them.
+
+        Use when: identifying test gaps — assertions that need tests written.
 
         Args:
-            req_id: Optional requirement ID. When None, scan all requirements.
+            req_id: Optional requirement ID to check. When None, scans ALL requirements.
         """
         return _get_uncovered_assertions(_state["graph"], req_id)
 
@@ -4010,7 +4648,11 @@ def create_server(
         keywords: list[str],
         match_all: bool = True,
     ) -> dict[str, Any]:
-        """Find assertions containing specified keywords."""
+        """Search assertion text for keywords (e.g., find all assertions mentioning "encrypt").
+
+        Use when: looking for specific obligations across all requirements.
+        Searches assertion text, not requirement titles — complements search().
+        """
         return _find_assertions_by_keywords(_state["graph"], keywords, match_all)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4079,7 +4721,10 @@ def create_server(
 
     @mcp.tool()
     def list_safety_branches() -> dict[str, Any]:
-        """List all safety branches."""
+        """List git safety branches created by save_mutations(save_branch=True).
+
+        Use for rollback via restore_from_safety_branch().
+        """
         return _list_safety_branches_impl(_state["working_dir"])
 
     @mcp.tool()
@@ -4100,7 +4745,8 @@ def create_server(
                 Required when mutations affect Active requirements
                 (when changelog enforcement is enabled).
         """
-        from elspais.server.persistence import replay_mutations_to_disk
+        # Implements: REQ-d00132-A, REQ-d00132-B
+        from elspais.graph.render import render_save
 
         graph = _state["graph"]
         if graph is None:
@@ -4128,7 +4774,11 @@ def create_server(
 
             create_safety_branch(_state["working_dir"], "save-mutations")
 
-        result = replay_mutations_to_disk(graph, _state["working_dir"])
+        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
+
+        result = render_save(
+            graph, _state["working_dir"], resolver=_build_resolver_for_save(config)
+        )
 
         # Add changelog entries for Active requirements after save
         if result.get("success") and changelog_enforce and message:
@@ -4153,7 +4803,11 @@ def create_server(
         file_path: str | None = None,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """Suggest requirement links for unlinked test nodes."""
+        """Suggest which requirements an unlinked test or code file should reference.
+
+        Use when: a test file has no ``# Implements:`` comment and you want
+        recommendations based on function names, imports, and file proximity.
+        """
         return _suggest_links_impl(
             _state["graph"],
             _state["working_dir"],
@@ -4191,9 +4845,14 @@ def create_server(
         include_kinds: str = "",
         format: str = "markdown",
     ) -> dict[str, Any]:
-        """Extract a subgraph rooted at a given node.
+        """Extract a requirement subtree as markdown, flat JSON, or nested JSON.
+
+        Use when: providing context about a requirement and its descendants to a
+        sub-agent, generating a scoped view of the hierarchy, or exporting a
+        section of the traceability graph.
 
         Args:
+            root_id: ID of the root node to start from.
             depth: Max depth from root (0 = unlimited).
             include_kinds: Comma-separated NodeKind values to include.
                 Empty string uses conservative defaults per root kind.
@@ -4217,11 +4876,15 @@ def create_server(
         params: dict[str, Any] | None = None,
         batch_size: int = 1,
     ) -> dict[str, Any]:
-        """Open a cursor for incremental iteration over query results.
+        """Open a cursor for paginated iteration over any query result set.
+
+        Use when: a query might return many results and you want to process
+        them one at a time without loading everything. Use cursor_next() to
+        advance and cursor_info() to check position.
 
         Args:
             query: 'subtree', 'search', 'hierarchy', 'query_nodes',
-                'test_coverage', or 'uncovered_assertions'.
+                'test_coverage', 'uncovered_assertions', or 'scoped_search'.
             params: Query-specific parameters as a dict.
             batch_size: -1=assertions first-class, 0=nodes with inline
                 assertions, 1=nodes with children summaries.
@@ -4237,12 +4900,12 @@ def create_server(
     def cursor_next(
         count: int = 1,
     ) -> dict[str, Any]:
-        """Advance cursor and return next items."""
+        """Get next item(s) from an open cursor. Call after open_cursor()."""
         return _cursor_next(_state, count=count)
 
     @mcp.tool()
     def cursor_info() -> dict[str, Any]:
-        """Cursor position, total, and remaining count."""
+        """Check cursor state: current position, total items, and how many remain."""
         return _cursor_info(_state)
 
     return mcp

@@ -21,7 +21,7 @@ from elspais.utilities.import_analyzer import (
 )
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
 
 
@@ -58,7 +58,7 @@ def _camel_to_snake(name: str) -> str:
 
 # Implements: REQ-o00050-C
 def _build_code_index(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path | None = None,
 ) -> dict[tuple[str, str], list[GraphNode]]:
     """Build index of CODE nodes by (normalized_path, function_name).
@@ -78,10 +78,11 @@ def _build_code_index(
 
     for node in graph.nodes_by_kind(NodeKind.CODE):
         func_name = node.get_field("function_name")
-        if not func_name or not node.source:
+        _fn = node.file_node()
+        if not func_name or not _fn:
             continue
 
-        path = _normalize_path(node.source.path)
+        path = _normalize_path(_fn.get_field("relative_path") or "")
         # Make path relative to repo_root if it's absolute
         if repo_root_str and path.startswith(repo_root_str):
             path = path[len(repo_root_str) :]
@@ -149,7 +150,7 @@ def _extract_candidate_functions(test_node: GraphNode) -> list[str]:
 
 # Implements: REQ-o00050-C
 def link_tests_to_code(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     repo_root: Path,
     source_roots: list[str] | None = None,
 ) -> int:
@@ -196,9 +197,10 @@ def link_tests_to_code(
             continue
 
         # Get test file path (make relative to repo_root)
-        if not test_node.source:
+        _tfn = test_node.file_node()
+        if not _tfn:
             continue
-        test_path = _normalize_path(test_node.source.path)
+        test_path = _normalize_path(_tfn.get_field("relative_path") or "")
         if test_path.startswith(repo_root_str):
             test_path = test_path[len(repo_root_str) :]
 

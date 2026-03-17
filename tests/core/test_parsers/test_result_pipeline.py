@@ -8,7 +8,7 @@ ParsedContent objects with content_type="test_result".
 
 from __future__ import annotations
 
-from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 
@@ -50,7 +50,6 @@ class TestJUnitXMLClaimAndParse:
         results = list(parser.claim_and_parse(lines, context))
 
         assert len(results) == 1
-        assert isinstance(results[0], ParsedContent)
         assert results[0].content_type == "test_result"
 
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):
@@ -146,7 +145,6 @@ class TestPytestJSONClaimAndParse:
         results = list(parser.claim_and_parse(lines, context))
 
         assert len(results) == 1
-        assert isinstance(results[0], ParsedContent)
         assert results[0].content_type == "test_result"
 
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):

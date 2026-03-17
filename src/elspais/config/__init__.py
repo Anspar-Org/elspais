@@ -19,15 +19,22 @@ import tomlkit
 
 # Default configuration values
 DEFAULT_CONFIG: dict[str, Any] = {
-    "patterns": {
-        "id_template": "{prefix}-{type}{id}",
-        "prefix": "REQ",
+    "project": {
+        "namespace": "REQ",
+    },
+    "id-patterns": {
+        "canonical": "{namespace}-{type.letter}{component}",
+        "aliases": {"short": "{type.letter}{component}"},
         "types": {
-            "prd": {"id": "p", "name": "PRD", "level": 1},
-            "ops": {"id": "o", "name": "OPS", "level": 2},
-            "dev": {"id": "d", "name": "DEV", "level": 3},
+            "prd": {"level": 1, "aliases": {"letter": "p"}},
+            "ops": {"level": 2, "aliases": {"letter": "o"}},
+            "dev": {"level": 3, "aliases": {"letter": "d"}},
         },
-        "id_format": {"style": "numeric", "digits": 5, "leading_zeros": True},
+        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+        "assertions": {
+            "label_style": "uppercase",
+            "max_count": 26,
+        },
     },
     "spec": {
         "directories": ["spec"],
@@ -45,10 +52,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "testing": {
         "enabled": False,
         "test_dirs": ["tests"],
+        "skip_dirs": [],
         "patterns": ["test_*.py", "*_test.py"],
         "result_files": [],
+        "run_meta_file": "",
         "reference_patterns": [],
         "reference_keyword": "Validates",
+        "prescan_command": "",
     },
     "ignore": {
         "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
@@ -62,11 +72,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "case_sensitive": False,
             "prefix_optional": False,
             "comment_styles": ["#", "//", "--"],
-            "multi_assertion_separator": "+",
             "keywords": {
                 "implements": ["Implements", "IMPLEMENTS"],
                 "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
                 "refines": ["Refines", "REFINES"],
+                # Implements: REQ-d00069-H
+                "satisfies": ["Satisfies", "SATISFIES"],
             },
         },
         "overrides": [],
@@ -149,6 +160,98 @@ class ConfigLoader:
         return self._data
 
 
+def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
+    """Migrate legacy [patterns] config to [id-patterns] format.
+
+    Configs without an explicit ``version`` field (pre-v2) may define ID
+    patterns in the old ``[patterns]`` section.  This function synthesizes
+    the equivalent ``[id-patterns]`` so that ``IdResolver`` works correctly.
+
+    Once all repos have migrated to ``[id-patterns]`` and set ``version = 2``,
+    this migration path can be removed.
+    """
+    # v2+ configs must use [id-patterns] directly — skip migration
+    config_version = config.get("version")
+    if config_version is not None and config_version >= 2:
+        return config
+
+    patterns = config.get("patterns", {})
+    if not patterns or not patterns.get("types"):
+        return config
+
+    # Only migrate if [id-patterns] is still at defaults (user didn't define it)
+    id_patterns = config.get("id-patterns", {})
+    if id_patterns.get("canonical") != DEFAULT_CONFIG["id-patterns"]["canonical"]:
+        return config  # user has explicit [id-patterns], don't override
+
+    # Build type definitions: old types.*.id -> new types.*.aliases.letter
+    old_types = patterns.get("types", {})
+    new_types: dict[str, Any] = {}
+    for code, tdef in old_types.items():
+        if isinstance(tdef, dict):
+            new_types[code] = {
+                "level": tdef.get("level", 1),
+                "aliases": {"letter": tdef.get("id", code[0])},
+            }
+
+    # Build component format from old id_format
+    old_id_format = patterns.get("id_format", {})
+    new_component = {
+        "style": old_id_format.get("style", "numeric"),
+        "digits": old_id_format.get("digits", 5),
+        "leading_zeros": old_id_format.get("leading_zeros", True),
+    }
+    if old_id_format.get("pattern"):
+        new_component["pattern"] = old_id_format["pattern"]
+
+    # Build canonical template by translating tokens
+    old_template = patterns.get("id_template", "{prefix}-{type}{id}")
+    canonical = old_template
+    canonical = canonical.replace("{prefix}", "{namespace}")
+    canonical = canonical.replace("{id}", "{component}")
+    canonical = canonical.replace("{type}", "{type.letter}")
+
+    # Handle {associated} token: replace with literal prefix if configured
+    associated_config = patterns.get("associated", {})
+    if associated_config.get("enabled") and "{associated}" in canonical:
+        assoc_prefix = config.get("associated", {}).get("prefix", "")
+        sep = associated_config.get("separator", "-")
+        if assoc_prefix:
+            canonical = canonical.replace("{associated}", f"{assoc_prefix}{sep}")
+        else:
+            # Associated enabled but no prefix — drop the token
+            canonical = canonical.replace("{associated}", "")
+    else:
+        canonical = canonical.replace("{associated}", "")
+
+    # Build assertions config
+    old_assertions = patterns.get("assertions", {})
+    new_assertions: dict[str, Any] = {}
+    if old_assertions:
+        new_assertions["label_style"] = old_assertions.get("label_style", "uppercase")
+        new_assertions["max_count"] = old_assertions.get("max_count", 26)
+        if "zero_pad" in old_assertions:
+            new_assertions["zero_pad"] = old_assertions["zero_pad"]
+        if "multi_separator" in old_assertions:
+            new_assertions["multi_separator"] = old_assertions["multi_separator"]
+
+    # Also set namespace from patterns.prefix if not already in [project]
+    namespace = patterns.get("prefix", "REQ")
+    if config.get("project", {}).get("namespace") == DEFAULT_CONFIG["project"]["namespace"]:
+        config.setdefault("project", {})["namespace"] = namespace
+
+    # Write synthesized [id-patterns]
+    config["id-patterns"] = {
+        "canonical": canonical,
+        "aliases": {"short": canonical.split("-", 1)[1] if "-" in canonical else canonical},
+        "types": new_types,
+        "component": new_component,
+        "assertions": new_assertions or id_patterns.get("assertions", {}),
+    }
+
+    return config
+
+
 def load_config(config_path: Path) -> ConfigLoader:
     """Load configuration from a TOML file.
 
@@ -173,6 +276,7 @@ def load_config(config_path: Path) -> ConfigLoader:
         merged = _merge_configs(merged, local_config)
 
     merged = _apply_env_overrides(merged)
+    merged = _migrate_legacy_patterns(merged)
     return ConfigLoader(merged)
 
 
@@ -382,6 +486,33 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+def apply_cli_overrides(config: dict[str, Any], overrides: list[str] | None) -> dict[str, Any]:
+    """Apply ``--set key=value`` CLI overrides to a config dict.
+
+    Each override must be in ``key=value`` format where *key* is a
+    dot-separated path (e.g. ``spec.directories``) and *value* is parsed
+    via :func:`_try_parse_env_value` (supports JSON, booleans, strings).
+
+    Args:
+        config: Configuration dictionary to modify in place.
+        overrides: List of ``key=value`` strings, or *None*.
+
+    Returns:
+        The mutated *config* dict (for convenience).
+
+    Raises:
+        ValueError: If an override string does not contain ``=``.
+    """
+    if not overrides:
+        return config
+    for item in overrides:
+        if "=" not in item:
+            raise ValueError(f"Invalid override format: {item!r}  (expected key=value)")
+        key, value = item.split("=", 1)
+        _set_nested(config, key.strip(), _try_parse_env_value(value.strip()))
+    return config
+
+
 def _parse_toml(content: str) -> dict[str, Any]:
     """Parse TOML content into a plain dictionary.
 
@@ -439,6 +570,7 @@ def get_config(
     config_path: Path | None = None,
     start_path: Path | None = None,
     quiet: bool = False,
+    overrides: list[str] | None = None,
 ) -> dict[str, Any]:
     """Get configuration with auto-discovery and fallback.
 
@@ -448,17 +580,20 @@ def get_config(
     - Config file discovery from start_path
     - Fallback to defaults if no config found
     - Error reporting (unless quiet=True)
+    - CLI ``--set`` overrides (applied last, highest precedence)
+
+    Override precedence (highest first):
+        ``--set`` > env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
 
     Args:
         config_path: Explicit config file path (optional)
         start_path: Directory to search for config (defaults to cwd)
         quiet: Suppress error messages
+        overrides: List of ``key=value`` strings from ``--set`` CLI flag.
 
     Returns:
         Configuration dictionary (defaults if not found)
     """
-    import sys
-
     if start_path is None:
         start_path = Path.cwd()
 
@@ -467,13 +602,22 @@ def get_config(
 
     if resolved_path and resolved_path.exists():
         try:
-            return load_config(resolved_path).get_raw()
+            config = load_config(resolved_path).get_raw()
         except Exception as e:
-            if not quiet:
-                print(f"Warning: Error loading config from {resolved_path}: {e}", file=sys.stderr)
+            # A config file that exists but can't be parsed is always an error.
+            # Silently falling back to defaults would hide the problem and cause
+            # hard-to-diagnose issues (e.g. skip_dirs not working).
+            raise ValueError(
+                f"Failed to parse config file {resolved_path}: {e}\n"
+                "Fix the syntax error in your .elspais.toml file."
+            ) from e
+    else:
+        # Return defaults (no config file found)
+        config = dict(DEFAULT_CONFIG)
 
-    # Return defaults
-    return dict(DEFAULT_CONFIG)
+    # Apply CLI overrides (highest precedence)
+    apply_cli_overrides(config, overrides)
+    return config
 
 
 def get_spec_directories(
@@ -860,6 +1004,76 @@ __all__ = [
     "DEFAULT_CONFIG",
     "parse_toml",
     "parse_toml_document",
+    "get_status_roles",
     "_try_parse_numeric",
     "_try_parse_env_value",
+    "apply_cli_overrides",
+    "get_associates_config",
+    "validate_no_transitive_associates",
 ]
+
+
+# Implements: REQ-d00202-A+B+C
+def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
+    """Read [associates] sections from config.
+
+    Each associate entry has:
+    - path (str, required): relative path to the associate repo
+    - git (str | None, optional): remote URL for clone assistance
+
+    Args:
+        config: The project configuration dictionary.
+
+    Returns:
+        Dict mapping associate name to {"path": str, "git": str | None}.
+        Empty dict if no [associates] section exists.
+    """
+    associates = config.get("associates", {})
+    if not associates:
+        return {}
+    result: dict[str, dict] = {}
+    for name, entry in associates.items():
+        if isinstance(entry, dict):
+            result[name] = {
+                "path": entry["path"],
+                "git": entry.get("git"),
+            }
+    return result
+
+
+# Implements: REQ-d00202-D
+def validate_no_transitive_associates(
+    associate_name: str, associate_config: dict[str, Any]
+) -> None:
+    """Check that an associate does not declare its own associates.
+
+    Only the root repo may declare [associates]. If an associate's config
+    contains an [associates] section, raise FederationError.
+
+    Args:
+        associate_name: Name of the associate being validated.
+        associate_config: The associate's loaded config dict.
+
+    Raises:
+        FederationError: If the associate declares its own associates.
+    """
+    from elspais.graph.federated import FederationError
+
+    # Use get_associates_config to check for NEW-format [associates.<name>] entries
+    # (not the legacy associates.paths list from the old sponsor system)
+    new_format_associates = get_associates_config(associate_config)
+    if new_format_associates:
+        raise FederationError(
+            f"Associate '{associate_name}' declares its own associates "
+            f"-- only the root repo may declare associates."
+        )
+
+
+def get_status_roles(config: dict[str, Any]):
+    """Get StatusRolesConfig from configuration dictionary."""
+    from elspais.config.status_roles import StatusRolesConfig
+
+    roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+    if roles_data:
+        return StatusRolesConfig.from_dict(roles_data)
+    return StatusRolesConfig.default()

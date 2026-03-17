@@ -34,10 +34,9 @@ class TestHighlightFileContent:
         assert result["language"] == "python"
 
     def test_REQ_p00006_A_detects_markdown_language(self):
-        """Markdown files are detected correctly."""
+        """Markdown files are detected as 'markdown'."""
         result = highlight_file_content("README.md", "# Hello\n")
-        # Pygments may report 'markdown' or similar
-        assert result["language"] != ""
+        assert result["language"] == "markdown"
 
     def test_REQ_p00006_A_detects_javascript_language(self):
         """JavaScript files are detected correctly."""

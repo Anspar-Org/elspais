@@ -80,7 +80,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     changelog_enforce = config.get("changelog", {}).get("enforce", True)
 
     graph = build_graph(
@@ -114,12 +114,13 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     status = (node.status or "").lower()
     is_active = status == "active"
 
-    source = node.source
-    if source is None:
+    # Implements: REQ-d00129-D
+    _fn = node.file_node()
+    if _fn is None:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
         return 1
 
-    file_path = repo_root / source.path
+    file_path = repo_root / _fn.get_field("relative_path")
 
     # If hash is current, check for missing Changelog section on Active reqs
     if stored == computed:
@@ -268,7 +269,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     spec_dirs = get_spec_directories(spec_dir, config)
 
     if not spec_dirs:
@@ -278,23 +279,13 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         print("Would regenerate INDEX.md")
         return
 
-    # Include associated repo spec dirs for combined mode
-    from elspais.associates import get_associate_spec_directories
-
-    repo_root = getattr(args, "git_root", None)
-    sponsor_dirs, _ = get_associate_spec_directories(
-        config,
-        repo_root,
-        canonical_root=canonical_root,
-    )
-    all_spec_dirs = list(spec_dirs) + sponsor_dirs
+    all_spec_dirs = list(spec_dirs)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         scan_code=False,
         scan_tests=False,
-        scan_sponsors=True,
         canonical_root=canonical_root,
     )
 

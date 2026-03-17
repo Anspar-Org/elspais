@@ -3,16 +3,31 @@
 This module defines the typed edges between graph nodes:
 - EdgeKind: Enum of relationship types with semantic properties
 - Edge: A typed edge between two nodes
+- Stereotype: Node classification for template-instance pattern
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
+
+
+# Implements: REQ-p00014-C
+class Stereotype(Enum):
+    """Classification of nodes in the template-instance pattern.
+
+    - CONCRETE: Default — normal requirement node
+    - TEMPLATE: Original node targeted by a Satisfies declaration
+    - INSTANCE: Cloned copy of a template node
+    """
+
+    CONCRETE = "concrete"
+    TEMPLATE = "template"
+    INSTANCE = "instance"
 
 
 # Implements: REQ-p00050-A
@@ -25,6 +40,7 @@ class EdgeKind(Enum):
     - VALIDATES: Test validates requirement/assertion (coverage rollup)
     - ADDRESSES: Links to user journey (informational, no coverage)
     - CONTAINS: File structure containment (no coverage)
+    - SATISFIES: Requirement satisfies a cross-cutting template (structural, no coverage)
     """
 
     IMPLEMENTS = "implements"
@@ -32,6 +48,14 @@ class EdgeKind(Enum):
     VALIDATES = "validates"
     ADDRESSES = "addresses"
     CONTAINS = "contains"
+    # Implements: REQ-d00069-G
+    SATISFIES = "satisfies"
+    # Implements: REQ-p00014-C
+    INSTANCE = "instance"
+    # Implements: REQ-d00126-C
+    STRUCTURES = "structures"
+    DEFINES = "defines"
+    YIELDS = "yields"
 
     # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:
@@ -64,6 +88,8 @@ class Edge:
     target: GraphNode
     kind: EdgeKind
     assertion_targets: list[str] = field(default_factory=list)
+    # Implements: REQ-d00126-E
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __eq__(self, other: object) -> bool:
         """Check equality based on source, target, and kind."""

@@ -56,7 +56,6 @@ class TestBuildNodeIndex:
             assert "children" in data, f"Node {node_id} missing 'children'"
             assert "parents" in data, f"Node {node_id} missing 'parents'"
             assert "properties" in data, f"Node {node_id} missing 'properties'"
-            break  # Spot-check first entry
 
     def test_REQ_p00006_A_requirement_node_has_correct_properties(self, generator, graph):
         """Requirement nodes should have level, status, hash in properties."""
@@ -70,7 +69,6 @@ class TestBuildNodeIndex:
             assert "level" in props
             assert "status" in props
             assert "hash" in props
-            break  # Spot-check first requirement
 
 
 class TestBuildCoverageIndex:
@@ -90,7 +88,6 @@ class TestBuildCoverageIndex:
         for req_id, entry in index.items():
             assert "test" in entry, f"Missing 'test' in coverage for {req_id}"
             assert "code" in entry, f"Missing 'code' in coverage for {req_id}"
-            break  # Spot-check first
 
     def test_REQ_p00006_B_test_coverage_matches_api_shape(self, generator):
         """Test coverage data should have success, assertion_tests, coverage_pct fields."""
@@ -100,7 +97,6 @@ class TestBuildCoverageIndex:
             assert "success" in test_data
             assert "assertion_tests" in test_data
             assert "coverage_pct" in test_data
-            break  # Spot-check first
 
     def test_REQ_p00006_B_code_coverage_matches_api_shape(self, generator):
         """Code coverage data should have success, assertion_code, coverage_pct fields."""
@@ -110,7 +106,6 @@ class TestBuildCoverageIndex:
             assert "success" in code_data
             assert "assertion_code" in code_data
             assert "coverage_pct" in code_data
-            break  # Spot-check first
 
 
 class TestBuildStatusData:

@@ -2,10 +2,235 @@
 
 All notable changes to elspais will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`FederatedGraph` class** -- New `graph/federated.py` module with `RepoEntry` dataclass and `FederatedGraph` wrapper. Wraps one or more `TraceGraph` instances with per-repo config isolation. Implements all read-only methods with documented federation strategies (by_id, aggregate). Includes `from_single()` for federation-of-one, `repo_for()`, `config_for()`, `iter_repos()`. Error-state repos (graph=None) are skipped during aggregation.
+- **Legacy sponsor system removed** -- Removed YAML-based `sponsors.yml`/`sponsors.local.yml` loading, `Sponsor`/`SponsorsConfig`/`AssociatesConfig` aliases, `load_associates_config()`, `resolve_associate_spec_dir()`, `parse_yaml()`, and the `scan_sponsors` parameter from `build_graph()`. All multi-repo federation now uses `[associates]` TOML config exclusively. `Associate`, `discover_associate_from_path()`, and `get_associate_spec_directories()` (path-based loading) are retained.
+- **Cross-graph edge wiring** -- `FederatedGraph` detects ID conflicts across repos and wires cross-graph edges by resolving broken references. `TraceGraph.add_edge()` gains `target_graph` parameter for cross-graph resolution. After wiring, only genuinely unresolvable references remain as broken.
+- **Multi-repo federation build** -- `build_graph()` now builds separate `TraceGraph` per associate repository when `[associates]` config is present. Each associate gets its own config, resolver, and graph. Missing associates create error-state `RepoEntry` (soft fail). `strict=True` raises `FederationError` on missing associates.
+- **`[associates]` config section** -- `get_associates_config()` reads `[associates.<name>]` sections from `.elspais.toml` with `path` (required) and `git` (optional) fields. Returns empty dict when no associates are configured. `validate_no_transitive_associates()` raises `FederationError` if an associate declares its own associates.
+- **Per-repo health check delegation** -- Config-sensitive health checks (hierarchy levels, format rules, reference resolution, structural orphans, changelog) now run per-repo using each repo's own config via `FederatedGraph.iter_repos()`. Non-config-sensitive checks (file parseability, duplicates, hash integrity, index) run once on the full federation. `HealthFinding` gains optional `repo` field for per-repo attribution. `check_broken_references` distinguishes within-repo broken refs (error severity) from cross-repo broken refs where the target repo is in error state (warning severity).
+- **MCP federation support** -- `get_workspace_info()` includes a `federation` section with repo names, paths, error states, and git origins when multiple repos are present. `refresh_graph()` syncs `_state["config"]` from the rebuilt federation's root repo config after every rebuild, preventing config staleness. `_get_workspace_info` derives root config from FederatedGraph when not provided explicitly.
+- **Server federation and staleness** -- New `/api/repos` endpoint returns federated repo list with name, path, status, git_origin, error, and staleness info (branch, remote_diverged, fast_forward_possible) for repos with a configured git origin. `/api/status` now includes `repos` field from `iter_repos()`, replacing the legacy `associated_repos` field.
+- **Federation-aware `render_save()`** -- File path resolution now uses the owning repo's root path from `FederatedGraph.repo_for()`, preparing for multi-repo file persistence. `repo_root` parameter now defaults to `graph.repo_root`.
+- **`build_graph()` returns `FederatedGraph`** -- Factory wraps result in `FederatedGraph.from_single()`. All consumer type hints updated from `TraceGraph` to `FederatedGraph` across commands, graph modules, MCP server, Flask app, and HTML/PDF generators. `FederatedGraph` exported from `graph/__init__.py`.
+- **`FederatedGraph` mutation methods** -- All TraceGraph mutations (rename, update, delete, edge ops, assertions) delegate to the correct sub-graph via ownership mapping. Unified `FederatedMutationLog` tracks mutations across repos with lightweight pointers. `undo_last()`/`undo_to()` delegate to the correct sub-graph. `add_requirement()` accepts `target_repo` parameter. `clone()` deep-copies the entire federation.
+- **Branch selection** -- Click the branch badge in the viewer header to switch between local and remote git branches. Modal shows a filterable list grouped by local/remote, handles checkout, graph reload with config refresh, and full UI state refresh. Refuses to switch when unsaved mutations exist. Detached HEAD shown as "no branch selected" with tooltip.
+- **`list_branches()` git utility** -- Lists local and remote branches, strips `origin/` prefix, deduplicates.
+- **`GET /api/git/branches`** -- Returns branch list for the viewer.
+- **`POST /api/git/checkout`** -- Switches branches with mutation guard and remote fallback.
+- **`/api/reload` config refresh** -- Re-reads `.elspais.toml` from disk before rebuilding the graph, supporting branch-specific configuration.
+- **`move_node_to_file()` graph mutation** -- Moves a requirement between FILE nodes by re-wiring the CONTAINS edge. Full undo support.
+- **`rename_file()` graph mutation** -- Renames a FILE node (updates ID, index, paths). `render_save()` handles disk rename. Full undo support.
+- **`change_edge_targets()` mutation** -- Modifies assertion targets on IMPLEMENTS/REFINES edges without requiring delete+add. Full undo support.
+- **MCP tools** -- `mutate_move_node_to_file`, `mutate_rename_file`, `mutate_change_edge_targets` for graph manipulation via MCP.
+- **Flask API endpoints** -- `/api/mutate/move-to-file`, `/api/mutate/rename-file` for viewer-driven mutations.
+- **Viewer UI** -- "Move to file" button, file rename button, assertion targets display in the card view.
+
+## [0.104.17] - 2026-03-14
+
+### Added
+
+- **Help mode** -- "? Help" in hamburger menu activates a fixed help bar below the header. Hovering over controls shows extended descriptions. Native browser tooltips are suppressed while help mode is active and restored on deactivation.
+
+## [0.104.16] - 2026-03-14
+
+### Added
+
+- **CLI config overrides** -- `--set key=value` repeatable flag overrides any config value at runtime. Supports dotted paths, JSON lists, and booleans. Precedence: `--set` > env vars > `.elspais.local.toml` > `.elspais.toml` > defaults.
+
+## [0.104.15] - 2026-03-14
+
+### Added
+
+- **Viewer refresh-from-disk** -- "Refresh" button in header reloads graph from disk. `/api/check-freshness` endpoint detects stale spec files. Client polls every 30s and shows a non-intrusive banner when files change on disk. Warns before discarding pending mutations.
+
+## [0.104.14] - 2026-03-14
+
+### Fixed
+
+- **Mutation refresh gaps** -- Status and title changes now refresh the nav tree and all open cards (not just the mutated card). Edge mutations (add/delete/change kind) and undo refresh all open cards. Save and revert refresh the file viewer panel. Added `refreshAllOpenCards()` and `refreshFileViewer()` helpers.
+
+## [0.104.13] - 2026-03-14
+
+### Fixed
+
+- **Card scroll-to targeting** -- `focusCard()` now renders the card stack before scrolling, preventing stale scroll position when `renderCardStack()` replaced the target DOM element.
+
+## [0.104.12] - 2026-03-14
+
+### Fixed
+
+- **Test scanner class context** -- Python test files now use `ast.parse()` for pre-scanning, fixing incorrect TEST node IDs when multiline strings contained unindented content (e.g., `## REQ-d00001:` at column 0 inside a `"""` heredoc). Previously, the text-based indent tracker incorrectly exited class scope, producing 123 class-less TEST node IDs and 111 broken YIELDS references.
+
+### Added
+
+- **Configurable test pre-scan command** -- `[testing].prescan_command` config option for non-Python test files. The command receives file paths on stdin and outputs a JSON array describing test structure (`[{file, function, class, line}]`), enabling accurate test discovery for any language.
+
+## [0.104.11] - 2026-03-14
+
+### Changed
+
+- **Traceability classification redesign** -- Split `spec.orphans` health check into distinct checks with appropriate severities:
+  - `spec.structural_orphans` (error) -- nodes without FILE ancestor (build bugs)
+  - `spec.broken_references` (warning) -- edges targeting non-existent nodes
+  - `tests.unlinked` (info) -- tests not linked to any requirement
+  - `code.unlinked` (info) -- code refs not linked to any requirement
+- **Removed** `tests.references_resolve` and `code.references_resolve` checks (subsumed by `*.unlinked` + `spec.broken_references`)
+- **Config** `allow_orphans` replaced by `allow_structural_orphans` (backward compatible)
+
+### Added
+
+- **Graph API** -- `is_reachable_to_requirement()`, `iter_unlinked()`, `iter_structural_orphans()` methods on TraceGraph
+- **Edge kind constants** -- `_STRUCTURAL_EDGE_KINDS` and `_TRACEABILITY_EDGE_KINDS` in builder.py for classifying edge types
+- **MCP tool** -- `get_unlinked_nodes(kind?)` lists CODE/TEST nodes not linked to any requirement
+
+## [0.104.10] - 2026-03-14
+
+### Added
+
+- **Comprehensive mutation round-trip scenario test** -- E2E test exercising 70+ mutations across all types (status, title, assertion CRUD, edge CRUD, requirement CRUD, undo) through the Flask API layer, with intermediate checkpoints, save-reload verification, and a second mutation round proving saved state is mutable (REQ-d00134-A through REQ-d00134-F)
+
+### Fixed
+
+- **Scenario test `.elspais.toml`** -- `build_graph` reload in scenario test now creates a `.elspais.toml` config file so `_find_repo_root` can locate the spec directory
+
+## [0.104.9] - 2026-03-13
+
+### Added
+
+- **MCP FILE node integration** -- `get_subtree()` uses filtered traversal: FILE roots walk CONTAINS edges (file contents view), REQUIREMENT roots walk domain edges (IMPLEMENTS, REFINES, STRUCTURES). FILE nodes do not appear in `search()` results. `get_graph_status()` reports FILE node counts. (REQ-d00133-A through REQ-d00133-F)
+- **`_SUBTREE_KIND_DEFAULTS` for FILE** -- Conservative kind defaults for FILE root subtree traversal include REQUIREMENT, ASSERTION, and REMAINDER (REQ-d00133-C)
+- **`_SUBTREE_EDGE_DEFAULTS`** -- New edge-kind filter map determines which edge types to follow per root kind during subtree extraction (REQ-d00133-A, REQ-d00133-B)
+
+### Added (spec)
+
+- **REQ-d00133** -- New requirement "MCP FILE Node Integration" with assertions A-F covering subtree filtered traversal, search exclusion, graph status reporting, and serialization
+
+## [0.104.8] - 2026-03-13
+
+### Added
+
+- **DEFINES edges for template instances** -- Template instantiation (`_instantiate_satisfies_templates()`) creates DEFINES edges from the declaring requirement's FILE node to each INSTANCE node in the cloned subtree (REQ-d00128-J)
+- **`file_node()` returns None for INSTANCE nodes** -- INSTANCE nodes are virtual and have no physical file; `file_node()` now explicitly returns None for them. Navigate via INSTANCE edge to the original node to find the source file (REQ-d00128-L)
+
+### Added (spec)
+
+- **REQ-d00128-J, K, L** -- New assertions for DEFINES edges from FILE to INSTANCE nodes, INSTANCE nodes having no CONTAINS edges, and `file_node()` returning None for INSTANCE nodes
+
+## [0.104.7] - 2026-03-13
+
+### Added
+
+- **Render-based save** -- `render_save()` persists dirty FILE nodes to disk by rendering their CONTAINS children, replacing the old `persistence.py` text surgery approach (REQ-d00132-A)
+- **Consistency check** -- Optional rebuild-and-compare check after save proves round-trip fidelity; enabled via `consistency_check=True` parameter with a `rebuild_fn` callback (REQ-d00132-C)
+- **Edge-derived references** -- Implements and Refines reference lists are derived from live graph edges during rendering, ensuring edge mutations are correctly reflected in output (REQ-d00132-F)
+
+### Removed
+
+- **BREAKING: `persistence.py` deleted** -- The `replay_mutations_to_disk()` and `check_for_external_changes()` functions are removed. All persistence is now handled by `render_save()` in `graph/render.py` (REQ-d00132-D)
+
+### Changed
+
+- **Mutation log cleared after save** -- The mutation log is cleared after a successful `render_save()`, consistent with the old behavior (REQ-d00132-E)
+- **Safety branches** -- Safety branch creation remains in the MCP `save_mutations()` tool, called before `render_save()` (REQ-d00132-B)
+- **`test_server_persistence.py` migrated** -- All persistence tests now use `render_save()` instead of `replay_mutations_to_disk()`
+
+## [0.104.6] - 2026-03-13
+
+### Added
+
+- **Render protocol** -- Each `NodeKind` has a `render_node()` function that produces its text representation, enabling graph-to-file serialization (REQ-d00131-A)
+- **REQUIREMENT rendering** -- Full requirement block rendering: header, metadata line, body text, assertions from STRUCTURES children, named sections, `*End*` marker with hash (REQ-d00131-B)
+- **REMAINDER rendering** -- Raw text rendered verbatim (REQ-d00131-D)
+- **USER_JOURNEY rendering** -- Full journey block rendering from stored body text (REQ-d00131-E)
+- **CODE/TEST rendering** -- Comment line(s) rendered from stored `raw_text` field (REQ-d00131-F, REQ-d00131-G)
+- **FILE rendering** -- `render_file()` walks CONTAINS children sorted by `render_order` edge metadata and concatenates their rendered output (REQ-d00131-I)
+- **Order-independent assertion hashing** -- `compute_requirement_hash()` sorts individual assertion hashes lexicographically before combining, ensuring assertion reorder does not trigger change detection (REQ-d00131-J)
+- **Builder stores render data** -- CODE and TEST nodes now store `raw_text`, REQUIREMENT nodes store `implements_refs`, `refines_refs`, `satisfies_refs` for render protocol
+
+## [0.104.5] - 2026-03-13
+
+### Added
+
+- **Parameterized `iter_roots(kind)`** -- `TraceGraph.iter_roots()` accepts optional `NodeKind` filter: `iter_roots(NodeKind.FILE)` returns FILE nodes, `iter_roots(NodeKind.REQUIREMENT)` returns only REQ roots, etc. Default (no argument) preserves backward compatibility (REQ-d00130-A through REQ-d00130-D, REQ-d00130-F)
+- **`iter_by_kind(kind)`** -- New iterator-API-consistent method equivalent to `nodes_by_kind()`, aligned with `iter_roots`/`iter_children` naming convention (REQ-d00130-E)
+
+## [0.104.4] - 2026-03-13
+
+### Removed
+
+- **BREAKING: `SourceLocation` class deleted** -- File paths now accessed via `node.file_node().get_field("relative_path")` instead of `node.source.path` (REQ-d00129-A)
+- **BREAKING: `GraphNode.source` field deleted** -- Line numbers now accessed via `node.get_field("parse_line")` and `node.get_field("parse_end_line")` (REQ-d00129-B, REQ-d00129-C)
+
+### Changed
+
+- **Consumer migration** -- All ~15 consumers (annotators, serializers, commands, MCP server, HTML/PDF generators, test-code linker, link suggester) migrated to use `file_node()` for file paths and `get_field("parse_line")` for line numbers (REQ-d00129-D, REQ-d00129-E, REQ-d00129-F)
+- **`GraphNode.depth` excludes FILE parents** -- FILE nodes (structural containment) no longer count toward domain hierarchy depth
+- **`_collect_source_files`** -- HTML generator now resolves relative paths from repo_root when collecting source files
+
+## [0.104.3] - 2026-03-13
+
+### Added
+
+- **FILE node creation in build pipeline** -- `factory.py` creates `NodeKind.FILE` nodes with ID `file:<repo-relative-path>` for every scanned file (REQ-d00128-A)
+- **FILE node content fields** -- Each FILE node stores `file_type`, `absolute_path`, `relative_path`, `repo`, `git_branch`, `git_commit` (REQ-d00128-B)
+- **CONTAINS edges** -- FILE nodes are connected to top-level content nodes (REQUIREMENT, USER_JOURNEY, CODE, TEST, file-level REMAINDER) via `EdgeKind.CONTAINS` with `start_line`, `end_line`, and `render_order` metadata (REQ-d00128-D, REQ-d00128-E)
+- **RemainderParser mandatory** -- RemainderParser is now always registered for SPEC, JOURNEY, CODE, and TEST file types, ensuring every line is claimed by some parser (REQ-d00128-G)
+- **Git info captured per repo** -- `git_branch` and `git_commit` captured once per repository via `get_current_commit()` utility (REQ-d00128-C)
+- **`GraphBuilder.register_file_node()`** -- New method to register FILE nodes in the builder's index without adding them to orphan candidates
+
+### Changed
+
+- **Orphan detection** -- Validate command now ignores FILE parents (CONTAINS edges) when checking for orphan requirements, preserving existing behavior (REQ-d00128-I)
+
+## [0.104.2] - 2026-03-13
+
+### Changed
+
+- **BREAKING: `add_child()` removed** — All parent-child relationships now use `link()` with a typed `EdgeKind`; edge-less parent-child links eliminated (REQ-d00127-A)
+- **BREAKING: `remove_child()` renamed to `unlink()`** — API symmetry with `link()`; identical behavior retained (REQ-d00127-B)
+- **TEST_RESULT edge kind** — TEST_RESULT nodes now linked from TEST via `EdgeKind.YIELDS` (not `CONTAINS`), correcting the semantic relationship (REQ-d00127-E)
+- **Builder assertions/sections** — Assertions and sections in `_add_requirement()`, `add_assertion()`, and template instantiation now use `link(..., EdgeKind.STRUCTURES)` instead of `add_child()`
+
+### Added
+
+- **Filtered traversal** — `iter_children()`, `iter_parents()`, `walk()`, `ancestors()` accept optional `edge_kinds` parameter; when provided, only nodes reachable via those edge kinds are returned; unfiltered (None default) is backwards compatible (REQ-d00127-C)
+- **`file_node()` convenience** — `GraphNode.file_node()` walks incoming edges to find nearest `NodeKind.FILE` ancestor; returns None when no FILE parent exists (REQ-d00127-D)
+
+## [0.104.1] - 2026-03-13
+
+### Added
+
+- **NodeKind.FILE** — New `FILE` enum member in `NodeKind` for representing source files as first-class graph nodes (REQ-d00126-A)
+- **FileType enum** — New `FileType` enum (`SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`) classifying source files by domain role (REQ-d00126-B)
+- **Structural edge kinds** — `EdgeKind.STRUCTURES`, `DEFINES`, `YIELDS` for domain-internal hierarchy, virtual node provenance, and test-result linking; none contribute to coverage (REQ-d00126-C, REQ-d00126-D)
+- **Edge.metadata** — `dict[str, Any]` field on `Edge` dataclass for mutable annotations (line ranges, render order); excluded from `__eq__`/`__hash__` (REQ-d00126-E)
+
+## [0.104.0] - 2026-03-12
+
+### Added
+
+- **ID Pattern System** — New `IdPatternConfig`, `IdResolver`, `ParsedId`, `TypeDef`, `ComponentFormat`, `AssertionFormat` dataclasses replacing `PatternConfig`/`PatternValidator`/`normalize_req_id`. Supports named aliases, configurable output forms, template compilation with short-form parsing, component normalization, and multi-assertion expansion via a single `IdResolver` authority class.
+
+## [0.103.17] - 2026-03-12
+
+### Added
+
+- **Stereotype enum** — `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) in `graph/relations.py` classifies nodes in the template-instance pattern (REQ-p00014-C)
+- **INSTANCE EdgeKind** — `EdgeKind.INSTANCE` for connecting cloned template nodes to their originals; does not contribute to coverage (REQ-p00014-C)
+- **Template instantiation** — `Satisfies: X` declarations now clone the template's REQ subtree with composite IDs (`declaring_id::original_id`), creating INSTANCE nodes with SATISFIES/INSTANCE edges; coverage computed through standard mechanism (REQ-p00014-B, REQ-d00069-H)
+- **File-based attribution** — `Implements:` refs targeting template assertions are redirected to the correct instance clone using sibling refs in the same source file (REQ-p00014-D)
+- **MCP stereotype serialization** — `_serialize_node_generic()` includes `stereotype` field in REQUIREMENT properties; INSTANCE edges included in parent/links sections
+- **Viewer satisfies support** — card label updated to "Implements / Refines / Satisfies"; edge toggle cycles through all three kinds; add-relationship form includes Satisfies option
+
 ## [0.101.0] - 2026-03-09
 
 ### Added
 
+- **Satisfies relationship** — `Satisfies:` metadata field declares compliance with a cross-cutting template requirement; per-instance `satisfies_coverage` metric tracks what fraction of the template's leaf assertions are covered within the declaring requirement's subtree; N/A declarations (`REQ-xxx-Y SHALL be NOT APPLICABLE`) exclude template assertions from the coverage denominator; `check_template_coverage()` health check reports gaps; template hash changes flag declaring requirements for review
 - **Theme catalog system** — `theme.toml` and `help.toml` TOML data files as single source of truth for all UI colors, symbols, labels, and descriptions; `LegendCatalog` Python class with cached loader, CSS variable generation, and catalog entry lookup (REQ-p00006-A)
 - **Multi-theme support** — arbitrary named themes via `.theme-*` CSS class selectors replacing the old `.dark-theme` approach; theme buttons in hamburger menu generated from catalog (REQ-p00006-A)
 - **Dynamic page title** — browser tab shows `Elspais {version} ({repo_name}) -- PRD: N OPS: N DEV: N` in edit mode and `Elspais {version} -- Requirements Traceability` in view mode (REQ-p00006-A)

@@ -1,4 +1,5 @@
 # Implements: REQ-d00054-A
+# Implements: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-G, REQ-d00128-H
 """Graph Factory - Shared utility for building TraceGraph from spec files.
 
 This module provides a single entry point for all commands to build a TraceGraph
@@ -13,7 +14,6 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
-from elspais.associates import get_associate_spec_directories
 from elspais.config import (
     IgnoreConfig,
     get_code_directories,
@@ -21,16 +21,170 @@ from elspais.config import (
     get_ignore_config,
     get_spec_directories,
 )
-from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
+from elspais.graph.federated import FederatedGraph
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
+from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import build_resolver
 from elspais.utilities.reference_config import ReferenceResolver
+
+
+# Implements: REQ-d00128-C
+def _capture_git_info(repo_root: Path) -> tuple[str | None, str | None]:
+    """Capture git branch and commit once per repo.
+
+    Args:
+        repo_root: Path to repository root.
+
+    Returns:
+        Tuple of (git_branch, git_commit), both may be None.
+    """
+    try:
+        from elspais.utilities.git import get_current_branch, get_current_commit
+
+        return get_current_branch(repo_root), get_current_commit(repo_root)
+    except Exception:
+        return None, None
+
+
+# Implements: REQ-d00128-A, REQ-d00128-B
+def _create_file_node(
+    file_path: Path,
+    repo_root: Path,
+    file_type: FileType,
+    repo: str | None,
+    git_branch: str | None,
+    git_commit: str | None,
+) -> GraphNode:
+    """Create a FILE node for a scanned file.
+
+    Args:
+        file_path: Absolute path to the file.
+        repo_root: Repository root for computing relative path.
+        file_type: The FileType classification.
+        repo: Repository identifier (None for main project).
+        git_branch: Current git branch (captured once per repo).
+        git_commit: Current git commit (captured once per repo).
+
+    Returns:
+        A GraphNode with kind == NodeKind.FILE.
+    """
+    try:
+        rel_path = str(file_path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        rel_path = str(file_path)
+
+    file_id = f"file:{rel_path}"
+    node = GraphNode(
+        id=file_id,
+        kind=NodeKind.FILE,
+        label=file_path.name,
+    )
+    node._content = {
+        "file_type": file_type,
+        "absolute_path": str(file_path.resolve()),
+        "relative_path": rel_path,
+        "repo": repo,
+        "git_branch": git_branch,
+        "git_commit": git_commit,
+    }
+    return node
+
+
+def _run_prescan_command(
+    command: str,
+    test_dirs: list[str],
+    test_patterns: list[str],
+    skip_dirs: list[str],
+    repo_root: Path,
+) -> dict[str, list[dict]] | None:
+    """Run an external prescan command to discover test structure.
+
+    The command receives test file paths on stdin (one per line) and
+    outputs a JSON array on stdout with the standardized schema:
+    [{"file": "...", "function": "...", "class": "...|null", "line": N}, ...]
+
+    Args:
+        command: Shell command to run.
+        test_dirs: Test directory patterns from config.
+        test_patterns: File patterns to match.
+        skip_dirs: Directories to skip.
+        repo_root: Repository root for resolving paths.
+
+    Returns:
+        Dict mapping file path -> list of function entries, or None on failure.
+    """
+    import json
+    import subprocess
+    import sys
+
+    # Collect all test file paths
+    test_files: list[str] = []
+    for dir_pattern in test_dirs:
+        matched_dirs = glob(str(repo_root / dir_pattern), recursive=True)
+        for dir_path in matched_dirs:
+            p = Path(dir_path)
+            if p.is_dir():
+                domain_file = DomainFile(
+                    p, patterns=test_patterns, recursive=True, skip_dirs=skip_dirs
+                )
+                for ctx, _content in domain_file.iterate_sources():
+                    source_path = ctx.metadata.get("path", ctx.source_id)
+                    try:
+                        rel = str(Path(source_path).resolve().relative_to(repo_root.resolve()))
+                    except ValueError:
+                        rel = source_path
+                    test_files.append(rel)
+
+    if not test_files:
+        return None
+
+    stdin_data = "\n".join(test_files)
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            input=stdin_data,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            print(
+                f"Warning: prescan_command failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return None
+
+        entries = json.loads(result.stdout)
+        if not isinstance(entries, list):
+            print("Warning: prescan_command output is not a JSON array", file=sys.stderr)
+            return None
+
+        # Group by file path
+        by_file: dict[str, list[dict]] = {}
+        for entry in entries:
+            file_path = entry.get("file", "")
+            if file_path:
+                by_file.setdefault(file_path, []).append(entry)
+        return by_file
+
+    except subprocess.TimeoutExpired:
+        print("Warning: prescan_command timed out after 60s", file=sys.stderr)
+        return None
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: prescan_command error: {e}", file=sys.stderr)
+        return None
+
 
 # Default file patterns for [directories].code scanning.
 # Covers all languages listed in the multi-language comment support table.
@@ -124,15 +278,16 @@ def _resolve_spec_dir_config(
 
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
-    patterns_dict = repo_config.get("patterns", {})
-    pattern_config = PatternConfig.from_dict(patterns_dict)
+    resolver = build_resolver(repo_config)
     reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
     registry = ParserRegistry()
-    registry.register(RequirementParser(pattern_config))
+    registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
-    registry.register(CodeParser(pattern_config, reference_resolver))
-    registry.register(TestParser(pattern_config, reference_resolver))
+    registry.register(CodeParser(resolver, reference_resolver))
+    registry.register(TestParser(resolver, reference_resolver))
+    # Implements: REQ-d00128-G
+    registry.register(RemainderParser())
 
     spec_config = repo_config.get("spec", {})
     return SpecDirConfig(
@@ -144,7 +299,7 @@ def _resolve_spec_dir_config(
     )
 
 
-# Implements: REQ-p00005-B
+# Implements: REQ-p00005-B, REQ-d00203-A+B+C+D+E
 def build_graph(
     config: dict[str, Any] | None = None,
     spec_dirs: list[Path] | None = None,
@@ -152,19 +307,20 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    scan_sponsors: bool = True,
     canonical_root: Path | None = None,
-) -> TraceGraph:
-    """Build a TraceGraph from spec directories.
+    strict: bool = False,
+    _build_associates: bool = True,
+) -> FederatedGraph:
+    """Build a FederatedGraph from spec directories.
 
-    This is the standard way for commands to obtain a TraceGraph.
+    This is the standard way for commands to obtain a graph.
     It handles:
     - Configuration loading (auto-discovery or explicit)
     - Spec directory resolution
-    - Sponsor/associate spec directory resolution
     - Parser registration
     - Graph construction
     - Code and test directory scanning (configurable)
+    - Multi-repo federation via [associates] config
 
     Args:
         config: Pre-loaded config dict (optional).
@@ -173,11 +329,12 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
-        scan_sponsors: Whether to scan sponsor/associate spec directories.
         canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
+        strict: If True, raise on missing associate paths instead of soft-failing.
+        _build_associates: Internal flag to prevent recursive associate building.
 
     Returns:
-        Complete TraceGraph with all requirements linked.
+        FederatedGraph wrapping one or more TraceGraph instances.
 
     Priority:
         spec_dirs > config > config_path > defaults
@@ -194,36 +351,27 @@ def build_graph(
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
-    # 2b. Add sponsor/associate spec directories if enabled
-    if scan_sponsors:
-        sponsor_dirs, associate_errors = get_associate_spec_directories(
-            config, repo_root, canonical_root=canonical_root
-        )
-        spec_dirs = list(spec_dirs) + sponsor_dirs
-        if associate_errors:
-            import sys
-
-            for err in associate_errors:
-                print(f"Warning: {err}", file=sys.stderr)
-
-    # 3. Create default pattern config and reference resolver
-    default_pattern_config = PatternConfig.from_dict(config.get("patterns", {}))
+    # 3. Create default resolver and reference resolver
+    default_resolver = build_resolver(config)
     default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
-    # Registry for code files (code parser only)
+    # Implements: REQ-d00128-G
+    # Registry for code files (code parser + remainder)
     code_registry = ParserRegistry()
-    code_registry.register(CodeParser(default_pattern_config, default_reference_resolver))
+    code_registry.register(CodeParser(default_resolver, default_reference_resolver))
+    code_registry.register(RemainderParser())
 
-    # Registry for test files (test parser only)
+    # Implements: REQ-d00128-G
+    # Registry for test files (test parser + remainder)
     test_registry = ParserRegistry()
-    test_registry.register(TestParser(default_pattern_config, default_reference_resolver))
+    test_registry.register(TestParser(default_resolver, default_reference_resolver))
+    test_registry.register(RemainderParser())
 
     # 4. Build graph from all spec directories
     hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
     graph_config = config.get("graph", {})
     satellite_kinds = graph_config.get("satellite_kinds", None)
-    ref_defaults = config.get("references", {}).get("defaults", {})
-    mas = ref_defaults.get("multi_assertion_separator", "+")
+    mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
     builder = GraphBuilder(
@@ -231,10 +379,33 @@ def build_graph(
         hash_mode=hash_mode,
         satellite_kinds=satellite_kinds,
         multi_assertion_separator=str(mas),
+        resolver=default_resolver,
     )
 
     # Get ignore configuration for code/test scanning (main project only)
     default_ignore_config = get_ignore_config(config)
+
+    # Implements: REQ-d00128-C
+    # Capture git info once per repo
+    git_branch, git_commit = _capture_git_info(repo_root)
+
+    # Track FILE nodes created to avoid duplicates
+    file_nodes: dict[str, GraphNode] = {}  # resolved_path -> FILE node
+
+    def _get_or_create_file_node(
+        source_path: Path,
+        file_type: FileType,
+        file_repo: str | None = None,
+    ) -> GraphNode:
+        """Get or create a FILE node for the given source path."""
+        resolved = str(source_path.resolve())
+        if resolved not in file_nodes:
+            fn = _create_file_node(
+                source_path, repo_root, file_type, file_repo, git_branch, git_commit
+            )
+            file_nodes[resolved] = fn
+            builder.register_file_node(fn)
+        return file_nodes[resolved]
 
     for spec_dir in spec_dirs:
         # Resolve full scan config for this spec dir from its own .elspais.toml
@@ -253,7 +424,12 @@ def build_graph(
             source_path = parsed_content.source_context.metadata.get("path")
             if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
                 continue
-            builder.add_parsed_content(parsed_content)
+            # Implements: REQ-d00128-A
+            # Create FILE node for this spec file
+            file_node = None
+            if source_path:
+                file_node = _get_or_create_file_node(Path(source_path), FileType.SPEC)
+            builder.add_parsed_content(parsed_content, file_node=file_node)
 
     # 5. Scan code files from [traceability].scan_patterns AND [directories].code
     if scan_code:
@@ -271,9 +447,11 @@ def build_graph(
                 if path.is_file():
                     resolved = str(path.resolve())
                     scanned_code_files.add(resolved)
+                    # Implements: REQ-d00128-A
+                    fn = _get_or_create_file_node(path, FileType.CODE)
                     domain_file = DomainFile(path)
                     for parsed_content in domain_file.deserialize(code_registry):
-                        builder.add_parsed_content(parsed_content)
+                        builder.add_parsed_content(parsed_content, file_node=fn)
 
         # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
@@ -303,7 +481,11 @@ def build_graph(
                             skip_files.add(resolved)
                     if resolved in skip_files:
                         continue
-                builder.add_parsed_content(parsed_content)
+                # Implements: REQ-d00128-A
+                fn = None
+                if source_path:
+                    fn = _get_or_create_file_node(Path(source_path), FileType.CODE)
+                builder.add_parsed_content(parsed_content, file_node=fn)
 
     # 6. Scan test directories from testing config
     if scan_tests:
@@ -311,6 +493,23 @@ def build_graph(
         if testing_config.get("enabled", False):
             test_dirs = testing_config.get("test_dirs", [])
             test_patterns = testing_config.get("patterns", ["*_test.*", "test_*.*"])
+            test_skip_dirs = testing_config.get("skip_dirs", [])
+
+            # Run external prescan command if configured
+            prescan_command = testing_config.get("prescan_command", "")
+            prescan_data: dict[str, list[dict]] | None = None
+            if prescan_command:
+                prescan_data = _run_prescan_command(
+                    prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
+                )
+
+            # Rebuild test registry with prescan data if available
+            if prescan_data:
+                test_registry = ParserRegistry()
+                test_registry.register(
+                    TestParser(default_resolver, default_reference_resolver, prescan_data)
+                )
+                test_registry.register(RemainderParser())
 
             for dir_pattern in test_dirs:
                 # Resolve glob pattern to get directories
@@ -322,20 +521,25 @@ def build_graph(
                             path,
                             patterns=test_patterns,
                             recursive=True,
+                            skip_dirs=test_skip_dirs,
                         )
                         for parsed_content in domain_file.deserialize(test_registry):
-                            builder.add_parsed_content(parsed_content)
+                            # Implements: REQ-d00128-A
+                            source_path = parsed_content.source_context.metadata.get("path")
+                            fn = None
+                            if source_path:
+                                fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
+                            builder.add_parsed_content(parsed_content, file_node=fn)
 
             # 6b. Scan test result files (JUnit XML, pytest JSON)
-            # Uses standard pipeline: result parsers implement claim_and_parse()
-            # Each file type gets its own registry since result parsers consume
-            # the entire file content (not individual lines).
+            # Implements: REQ-d00128-H
+            # RemainderParser is NOT registered for RESULT file types
             result_files = testing_config.get("result_files", [])
             if result_files:
                 xml_registry = ParserRegistry()
                 xml_registry.register(
                     JUnitXMLParser(
-                        pattern_config=default_pattern_config,
+                        resolver=default_resolver,
                         reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
@@ -343,7 +547,7 @@ def build_graph(
                 json_registry = ParserRegistry()
                 json_registry.register(
                     PytestJSONParser(
-                        pattern_config=default_pattern_config,
+                        resolver=default_resolver,
                         reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
@@ -362,9 +566,11 @@ def build_graph(
                             registry = json_registry
                         else:
                             continue
+                        # Implements: REQ-d00128-A
+                        fn = _get_or_create_file_node(path, FileType.RESULT)
                         domain_file = DomainFile(path)
                         for parsed_content in domain_file.deserialize(registry):
-                            builder.add_parsed_content(parsed_content)
+                            builder.add_parsed_content(parsed_content, file_node=fn)
 
     graph = builder.build()
 
@@ -386,7 +592,76 @@ def build_graph(
     annotate_keywords(graph)
     annotate_coverage(graph)
 
-    return graph
+    # Implements: REQ-d00203-A+B+C+D+E
+    # Build associate repos if [associates] config is present
+    if _build_associates:
+        from elspais.config import get_associates_config, validate_no_transitive_associates
+        from elspais.graph.federated import FederationError, RepoEntry
+
+        associates_config = get_associates_config(config)
+        if associates_config:
+            entries: list[RepoEntry] = []
+            # Root repo entry
+            entries.append(
+                RepoEntry(
+                    name="root",
+                    graph=graph,
+                    config=config,
+                    repo_root=repo_root,
+                )
+            )
+            for assoc_name, assoc_info in associates_config.items():
+                assoc_path = (repo_root / assoc_info["path"]).resolve()
+                git_origin = assoc_info.get("git")
+
+                if not assoc_path.exists():
+                    # Implements: REQ-d00203-C, REQ-d00203-D
+                    if strict:
+                        raise FederationError(
+                            f"Associate '{assoc_name}' path does not exist: {assoc_path}"
+                        )
+                    entries.append(
+                        RepoEntry(
+                            name=assoc_name,
+                            graph=None,
+                            config=None,
+                            repo_root=assoc_path,
+                            git_origin=git_origin,
+                            error=f"Path does not exist: {assoc_path}",
+                        )
+                    )
+                    continue
+
+                # Load associate's config
+                assoc_config = get_config(None, assoc_path)
+
+                # Implements: REQ-d00203-B
+                validate_no_transitive_associates(assoc_name, assoc_config)
+
+                # Build associate's graph (no recursive associate building)
+                assoc_fg = build_graph(
+                    config=assoc_config,
+                    repo_root=assoc_path,
+                    scan_code=scan_code,
+                    scan_tests=scan_tests,
+                    canonical_root=canonical_root,
+                    _build_associates=False,
+                )
+                # Extract the TraceGraph from the federation-of-one
+                assoc_graph = list(assoc_fg.iter_repos())[0].graph
+                entries.append(
+                    RepoEntry(
+                        name=assoc_name,
+                        graph=assoc_graph,
+                        config=assoc_config,
+                        repo_root=assoc_path,
+                        git_origin=git_origin,
+                    )
+                )
+
+            return FederatedGraph(entries, root_repo="root")
+
+    return FederatedGraph.from_single(graph, config, repo_root)
 
 
 __all__ = ["build_graph"]

@@ -17,12 +17,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.config.status_roles import StatusRole
+
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
+    from elspais.utilities.patterns import IdResolver
 
 
-# Implements: REQ-d00085-I
+# Implements: REQ-d00085-I, REQ-d00204-D
 @dataclass
 class HealthFinding:
     """Individual finding within a health check, with optional source location."""
@@ -32,15 +35,21 @@ class HealthFinding:
     line: int | None = None
     node_id: str | None = None
     related: list[str] = field(default_factory=list)
+    repo: str | None = None
+    retired: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "message": self.message,
             "file_path": self.file_path,
             "line": self.line,
             "node_id": self.node_id,
             "related": self.related,
+            "repo": self.repo,
         }
+        if self.retired:
+            d["retired"] = True
+        return d
 
 
 @dataclass
@@ -144,7 +153,7 @@ def __getattr__(name: str):  # noqa: N807
 # =============================================================================
 
 
-def check_spec_files_parseable(graph: TraceGraph) -> HealthCheck:
+def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
     """Check that all spec files were parsed without errors."""
     from elspais.graph import NodeKind
 
@@ -170,7 +179,7 @@ def check_spec_files_parseable(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
+def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
     """Check for duplicate requirement IDs."""
     from elspais.graph import NodeKind
 
@@ -213,7 +222,9 @@ def check_spec_no_duplicates(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_implements_resolve(graph: TraceGraph) -> HealthCheck:
+def check_spec_implements_resolve(
+    graph: FederatedGraph, resolver: IdResolver | None = None
+) -> HealthCheck:
     """Check that all Implements references resolve to valid requirements."""
     from elspais.graph import NodeKind
 
@@ -227,13 +238,15 @@ def check_spec_implements_resolve(graph: TraceGraph) -> HealthCheck:
             target = graph.find_by_id(ref)
             if target is None:
                 # Check if it's an assertion reference (e.g., REQ-xxx-A)
-                if "-" in ref:
+                split = resolver.split_assertion_ref(ref) if resolver else None
+                if split is None and "-" in ref:
                     parts = ref.rsplit("-", 1)
                     if len(parts) == 2:
-                        parent_id, assertion_label = parts
-                        parent = graph.find_by_id(parent_id)
-                        if parent is not None:
-                            continue  # Assertion reference is valid
+                        split = (parts[0], parts[1])
+                if split is not None:
+                    parent = graph.find_by_id(split[0])
+                    if parent is not None:
+                        continue  # Assertion reference is valid
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
@@ -263,7 +276,9 @@ def check_spec_implements_resolve(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
+def check_spec_refines_resolve(
+    graph: FederatedGraph, resolver: IdResolver | None = None
+) -> HealthCheck:
     """Check that all Refines references resolve to valid requirements."""
     from elspais.graph import NodeKind
 
@@ -275,13 +290,15 @@ def check_spec_refines_resolve(graph: TraceGraph) -> HealthCheck:
             target = graph.find_by_id(ref)
             if target is None:
                 # Check assertion reference
-                if "-" in ref:
+                split = resolver.split_assertion_ref(ref) if resolver else None
+                if split is None and "-" in ref:
                     parts = ref.rsplit("-", 1)
                     if len(parts) == 2:
-                        parent_id, _ = parts
-                        parent = graph.find_by_id(parent_id)
-                        if parent is not None:
-                            continue
+                        split = (parts[0], parts[1])
+                if split is not None:
+                    parent = graph.find_by_id(split[0])
+                    if parent is not None:
+                        continue
                 unresolved.append({"from": node.id, "to": ref})
 
     if unresolved:
@@ -322,7 +339,12 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
 
     # Filter out non-level keys
-    non_level_keys = {"allow_circular", "allow_orphans", "cross_repo_implements"}
+    non_level_keys = {
+        "allow_circular",
+        "allow_orphans",
+        "allow_structural_orphans",
+        "cross_repo_implements",
+    }
     for key, value in hierarchy.items():
         if key in non_level_keys:
             continue
@@ -332,20 +354,20 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
-def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_hierarchy_levels(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
 
     hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("patterns.types", {})
+    types = config.get("id-patterns.types", {})
     strict_hierarchy = config.get("validation.strict_hierarchy", False)
 
     # Parse hierarchy rules
     allowed_parents_map = _parse_hierarchy_rules(hierarchy)
 
-    # Build level lookup: type_id -> level_name (lowercase)
+    # Build level lookup from id-patterns types
     # Note: level_lookup reserved for future strict hierarchy validation
-    _ = {v["id"]: k for k, v in types.items()}
+    _ = {k: k for k in types}
 
     violations = []
 
@@ -414,62 +436,149 @@ def check_spec_hierarchy_levels(graph: TraceGraph, config: ConfigLoader) -> Heal
     )
 
 
-def check_spec_orphans(graph: TraceGraph) -> HealthCheck:
-    """Check for orphaned nodes across all kinds.
+def check_structural_orphans(
+    graph: FederatedGraph, allow_structural_orphans: bool = False
+) -> HealthCheck:
+    """Check for nodes without a FILE ancestor (build pipeline bugs)."""
+    if allow_structural_orphans:
+        return HealthCheck(
+            name="spec.structural_orphans",
+            passed=True,
+            message="Structural orphan check skipped (allow_structural_orphans=true)",
+            category="spec",
+        )
 
-    Uses graph.orphaned_nodes() which returns all parentless nodes
-    that have no meaningful (non-satellite) children.
-    Skips nodes whose broken references are all expected (expected-broken-links).
-    """
-    by_kind: dict[str, list[dict]] = {}
-
-    for node in graph.orphaned_nodes():
-        # Skip nodes where all broken targets are expected
-        expected = node.get_metric("_expected_broken_targets")
-        if expected:
-            continue
+    orphans_by_kind: dict[str, list[dict]] = {}
+    for node in graph.iter_structural_orphans():
         kind_name = node.kind.value
-        if kind_name not in by_kind:
-            by_kind[kind_name] = []
+        if kind_name not in orphans_by_kind:
+            orphans_by_kind[kind_name] = []
         entry: dict = {"id": node.id, "kind": kind_name}
         if node.level:
             entry["level"] = node.level
-        by_kind[kind_name].append(entry)
+        orphans_by_kind[kind_name].append(entry)
 
-    total = sum(len(nodes) for nodes in by_kind.values())
-
+    total = sum(len(v) for v in orphans_by_kind.values())
     if total:
-        summary_parts = [f"{len(v)} {k}" for k, v in sorted(by_kind.items())]
+        summary_parts = [f"{len(v)} {k}" for k, v in sorted(orphans_by_kind.items())]
         findings = [
             HealthFinding(
-                message=f"Orphan: {entry['id']} ({entry['kind']})",
-                node_id=entry["id"],
+                message=f"Structural orphan: {e['id']} ({e['kind']})",
+                node_id=e["id"],
             )
-            for entries in by_kind.values()
-            for entry in entries
+            for entries in orphans_by_kind.values()
+            for e in entries
         ]
         return HealthCheck(
-            name="spec.orphans",
+            name="spec.structural_orphans",
             passed=False,
-            message=f"{total} orphaned nodes ({', '.join(summary_parts)})",
+            message=f"{total} structural orphans ({', '.join(summary_parts)})",
             category="spec",
-            severity="warning",
-            details={
-                "by_kind": {k: v[:10] for k, v in by_kind.items()},
-                "total": total,
-            },
+            severity="error",
+            details={"by_kind": {k: v[:10] for k, v in orphans_by_kind.items()}, "total": total},
             findings=findings,
         )
 
     return HealthCheck(
-        name="spec.orphans",
+        name="spec.structural_orphans",
         passed=True,
-        message="No orphaned nodes",
+        message="No structural orphans",
         category="spec",
     )
 
 
-def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+# Implements: REQ-d00204-E
+def check_broken_references(graph: FederatedGraph) -> HealthCheck:
+    """Check for edges targeting non-existent nodes.
+
+    Distinguishes within-repo broken references (error severity) from
+    cross-repo references where the target repo is in error state
+    (warning severity with clone assistance info).
+    """
+    broken = graph.broken_references()
+
+    if broken:
+        # Identify error-state repos and collect all known node IDs
+        error_repos = {entry.name for entry in graph.iter_repos() if entry.graph is None}
+        # All node IDs owned by live repos — if a target isn't here and
+        # error-state repos exist, it might belong to a missing repo
+        owned_ids = set(graph._ownership.keys()) if hasattr(graph, "_ownership") else set()
+
+        within_repo_findings = []
+        cross_repo_findings = []
+
+        for br in broken:
+            try:
+                source_entry = graph.repo_for(br.source_id)
+                repo_name = source_entry.name
+            except KeyError:
+                repo_name = None
+
+            finding = HealthFinding(
+                message=f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})",
+                node_id=br.source_id,
+                repo=repo_name,
+            )
+
+            # Only classify as cross-repo if the target is genuinely
+            # unresolvable AND error-state repos exist that might contain it.
+            # A target that isn't in any live repo's ownership map could
+            # plausibly belong to a missing repo.
+            target_in_live_repo = br.target_id in owned_ids
+            if error_repos and not target_in_live_repo:
+                cross_repo_findings.append(finding)
+            else:
+                within_repo_findings.append(finding)
+
+        all_findings = within_repo_findings + cross_repo_findings
+
+        # Severity: error if any within-repo broken refs, warning if only cross-repo
+        if within_repo_findings:
+            severity = "error"
+            msg_parts = [f"{len(within_repo_findings)} broken reference(s)"]
+            if cross_repo_findings:
+                msg_parts.append(
+                    f"{len(cross_repo_findings)} possibly due to missing repo(s): "
+                    + ", ".join(sorted(error_repos))
+                )
+            message = "; ".join(msg_parts)
+        else:
+            severity = "warning"
+            message = (
+                f"{len(cross_repo_findings)} broken reference(s), "
+                f"possibly due to missing repo(s): {', '.join(sorted(error_repos))}"
+            )
+
+        return HealthCheck(
+            name="spec.broken_references",
+            passed=False,
+            message=message,
+            category="spec",
+            severity=severity,
+            details={
+                "count": len(broken),
+                "within_repo": len(within_repo_findings),
+                "cross_repo": len(cross_repo_findings),
+                "error_repos": sorted(error_repos),
+                "references": [
+                    {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
+                    for br in broken[:20]
+                ],
+            },
+            findings=all_findings,
+        )
+
+    return HealthCheck(
+        name="spec.broken_references",
+        passed=True,
+        message="No broken references",
+        category="spec",
+    )
+
+
+def check_spec_format_rules(
+    graph: FederatedGraph, config: ConfigLoader, resolver: IdResolver | None = None
+) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
@@ -504,7 +613,7 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         req_count += 1
-        violations = validate_requirement_format(node, rules)
+        violations = validate_requirement_format(node, rules, resolver=resolver)
         all_violations.extend(violations)
 
     errors = [v for v in all_violations if v.severity == "error"]
@@ -558,12 +667,14 @@ def check_spec_format_rules(graph: TraceGraph, config: ConfigLoader) -> HealthCh
     )
 
 
-def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
+# Implements: REQ-p00004
+def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
     """Check that stored requirement hashes match computed hashes."""
     from elspais.commands.validate import compute_hash_for_node
     from elspais.graph import NodeKind
 
     mismatches = []
+    findings: list[HealthFinding] = []
     checked = 0
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -574,6 +685,32 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
         computed = compute_hash_for_node(node, graph.hash_mode)
         if computed and stored != computed:
             mismatches.append({"id": node.id, "stored": stored, "computed": computed})
+            # Flag requirements that Satisfy this template for review
+            # Instance clones have incoming INSTANCE edges from template
+            from elspais.graph.relations import EdgeKind
+
+            for edge in node.iter_incoming_edges():
+                if edge.kind == EdgeKind.INSTANCE:
+                    # edge.source is the clone, find the declaring req
+                    # by looking for the clone's parent with SATISFIES edge
+                    clone = edge.source
+                    for parent in clone.iter_parents():
+                        for parent_edge in parent.iter_outgoing_edges():
+                            if (
+                                parent_edge.kind == EdgeKind.SATISFIES
+                                and parent_edge.target is clone
+                            ):
+                                findings.append(
+                                    HealthFinding(
+                                        message=(
+                                            f"Template {node.id} content changed;"
+                                            f" review {parent.id}"
+                                            f" (Satisfies: {node.id})"
+                                        ),
+                                        node_id=parent.id,
+                                        related=[node.id],
+                                    )
+                                )
 
     if not checked:
         return HealthCheck(
@@ -596,6 +733,7 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
             category="spec",
             severity="warning",
             details={"mismatches": mismatches, "checked": checked},
+            findings=findings,
         )
 
     return HealthCheck(
@@ -606,7 +744,7 @@ def check_spec_hash_integrity(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_present(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that all Active requirements have at least one changelog entry."""
     from elspais.graph import NodeKind
 
@@ -657,7 +795,7 @@ def check_spec_changelog_present(graph: TraceGraph, config: ConfigLoader) -> Hea
     )
 
 
-def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_current(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
     from elspais.graph import NodeKind
 
@@ -713,7 +851,7 @@ def check_spec_changelog_current(graph: TraceGraph, config: ConfigLoader) -> Hea
     )
 
 
-def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_format(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
     """Validate changelog entry fields per config requirements."""
     from elspais.graph import NodeKind
 
@@ -780,7 +918,7 @@ def check_spec_changelog_format(graph: TraceGraph, config: ConfigLoader) -> Heal
 
 
 def check_spec_index_current(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     spec_dirs: list[Path],
 ) -> HealthCheck:
     """Check that INDEX.md is up to date with current requirements."""
@@ -851,27 +989,154 @@ def check_spec_index_current(
     )
 
 
+def _annotate_findings(check: HealthCheck, repo_name: str) -> HealthCheck:
+    """Annotate all findings in a HealthCheck with the source repo name."""
+    for finding in check.findings:
+        finding.repo = repo_name
+    return check
+
+
+def _downgrade_retired_findings(
+    checks: list[HealthCheck],
+    retired_ids: set[str],
+) -> list[HealthCheck]:
+    """Downgrade health checks whose failures come only from retired requirements.
+
+    For each failing check, mark findings whose node_id is a retired requirement.
+    If ALL findings in a check are retired, downgrade the check to info severity
+    so it doesn't count against the health score. The findings are preserved for
+    the detailed report.
+    """
+    for check in checks:
+        if check.passed or not check.findings:
+            continue
+
+        # Mark individual findings for retired nodes
+        has_active = False
+        for finding in check.findings:
+            if finding.node_id and finding.node_id in retired_ids:
+                finding.retired = True
+            else:
+                has_active = True
+
+        # If all findings are retired, downgrade the entire check
+        if not has_active:
+            check.passed = True
+            check.severity = "info"
+            check.message = f"[retired only] {check.message}"
+
+    return checks
+
+
+# Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: ConfigLoader,
     spec_dirs: list[Path] | None = None,
 ) -> list[HealthCheck]:
-    """Run all spec file health checks."""
-    checks = [
+    """Run all spec file health checks.
+
+    Non-config-sensitive checks run once on the full FederatedGraph.
+    Config-sensitive checks run per-repo using each repo's own config,
+    with results annotated by repo name.
+
+    Findings for retired requirements (Deprecated, Superseded, Rejected)
+    are preserved in the detailed report but do not count as errors
+    for health scoring.
+    """
+    from elspais.config import ConfigLoader as CL
+    from elspais.config import get_status_roles
+    from elspais.graph import NodeKind as NK
+    from elspais.graph.federated import FederatedGraph as FG
+
+    # Build the set of retired requirement IDs for post-processing
+    roles = get_status_roles(config.get_raw())
+    retired_ids: set[str] = set()
+    for node in graph.nodes_by_kind(NK.REQUIREMENT):
+        if roles.role_of(node.status) == StatusRole.RETIRED:
+            retired_ids.add(node.id)
+
+    # --- Non-config-sensitive checks: run once on full federation ---
+    checks: list[HealthCheck] = [
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
-        check_spec_implements_resolve(graph),
-        check_spec_refines_resolve(graph),
-        check_spec_hierarchy_levels(graph, config),
-        check_spec_orphans(graph),
-        check_spec_format_rules(graph, config),
+        check_broken_references(graph),
         check_spec_hash_integrity(graph),
-        check_spec_changelog_present(graph, config),
-        check_spec_changelog_current(graph, config),
-        check_spec_changelog_format(graph, config),
     ]
+
+    # --- Config-sensitive checks: run per-repo ---
+    for entry in graph.iter_repos():
+        if entry.graph is None or entry.config is None:
+            continue
+        from elspais.utilities.patterns import build_resolver
+
+        # Normalize config: may be raw dict or ConfigLoader
+        repo_config = entry.config if isinstance(entry.config, CL) else CL.from_dict(entry.config)
+        repo_graph = FG.from_single(entry.graph, repo_config, entry.repo_root)
+        repo_resolver = build_resolver(repo_config.get_raw())
+
+        checks.append(
+            _annotate_findings(
+                check_spec_implements_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_refines_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_hierarchy_levels(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_structural_orphans(
+                    repo_graph,
+                    allow_structural_orphans=repo_config.get(
+                        "rules.hierarchy.allow_structural_orphans",
+                        repo_config.get("rules.hierarchy.allow_orphans", False),
+                    ),
+                ),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_format_rules(repo_graph, repo_config, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_present(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_current(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_changelog_format(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+
     if spec_dirs:
         checks.append(check_spec_index_current(graph, spec_dirs))
+
+    # Post-process: downgrade checks that only have findings for retired REQs
+    if retired_ids:
+        _downgrade_retired_findings(checks, retired_ids)
+
     return checks
 
 
@@ -880,79 +1145,42 @@ def run_spec_checks(
 # =============================================================================
 
 
-def check_code_references_resolve(graph: TraceGraph) -> HealthCheck:
-    """Check that code # Implements: references resolve to valid requirements."""
-    from elspais.graph import NodeKind
+def _resolve_exclude_status(
+    args: argparse.Namespace,
+    config: dict[str, Any] | None = None,
+) -> set[str]:
+    """Compute the set of statuses to exclude from coverage.
 
-    code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
+    If --status is provided, include only those statuses (case-insensitive).
+    Otherwise, use status_roles config to determine exclusions.
+    """
+    from elspais.config import get_status_roles
 
-    if not code_nodes:
-        return HealthCheck(
-            name="code.references_resolve",
-            passed=True,
-            message="No code references found (code scanning may be disabled)",
-            category="code",
-            severity="info",
-        )
-
-    unresolved = []
-    resolved_count = 0
-
-    for node in code_nodes:
-        # CODE nodes reference requirements via parents
-        has_valid_parent = False
-        for parent in node.iter_parents():
-            if parent.kind in (NodeKind.REQUIREMENT, NodeKind.ASSERTION):
-                has_valid_parent = True
-                resolved_count += 1
-                break
-
-        if not has_valid_parent:
-            implements = node.get_field("implements", [])
-            unresolved.append(
-                {
-                    "source": node.get_field("source_file", "unknown"),
-                    "line": node.get_field("line", 0),
-                    "references": implements,
-                }
-            )
-
-    if unresolved:
-        findings = [
-            HealthFinding(
-                message=f"Unresolved refs in {u['source']}:{u['line']}",
-                file_path=u["source"],
-                line=u["line"] or None,
-                related=u.get("references", []),
-            )
-            for u in unresolved
-        ]
-        return HealthCheck(
-            name="code.references_resolve",
-            passed=False,
-            message=f"{len(unresolved)} code references don't resolve to requirements",
-            category="code",
-            severity="warning",
-            details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
-            findings=findings,
-        )
-
-    return HealthCheck(
-        name="code.references_resolve",
-        passed=True,
-        message=f"All {resolved_count} code references resolve to requirements",
-        category="code",
-        details={"resolved_count": resolved_count},
-    )
+    roles = get_status_roles(config or {})
+    include_raw: list[str] | None = getattr(args, "status", None)
+    if not include_raw:
+        return roles.coverage_excluded_statuses()
+    # --status flag: include only listed statuses, exclude all others
+    included = {s.title() for s in include_raw}
+    all_known = roles.coverage_excluded_statuses() | set(roles._original_case.values())
+    return all_known - included
 
 
-def _excluded_note(graph: TraceGraph) -> str:
+def _excluded_note(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
     """Build a note about excluded requirements."""
     from elspais.graph import NodeKind
 
+    if exclude_status is None:
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     counts: dict[str, int] = {}
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if n.status in ("Draft", "Deprecated"):
+        if n.status in exclude_status:
             counts[n.status] = counts.get(n.status, 0) + 1
     if not counts:
         return ""
@@ -960,14 +1188,22 @@ def _excluded_note(graph: TraceGraph) -> str:
     return f" [{', '.join(parts)} excluded]"
 
 
-def check_code_coverage(graph: TraceGraph) -> HealthCheck:
+def check_code_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
     """Check code coverage statistics."""
     from elspais.graph import NodeKind
     from elspais.graph.annotators import count_with_code_refs
 
+    if exclude_status is None:
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph, exclude_status={"Draft", "Deprecated"})
-    note = _excluded_note(graph)
+    coverage = count_with_code_refs(graph, exclude_status=exclude_status)
+    note = _excluded_note(graph, exclude_status)
 
     return HealthCheck(
         name="code.coverage",
@@ -987,11 +1223,56 @@ def check_code_coverage(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def run_code_checks(graph: TraceGraph) -> list[HealthCheck]:
+def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
+    """Check for CODE nodes not linked to any requirement."""
+    from elspais.graph import NodeKind
+
+    unlinked = []
+    for node in graph.iter_unlinked(NodeKind.CODE):
+        file_n = node.file_node()
+        unlinked.append(
+            {
+                "id": node.id,
+                "file": file_n.get_field("relative_path") if file_n else "unknown",
+                "line": node.get_field("parse_line"),
+            }
+        )
+
+    if unlinked:
+        findings = [
+            HealthFinding(
+                message=f"Unlinked code: {u['id']}",
+                file_path=u["file"],
+                line=u["line"],
+                node_id=u["id"],
+            )
+            for u in unlinked
+        ]
+        return HealthCheck(
+            name="code.unlinked",
+            passed=False,
+            message=f"{len(unlinked)} code references not linked to any requirement",
+            category="code",
+            severity="info",
+            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="code.unlinked",
+        passed=True,
+        message="All code references linked to requirements",
+        category="code",
+    )
+
+
+def run_code_checks(
+    graph: FederatedGraph, exclude_status: set[str] | None = None
+) -> list[HealthCheck]:
     """Run all code reference health checks."""
     return [
-        check_code_references_resolve(graph),
-        check_code_coverage(graph),
+        check_code_coverage(graph, exclude_status=exclude_status),
+        check_unlinked_code(graph),
     ]
 
 
@@ -1000,82 +1281,53 @@ def run_code_checks(graph: TraceGraph) -> list[HealthCheck]:
 # =============================================================================
 
 
-def check_test_references_resolve(graph: TraceGraph) -> HealthCheck:
-    """Check that test file REQ references resolve to valid requirements."""
-    from elspais.graph import NodeKind
+def _read_run_meta(config: dict | None) -> dict:
+    """Read test-run metadata sidecar (deselected counts, runner info).
 
-    test_nodes = list(graph.nodes_by_kind(NodeKind.TEST))
+    Returns a dict with at least {"deselected_count": 0, "runner": ""}.
+    The sidecar JSON format is test-runner agnostic — any runner can produce it.
+    """
+    import json
+    from pathlib import Path
 
-    if not test_nodes:
-        return HealthCheck(
-            name="tests.references_resolve",
-            passed=True,
-            message="No test references found (test scanning may be disabled)",
-            category="tests",
-            severity="info",
-        )
-
-    unresolved = []
-    resolved_count = 0
-
-    for node in test_nodes:
-        has_valid_parent = False
-        for parent in node.iter_parents():
-            if parent.kind in (NodeKind.REQUIREMENT, NodeKind.ASSERTION):
-                has_valid_parent = True
-                resolved_count += 1
-                break
-
-        if not has_valid_parent:
-            # Skip nodes whose broken targets are all expected
-            expected = node.get_metric("_expected_broken_targets")
-            if expected:
-                continue
-            unresolved.append(
-                {
-                    "source": node.get_field("source_file", "unknown"),
-                    "test_name": node.get_label() or node.id,
-                }
-            )
-
-    if unresolved:
-        findings = [
-            HealthFinding(
-                message=f"Unresolved: {u['test_name']} in {u['source']}",
-                file_path=u["source"],
-            )
-            for u in unresolved
-        ]
-        return HealthCheck(
-            name="tests.references_resolve",
-            passed=False,
-            message=f"{len(unresolved)} test references don't resolve to requirements",
-            category="tests",
-            severity="warning",
-            details={"unresolved": unresolved[:10], "resolved_count": resolved_count},
-            findings=findings,
-        )
-
-    return HealthCheck(
-        name="tests.references_resolve",
-        passed=True,
-        message=f"All {resolved_count} test references resolve to requirements",
-        category="tests",
-        details={"resolved_count": resolved_count},
-    )
+    defaults = {"deselected_count": 0, "runner": ""}
+    meta_file = (config or {}).get("testing", {}).get("run_meta_file", "")
+    if not meta_file:
+        return defaults
+    meta_path = Path(meta_file)
+    if not meta_path.exists():
+        return defaults
+    try:
+        data = json.loads(meta_path.read_text())
+        return {
+            "deselected_count": data.get("deselected_count", 0),
+            "runner": data.get("runner", ""),
+        }
+    except (json.JSONDecodeError, OSError):
+        return defaults
 
 
-def check_test_results(graph: TraceGraph) -> HealthCheck:
+def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output."""
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.TEST_RESULT))
+    run_meta = _read_run_meta(config)
+    deselected = run_meta["deselected_count"]
 
     if not result_nodes:
+        # Check if result scanning is actually configured
+        result_files = (config or {}).get("testing", {}).get("result_files", [])
+        if not result_files:
+            message = "No result files configured"
+        else:
+            message = (
+                f"No test results found ({len(result_files)} result path(s) configured but empty)"
+            )
         return HealthCheck(
             name="tests.results",
             passed=True,
-            message="No test results found (result scanning may be disabled)",
+            message=message,
             category="tests",
             severity="info",
         )
@@ -1095,6 +1347,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
 
     total = passed + failed + skipped
     pass_rate = (passed / total * 100) if total > 0 else 0
+    deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
         findings = [
@@ -1111,7 +1364,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
             passed=False,
             message=(
                 f"Test failures: {passed} passed, {failed} failed, "
-                f"{skipped} skipped ({pass_rate:.1f}% pass rate)"
+                f"{skipped} skipped{deselected_suffix} ({pass_rate:.1f}% pass rate)"
             ),
             category="tests",
             severity="warning",
@@ -1119,6 +1372,7 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
                 "passed": passed,
                 "failed": failed,
                 "skipped": skipped,
+                "deselected": deselected,
                 "pass_rate": round(pass_rate, 1),
             },
             findings=findings,
@@ -1127,44 +1381,51 @@ def check_test_results(graph: TraceGraph) -> HealthCheck:
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All tests passing: {passed} passed, {skipped} skipped",
+        message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
         details={
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
+            "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
     )
 
 
-def check_test_coverage(graph: TraceGraph) -> HealthCheck:
-    """Check test coverage statistics (excludes Draft requirements)."""
+def check_test_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
+    """Check test coverage statistics."""
     from elspais.graph import NodeKind
 
+    if exclude_status is None:
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    # Exclude Draft and Deprecated from denominator
-    _exclude = {"Draft", "Deprecated"}
     req_count = sum(
-        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in _exclude
+        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in exclude_status
     )
 
     # Count requirements with at least one TEST child
     covered_reqs = set()
     for node in graph.nodes_by_kind(NodeKind.TEST):
         for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT and parent.status not in _exclude:
+            if parent.kind == NodeKind.REQUIREMENT and parent.status not in exclude_status:
                 covered_reqs.add(parent.id)
             elif parent.kind == NodeKind.ASSERTION:
                 for grandparent in parent.iter_parents():
                     if (
                         grandparent.kind == NodeKind.REQUIREMENT
-                        and grandparent.status not in _exclude
+                        and grandparent.status not in exclude_status
                     ):
                         covered_reqs.add(grandparent.id)
 
     coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
-    note = _excluded_note(graph)
+    note = _excluded_note(graph, exclude_status)
 
     return HealthCheck(
         name="tests.coverage",
@@ -1184,12 +1445,57 @@ def check_test_coverage(graph: TraceGraph) -> HealthCheck:
     )
 
 
-def run_test_checks(graph: TraceGraph) -> list[HealthCheck]:
+def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
+    """Check for TEST nodes not linked to any requirement."""
+    from elspais.graph import NodeKind
+
+    unlinked = []
+    for node in graph.iter_unlinked(NodeKind.TEST):
+        file_n = node.file_node()
+        unlinked.append(
+            {
+                "id": node.id,
+                "file": file_n.get_field("relative_path") if file_n else "unknown",
+                "line": node.get_field("parse_line"),
+            }
+        )
+
+    if unlinked:
+        findings = [
+            HealthFinding(
+                message=f"Unlinked test: {u['id']}",
+                file_path=u["file"],
+                line=u["line"],
+                node_id=u["id"],
+            )
+            for u in unlinked
+        ]
+        return HealthCheck(
+            name="tests.unlinked",
+            passed=False,
+            message=f"{len(unlinked)} tests not linked to any requirement",
+            category="tests",
+            severity="info",
+            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="tests.unlinked",
+        passed=True,
+        message="All tests linked to requirements",
+        category="tests",
+    )
+
+
+def run_test_checks(
+    graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
+) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
-        check_test_references_resolve(graph),
-        check_test_results(graph),
-        check_test_coverage(graph),
+        check_test_results(graph, config=config),
+        check_test_coverage(graph, exclude_status=exclude_status),
+        check_unlinked_tests(graph),
     ]
 
 
@@ -1200,7 +1506,7 @@ def run_test_checks(graph: TraceGraph) -> list[HealthCheck]:
 
 # Implements: REQ-d00085-A
 def render_section(
-    graph: TraceGraph | None,
+    graph: FederatedGraph | None,
     config: ConfigLoader | None,
     args: argparse.Namespace,
 ) -> tuple[str, int]:
@@ -1225,9 +1531,11 @@ def render_section(
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
-        for check in run_code_checks(graph):
+        raw_config = config.get_raw() if config else {}
+        exclude_status = _resolve_exclude_status(args, config=raw_config)
+        for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
-        for check in run_test_checks(graph):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     output = _format_report(report, args)
@@ -1276,7 +1584,11 @@ def run(args: argparse.Namespace) -> int:
         try:
             from elspais.commands.doctor import run_config_checks as _run_config_checks
 
-            config_dict = get_config(config_path, start_path=start_path)
+            config_dict = get_config(
+                config_path,
+                start_path=start_path,
+                overrides=getattr(args, "config_overrides", None),
+            )
             config = ConfigLoader.from_dict(config_dict)
             for check in _run_config_checks(config_path, config, start_path):
                 report.add(check)
@@ -1304,7 +1616,11 @@ def run(args: argparse.Namespace) -> int:
                 canonical_root=canonical_root,
             )
             if config is None:
-                config_dict = get_config(config_path, start_path=start_path)
+                config_dict = get_config(
+                    config_path,
+                    start_path=start_path,
+                    overrides=getattr(args, "config_overrides", None),
+                )
                 config = ConfigLoader.from_dict(config_dict)
         except Exception as e:
             report.add(
@@ -1327,13 +1643,15 @@ def run(args: argparse.Namespace) -> int:
             report.add(check)
 
     # Code checks
+    raw_config = config.get_raw() if config else {}
+    exclude_status = _resolve_exclude_status(args, config=raw_config)
     if run_code and graph:
-        for check in run_code_checks(graph):
+        for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
 
     # Test checks
     if run_tests and graph:
-        for check in run_test_checks(graph):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     return _output_report(report, args)
@@ -1397,8 +1715,19 @@ def _print_text_report(
         # Category header
         passed = sum(1 for c in checks if c.passed)
         total = len(checks)
-        status = "✓" if passed == total else "✗"
-        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed)")
+        has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        has_warnings = any(not c.passed and c.severity == "warning" for c in checks)
+        if passed == total:
+            status = "✓"
+        elif has_errors:
+            status = "✗"
+        else:
+            status = "⚠"
+        warn_suffix = ""
+        if has_warnings and not has_errors:
+            warn_count = sum(1 for c in checks if not c.passed and c.severity == "warning")
+            warn_suffix = f", {warn_count} warnings"
+        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{warn_suffix})")
         print("-" * 40)
 
         for check in checks:
@@ -1426,18 +1755,55 @@ def _print_text_report(
     print()
     print("=" * 40)
     _print_summary_line(report)
+    if not report.is_healthy:
+        _print_detail_hint(report, verbose)
     print("=" * 40)
 
 
 def _print_summary_line(report: HealthReport) -> None:
     """Print a single summary line."""
-    total = report.passed + report.failed + report.warnings
-    if report.failed == 0 and report.warnings == 0:
+    total = len(report.checks)
+    if report.failed == 0 and report.warnings == 0 and report.passed == total:
         print(f"HEALTHY: {total}/{total} checks passed")
+    elif report.failed == 0 and report.warnings == 0:
+        # Info-severity failures only
+        infos = total - report.passed
+        print(f"{report.passed}/{total} checks passed, {infos} info")
     elif report.failed == 0:
         print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
     else:
         print(f"UNHEALTHY: {report.failed} errors," f" {report.warnings} warnings")
+
+
+def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
+    """Print a hint about how to get more details on failures."""
+    # Identify which categories have failures
+    failed_categories = set()
+    for check in report.checks:
+        if not check.passed and check.severity in ("error", "warning"):
+            failed_categories.add(check.category)
+
+    if not failed_categories:
+        return
+
+    # Build a targeted command hint
+    category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
+    if len(failed_categories) == 1:
+        cat = next(iter(failed_categories))
+        flag = category_flags.get(cat, "")
+        scope = f" {flag}" if flag else ""
+    else:
+        scope = ""
+
+    if not already_verbose:
+        print(f"Run 'elspais health{scope} -v' for details,")
+        print(
+            f" or 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        )
+    else:
+        print(
+            f"Run 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        )
 
 
 def _print_quiet_report(report: HealthReport) -> None:
@@ -1463,7 +1829,13 @@ def _render_markdown(
 
         passed = sum(1 for c in checks if c.passed)
         total = len(checks)
-        status = "pass" if passed == total else "FAIL"
+        has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        if passed == total:
+            status = "pass"
+        elif has_errors:
+            status = "FAIL"
+        else:
+            status = "WARN"
         lines.append(f"## {category.upper()} ({passed}/{total} {status})")
         lines.append("")
         lines.append("| Check | Status | Message |")
@@ -1496,9 +1868,12 @@ def _render_markdown(
         lines.append("")
 
     # Summary
-    total = report.passed + report.failed + report.warnings
-    if report.failed == 0 and report.warnings == 0:
+    total = len(report.checks)
+    if report.failed == 0 and report.warnings == 0 and report.passed == total:
         lines.append(f"**HEALTHY**: {total}/{total} checks passed")
+    elif report.failed == 0 and report.warnings == 0:
+        infos = total - report.passed
+        lines.append(f"**{report.passed}/{total}** checks passed, {infos} info")
     elif report.failed == 0:
         lines.append(f"**{report.passed}/{total}** checks passed," f" {report.warnings} warnings")
     else:

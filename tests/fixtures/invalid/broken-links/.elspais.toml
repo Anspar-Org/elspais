@@ -2,23 +2,24 @@
 [project]
 name = "broken-links-test"
 type = "core"
+namespace = "REQ"
 
 [directories]
 spec = "spec"
 
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[id-patterns]
+canonical = "{namespace}-{type.letter}{component}"
+aliases = { short = "{type.letter}{component}" }
 
-[patterns.types]
-prd = { id = "p", level = 1 }
-dev = { id = "d", level = 3 }
+[id-patterns.types]
+prd = { level = 1, aliases = { letter = "p" } }
+dev = { level = 3, aliases = { letter = "d" } }
 
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
 [rules.hierarchy]
 allowed_implements = ["dev -> prd"]
-allow_orphans = false
+allow_structural_orphans = false

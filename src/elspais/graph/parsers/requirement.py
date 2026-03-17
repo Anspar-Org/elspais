@@ -12,7 +12,7 @@ from typing import Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
-from elspais.utilities.patterns import PatternConfig, PatternValidator
+from elspais.utilities.patterns import IdResolver
 
 
 # Implements: REQ-p00002-A
@@ -32,7 +32,7 @@ class RequirementParser:
     priority = 50
 
     # Regex patterns
-    HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
+    HEADER_PATTERN = re.compile(r"^(?P<hashes>#+)\s*(?P<id>[A-Z]+-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
     LEVEL_STATUS_PATTERN = re.compile(
         r"\*\*Level\*\*:\s*(?P<level>\w+)"
         r"(?:\s*\|\s*\*\*Implements\*\*:\s*(?P<implements>[^|\n]+))?"
@@ -41,6 +41,10 @@ class RequirementParser:
     ALT_STATUS_PATTERN = re.compile(r"\*\*Status\*\*:\s*(?P<status>\w+)")
     IMPLEMENTS_PATTERN = re.compile(r"\*\*Implements\*\*:\s*(?P<implements>[^|\n]+)")
     REFINES_PATTERN = re.compile(r"\*\*Refines\*\*:\s*(?P<refines>[^|\n]+)")
+    # Implements: REQ-d00069-H
+    SATISFIES_PATTERN = re.compile(
+        r"^(?:\*\*)?Satisfies(?:\*\*)?:\s*(?P<satisfies>.+)$", re.MULTILINE
+    )
     END_MARKER_PATTERN = re.compile(
         rf"^\*End\*\s+\*[^*]+\*\s*(?:\|\s*\*\*Hash\*\*:\s*(?P<hash>{HASH_VALUE_PATTERN}))?",
         re.MULTILINE,
@@ -51,14 +55,13 @@ class RequirementParser:
     # Values that mean "no references"
     NO_REFERENCE_VALUES = ["-", "null", "none", "x", "X", "N/A", "n/a"]
 
-    def __init__(self, pattern_config: PatternConfig) -> None:
-        """Initialize parser with pattern configuration.
+    def __init__(self, resolver: IdResolver) -> None:
+        """Initialize parser with ID resolver.
 
         Args:
-            pattern_config: Configuration for ID patterns.
+            resolver: IdResolver for ID parsing and validation.
         """
-        self.pattern_config = pattern_config
-        self.validator = PatternValidator(pattern_config)
+        self.resolver = resolver
 
     # Implements: REQ-p00002-A
     def claim_and_parse(
@@ -99,11 +102,12 @@ class RequirementParser:
                 req_id = header_match.group("id")
 
                 # Validate ID against configured pattern
-                if not self.validator.is_valid(req_id):
+                if not self.resolver.is_valid(req_id):
                     i += 1
                     continue
 
                 title = header_match.group("title").strip()
+                heading_level = len(header_match.group("hashes"))
                 start_line = ln
 
                 # Find the end of this requirement
@@ -120,18 +124,12 @@ class RequirementParser:
                     # Check for end marker
                     if self.END_MARKER_PATTERN.match(next_text):
                         j += 1
-                        # Include separator if present
-                        if j < len(line_numbers):
-                            sep_ln = line_numbers[j]
-                            if line_map[sep_ln].strip() == "---":
-                                req_lines.append((sep_ln, line_map[sep_ln]))
-                                end_line = sep_ln
-                                j += 1
+                        # Separator (---) is NOT claimed; it becomes REMAINDER
                         break
 
                     # Check for next requirement header
                     next_match = self.HEADER_PATTERN.match(next_text)
-                    if next_match and self.validator.is_valid(next_match.group("id")):
+                    if next_match and self.resolver.is_valid(next_match.group("id")):
                         # Hit next requirement - don't include this line
                         req_lines.pop()
                         end_line = line_numbers[j - 1] if j > i + 1 else ln
@@ -146,6 +144,7 @@ class RequirementParser:
                 # Parse the requirement data
                 raw_text = "\n".join(t for _, t in req_lines)
                 parsed_data = self._parse_requirement(req_id, title, raw_text, start_line)
+                parsed_data["heading_level"] = heading_level
 
                 yield ParsedContent(
                     content_type="requirement",
@@ -183,6 +182,7 @@ class RequirementParser:
             "status": "Unknown",
             "implements": [],
             "refines": [],
+            "satisfies": [],
             "assertions": [],
             "changelog": [],
             "hash": None,
@@ -198,7 +198,7 @@ class RequirementParser:
         if level_match:
             raw_level = level_match.group("level") or "Unknown"
             # Normalize level to canonical config type key
-            resolved = self.pattern_config.resolve_level(raw_level)
+            resolved = self.resolver.resolve_level(raw_level)
             data["level"] = resolved if resolved is not None else raw_level
             data["status"] = level_match.group("status") or "Unknown"
             if level_match.group("implements"):
@@ -220,6 +220,12 @@ class RequirementParser:
         refines_match = self.REFINES_PATTERN.search(text)
         if refines_match:
             data["refines"] = self._parse_refs(refines_match.group("refines"))
+
+        # Parse satisfies
+        # Implements: REQ-d00069-H
+        satisfies_match = self.SATISFIES_PATTERN.search(text)
+        if satisfies_match:
+            data["satisfies"] = self._parse_refs(satisfies_match.group("satisfies"))
 
         # Extract assertions
         data["assertions"] = self._extract_assertions(text, start_line)
@@ -251,17 +257,15 @@ class RequirementParser:
         if stripped in self.NO_REFERENCE_VALUES:
             return []
 
-        prefix = self.pattern_config.prefix
         parts = [p.strip() for p in refs_str.split(",")]
         result = []
 
         for p in parts:
             if not p or p in self.NO_REFERENCE_VALUES:
                 continue
-            # Normalize shorthand to full ID (e.g., "o00001" -> "REQ-o00001")
-            if not p.startswith(f"{prefix}-"):
-                p = f"{prefix}-{p}"
-            result.append(p)
+            # Normalize to canonical form (e.g., "o00001" -> "REQ-o00001")
+            canonical = self.resolver.to_canonical(p)
+            result.append(canonical if canonical else p)
 
         return result
 
@@ -296,22 +300,45 @@ class RequirementParser:
 
         assertions_text = section_text[:end_pos]
 
-        # Parse assertion lines
-        for match in self.ASSERTION_LINE_PATTERN.finditer(assertions_text):
-            label = match.group(1)
-            assertion_text = match.group(2).strip()
-            # Compute absolute line number: use match.start(1) to point to the
-            # label character itself (not leading whitespace which may include \n)
-            abs_pos = start_pos + match.start(1)
-            line = start_line + text[:abs_pos].count("\n")
-            assertions.append(
-                {
-                    "label": label,
-                    "text": assertion_text,
-                    "line": line,
-                }
-            )
+        # Parse assertion lines with multi-line continuation.
+        # A continuation line is any non-blank line that doesn't start a new
+        # assertion label (e.g. indented list items under "A. ... SHALL contain:").
+        assertion_lines = assertions_text.split("\n")
+        current_label: str | None = None
+        current_text_parts: list[str] = []
+        current_line_num = 0
 
+        def _flush() -> None:
+            if current_label is not None:
+                # Strip trailing blank lines (inter-assertion gaps)
+                parts = list(current_text_parts)
+                while parts and not parts[-1].strip():
+                    parts.pop()
+                assertions.append(
+                    {
+                        "label": current_label,
+                        "text": "\n".join(parts),
+                        "line": current_line_num,
+                    }
+                )
+
+        for i, raw_line in enumerate(assertion_lines):
+            abs_pos = start_pos + sum(len(assertion_lines[k]) + 1 for k in range(i))
+            line_num = start_line + text[:abs_pos].count("\n")
+
+            m = self.ASSERTION_LINE_PATTERN.match(raw_line)
+            if m:
+                _flush()
+                current_label = m.group(1)
+                current_text_parts = [m.group(2).strip()]
+                current_line_num = line_num
+            elif current_label is not None:
+                # Continuation: blank lines and indented/list content
+                # belong to the current assertion. Trailing blanks are
+                # stripped during _flush so inter-assertion gaps work.
+                current_text_parts.append(raw_line)
+
+        _flush()
         return assertions
 
     # Implements: REQ-p00002-C
@@ -449,6 +476,7 @@ class RequirementParser:
                 if not self.LEVEL_STATUS_PATTERN.search(ln)
                 and not self.ALT_STATUS_PATTERN.search(ln)
                 and not self.IMPLEMENTS_PATTERN.search(ln)
+                and not self.SATISFIES_PATTERN.search(ln)
             ]
 
         content = "\n".join(lines).strip()

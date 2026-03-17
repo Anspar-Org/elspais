@@ -1,4 +1,5 @@
-# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F
+# Validates REQ-p00004-A, REQ-p00004-B, REQ-p00004-D, REQ-p00004-E,
+# REQ-p00004-F, REQ-p00004-H, REQ-p00004-I
 """Tests for Git Integration.
 
 Validates:
@@ -7,6 +8,8 @@ Validates:
 - REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
 - REQ-p00004-E: commit_and_push_spec_files SHALL commit spec files, refuse on main/master
 - REQ-p00004-F: sync_branch SHALL fetch, merge remote, and rebase on main, aborting on conflict
+- REQ-p00004-H: list_branches SHALL list local/remote branches, strip prefixes, deduplicate
+- REQ-p00004-I: checkout SHALL switch to existing local/remote branches with fallback
 """
 
 import subprocess
@@ -29,6 +32,7 @@ from elspais.utilities.git import (
     get_repo_root,
     get_req_locations_from_graph,
     git_status_summary,
+    list_branches,
     sync_branch,
     temporary_worktree,
 )
@@ -329,17 +333,17 @@ class TestGetReqLocationsFromGraph:
             assert isinstance(req_id, str)
             assert isinstance(path, str)
 
-    def test_extracts_req_suffix(self):
-        """Extracts just the suffix (e.g., 'd00001') from REQ IDs."""
+    def test_uses_full_canonical_id(self):
+        """Uses the full canonical ID (e.g., 'REQ-d00001') as keys."""
         repo_root = get_repo_root()
         if repo_root is None:
             pytest.skip("Not in a git repository")
 
         result = get_req_locations_from_graph(repo_root)
 
-        # If we have results, none should start with "REQ-"
+        # If we have results, keys should be full canonical IDs
         for req_id in result.keys():
-            assert not req_id.startswith("REQ-"), f"Expected suffix only, got: {req_id}"
+            assert req_id.startswith("REQ-"), f"Expected full canonical ID, got: {req_id}"
 
 
 class TestGetAuthorInfo:
@@ -1227,3 +1231,198 @@ class TestFullGitSyncWorkflowWithRemote:
             text=True,
         )
         assert status.stdout.strip() == ""
+
+
+# ─────────────────────────────────────────────────────────────────
+# list_branches (REQ-p00004-H)
+# ─────────────────────────────────────────────────────────────────
+
+
+class TestListBranches:
+    """Validates REQ-p00004-H: list_branches SHALL list local/remote branches,
+    strip remote prefixes, and deduplicate branches that exist both locally
+    and remotely.
+    """
+
+    @pytest.fixture()
+    def repo_root(self) -> Path:
+        """Return the real repository root for live git queries."""
+        return get_repo_root(Path(__file__).parent)
+
+    def test_REQ_p00004_H_list_branches_returns_expected_structure(self, repo_root: Path):
+        """list_branches returns dict with local, remote, current keys."""
+        result = list_branches(repo_root)
+        assert isinstance(result, dict)
+        assert "local" in result
+        assert "remote" in result
+        assert "current" in result
+        assert isinstance(result["local"], list)
+        assert isinstance(result["remote"], list)
+        # current branch should be a non-empty string inside a real repo
+        assert result["current"] is not None
+        assert isinstance(result["current"], str)
+        assert len(result["current"]) > 0
+        # current branch must appear in the local list
+        assert result["current"] in result["local"]
+
+    def test_REQ_p00004_H_list_branches_deduplicates_remotes(self, repo_root: Path):
+        """No branch name appears in both local and remote lists."""
+        result = list_branches(repo_root)
+        local_set = set(result["local"])
+        remote_set = set(result["remote"])
+        overlap = local_set & remote_set
+        assert overlap == set(), f"Branches in both local and remote: {overlap}"
+
+    def test_REQ_p00004_H_list_branches_strips_origin_prefix(self, repo_root: Path):
+        """No remote branch name starts with 'origin/'."""
+        result = list_branches(repo_root)
+        for name in result["remote"]:
+            assert not name.startswith("origin/"), f"Remote branch still has origin/ prefix: {name}"
+
+
+# ─────────────────────────────────────────────────────────────────
+# checkout (REQ-p00004-I)
+# ─────────────────────────────────────────────────────────────────
+
+
+class TestCheckoutBranch:
+    """Validates REQ-p00004-I: checkout SHALL switch to existing local or
+    remote branches, with fallback from ``git checkout -b`` to ``git checkout``
+    when the local branch already exists.
+    """
+
+    def test_REQ_p00004_I_checkout_local_branch(self, tmp_path):
+        """Can switch between two local branches using git checkout."""
+        _init_git_repo(tmp_path)
+
+        # Create a second branch and switch back to main
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "feature.txt").write_text("feature content\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "feature commit"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "main"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        # Verify we're on main
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == "main"
+
+        # Switch to feature branch using plain git checkout
+        from elspais.utilities.git import _clean_git_env
+
+        switch = subprocess.run(
+            ["git", "checkout", "feature"],
+            cwd=tmp_path,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+        assert switch.returncode == 0
+
+        # Verify we're on feature now
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == "feature"
+
+    def test_REQ_p00004_I_checkout_remote_fallback(self, tmp_path):
+        """When ``git checkout -b <name> origin/<name>`` fails because the
+        local branch already exists, falls back to ``git checkout <name>``.
+        """
+        bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        # clone_a creates and pushes a feature branch
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/remote-test"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        (clone_a / "remote.txt").write_text("from remote\n")
+        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "remote feature"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "feature/remote-test"],
+            cwd=clone_a,
+            capture_output=True,
+            check=True,
+        )
+
+        # clone_b: fetch, create a local branch with the same name, then switch away
+        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/remote-test", "origin/feature/remote-test"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "main"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+
+        # Now simulate the remote checkout flow:
+        # First attempt: git checkout -b should fail (already exists)
+        from elspais.utilities.git import _clean_git_env
+
+        env = _clean_git_env()
+        attempt1 = subprocess.run(
+            ["git", "checkout", "-b", "feature/remote-test", "origin/feature/remote-test"],
+            cwd=clone_b,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert attempt1.returncode != 0
+        assert "already exists" in attempt1.stderr
+
+        # Fallback: plain git checkout should succeed
+        attempt2 = subprocess.run(
+            ["git", "checkout", "feature/remote-test"],
+            cwd=clone_b,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert attempt2.returncode == 0
+
+        # Verify we're on the right branch
+        head = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert head.stdout.strip() == "feature/remote-test"

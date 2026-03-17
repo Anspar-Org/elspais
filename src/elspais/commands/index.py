@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
 
@@ -29,34 +29,17 @@ def run(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    mode = getattr(args, "mode", "combined")
 
-    config = get_config(config_path)
+    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
     spec_dirs = get_spec_directories(spec_dir, config)
 
-    scan_sponsors = mode == "combined"
-
-    # Include associated repo spec dirs so nodes classify correctly
-    if scan_sponsors:
-        from elspais.associates import get_associate_spec_directories
-
-        canonical_root = getattr(args, "canonical_root", None)
-        repo_root = getattr(args, "git_root", None)
-        sponsor_dirs, _ = get_associate_spec_directories(
-            config,
-            repo_root,
-            canonical_root=canonical_root,
-        )
-        all_spec_dirs = list(spec_dirs) + sponsor_dirs
-    else:
-        all_spec_dirs = list(spec_dirs)
-
     canonical_root = getattr(args, "canonical_root", None)
+    all_spec_dirs = list(spec_dirs)
+
     graph = build_graph(
         config=config,
         spec_dirs=all_spec_dirs if spec_dir else None,
         config_path=config_path,
-        scan_sponsors=scan_sponsors,
         canonical_root=canonical_root,
     )
 
@@ -71,7 +54,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
 
-def _validate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+def _validate_index(graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
     """Validate INDEX.md against graph requirements."""
     # Find INDEX.md
     index_path = None
@@ -172,7 +155,7 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     """Resolve label and level ordering for a spec directory.
 
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
-    the project name and ``[patterns.types]`` level definitions.
+    the project name and ``[id-patterns].types`` level definitions.
     """
     from elspais.config import get_config
 
@@ -189,14 +172,14 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
                 spec_subpath = resolved.name
             label = f"{project_name}/{spec_subpath}"
 
-            # Build level ordering from [patterns.types]
+            # Build level ordering from [id-patterns.types]
             # Keys match node.level values (e.g. "prd", "ops", "dev")
-            types = cfg.get("patterns", {}).get("types", {})
+            types = cfg.get("id-patterns", {}).get("types", {})
             level_order: dict[str, int] = {}
             level_names: dict[str, str] = {}
             for type_key, type_def in types.items():
                 level_num = type_def.get("level", 99)
-                display = type_def.get("name", type_key.upper())
+                display = type_key.upper()
                 level_order[type_key] = level_num
                 level_names[type_key] = display
 
@@ -216,10 +199,12 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
 
     Checks deepest paths first so ``spec/regulations/fda`` matches before ``spec``.
     """
-    source = getattr(node, "source", None)
-    if not source or not source.path:
+    # Implements: REQ-d00129-D
+    fn = node.file_node() if hasattr(node, "file_node") else None
+    rp = fn.get_field("relative_path") if fn else None
+    if not rp:
         return None
-    source_path = Path(source.path).resolve()
+    source_path = Path(rp).resolve()
     # Sort deepest-first so nested dirs match before their parents
     for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
         resolved = spec_dir.resolve()
@@ -231,7 +216,9 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     return None
 
 
-def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+def _regenerate_index(
+    graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace
+) -> int:
     """Regenerate INDEX.md from graph requirements."""
     # Use git root (threaded from CLI) for relative paths
     repo_root = getattr(args, "git_root", None)
@@ -332,7 +319,9 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
             headers = ["ID", "Title", "File", "Hash"]
             rows = []
             for node in sorted(nodes, key=lambda n: n.id):
-                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                filename = Path(_rp).name if _rp else ""
                 hash_val = node.hash or ""
                 rows.append([node.id, node.get_label(), filename, hash_val])
             lines.extend(_format_table(headers, rows))
@@ -356,7 +345,9 @@ def _regenerate_index(graph: TraceGraph, spec_dirs: list[Path], args: argparse.N
             rows = []
             for node in sorted(jnys, key=lambda n: n.id):
                 actor = node.get_field("actor") or ""
-                filename = Path(node.source.path).name if node.source and node.source.path else ""
+                _fn = node.file_node()
+                _rp = _fn.get_field("relative_path") if _fn else None
+                filename = Path(_rp).name if _rp else ""
                 rows.append([node.id, node.get_label(), actor, filename])
             lines.extend(_format_table(headers, rows))
             lines.append("")

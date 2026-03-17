@@ -87,7 +87,7 @@ class TestPassingDetailFlagsCLI:
         parser = create_parser()
         args = parser.parse_args(["health"])
         # Default behavior: skip passing details
-        assert getattr(args, "include_passing_details", False) is False
+        assert args.include_passing_details is False
 
 
 class TestTextFormatPassingDetails:

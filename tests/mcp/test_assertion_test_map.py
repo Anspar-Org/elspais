@@ -17,7 +17,6 @@ import pytest
 
 from elspais.graph import EdgeKind, GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import SourceLocation
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -57,7 +56,7 @@ def assertion_map_graph():
         label="SHALL encrypt all data at rest",
     )
     assertion_a._content = {"label": "A", "text": "SHALL encrypt all data at rest"}
-    req_node.add_child(assertion_a)
+    req_node.link(assertion_a, EdgeKind.STRUCTURES)
 
     assertion_b = GraphNode(
         id="REQ-p00001-B",
@@ -65,7 +64,7 @@ def assertion_map_graph():
         label="SHALL use TLS 1.3 for transit",
     )
     assertion_b._content = {"label": "B", "text": "SHALL use TLS 1.3 for transit"}
-    req_node.add_child(assertion_b)
+    req_node.link(assertion_b, EdgeKind.STRUCTURES)
 
     assertion_c = GraphNode(
         id="REQ-p00001-C",
@@ -73,16 +72,23 @@ def assertion_map_graph():
         label="SHALL validate input parameters",
     )
     assertion_c._content = {"label": "C", "text": "SHALL validate input parameters"}
-    req_node.add_child(assertion_c)
+    req_node.link(assertion_c, EdgeKind.STRUCTURES)
 
     # -- Pattern 2: ASSERTION->TEST edge (assertion_a -> test_node) --
+    from tests.core.graph_test_helpers import wire_file_parent
+
     test_node = GraphNode(
         id="test:test_encryption.py::test_data_encrypted",
         kind=NodeKind.TEST,
         label="test_data_encrypted",
-        source=SourceLocation(path="tests/test_encryption.py", line=10),
     )
-    test_node._content = {"file": "tests/test_encryption.py", "name": "test_data_encrypted"}
+    test_node._content = {
+        "file": "tests/test_encryption.py",
+        "name": "test_data_encrypted",
+        "parse_line": 10,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node, "tests/test_encryption.py", line=10, graph=graph)
     assertion_a.link(test_node, EdgeKind.VALIDATES)
 
     result_node = GraphNode(
@@ -91,16 +97,21 @@ def assertion_map_graph():
         label="passed",
     )
     result_node._content = {"status": "passed", "duration": 0.5}
-    test_node.add_child(result_node)
+    test_node.link(result_node, EdgeKind.YIELDS)
 
     # -- Pattern 1: REQ->TEST edge with assertion_targets=["B"] --
     test_node2 = GraphNode(
         id="test:test_tls.py::test_tls_version",
         kind=NodeKind.TEST,
         label="test_tls_version",
-        source=SourceLocation(path="tests/test_tls.py", line=25),
     )
-    test_node2._content = {"file": "tests/test_tls.py", "name": "test_tls_version"}
+    test_node2._content = {
+        "file": "tests/test_tls.py",
+        "name": "test_tls_version",
+        "parse_line": 25,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node2, "tests/test_tls.py", line=25, graph=graph)
     req_node.link(test_node2, EdgeKind.VALIDATES, assertion_targets=["B"])
 
     result_node2 = GraphNode(
@@ -109,16 +120,21 @@ def assertion_map_graph():
         label="failed",
     )
     result_node2._content = {"status": "failed", "duration": 1.2}
-    test_node2.add_child(result_node2)
+    test_node2.link(result_node2, EdgeKind.YIELDS)
 
     # -- Indirect: REQ->TEST edge WITHOUT assertion_targets (covers all) --
     test_node3 = GraphNode(
         id="test:test_security.py::test_full_security_suite",
         kind=NodeKind.TEST,
         label="test_full_security_suite",
-        source=SourceLocation(path="tests/test_security.py", line=42),
     )
-    test_node3._content = {"file": "tests/test_security.py", "name": "test_full_security_suite"}
+    test_node3._content = {
+        "file": "tests/test_security.py",
+        "name": "test_full_security_suite",
+        "parse_line": 42,
+        "parse_end_line": None,
+    }
+    wire_file_parent(test_node3, "tests/test_security.py", line=42, graph=graph)
     req_node.link(test_node3, EdgeKind.VALIDATES)
 
     result_node3 = GraphNode(
@@ -127,7 +143,7 @@ def assertion_map_graph():
         label="passed",
     )
     result_node3._content = {"status": "passed", "duration": 3.1}
-    test_node3.add_child(result_node3)
+    test_node3.link(result_node3, EdgeKind.YIELDS)
 
     # -- REQ-p00002: one assertion, no tests --
     req_node2 = GraphNode(
@@ -147,7 +163,7 @@ def assertion_map_graph():
         label="SHALL respond within 100ms",
     )
     assertion_d._content = {"label": "A", "text": "SHALL respond within 100ms"}
-    req_node2.add_child(assertion_d)
+    req_node2.link(assertion_d, EdgeKind.STRUCTURES)
 
     # Register all nodes in the graph index
     graph._index = {

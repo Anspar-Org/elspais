@@ -9,14 +9,19 @@ from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import build_resolver
 
 
-def create_parser_registry(pattern_config: PatternConfig) -> ParserRegistry:
+def _make_resolver(config):
+    """Build IdResolver from loaded config."""
+    return build_resolver(config.get_raw())
+
+
+def create_parser_registry(resolver) -> ParserRegistry:
     """Create a parser registry with all standard parsers."""
     registry = ParserRegistry()
     registry.register(CommentsParser())
-    registry.register(RequirementParser(pattern_config))
+    registry.register(RequirementParser(resolver))
     registry.register(RemainderParser())
     return registry
 
@@ -31,10 +36,10 @@ class TestFullPipeline:
         config = load_config(config_path)
 
         # Create pattern config
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
+        resolver = _make_resolver(config)
 
         # Create parser registry
-        registry = create_parser_registry(pattern_config)
+        registry = create_parser_registry(resolver)
 
         # Create deserializer for spec directory
         spec_dir = integration_spec_dir / "spec"
@@ -59,8 +64,8 @@ class TestFullPipeline:
         """Verify assertions are created as child nodes."""
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
-        registry = create_parser_registry(pattern_config)
+        resolver = _make_resolver(config)
+        registry = create_parser_registry(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
@@ -86,8 +91,8 @@ class TestFullPipeline:
         """Verify implements relationships are properly linked."""
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
-        registry = create_parser_registry(pattern_config)
+        resolver = _make_resolver(config)
+        registry = create_parser_registry(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
@@ -118,8 +123,8 @@ class TestFullPipeline:
         """Verify root nodes are correctly identified."""
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
-        registry = create_parser_registry(pattern_config)
+        resolver = _make_resolver(config)
+        registry = create_parser_registry(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
@@ -143,8 +148,8 @@ class TestFullPipeline:
         """Verify expected node counts by type."""
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
-        registry = create_parser_registry(pattern_config)
+        resolver = _make_resolver(config)
+        registry = create_parser_registry(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
@@ -190,10 +195,10 @@ class TestMultiAssertionPipelineExpansion:
         """
         config_path = find_config_file(root_dir)
         config = load_config(config_path)
-        pattern_config = PatternConfig.from_dict(config.get_raw()["patterns"])
+        resolver = _make_resolver(config)
 
         # Registry for spec files
-        spec_registry = create_parser_registry(pattern_config)
+        spec_registry = create_parser_registry(resolver)
 
         # Parse spec files
         spec_dir = root_dir / "spec"
@@ -209,7 +214,7 @@ class TestMultiAssertionPipelineExpansion:
         # Optionally parse code files
         if include_code:
             code_registry = ParserRegistry()
-            code_registry.register(CodeParser(pattern_config))
+            code_registry.register(CodeParser(resolver))
             code_dir = root_dir / "src"
             code_deserializer = DomainFile(code_dir, patterns=["*.py"], recursive=True)
             for content in code_deserializer.deserialize(code_registry):

@@ -119,12 +119,13 @@ class TestValidateExport:
         assert isinstance(data, dict)
         assert "REQ-p00001" in data
 
-        # Should have expected fields
+        # Should have expected fields with correct values
         req = data["REQ-p00001"]
-        assert "title" in req
-        assert "level" in req
-        assert "status" in req
+        assert req["title"] == "Test Requirement"
+        assert req["level"] == "prd"
+        assert req["status"] == "Active"
         assert "assertions" in req
+        assert len(req["assertions"]) == 2
 
     def test_REQ_d00083_B_export_includes_hash_and_file(self, spec_repo, capsys):
         """REQ-d00083-B: --export includes hash and file path."""

@@ -12,7 +12,7 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
-from elspais.utilities.patterns import PatternConfig
+from elspais.utilities.patterns import build_resolver
 
 # Get repo root (3 levels up from this test file)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
@@ -21,36 +21,21 @@ CONFIG_FILE = REPO_ROOT / ".elspais.toml"
 
 
 @pytest.fixture
-def pattern_config():
-    """Load pattern config from the real .elspais.toml."""
+def real_resolver():
+    """Load IdResolver from the real .elspais.toml."""
     if not CONFIG_FILE.exists():
         pytest.skip("No .elspais.toml found in repo root")
 
     config = load_config(CONFIG_FILE)
-    patterns_data = config.get_raw().get("patterns", {})
-
-    # Filter out broken inline table entries (parsed as strings by simple parser)
-    # and keep only valid dict entries
-    types_data = patterns_data.get("types", {})
-    adapted_types = {}
-    for key, value in types_data.items():
-        if isinstance(value, dict):
-            # Add 'name' field if not present
-            if "name" not in value:
-                value = dict(value)  # Make a copy
-                value["name"] = key.upper()
-            adapted_types[key] = value
-    patterns_data["types"] = adapted_types
-
-    return PatternConfig.from_dict(patterns_data)
+    return build_resolver(config.get_raw())
 
 
 @pytest.fixture
-def parser_registry(pattern_config):
+def parser_registry(real_resolver):
     """Create parser registry with all standard parsers."""
     registry = ParserRegistry()
     registry.register(CommentsParser())
-    registry.register(RequirementParser(pattern_config))
+    registry.register(RequirementParser(real_resolver))
     registry.register(RemainderParser())
     return registry
 

@@ -1,7 +1,7 @@
 """Tests for test_code_linker module."""
 
 from elspais.graph.builder import TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind, SourceLocation
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from elspais.graph.test_code_linker import (
     _build_code_index,
@@ -9,6 +9,7 @@ from elspais.graph.test_code_linker import (
     _extract_candidate_functions,
     link_tests_to_code,
 )
+from tests.core.graph_test_helpers import wire_file_parent
 
 
 class TestCamelToSnake:
@@ -109,9 +110,9 @@ class TestBuildCodeIndex:
         node = GraphNode(
             id="code:src/auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=10),
         )
         node.set_field("function_name", "authenticate")
+        wire_file_parent(node, "src/auth.py", line=10, graph=graph)
         graph._index["code:src/auth.py:10"] = node
 
         index = _build_code_index(graph)
@@ -123,7 +124,6 @@ class TestBuildCodeIndex:
         node = GraphNode(
             id="code:src/auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=10),
         )
         # No function_name set
         graph._index["code:src/auth.py:10"] = node
@@ -149,17 +149,17 @@ class TestBuildCodeIndex:
         node1 = GraphNode(
             id="code:src/auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=10),
         )
         node1.set_field("function_name", "authenticate")
+        wire_file_parent(node1, "src/auth.py", line=10, graph=graph)
         graph._index[node1.id] = node1
 
         node2 = GraphNode(
             id="code:src/auth.py:20",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=20),
         )
         node2.set_field("function_name", "authenticate")
+        wire_file_parent(node2, "src/auth.py", line=20, graph=graph)
         graph._index[node2.id] = node2
 
         index = _build_code_index(graph)
@@ -170,7 +170,6 @@ class TestBuildCodeIndex:
         test_node = GraphNode(
             id="test:tests/test_auth.py::test_foo",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=1),
         )
         test_node.set_field("function_name", "test_foo")
         graph._index[test_node.id] = test_node
@@ -184,9 +183,9 @@ class TestBuildCodeIndex:
         node = GraphNode(
             id="code:./src\\auth.py:10",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="./src\\auth.py", line=10),
         )
         node.set_field("function_name", "authenticate")
+        wire_file_parent(node, "./src\\auth.py", line=10, graph=graph)
         graph._index[node.id] = node
 
         index = _build_code_index(graph)
@@ -214,17 +213,17 @@ class TestLinkTestsToCode:
         code_node = GraphNode(
             id="code:src/elspais/auth.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/elspais/auth.py", line=1),
         )
         code_node.set_field("function_name", "authenticate")
+        wire_file_parent(code_node, "src/elspais/auth.py", line=1, graph=graph)
         graph._index[code_node.id] = code_node
 
         test_node = GraphNode(
             id="test:tests/test_auth.py::test_authenticate",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=3),
         )
         test_node.set_field("function_name", "test_authenticate")
+        wire_file_parent(test_node, "tests/test_auth.py", line=3, graph=graph)
         graph._index[test_node.id] = test_node
 
         result = link_tests_to_code(graph, tmp_path)
@@ -254,17 +253,17 @@ class TestLinkTestsToCode:
         code_node = GraphNode(
             id="code:src/elspais/auth.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/elspais/auth.py", line=1),
         )
         code_node.set_field("function_name", "authenticate")
+        wire_file_parent(code_node, "src/elspais/auth.py", line=1, graph=graph)
         graph._index[code_node.id] = code_node
 
         test_node = GraphNode(
             id="test:tests/test_auth.py::test_authenticate",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=3),
         )
         test_node.set_field("function_name", "test_authenticate")
+        wire_file_parent(test_node, "tests/test_auth.py", line=3, graph=graph)
         graph._index[test_node.id] = test_node
 
         # Pre-link: CODE already has TEST as child
@@ -278,7 +277,6 @@ class TestLinkTestsToCode:
         test_node = GraphNode(
             id="test:tests/test_something.py::test_func",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_something.py", line=1),
         )
         test_node.set_field("function_name", "test_func")
         graph._index[test_node.id] = test_node
@@ -305,18 +303,18 @@ class TestLinkTestsToCode:
         code_node = GraphNode(
             id="code:src/elspais/annotators.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/elspais/annotators.py", line=1),
         )
         code_node.set_field("function_name", "annotate_coverage")
+        wire_file_parent(code_node, "src/elspais/annotators.py", line=1, graph=graph)
         graph._index[code_node.id] = code_node
 
         test_node = GraphNode(
             id="test:tests/test_annotators.py::TestAnnotateCoverage::test_basic",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_annotators.py", line=4),
         )
         test_node.set_field("function_name", "test_basic")
         test_node.set_field("class_name", "TestAnnotateCoverage")
+        wire_file_parent(test_node, "tests/test_annotators.py", line=4, graph=graph)
         graph._index[test_node.id] = test_node
 
         result = link_tests_to_code(graph, tmp_path)
@@ -336,17 +334,17 @@ class TestLinkTestsToCode:
         code_node = GraphNode(
             id="code:src/auth.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=1),
         )
         code_node.set_field("function_name", "authenticate")
+        wire_file_parent(code_node, "src/auth.py", line=1, graph=graph)
         graph._index[code_node.id] = code_node
 
         test_node = GraphNode(
             id="test:tests/test_missing.py::test_authenticate",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_missing.py", line=3),
         )
         test_node.set_field("function_name", "test_authenticate")
+        wire_file_parent(test_node, "tests/test_missing.py", line=3, graph=graph)
         graph._index[test_node.id] = test_node
 
         result = link_tests_to_code(graph, tmp_path)
@@ -358,7 +356,6 @@ class TestLinkTestsToCode:
         code_node = GraphNode(
             id="code:src/auth.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/auth.py", line=1),
         )
         code_node.set_field("function_name", "authenticate")
         graph._index[code_node.id] = code_node
@@ -394,33 +391,33 @@ class TestLinkTestsToCode:
         code_login = GraphNode(
             id="code:src/elspais/auth.py:1",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/elspais/auth.py", line=1),
         )
         code_login.set_field("function_name", "login")
+        wire_file_parent(code_login, "src/elspais/auth.py", line=1, graph=graph)
         graph._index[code_login.id] = code_login
 
         code_logout = GraphNode(
             id="code:src/elspais/auth.py:4",
             kind=NodeKind.CODE,
-            source=SourceLocation(path="src/elspais/auth.py", line=4),
         )
         code_logout.set_field("function_name", "logout")
+        wire_file_parent(code_logout, "src/elspais/auth.py", line=4, graph=graph)
         graph._index[code_logout.id] = code_logout
 
         test_login = GraphNode(
             id="test:tests/test_auth.py::test_login",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=3),
         )
         test_login.set_field("function_name", "test_login")
+        wire_file_parent(test_login, "tests/test_auth.py", line=3, graph=graph)
         graph._index[test_login.id] = test_login
 
         test_logout = GraphNode(
             id="test:tests/test_auth.py::test_logout",
             kind=NodeKind.TEST,
-            source=SourceLocation(path="tests/test_auth.py", line=5),
         )
         test_logout.set_field("function_name", "test_logout")
+        wire_file_parent(test_logout, "tests/test_auth.py", line=5, graph=graph)
         graph._index[test_logout.id] = test_logout
 
         result = link_tests_to_code(graph, tmp_path)

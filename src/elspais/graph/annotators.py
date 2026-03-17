@@ -23,13 +23,20 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+# Implements: REQ-p00016
+_NA_PATTERN = re.compile(
+    r"([\w-]+-[A-Z0-9]+)\s+SHALL\s+be\s+NOT\s+APPLICABLE",
+    re.IGNORECASE,
+)
+
 if TYPE_CHECKING:
     from elspais.graph import NodeKind
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.git import GitChangeInfo
 
@@ -57,8 +64,10 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Get file path relative to repo
-    file_path = node.source.path if node.source else ""
+    # Implements: REQ-d00129-D
+    # Get file path relative to repo via FILE parent node
+    fn = node.file_node()
+    file_path = fn.get_field("relative_path") if fn else ""
 
     # Default all git states to False
     is_uncommitted = False
@@ -76,21 +85,10 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
         # Check if file changed vs main branch
         is_branch_changed = file_path in git_info.branch_changed_files
 
-        # Check if requirement was moved
-        # Extract short ID from node ID (e.g., 'p00001' from 'REQ-p00001')
-        req_id = node.id
-        if "-" in req_id:
-            short_id = req_id.rsplit("-", 1)[-1]
-            # Handle assertion IDs like REQ-p00001-A
-            if len(short_id) == 1 and short_id.isalpha():
-                # This is an assertion, get the parent ID
-                parts = req_id.split("-")
-                if len(parts) >= 2:
-                    short_id = parts[-2]
-        else:
-            short_id = req_id
-
-        committed_path = git_info.committed_req_locations.get(short_id)
+        # Check if requirement was moved by comparing its current file path
+        # against the committed location. Uses the full canonical node ID as key,
+        # matching the format produced by _extract_req_locations_from_graph().
+        committed_path = git_info.committed_req_locations.get(node.id)
         if committed_path and committed_path != file_path:
             is_moved = True
 
@@ -129,8 +127,10 @@ def annotate_display_info(node: GraphNode) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Get file path relative to repo
-    file_path = node.source.path if node.source else ""
+    # Implements: REQ-d00129-D
+    # Get file path relative to repo via FILE parent node
+    fn = node.file_node()
+    file_path = fn.get_field("relative_path") if fn else ""
 
     # Roadmap detection from path
     is_roadmap = "roadmap" in file_path.lower()
@@ -162,7 +162,7 @@ def annotate_display_info(node: GraphNode) -> None:
         node.set_metric("external_spec_path", str(external_spec_path))
 
 
-def annotate_graph_git_state(graph: TraceGraph) -> None:
+def annotate_graph_git_state(graph: FederatedGraph) -> None:
     """Annotate all requirement nodes in the graph with git state information.
 
     This is the single entry point for applying git annotations to a graph.
@@ -221,27 +221,36 @@ def annotate_implementation_files(
 
 
 def count_by_level(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, int]]:
-    """Count requirements by level, with and without deprecated.
+    """Count requirements by level, with and without excluded statuses.
 
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
+                config["patterns"]["types"] and status roles from
+                config["rules"]["format"]["status_roles"].
 
     Returns:
-        Dict with 'active' (excludes Deprecated) and 'all' (includes Deprecated) counts
-        by level.
+        Dict with 'active' (excludes analysis-excluded statuses) and 'all'
+        (includes all) counts by level.
     """
+    from elspais.config.status_roles import StatusRolesConfig
     from elspais.graph import NodeKind
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
+        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        roles = (
+            StatusRolesConfig.from_dict(status_roles_data)
+            if status_roles_data
+            else StatusRolesConfig.default()
+        )
     else:
         level_keys = ["PRD", "OPS", "DEV"]
+        roles = StatusRolesConfig.default()
 
     counts: dict[str, dict[str, int]] = {
         "active": dict.fromkeys(level_keys, 0),
@@ -252,13 +261,13 @@ def count_by_level(
         status = node.get_field("status", "Active")
         if level:
             counts["all"][level] = counts["all"].get(level, 0) + 1
-            if status != "Deprecated":
+            if not roles.is_excluded_from_analysis(status):
                 counts["active"][level] = counts["active"].get(level, 0) + 1
     return counts
 
 
 def group_by_level(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: dict[str, Any] | None = None,
 ) -> dict[str, list[GraphNode]]:
     """Group requirements by level.
@@ -275,7 +284,7 @@ def group_by_level(
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("patterns", {}).get("types", {}).keys())
+        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
     else:
         level_keys = ["PRD", "OPS", "DEV"]
 
@@ -291,17 +300,33 @@ def group_by_level(
     return groups
 
 
-def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
+def count_by_repo(
+    graph: FederatedGraph,
+    config: dict[str, Any] | None = None,
+) -> dict[str, dict[str, int]]:
     """Count requirements by repo prefix (CORE, CAL, TTN, etc.).
 
     Args:
         graph: The TraceGraph to aggregate.
+        config: Optional config dict. If provided, derives status roles from
+                config["rules"]["format"]["status_roles"].
 
     Returns:
         Dict mapping repo prefix to {'active': count, 'all': count}.
         CORE is used for core repo requirements (no prefix).
     """
+    from elspais.config.status_roles import StatusRolesConfig
     from elspais.graph import NodeKind
+
+    if config is not None:
+        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        roles = (
+            StatusRolesConfig.from_dict(status_roles_data)
+            if status_roles_data
+            else StatusRolesConfig.default()
+        )
+    else:
+        roles = StatusRolesConfig.default()
 
     repo_counts: dict[str, dict[str, int]] = {}
 
@@ -314,13 +339,13 @@ def count_by_repo(graph: TraceGraph) -> dict[str, dict[str, int]]:
             repo_counts[prefix] = {"active": 0, "all": 0}
 
         repo_counts[prefix]["all"] += 1
-        if status != "Deprecated":
+        if not roles.is_excluded_from_analysis(status):
             repo_counts[prefix]["active"] += 1
 
     return repo_counts
 
 
-def count_implementation_files(graph: TraceGraph) -> int:
+def count_implementation_files(graph: FederatedGraph) -> int:
     """Count total implementation files across all requirements.
 
     Args:
@@ -338,7 +363,7 @@ def count_implementation_files(graph: TraceGraph) -> int:
     return total
 
 
-def collect_topics(graph: TraceGraph) -> list[str]:
+def collect_topics(graph: FederatedGraph) -> list[str]:
     """Collect unique topics from requirement file names.
 
     Args:
@@ -350,9 +375,12 @@ def collect_topics(graph: TraceGraph) -> list[str]:
     from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
+    # Implements: REQ-d00129-D
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.source and node.source.path:
-            stem = Path(node.source.path).stem
+        fn = node.file_node()
+        rel_path = fn.get_field("relative_path") if fn else None
+        if rel_path:
+            stem = Path(rel_path).stem
             topic = stem.split("-", 1)[1] if "-" in stem else stem
             all_topics.add(topic)
     return sorted(all_topics)
@@ -379,7 +407,7 @@ def get_implementation_status(node: GraphNode) -> str:
 
 
 def count_by_coverage(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     exclude_status: set[str] | None = None,
 ) -> dict[str, int]:
     """Count requirements by coverage level.
@@ -419,7 +447,7 @@ def count_by_coverage(
 
 
 def count_with_code_refs(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     exclude_status: set[str] | None = None,
 ) -> dict[str, int]:
     """Count requirements that have at least one CODE reference.
@@ -473,7 +501,7 @@ def count_with_code_refs(
     }
 
 
-def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
+def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     """Count requirements by git change status.
 
     Args:
@@ -499,7 +527,7 @@ def count_by_git_status(graph: TraceGraph) -> dict[str, int]:
     return counts
 
 
-def annotate_coverage(graph: TraceGraph) -> None:
+def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
@@ -912,7 +940,7 @@ def extract_keywords(
 
 
 def annotate_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     config: KeywordsConfig | None = None,
 ) -> None:
     """Extract and store keywords for all nodes with text content.
@@ -969,7 +997,7 @@ def annotate_keywords(
 
 
 def find_by_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     keywords: list[str],
     match_all: bool = True,
     kind: NodeKind | None = None,
@@ -1013,7 +1041,7 @@ def find_by_keywords(
 
 
 def collect_all_keywords(
-    graph: TraceGraph,
+    graph: FederatedGraph,
     kind: NodeKind | None = None,
 ) -> list[str]:
     """Collect all unique keywords from annotated nodes.

@@ -23,7 +23,7 @@ from elspais.utilities.reference_config import (
 )
 
 if TYPE_CHECKING:
-    from elspais.utilities.patterns import PatternConfig
+    from elspais.utilities.patterns import IdResolver
 
 # Language-aware function/class patterns for context tracking
 # Python: def name(
@@ -96,59 +96,62 @@ class CodeParser:
 
     def __init__(
         self,
-        pattern_config: PatternConfig | None = None,
+        resolver: IdResolver | None = None,
         reference_resolver: ReferenceResolver | None = None,
     ) -> None:
         """Initialize CodeParser with optional configuration.
 
         Args:
-            pattern_config: Configuration for ID structure. If None, uses defaults.
+            resolver: IdResolver for ID structure. If None, uses defaults.
             reference_resolver: Resolver for file-specific reference config. If None,
                                uses default ReferenceConfig.
         """
-        self._pattern_config = pattern_config
+        self._resolver = resolver
         self._reference_resolver = reference_resolver
 
-    def _get_pattern_config(self, context: ParseContext) -> PatternConfig:
-        """Get pattern config from context or instance.
+    def _get_resolver(self, context: ParseContext) -> IdResolver:
+        """Get IdResolver from context or instance.
 
         Args:
-            context: Parse context that may contain pattern config.
+            context: Parse context that may contain resolver.
 
         Returns:
-            PatternConfig to use for parsing.
+            IdResolver to use for parsing.
         """
         # Try instance config first
-        if self._pattern_config is not None:
-            return self._pattern_config
+        if self._resolver is not None:
+            return self._resolver
 
         # Try context config
-        if "pattern_config" in context.config:
-            return context.config["pattern_config"]
+        if "resolver" in context.config:
+            return context.config["resolver"]
 
         # Fall back to creating a default
-        from elspais.utilities.patterns import PatternConfig
+        from elspais.utilities.patterns import build_resolver
 
-        return PatternConfig.from_dict(
+        return build_resolver(
             {
-                "prefix": "REQ",
-                "types": {
-                    "prd": {"id": "p", "name": "PRD"},
-                    "ops": {"id": "o", "name": "OPS"},
-                    "dev": {"id": "d", "name": "DEV"},
+                "project": {"namespace": "REQ"},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type.letter}{component}",
+                    "types": {
+                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+                        "ops": {"level": 2, "aliases": {"letter": "o"}},
+                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+                    },
+                    "component": {"style": "numeric", "digits": 5},
                 },
-                "id_format": {"style": "numeric", "digits": 5},
             }
         )
 
     def _get_reference_config(
-        self, context: ParseContext, pattern_config: PatternConfig
+        self,
+        context: ParseContext,
     ) -> ReferenceConfig:
         """Get reference config for the current file.
 
         Args:
             context: Parse context with file path.
-            pattern_config: Pattern config (unused but available for consistency).
 
         Returns:
             ReferenceConfig for this file.
@@ -367,18 +370,18 @@ class CodeParser:
             ParsedContent for each code reference.
         """
         # Get configs for this file
-        pattern_config = self._get_pattern_config(context)
-        ref_config = self._get_reference_config(context, pattern_config)
+        resolver = self._get_resolver(context)
+        ref_config = self._get_reference_config(context)
 
         # Build function/class context map (pre-scan)
         language = self._detect_language(context.file_path)
         line_context = self._build_line_context(lines, language)
 
         # Build patterns dynamically based on config
-        implements_pattern = build_comment_pattern(pattern_config, ref_config, "implements")
-        validates_pattern = build_comment_pattern(pattern_config, ref_config, "validates")
+        implements_pattern = build_comment_pattern(resolver, ref_config, "implements")
+        validates_pattern = build_comment_pattern(resolver, ref_config, "validates")
         block_header_pattern = build_block_header_pattern(ref_config, "implements")
-        block_ref_pattern = build_block_ref_pattern(pattern_config, ref_config)
+        block_ref_pattern = build_block_ref_pattern(resolver, ref_config)
 
         i = 0
         while i < len(lines):

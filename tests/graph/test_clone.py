@@ -5,6 +5,7 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def simple_graph():
     )
     assertion._content = {"label": "A"}
     graph._index["REQ-p00001-A"] = assertion
-    req_node.add_child(assertion)
+    req_node.link(assertion, EdgeKind.STRUCTURES)
 
     return graph
 

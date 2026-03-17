@@ -6,6 +6,7 @@ from __future__ import annotations
 from elspais.graph import BrokenReference
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.parsers import ParsedContent
+from tests.fixtures import fake_reqs
 
 
 def make_req(
@@ -70,7 +71,9 @@ class TestOrphanDetection:
         builder = GraphBuilder()
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(
-            make_req("REQ-o00001", "Broken child", "OPS", implements=["REQ-NONEXISTENT"])
+            make_req(
+                "REQ-o00001", "Broken child", "OPS", implements=[fake_reqs.FAKE_NONEXISTENT_REQ]
+            )
         )
 
         graph = builder.build()
@@ -102,7 +105,7 @@ class TestBrokenReferenceDetection:
         """Broken implements reference is detected."""
         builder = GraphBuilder()
         builder.add_parsed_content(
-            make_req("REQ-o00001", "Broken", "OPS", implements=["REQ-NONEXISTENT"])
+            make_req("REQ-o00001", "Broken", "OPS", implements=[fake_reqs.FAKE_NONEXISTENT_REQ])
         )
 
         graph = builder.build()
@@ -111,14 +114,16 @@ class TestBrokenReferenceDetection:
         broken = graph.broken_references()
         assert len(broken) == 1
         assert broken[0].source_id == "REQ-o00001"
-        assert broken[0].target_id == "REQ-NONEXISTENT"
+        assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "implements"
 
     def test_broken_ref_refines(self):
         """Broken refines reference is detected."""
         builder = GraphBuilder()
         builder.add_parsed_content(
-            make_req("REQ-o00001", "Broken refines", "OPS", refines=["REQ-NONEXISTENT"])
+            make_req(
+                "REQ-o00001", "Broken refines", "OPS", refines=[fake_reqs.FAKE_NONEXISTENT_REQ]
+            )
         )
 
         graph = builder.build()
@@ -172,10 +177,10 @@ class TestCodeAndTestOrphans:
 
         code_content = ParsedContent(
             content_type="code_ref",
-            parsed_data={"implements": ["REQ-NONEXISTENT"]},
+            parsed_data={"implements": [fake_reqs.FAKE_NONEXISTENT_REQ]},
             start_line=42,
             end_line=42,
-            raw_text="# Implements: REQ-NONEXISTENT",
+            raw_text=fake_reqs.CODE_RAW_TEXT_NONEXISTENT,
         )
         code_content.source_context = SourceCtx()
         builder.add_parsed_content(code_content)
@@ -185,7 +190,7 @@ class TestCodeAndTestOrphans:
         assert graph.has_broken_references()
         broken = graph.broken_references()
         assert len(broken) == 1
-        assert broken[0].target_id == "REQ-NONEXISTENT"
+        assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "implements"
 
     def test_test_ref_to_nonexistent_req(self):
@@ -197,10 +202,10 @@ class TestCodeAndTestOrphans:
 
         test_content = ParsedContent(
             content_type="test_ref",
-            parsed_data={"validates": ["REQ-NONEXISTENT"]},
+            parsed_data={"validates": [fake_reqs.FAKE_NONEXISTENT_REQ]},
             start_line=100,
             end_line=100,
-            raw_text="# Validates: REQ-NONEXISTENT",
+            raw_text=fake_reqs.TEST_RAW_TEXT_NONEXISTENT,
         )
         test_content.source_context = SourceCtx()
         builder.add_parsed_content(test_content)
@@ -210,7 +215,7 @@ class TestCodeAndTestOrphans:
         assert graph.has_broken_references()
         broken = graph.broken_references()
         assert len(broken) == 1
-        assert broken[0].target_id == "REQ-NONEXISTENT"
+        assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "validates"
 
 
@@ -225,7 +230,9 @@ class TestIntegration:
             make_req("REQ-o00001", "Valid Child", "OPS", implements=["REQ-p00001"])
         )
         builder.add_parsed_content(
-            make_req("REQ-o00002", "Broken Child", "OPS", implements=["REQ-NONEXISTENT"])
+            make_req(
+                "REQ-o00002", "Broken Child", "OPS", implements=[fake_reqs.FAKE_NONEXISTENT_REQ]
+            )
         )
 
         graph = builder.build()

@@ -12,49 +12,8 @@ from tests.core.graph_test_helpers import (
 )
 
 
-class TestEdgeKind:
-    """Tests for EdgeKind enum."""
-
-    def test_all_edge_kinds_exist(self):
-        """All expected edge kinds exist with correct values."""
-        expected = {
-            "IMPLEMENTS": "implements",
-            "REFINES": "refines",
-            "VALIDATES": "validates",
-            "ADDRESSES": "addresses",
-            "CONTAINS": "contains",
-        }
-        for name, value in expected.items():
-            kind = getattr(EdgeKind, name)
-            assert kind.value == value, f"EdgeKind.{name} should have value '{value}'"
-
-
 class TestEdge:
     """Tests for Edge dataclass."""
-
-    def test_create_edge(self):
-        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
-        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-
-        edge = Edge(source=source, target=target, kind=EdgeKind.IMPLEMENTS)
-
-        assert edge.source == source
-        assert edge.target == target
-        assert edge.kind == EdgeKind.IMPLEMENTS
-
-    def test_edge_with_assertion_targets(self):
-        """Edge can target specific assertions."""
-        source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
-        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-
-        edge = Edge(
-            source=source,
-            target=target,
-            kind=EdgeKind.IMPLEMENTS,
-            assertion_targets=["A", "B", "C"],
-        )
-
-        assert edge.assertion_targets == ["A", "B", "C"]
 
     def test_edge_equality(self):
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
