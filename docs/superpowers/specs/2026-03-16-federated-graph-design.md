@@ -105,18 +105,12 @@ Aggregate methods skip repos with `graph: None` (error-state repos).
 
 ## Unified Mutation Log
 
-All mutations flow through `FederatedGraph` into a single `MutationLog`. Each `MutationEntry` is tagged with the repo it affected:
+Mutations are recorded at both levels:
 
-```python
-@dataclass
-class MutationEntry:
-    # ... existing fields ...
-    repo: str | None = None
-```
+- **Sub-graph level**: records the full `MutationEntry` with operation details, before/after state — the existing mechanism, unchanged.
+- **Federated level**: records a lightweight entry pointing to the repo name and the sub-graph's mutation ID, providing unified ordering across repos.
 
-Sub-graphs do not maintain independent mutation logs under federation. `FederatedGraph` owns the only log. When delegating a mutation, `FederatedGraph` calls the sub-graph's mutation method, then moves the resulting entry from the sub-graph's log to the federated log (tagged with `repo=name`), keeping the sub-graph's log empty.
-
-`undo_last()` reads the federated log, identifies the repo, and replays the undo operation directly on the sub-graph's state (not via the sub-graph's own undo method, since its log is empty).
+`undo_last()` reads the federated log, identifies which repo was affected, and calls that sub-graph's `undo_last()`. The sub-graph handles all state restoration using its own log.
 
 ## Render and Persistence
 
