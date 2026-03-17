@@ -146,11 +146,21 @@ class FederatedGraph:
         self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
         self._root_repo = root_repo or (repos[0].name if repos else "")
         # Build ownership map: node_id -> repo name
+        # Detect ID conflicts across repos
         self._ownership: dict[str, str] = {}
         for entry in repos:
             if entry.graph is not None:
                 for node_id in entry.graph._index:
+                    if node_id in self._ownership:
+                        existing_repo = self._ownership[node_id]
+                        raise FederationError(
+                            f"ID conflict: '{node_id}' exists in both "
+                            f"'{existing_repo}' and '{entry.name}'"
+                        )
                     self._ownership[node_id] = entry.name
+        # Wire cross-graph edges after ownership is established
+        if len([e for e in repos if e.graph is not None]) > 1:
+            self._wire_cross_graph_edges()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
@@ -762,6 +772,38 @@ class FederatedGraph:
         # Strategy: special — deep copy all sub-graphs independently
         """
         return copy.deepcopy(self)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Cross-Graph Edge Wiring
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _wire_cross_graph_edges(self) -> None:
+        """Wire cross-graph edges by resolving broken references across repos.
+
+        For each sub-graph's broken references, check if the target_id exists
+        in another sub-graph. If found, create the edge using target_graph
+        parameter and remove the broken reference.
+        """
+        for source_entry in self._repos.values():
+            if source_entry.graph is None:
+                continue
+            resolved: list[int] = []  # indices to remove
+            for i, br in enumerate(source_entry.graph._broken_references):
+                target_repo_name = self._ownership.get(br.target_id)
+                if target_repo_name and target_repo_name != source_entry.name:
+                    target_entry = self._repos[target_repo_name]
+                    if target_entry.graph is not None:
+                        # Wire the cross-graph edge
+                        source_entry.graph.add_edge(
+                            br.source_id,
+                            br.target_id,
+                            EdgeKind(br.edge_kind),
+                            target_graph=target_entry.graph,
+                        )
+                        resolved.append(i)
+            # Remove resolved broken references (reverse to preserve indices)
+            for idx in reversed(resolved):
+                source_entry.graph._broken_references.pop(idx)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Undo Operations

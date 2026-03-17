@@ -1484,6 +1484,7 @@ class TraceGraph:
         target_id: str,
         edge_kind: EdgeKind,
         assertion_targets: list[str] | None = None,
+        target_graph: TraceGraph | None = None,
     ) -> MutationEntry:
         """Add a new edge (reference).
 
@@ -1495,6 +1496,8 @@ class TraceGraph:
             target_id: The parent/target node ID.
             edge_kind: The type of relationship.
             assertion_targets: Optional assertion labels targeted.
+            target_graph: Optional graph to look up target_id in. When
+                provided, resolves cross-graph edges. Defaults to self.
 
         Returns:
             MutationEntry recording the operation.
@@ -1506,7 +1509,8 @@ class TraceGraph:
             raise KeyError(f"Source node '{source_id}' not found")
 
         source = self._index[source_id]
-        target = self._index.get(target_id)
+        resolve_graph = target_graph or self
+        target = resolve_graph._index.get(target_id)
 
         # Check if source was orphan before
         was_orphan = source_id in self._orphaned_ids
