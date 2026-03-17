@@ -33,7 +33,7 @@ Update `_state["graph"]` to hold `FederatedGraph`. Replace `_state["config"]` wi
 - [x] **Verify**: 2770 passed (5 new), doc sync 68 passed
 - [x] **Update docs**: CHANGELOG.md
 - [x] **Bump version**: 0.104.36
-- [ ] **Commit**: pending
+- [x] **Commit**: 3e359b6
 
 ---
 
@@ -43,27 +43,15 @@ Update `create_app()` in `server/app.py` to accept `FederatedGraph`. Add repo in
 
 **TASK_FILE**: `FEDGRAPH_MP3_TASK_2.md`
 
-- [ ] **Baseline**: confirm tests pass before any changes
-- [ ] **Create TASK_FILE**: write the task description into it
-- [ ] **Find assertions**: `discover_requirements("[relevant query]")` — record
-      `APPLICABLE_ASSERTIONS: ...` in TASK_FILE
-- [ ] **Create assertions if missing**: add to appropriate spec file, note in TASK_FILE
-- [ ] **Write failing tests** (use sub-agent):
-  - Test names MUST include assertion IDs (e.g. `test_REQ_p00004_A_validates_hash`)
-  - Test classes MUST include `Validates REQ-xxx-Y:` in docstring
-  - Confirm tests fail for the right reason (not syntax errors)
-  - Append test summary to TASK_FILE
-- [ ] **Implement**:
-  - Use existing code patterns and APIs — search before creating
-  - Add `# Implements: REQ-xxx` comments to new/modified source
-  - Append implementation summary to TASK_FILE
-- [ ] **Verify**:
-  - All tests pass (no workarounds)
-  - Lint clean
-  - Append results to TASK_FILE
-- [ ] **Update docs** (use sub-agent): CHANGELOG.md, docs/cli/, --help text, CLAUDE.md if architectural
-- [ ] **Bump version** in pyproject.toml
-- [ ] **Commit** with ticket prefix in subject; append commit summary to TASK_FILE
+- [x] **Baseline**: 2770 passed
+- [x] **Create TASK_FILE**: FEDGRAPH_MP3_TASK_2.md
+- [x] **Find assertions**: Created REQ-d00206-A..D in spec/dev-traceview-review.md
+- [x] **Write failing tests**: 6 tests in tests/server/test_server_federation.py
+- [x] **Implement**: /api/repos endpoint, /api/status federation update
+- [x] **Verify**: 2776 passed (6 new), doc sync 68 passed
+- [x] **Update docs**: CHANGELOG.md
+- [x] **Bump version**: 0.104.37
+- [ ] **Commit**: pending
 
 ---
 

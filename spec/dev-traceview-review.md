@@ -481,3 +481,27 @@ J. The UI SHALL provide a help panel with onboarding guidance and tooltips.
 K. JavaScript modules SHALL be loaded in dependency order via the `ReviewSystem` (RS) namespace.
 
 *End* *Review UI Framework* | **Hash**: 448be3b9
+
+---
+
+## REQ-d00206: Server Federation and Staleness
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-d00010, REQ-d00200
+
+The Flask review server SHALL expose federation repo metadata and staleness information.
+
+## Assertions
+
+A. `/api/repos` SHALL return a list of federated repos from `iter_repos()` with name, path, status (ok/error), git_origin, and error fields.
+
+B. `/api/repos` SHALL include staleness info (remote_diverged, branch) for repos with a `git_origin` configured, using `git_status_summary()` per-repo.
+
+C. `/api/status` SHALL include federation repo metadata from `iter_repos()`, replacing the legacy `associated_repos` field.
+
+D. Staleness info SHALL be informational only and SHALL NOT affect build or health check results.
+
+## Rationale
+
+Multi-repo federation users need visibility into which repos are current and which are behind their remotes. The viewer/server surfaces this as informational metadata without gating builds on it.
+
+*End* *Server Federation and Staleness* | **Hash**: 00000000

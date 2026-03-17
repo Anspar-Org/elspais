@@ -173,17 +173,63 @@ def create_app(
 
     @app.route("/api/status")
     def api_status():
-        """GET /api/status - Graph status with associated repos info."""
+        """GET /api/status - Graph status with federation repo info."""
         result = _get_graph_status(_state["graph"])
-        # Include associated repos metadata for badge display
-        try:
-            from elspais.config import get_associates_config
-
-            assoc_map = get_associates_config(_state["config"])
-            result["associated_repos"] = [{"code": name, "name": name} for name in assoc_map]
-        except Exception:
-            result["associated_repos"] = []
+        # Implements: REQ-d00206-C
+        # Include federation repo metadata from iter_repos()
+        graph = _state["graph"]
+        if hasattr(graph, "iter_repos"):
+            repos_info = []
+            for entry in graph.iter_repos():
+                repo_info = {
+                    "name": entry.name,
+                    "path": str(entry.repo_root),
+                    "status": "error" if entry.graph is None else "ok",
+                }
+                if entry.git_origin:
+                    repo_info["git_origin"] = entry.git_origin
+                if entry.error:
+                    repo_info["error"] = entry.error
+                repos_info.append(repo_info)
+            result["repos"] = repos_info
+        else:
+            result["repos"] = []
         return jsonify(result)
+
+    # Implements: REQ-d00206-A, REQ-d00206-B
+    @app.route("/api/repos")
+    def api_repos():
+        """GET /api/repos - Federation repo info with optional staleness."""
+        graph = _state["graph"]
+        repos = []
+        if hasattr(graph, "iter_repos"):
+            for entry in graph.iter_repos():
+                repo_info: dict = {
+                    "name": entry.name,
+                    "path": str(entry.repo_root),
+                    "status": "error" if entry.graph is None else "ok",
+                }
+                if entry.git_origin:
+                    repo_info["git_origin"] = entry.git_origin
+                if entry.error:
+                    repo_info["error"] = entry.error
+
+                # REQ-d00206-B: Staleness info for repos with git_origin
+                if entry.git_origin and entry.graph is not None:
+                    try:
+                        from elspais.utilities.git import git_status_summary
+
+                        summary = git_status_summary(entry.repo_root)
+                        repo_info["staleness"] = {
+                            "branch": summary.get("branch"),
+                            "remote_diverged": summary.get("remote_diverged", False),
+                            "fast_forward_possible": summary.get("fast_forward_possible", False),
+                        }
+                    except Exception:
+                        repo_info["staleness"] = None
+
+                repos.append(repo_info)
+        return jsonify({"repos": repos})
 
     @app.route("/api/requirement/<req_id>")
     def api_requirement(req_id: str):
