@@ -791,3 +791,28 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 *End* *Associates Config Loading* | **Hash**: 00000000
 ---
+
+## REQ-d00203: Multi-Repo Build Pipeline
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00005, REQ-d00200
+
+The `build_graph()` factory SHALL build separate TraceGraph instances per repository when associates are configured, constructing a multi-repo FederatedGraph.
+
+## Assertions
+
+A. When `[associates]` config is present, `build_graph()` SHALL create a separate `TraceGraph` per associate repo, each with its own config-derived resolver.
+
+B. Each associate's config SHALL be loaded from its own `.elspais.toml` and validated for transitive associates before building.
+
+C. Missing associate paths SHALL produce error-state `RepoEntry` with `graph=None` and a descriptive `error` message (soft fail).
+
+D. A `strict` parameter on `build_graph()` SHALL cause missing associates to raise an error instead of soft-failing.
+
+E. The root repo and all valid associates SHALL be combined into a single `FederatedGraph` with the root repo as `_root_repo`.
+
+## Rationale
+
+Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
+
+*End* *Multi-Repo Build Pipeline* | **Hash**: 00000000
+---

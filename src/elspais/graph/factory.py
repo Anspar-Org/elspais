@@ -300,7 +300,7 @@ def _resolve_spec_dir_config(
     )
 
 
-# Implements: REQ-p00005-B
+# Implements: REQ-p00005-B, REQ-d00203-A+B+C+D+E
 def build_graph(
     config: dict[str, Any] | None = None,
     spec_dirs: list[Path] | None = None,
@@ -310,6 +310,8 @@ def build_graph(
     scan_tests: bool = True,
     scan_sponsors: bool = True,
     canonical_root: Path | None = None,
+    strict: bool = False,
+    _build_associates: bool = True,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -331,9 +333,11 @@ def build_graph(
         scan_tests: Whether to scan test directories from testing.test_dirs.
         scan_sponsors: Whether to scan sponsor/associate spec directories.
         canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
+        strict: If True, raise on missing associate paths instead of soft-failing.
+        _build_associates: Internal flag to prevent recursive associate building.
 
     Returns:
-        FederatedGraph wrapping the built TraceGraph.
+        FederatedGraph wrapping one or more TraceGraph instances.
 
     Priority:
         spec_dirs > config > config_path > defaults
@@ -602,6 +606,76 @@ def build_graph(
 
     annotate_keywords(graph)
     annotate_coverage(graph)
+
+    # Implements: REQ-d00203-A+B+C+D+E
+    # Build associate repos if [associates] config is present
+    if _build_associates:
+        from elspais.config import get_associates_config, validate_no_transitive_associates
+        from elspais.graph.federated import FederationError, RepoEntry
+
+        associates_config = get_associates_config(config)
+        if associates_config:
+            entries: list[RepoEntry] = []
+            # Root repo entry
+            entries.append(
+                RepoEntry(
+                    name="root",
+                    graph=graph,
+                    config=config,
+                    repo_root=repo_root,
+                )
+            )
+            for assoc_name, assoc_info in associates_config.items():
+                assoc_path = (repo_root / assoc_info["path"]).resolve()
+                git_origin = assoc_info.get("git")
+
+                if not assoc_path.exists():
+                    # Implements: REQ-d00203-C, REQ-d00203-D
+                    if strict:
+                        raise FederationError(
+                            f"Associate '{assoc_name}' path does not exist: {assoc_path}"
+                        )
+                    entries.append(
+                        RepoEntry(
+                            name=assoc_name,
+                            graph=None,
+                            config=None,
+                            repo_root=assoc_path,
+                            git_origin=git_origin,
+                            error=f"Path does not exist: {assoc_path}",
+                        )
+                    )
+                    continue
+
+                # Load associate's config
+                assoc_config = get_config(None, assoc_path)
+
+                # Implements: REQ-d00203-B
+                validate_no_transitive_associates(assoc_name, assoc_config)
+
+                # Build associate's graph (no recursive associate building)
+                assoc_fg = build_graph(
+                    config=assoc_config,
+                    repo_root=assoc_path,
+                    scan_code=scan_code,
+                    scan_tests=scan_tests,
+                    scan_sponsors=False,
+                    canonical_root=canonical_root,
+                    _build_associates=False,
+                )
+                # Extract the TraceGraph from the federation-of-one
+                assoc_graph = list(assoc_fg.iter_repos())[0].graph
+                entries.append(
+                    RepoEntry(
+                        name=assoc_name,
+                        graph=assoc_graph,
+                        config=assoc_config,
+                        repo_root=assoc_path,
+                        git_origin=git_origin,
+                    )
+                )
+
+            return FederatedGraph(entries, root_repo="root")
 
     return FederatedGraph.from_single(graph, config, repo_root)
 
