@@ -708,3 +708,34 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 *End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 4772cbb4
 ---
+
+## REQ-d00200: FederatedGraph Read-Only Delegation
+
+**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00050, REQ-p00005
+
+FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its own configuration and repo root, delegating all read-only TraceGraph methods with documented federation strategies.
+
+## Assertions
+
+A. FederatedGraph SHALL wrap one or more TraceGraph instances via RepoEntry dataclass containing: name, graph (TraceGraph | None), config (ConfigLoader | None), repo_root (Path), git_origin (str | None), error (str | None).
+
+B. FederatedGraph.from_single() classmethod SHALL create a federation-of-one from a single TraceGraph, config, and repo_root, using "root" as the default repo name.
+
+C. All read-only TraceGraph public methods SHALL be explicitly implemented on FederatedGraph with a strategy comment (by_id, aggregate, or special).
+
+D. by_id strategy methods (find_by_id, has_root) SHALL look up the owning graph via an internal ownership mapping and delegate to the correct sub-graph.
+
+E. aggregate strategy methods (iter_roots, all_nodes, node_count, root_count, iter_by_kind, nodes_by_kind, all_connected_nodes, orphaned_nodes, has_orphans, orphan_count, broken_references, has_broken_references, iter_unlinked, iter_structural_orphans, deleted_nodes, has_deletions) SHALL combine results from all sub-graphs.
+
+F. Aggregate methods SHALL skip repos with graph set to None (error-state repos).
+
+G. repo_for(node_id) SHALL return the RepoEntry for the graph owning that node. config_for(node_id) SHALL return the config for that node's owning repo.
+
+H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
+
+## Rationale
+
+FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
+
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: 00000000
+---
