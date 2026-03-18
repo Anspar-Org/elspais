@@ -54,7 +54,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_canonical_root, find_config_file, get_config, get_project_name
+from elspais.config import find_canonical_root, find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
@@ -1330,7 +1330,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     REQ-o00061-D: Reads configuration from unified config system.
     """
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    project_name = get_project_name(config)
+    project_name = typed_config.project.name or "unknown"
 
     config_file = find_config_file(working_dir)
 
