@@ -125,7 +125,8 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
     config = get_config(
-        start_path=repo_root, quiet=True, overrides=getattr(args, "config_overrides", None)
+        start_path=repo_root,
+        quiet=True,
     )
     canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
@@ -252,7 +253,8 @@ def _run_static(args: argparse.Namespace) -> int:
         from elspais.config import get_config, get_project_name
 
         config = get_config(
-            start_path=repo_root, quiet=True, overrides=getattr(args, "config_overrides", None)
+            start_path=repo_root,
+            quiet=True,
         )
         content = format_view(
             graph,

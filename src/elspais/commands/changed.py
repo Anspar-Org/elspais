@@ -49,7 +49,7 @@ def load_configuration(args: argparse.Namespace) -> dict | None:
     from elspais.config import get_config
 
     return get_config(
-        config_path=getattr(args, "config", None), overrides=getattr(args, "config_overrides", None)
+        config_path=getattr(args, "config", None),
     )
 
 

@@ -518,33 +518,6 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
-def apply_cli_overrides(config: dict[str, Any], overrides: list[str] | None) -> dict[str, Any]:
-    """Apply ``--set key=value`` CLI overrides to a config dict.
-
-    Each override must be in ``key=value`` format where *key* is a
-    dot-separated path (e.g. ``spec.directories``) and *value* is parsed
-    via :func:`_try_parse_env_value` (supports JSON, booleans, strings).
-
-    Args:
-        config: Configuration dictionary to modify in place.
-        overrides: List of ``key=value`` strings, or *None*.
-
-    Returns:
-        The mutated *config* dict (for convenience).
-
-    Raises:
-        ValueError: If an override string does not contain ``=``.
-    """
-    if not overrides:
-        return config
-    for item in overrides:
-        if "=" not in item:
-            raise ValueError(f"Invalid override format: {item!r}  (expected key=value)")
-        key, value = item.split("=", 1)
-        _set_nested(config, key.strip(), _try_parse_env_value(value.strip()))
-    return config
-
-
 def _parse_toml(content: str) -> dict[str, Any]:
     """Parse TOML content into a plain dictionary.
 
@@ -602,7 +575,6 @@ def get_config(
     config_path: Path | None = None,
     start_path: Path | None = None,
     quiet: bool = False,
-    overrides: list[str] | None = None,
 ) -> dict[str, Any]:
     """Get configuration with auto-discovery and fallback.
 
@@ -612,16 +584,14 @@ def get_config(
     - Config file discovery from start_path
     - Fallback to defaults if no config found
     - Error reporting (unless quiet=True)
-    - CLI ``--set`` overrides (applied last, highest precedence)
 
     Override precedence (highest first):
-        ``--set`` > env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
+        env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
 
     Args:
         config_path: Explicit config file path (optional)
         start_path: Directory to search for config (defaults to cwd)
         quiet: Suppress error messages
-        overrides: List of ``key=value`` strings from ``--set`` CLI flag.
 
     Returns:
         Configuration dictionary (defaults if not found)
@@ -647,8 +617,6 @@ def get_config(
         # Return defaults (no config file found)
         config = dict(DEFAULT_CONFIG)
 
-    # Apply CLI overrides (highest precedence)
-    apply_cli_overrides(config, overrides)
     return config
 
 
@@ -976,7 +944,6 @@ __all__ = [
     "get_status_roles",
     "_try_parse_numeric",
     "_try_parse_env_value",
-    "apply_cli_overrides",
     "get_associates_config",
     "validate_no_transitive_associates",
 ]

@@ -716,6 +716,3 @@ class GlobalArgs:
 
     quiet: Annotated[bool, tyro.conf.arg(aliases=["-q"])] = False
     """Suppress non-error output."""
-
-    config_overrides: list[str] | None = None
-    """Override config values (KEY=VALUE). Repeatable."""

@@ -147,7 +147,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+    config = get_config(config_path)
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.enforce
 
@@ -338,7 +338,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
-    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+    config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
     if not spec_dirs:

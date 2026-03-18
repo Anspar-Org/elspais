@@ -30,7 +30,7 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
 
-    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+    config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
     canonical_root = getattr(args, "canonical_root", None)
