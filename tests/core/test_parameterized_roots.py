@@ -130,7 +130,7 @@ class TestIterRootsRequirement:
         )
 
         req_roots = list(graph.iter_roots(NodeKind.REQUIREMENT))
-        # The REQ is a child of the journey via ADDRESSES, so no REQ roots
+        # The REQ is a child of the journey via VALIDATES, so no REQ roots
         # But the req is still in _roots if it has no parent... depends on linking
         # Just verify kind filtering works
         assert all(n.kind == NodeKind.REQUIREMENT for n in req_roots)
