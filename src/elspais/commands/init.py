@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
+
+import tomlkit
 
 # Example requirement template for --template flag
 EXAMPLE_REQUIREMENT = """# REQ-d00001: Example Requirement Title
@@ -117,171 +120,255 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00209
+# Section-level comments for the generated TOML, keyed by TOML section path.
+_SECTION_COMMENTS: dict[str, str] = {
+    "project": "Project identity",
+    "directories": "Directory scanning paths",
+    "id-patterns": "Requirement ID format and type definitions",
+    "id-patterns.assertions": ('"uppercase" | "numeric" | "alphanumeric" | "numeric_1based"'),
+    "spec": "Spec file scanning configuration",
+    "rules": "Validation rules",
+    "rules.hierarchy": "Allowed implements relationships between levels",
+    "rules.format": "Format enforcement rules",
+    "rules.format.status_roles": (
+        "Status role classification (determines behavior in metrics/viewer)\n"
+        "# active: committed, normative - counted in all metrics\n"
+        "# provisional: in-progress toward active - excluded from coverage\n"
+        "# aspirational: future/planning - excluded from coverage and analysis\n"
+        "# retired: concluded - excluded from everything"
+    ),
+    "changelog": "Changelog enforcement",
+    "testing": "Test file scanning and reference detection",
+    "references": "Reference parsing configuration",
+    "references.defaults": "Default reference parsing settings",
+    "ignore": "File/directory ignore patterns",
+    "keywords": "Keyword extraction settings",
+    "validation": "Hash and validation settings",
+    "graph": "Graph construction settings",
+    "traceability": "Traceability output settings",
+    "associated": "Associated repository identity",
+    "core": "Path to core repository (relative or absolute)",
+}
+
+# Per-project-type overrides applied on top of schema defaults.
+_CORE_OVERRIDES: dict[str, Any] = {
+    "project": {"name": "my-project", "type": "core"},
+    "directories": {"code": ["src", "apps", "packages"]},
+    "spec": {
+        "index_file": "INDEX.md",
+        "skip_files": ["README.md", "requirements-format.md", "INDEX.md"],
+    },
+    "rules": {
+        "hierarchy": {
+            "dev": ["dev", "ops", "prd"],
+            "ops": ["ops", "prd"],
+            "prd": ["prd"],
+            "allow_circular": False,
+            "allow_structural_orphans": False,
+        },
+        "format": {
+            "require_hash": True,
+            "require_rationale": False,
+            "require_assertions": True,
+            "require_status": True,
+            "allowed_statuses": ["Active", "Draft", "Deprecated", "Superseded"],
+            "status_roles": {
+                "active": ["Active"],
+                "provisional": ["Draft", "Proposed"],
+                "aspirational": ["Roadmap", "Future"],
+                "retired": ["Deprecated", "Superseded"],
+            },
+        },
+    },
+    "changelog": {
+        "enforce": True,
+        "id_source": "gh",
+        "date_format": "iso",
+        "require_change_order": False,
+        "require_reason": True,
+        "require_author_name": True,
+        "require_author_id": True,
+        "author_id_format": "email",
+    },
+    "testing": {
+        "enabled": False,
+        "test_dirs": ["tests"],
+        "patterns": ["test_*.py", "*_test.py"],
+        "reference_keyword": "Validates",
+    },
+    "references": {
+        "defaults": {
+            "separators": ["-", "_"],
+            "multi_assertion_separator": "+",
+        },
+    },
+    "ignore": {
+        "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
+        "spec": ["README.md", "INDEX.md", "drafts/**"],
+        "code": ["*_test.py", "conftest.py", "test_*.py"],
+        "test": ["fixtures/**", "__snapshots__"],
+    },
+}
+
+# Sections to include in core template (order determines output order).
+_CORE_SECTIONS = [
+    "version",
+    "project",
+    "directories",
+    "id-patterns",
+    "spec",
+    "rules",
+    "changelog",
+    "testing",
+    "references",
+    "ignore",
+    "keywords",
+    "validation",
+    "graph",
+    "traceability",
+]
+
+# Sections to include in associated template.
+_ASSOCIATED_SECTIONS = [
+    "version",
+    "project",
+    "associated",
+    "core",
+    "directories",
+    "id-patterns",
+    "spec",
+    "rules",
+    "testing",
+    "references",
+    "ignore",
+    "keywords",
+    "validation",
+    "graph",
+    "traceability",
+]
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep-merge *override* into a copy of *base*."""
+    result = dict(base)
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
+def _add_table(
+    doc: tomlkit.TOMLDocument,
+    key: str,
+    value: Any,
+    comment: str | None = None,
+) -> None:
+    """Add a key/value pair to *doc*, inserting a comment above tables."""
+    if comment:
+        for line in comment.split("\n"):
+            doc.add(tomlkit.comment(line))
+    if isinstance(value, dict):
+        tbl = tomlkit.table()
+        for k, v in value.items():
+            if isinstance(v, dict):
+                sub = tomlkit.table()
+                for sk, sv in v.items():
+                    if isinstance(sv, dict):
+                        inner = tomlkit.table()
+                        for ik, iv in sv.items():
+                            inner.add(ik, iv)
+                        sub.add(sk, inner)
+                    else:
+                        sub.add(sk, sv)
+                sub_comment = _SECTION_COMMENTS.get(f"{key}.{k}")
+                if sub_comment:
+                    sub.comment(sub_comment)
+                tbl.add(k, sub)
+            else:
+                tbl.add(k, v)
+        doc.add(key, tbl)
+    else:
+        doc.add(key, value)
+
+
 def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
-    """Generate configuration file content."""
+    """Generate configuration file content from the ElspaisConfig schema.
+
+    Walks the Pydantic model defaults and applies project-type-specific
+    overrides to produce valid, schema-compliant TOML.
+    """
     from elspais import __version__
+    from elspais.config import config_defaults
+
+    defaults = config_defaults()
 
     if project_type == "associated":
         if associated_prefix is None:
-            associated_prefix = "XXX"  # Placeholder if not provided
-        return f"""# elspais configuration - Associated Repository
-# Generated by: elspais init --type associated (v{__version__})
-#
-# Tip: Create .elspais.local.toml alongside this file for developer-local
-# overrides (e.g. associate paths). It is deep-merged and gitignored.
+            associated_prefix = "XXX"
+        overrides: dict[str, Any] = {
+            "project": {
+                "name": f"{associated_prefix.lower()}-project",
+                "type": "associated",
+            },
+            "associated": {
+                "prefix": associated_prefix,
+                "id_range": [1, 99999],
+            },
+            "core": {"path": "../core"},
+            "directories": {"code": ["src", "lib"]},
+            "id-patterns": {
+                **defaults.get("id-patterns", {}),
+                "associated": {
+                    "enabled": True,
+                    "position": "after_prefix",
+                    "format": "uppercase",
+                    "length": 3,
+                    "separator": "-",
+                },
+            },
+            "rules": {
+                "hierarchy": {
+                    "dev": ["dev", "ops", "prd"],
+                    "ops": ["ops", "prd"],
+                    "prd": ["prd"],
+                    "cross_repo_implements": True,
+                    "allow_structural_orphans": True,
+                },
+                "format": {
+                    "require_hash": True,
+                    "require_assertions": True,
+                },
+            },
+        }
+        sections = _ASSOCIATED_SECTIONS
+        label = "Associated Repository"
+        gen_by = f"elspais init --type associated (v{__version__})"
+    else:
+        overrides = _CORE_OVERRIDES
+        sections = _CORE_SECTIONS
+        label = "Core Repository"
+        gen_by = f"elspais init (v{__version__})"
 
-[project]
-name = "{associated_prefix.lower()}-project"
-type = "associated"
-namespace = "REQ"
+    data = _deep_merge(defaults, overrides)
 
-[associated]
-prefix = "{associated_prefix}"
-id_range = [1, 99999]
+    doc = tomlkit.document()
+    doc.add(tomlkit.comment(f"elspais configuration - {label}"))
+    doc.add(tomlkit.comment(f"Generated by: {gen_by}"))
+    doc.add(tomlkit.comment(""))
+    doc.add(
+        tomlkit.comment("Tip: Create .elspais.local.toml alongside this file for developer-local")
+    )
+    doc.add(tomlkit.comment("overrides (e.g. associate paths). It is deep-merged and gitignored."))
+    doc.add(tomlkit.nl())
 
-[core]
-# Path to core repository (relative or absolute)
-path = "../core"
+    for section in sections:
+        if section not in data:
+            continue
+        comment = _SECTION_COMMENTS.get(section)
+        _add_table(doc, section, data[section], comment)
+        doc.add(tomlkit.nl())
 
-[directories]
-spec = "spec"
-docs = "docs"
-code = ["src", "lib"]
-
-[id-patterns]
-canonical = "{{namespace}}-{{type.letter}}{{component}}"
-aliases = {{ short = "{{type.letter}}{{component}}" }}
-
-[id-patterns.types]
-prd = {{ level = 1, aliases = {{ letter = "p" }} }}
-ops = {{ level = 2, aliases = {{ letter = "o" }} }}
-dev = {{ level = 3, aliases = {{ letter = "d" }} }}
-
-[id-patterns.component]
-style = "numeric"
-digits = 5
-leading_zeros = true
-
-[id-patterns.associated]
-enabled = true
-position = "after_prefix"
-format = "uppercase"
-length = 3
-separator = "-"
-
-[rules.hierarchy]
-dev = ["dev", "ops", "prd"]
-ops = ["ops", "prd"]
-prd = ["prd"]
-cross_repo_implements = true
-allow_structural_orphans = true  # More permissive for associated development
-
-[rules.format]
-require_hash = true
-require_assertions = true
-"""
-
-    else:  # core
-        return f"""# elspais configuration - Core Repository
-# Generated by: elspais init (v{__version__})
-#
-# Tip: Create .elspais.local.toml alongside this file for developer-local
-# overrides (e.g. associate paths). It is deep-merged and gitignored.
-
-[project]
-name = "my-project"
-type = "core"
-namespace = "REQ"
-
-[directories]
-spec = "spec"
-docs = "docs"
-code = ["src", "apps", "packages"]
-
-[id-patterns]
-canonical = "{{namespace}}-{{type.letter}}{{component}}"
-aliases = {{ short = "{{type.letter}}{{component}}" }}
-
-[id-patterns.types]
-prd = {{ level = 1, aliases = {{ letter = "p" }} }}
-ops = {{ level = 2, aliases = {{ letter = "o" }} }}
-dev = {{ level = 3, aliases = {{ letter = "d" }} }}
-
-[id-patterns.component]
-style = "numeric"
-digits = 5
-leading_zeros = true
-
-[id-patterns.assertions]
-label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
-# max_count = 26           # Defaults to style maximum (26 for uppercase, 100 for numeric)
-# zero_pad = false         # For numeric styles: "01" vs "1"
-
-[spec]
-index_file = "INDEX.md"
-skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
-
-[rules.hierarchy]
-dev = ["dev", "ops", "prd"]
-ops = ["ops", "prd"]
-prd = ["prd"]
-allow_circular = false
-allow_structural_orphans = false
-
-[rules.format]
-require_hash = true
-require_rationale = false
-require_assertions = true
-require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
-
-# Status role classification (determines behavior in metrics/viewer)
-# active: committed, normative — counted in all metrics
-# provisional: in-progress toward active — excluded from coverage, in analysis
-# aspirational: future/planning — excluded from coverage and analysis
-# retired: concluded — excluded from everything, hidden by default in viewer
-[rules.format.status_roles]
-active = ["Active"]
-provisional = ["Draft", "Proposed"]
-aspirational = ["Roadmap", "Future"]
-retired = ["Deprecated", "Superseded"]
-
-# Associate repositories for combined validation (uncomment to enable)
-# Relative paths resolve from canonical repo root (worktree-safe).
-# [associates]
-# paths = ["../sibling-repo"]
-
-[changelog]
-enforce = true            # Require changelog entries for Active hash changes
-id_source = "gh"          # Author identity source: "gh" | "git"
-date_format = "iso"       # "iso" (YYYY-MM-DD) | "us" | "eu"
-require_change_order = false
-require_reason = true
-require_author_name = true
-require_author_id = true
-author_id_format = "email"  # "email" | "handle"
-
-[testing]
-enabled = false
-test_dirs = ["tests"]
-patterns = ["test_*.py", "*_test.py"]
-# result_files = ["test-results.xml"]  # Uncomment to enable test result parsing
-reference_keyword = "Validates"
-# prescan_command = ""  # External command for non-Python test structure discovery
-
-[references.defaults]
-# Separator characters accepted between ID components
-separators = ["-", "_"]
-# Character joining multiple assertion labels: REQ-p00001-A+B+C
-multi_assertion_separator = "+"
-
-[ignore]
-# Global patterns applied everywhere
-global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
-# Additional patterns for spec file scanning
-spec = ["README.md", "INDEX.md", "drafts/**"]
-# Additional patterns for code scanning
-code = ["*_test.py", "conftest.py", "test_*.py"]
-# Additional patterns for test scanning
-test = ["fixtures/**", "__snapshots__"]
-"""
+    return tomlkit.dumps(doc)
