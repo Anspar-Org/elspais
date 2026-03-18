@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Docs
+
+- **`spec/requirements-spec.md`** -- Added `Validates:` field documentation in the JNY format section with multi-assertion syntax example (`Validates: REQ-xxx-A+B`), new "User Journeys Declaring Validation Relationships" subsection, and updated relationship table to include UAT coverage role. Updated "non-normative" note to clarify JNYs may declare `Validates:` references.
+- **`CLAUDE.md`** -- Fixed `TEST_RESULT` → `RESULT` in Render Protocol description; added `VALIDATES` to `_TRACEABILITY_EDGE_KINDS` list with explanatory note distinguishing VERIFIES (automated) from VALIDATES (UAT/JNY).
+- **`KNOWN_ISSUES.md`** -- Marked JNY Validates task complete (`[x]`) with implementation summary.
+
 ### Added
 
 - **UAT section in `_get_test_coverage()` MCP tool** -- Returns a `"uat"` dict alongside existing test data containing `jny_nodes`, `covered_assertions`, `covered_count`, `coverage_pct` (from VALIDATES edges), and `validated_pct` (from `RollupMetrics.uat_validated_pct`).

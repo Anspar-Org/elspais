@@ -99,6 +99,7 @@ The metadata block immediately follows the header line. It consists of one or mo
 - Parent requirements MUST NOT reference children.
 - Duplicate references (the same REQ ID appearing more than once across all occurrences of a field) MUST be deduplicated to a single occurrence. A file containing duplicate references is considered malformed; tooling SHALL rewrite it on the next save to remove the redundancy.
 - `Addresses` is optional; when present it lists User Journey IDs this requirement supports. It appears after the metadata block, before any section content, and is NOT part of the hashed content.
+- `Validates` (on JNY nodes) is optional; when present on a User Journey it lists REQ IDs or assertion references (e.g., `REQ-p00001-A`) that this journey validates. Multi-assertion syntax is supported (e.g., `Validates: REQ-p00001-A+B`). The `Validates:` field contributes to UAT coverage metrics.
 
 ### Examples
 
@@ -286,7 +287,9 @@ User Journeys exist to:
 - provide context for why requirements exist,
 - help stakeholders understand the system from the user's point of view.
 
-User Journeys are **non-normative**. They do not define obligations and are not subject to automated validation.
+User Journeys are **non-normative** with respect to obligations — they do not define system requirements and SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
+
+However, User Journeys MAY declare `Validates:` references that link them to specific requirements or assertions. These links contribute to UAT coverage metrics and represent planned manual acceptance tests.
 
 User Journeys SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
@@ -321,6 +324,8 @@ A User Journey SHOULD follow this structure:
 **Goal**: {what the user wants to achieve}
 **Context**: {situational background that sets up the scenario}
 
+Validates: REQ-pXXXXX-A, REQ-pXXXXX-B+C
+
 ## Steps
 
 1. {User action or system response}
@@ -339,6 +344,7 @@ Field guidance:
 - **Actor**: Include a persona name and role in parentheses for readability (e.g., "Dr. Lisa Chen (Principal Investigator)")
 - **Goal**: A single sentence describing what the user wants to achieve
 - **Context**: Optional but recommended; provides situational background (e.g., "Trial sponsor's IT team has deployed the portal. Dr. Chen has been designated as the first administrator.")
+- **Validates**: Optional; lists REQ IDs or assertion references this journey validates (e.g., `Validates: REQ-p00001-A, REQ-p00002-A+B`). Multi-assertion syntax is supported. Contributes to UAT coverage metrics.
 - **Steps**: Numbered sequence of user actions and system responses
 - **Expected Outcome**: Brief statement of success from the user's perspective
 - **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative)
@@ -365,6 +371,34 @@ The `Addresses:` line:
 - indicates which user journeys this requirement supports,
 - is NOT part of the hashed content.
 
+### User Journeys Declaring Validation Relationships
+
+User Journeys MAY declare which requirements or assertions they validate using the `Validates:` field. This is the primary mechanism for UAT coverage:
+
+```markdown
+# JNY-Admin-Portal-01: Manage Admin Users
+
+**Actor**: Dr. Lisa Chen (Principal Investigator)
+**Goal**: Add a new administrator to the portal
+
+Validates: REQ-p00001-A, REQ-p00002-A+B
+
+## Steps
+...
+
+*End* *JNY-Admin-Portal-01*
+```
+
+The `Validates:` line:
+
+- is optional,
+- appears after the JNY header block but before the `## Steps` section,
+- lists REQ IDs or assertion references separated by commas,
+- supports multi-assertion syntax (e.g., `REQ-p00001-A+B` expands to `REQ-p00001-A` and `REQ-p00001-B`),
+- creates `VALIDATES` edges in the traceability graph,
+- contributes to UAT coverage metrics (separate from automated test coverage),
+- is NOT part of the hashed content (JNYs have no hash).
+
 ### Do's and Don'ts
 
 **DO:**
@@ -389,11 +423,12 @@ The `Addresses:` line:
 | ------ | ------------------ | ----------------- |
 | Purpose | Describe user experience | Define obligations |
 | Language | Descriptive ("User clicks...") | Prescriptive ("System SHALL...") |
-| Validation | Manual walkthrough | Automated/formal verification |
+| Validation | Manual walkthrough (`Validates:`) | Automated/formal verification |
 | Granularity | Major flows only | Every testable obligation |
 | Normative | No | Yes |
+| Coverage role | UAT coverage via `Validates:` | Subject of coverage |
 
-User Journeys provide **context**; Requirements provide **contracts**.
+User Journeys provide **context** and **UAT validation paths**; Requirements provide **contracts**.
 
 ---
 

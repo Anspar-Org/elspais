@@ -4,10 +4,14 @@
 
 [x] Tweak: allow_unresolved_cross_repo or similar in [validation], so we can run health and ignore unresolved refs to associated repos
 
-[ ] Change: We now define User Journeys to "Validate" Requirements (or Assertions). 
+[x] Change: We now define User Journeys to "Validate" Requirements (or Assertions).
+- Implemented: JNYs declare `Validates: REQ-xxx-A+B` to create VALIDATES edges in the traceability graph.
+- UAT coverage is now calculated separately from automated test coverage (CoverageSource.UAT).
+- RollupMetrics tracks `uat_covered` and `uat_total` alongside standard coverage fields.
+- Multi-assertion syntax supported (e.g., `Validates: REQ-p00001-A+B` expands to two edges).
 - We can now calculate a second 'coverage' 'Validated' value: which REQs (or Assertions) are validated by a JNY?
 - This will be used for UAT: we treat the JNYs as a the set of manual tests to run that will cover all the REQs and demonstrate the correct functionality.
-- The corresponds to the PQ
+- This corresponds to the PQ
 
 [ ] Parsing Schema
 - formal schema for REQUIREMENTS
