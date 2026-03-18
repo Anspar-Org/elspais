@@ -22,8 +22,6 @@ elspais mcp install --global --desktop
 # Or Claude Code only (current project)
 elspais mcp install
 
-# Enable tab-completion (optional)
-elspais completion --install
 ```
 
 ### Running the Server Manually

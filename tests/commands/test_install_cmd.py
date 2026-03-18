@@ -115,7 +115,6 @@ class TestDetectInstalledExtras:
         assert "mcp" in result
         assert "trace-review" in result
         assert "trace-view" not in result
-        assert "completion" in result
 
     @patch("importlib.util.find_spec")
     def test_REQ_p00001_A_only_mcp_available(self, mock_find):
@@ -171,7 +170,6 @@ class TestInstallLocal:
 
     @patch("elspais.commands.install_cmd._print_shell_hint")
     @patch("elspais.commands.install_cmd._show_active_version")
-    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
     @patch("subprocess.run")
     def test_REQ_p00001_A_pipx_two_step(self, mock_run, *_):
         """pipx uses two-step: install --force, then runpip -e."""
@@ -189,7 +187,6 @@ class TestInstallLocal:
 
     @patch("elspais.commands.install_cmd._print_shell_hint")
     @patch("elspais.commands.install_cmd._show_active_version")
-    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
     @patch("subprocess.run")
     def test_REQ_p00001_A_pipx_with_extras(self, mock_run, *_):
         mock_run.return_value = MagicMock(returncode=0)
@@ -202,7 +199,6 @@ class TestInstallLocal:
 
     @patch("elspais.commands.install_cmd._print_shell_hint")
     @patch("elspais.commands.install_cmd._show_active_version")
-    @patch("elspais.commands.install_cmd._patch_argcomplete_marker")
     @patch("subprocess.run")
     def test_REQ_p00001_A_uv_command(self, mock_run, *_):
         mock_run.return_value = MagicMock(returncode=0)
@@ -450,50 +446,6 @@ class TestParseExtras:
 
 
 # ---------------------------------------------------------------------------
-# _patch_argcomplete_marker
-# ---------------------------------------------------------------------------
-
-
-class TestPatchArgcompleteMarker:
-    """Validates REQ-p00001-A: Argcomplete marker injection in entry point."""
-
-    def test_REQ_p00001_A_patches_shebang_script(self, tmp_path):
-        script = tmp_path / "elspais"
-        script.write_text("#!/usr/bin/python\nimport sys\nsys.exit(0)\n")
-        with patch("shutil.which", return_value=str(script)):
-            install_cmd._patch_argcomplete_marker()
-        content = script.read_text()
-        assert "# PYTHON_ARGCOMPLETE_OK" in content
-        # Marker should be on line 2 (after shebang)
-        lines = content.splitlines()
-        assert lines[0].startswith("#!")
-        assert lines[1] == "# PYTHON_ARGCOMPLETE_OK"
-
-    def test_REQ_p00001_A_idempotent(self, tmp_path):
-        script = tmp_path / "elspais"
-        script.write_text("#!/usr/bin/python\n# PYTHON_ARGCOMPLETE_OK\nimport sys\n")
-        with patch("shutil.which", return_value=str(script)):
-            install_cmd._patch_argcomplete_marker()
-        content = script.read_text()
-        assert content.count("PYTHON_ARGCOMPLETE_OK") == 1
-
-    def test_REQ_p00001_A_skips_when_not_found(self):
-        with patch("shutil.which", return_value=None):
-            # Should not raise
-            install_cmd._patch_argcomplete_marker()
-
-    def test_REQ_p00001_A_handles_permission_error(self, tmp_path):
-        script = tmp_path / "elspais"
-        script.write_text("#!/usr/bin/python\nimport sys\n")
-        with (
-            patch("shutil.which", return_value=str(script)),
-            patch.object(Path, "write_text", side_effect=PermissionError("denied")),
-        ):
-            # Should not raise, just warn
-            install_cmd._patch_argcomplete_marker()
-
-
-# ---------------------------------------------------------------------------
 # _print_shell_hint
 # ---------------------------------------------------------------------------
 
@@ -506,24 +458,21 @@ class TestPrintShellHint:
         install_cmd._print_shell_hint()
         out = capsys.readouterr().out
         assert "rehash" in out
-        assert "completion --install" in out
 
     @patch.dict("os.environ", {"SHELL": "/bin/bash"})
     def test_REQ_p00001_A_bash_hint(self, capsys):
         install_cmd._print_shell_hint()
         out = capsys.readouterr().out
         assert "hash -r" in out
-        assert "completion --install" in out
 
     @patch.dict("os.environ", {"SHELL": "/usr/bin/fish"})
     def test_REQ_p00001_A_fish_hint(self, capsys):
         install_cmd._print_shell_hint()
         out = capsys.readouterr().out
-        assert "completion --install" in out
+        assert "activate" in out
 
     @patch.dict("os.environ", {"SHELL": ""})
     def test_REQ_p00001_A_unknown_shell_hint(self, capsys):
         install_cmd._print_shell_hint()
         out = capsys.readouterr().out
         assert "hash -r" in out
-        assert "completion --install" in out
