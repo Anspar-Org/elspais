@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elspais"
-version = "0.104.43"
+version = "0.104.44"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,8 +25,8 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
     "Typing :: Typed",
 ]
-# Minimal dependency: tomlkit for correct TOML parsing and round-trip editing
-dependencies = ["tomlkit>=0.12"]
+# Minimal dependencies: tomlkit for TOML parsing/round-trip, pydantic for config schema validation
+dependencies = ["tomlkit>=0.12", "pydantic>=2.0"]
 
 [project.optional-dependencies]
 dev = [
