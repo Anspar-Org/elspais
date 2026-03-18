@@ -17,7 +17,26 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
 
 
 def compute_hash_for_node(node, hash_mode: str) -> str | None:
@@ -187,9 +206,12 @@ def run(args: argparse.Namespace) -> int:
     validate_config = get_config(
         config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
     )
-    hierarchy_rules = validate_config.get("rules", {}).get("hierarchy", {})
-    allow_orphans = hierarchy_rules.get(
-        "allow_structural_orphans", hierarchy_rules.get("allow_orphans", False)
+    _typed_vc = _validate_config(validate_config)
+    _hier = _typed_vc.rules.hierarchy
+    allow_orphans = (
+        _hier.allow_structural_orphans
+        if _hier.allow_structural_orphans is not None
+        else (_hier.allow_orphans or False)
     )
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):

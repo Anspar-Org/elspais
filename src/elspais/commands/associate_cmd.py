@@ -165,6 +165,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         config_path=config_path, quiet=True, overrides=getattr(args, "config_overrides", None)
     )
 
+    # Legacy format: associates.paths is a list (not schema-typed)
     paths = config.get("associates", {}).get("paths", [])
 
     if not paths:

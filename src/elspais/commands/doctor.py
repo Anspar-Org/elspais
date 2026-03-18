@@ -17,9 +17,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from elspais.commands.health import HealthCheck, HealthReport
+from elspais.config.schema import ElspaisConfig
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    # Associated projects may lack [core] when read externally
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
 
 
 # =============================================================================
@@ -99,19 +118,24 @@ def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthChe
 
 def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
     """Check that required configuration sections exist."""
-    raw = config.get_raw()
+    typed_config = _validate_config(config.get_raw())
     missing = []
 
-    id_patterns = raw.get("id-patterns", {})
-    if not id_patterns.get("types"):
+    if not typed_config.id_patterns.types:
         missing.append("id-patterns.types (requirement type definitions)")
 
-    spec = raw.get("spec", {})
-    if not spec.get("directories"):
+    if not typed_config.spec.directories:
         missing.append("spec.directories (where to find spec files)")
 
-    rules = raw.get("rules", {})
-    if not rules.get("hierarchy"):
+    hierarchy_dump = typed_config.rules.hierarchy.model_dump()
+    non_level = {
+        "allow_circular",
+        "allow_orphans",
+        "allow_structural_orphans",
+        "cross_repo_implements",
+    }
+    has_levels = any(k for k in hierarchy_dump if k not in non_level and hierarchy_dump[k])
+    if not has_levels:
         missing.append("rules.hierarchy (requirement hierarchy rules)")
 
     if missing:
@@ -135,7 +159,8 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
     """Validate that the ID pattern template uses valid placeholders."""
     import re
 
-    template = config.get("id-patterns.canonical", "")
+    typed_config = _validate_config(config.get_raw())
+    template = typed_config.id_patterns.canonical
     valid_tokens = {"{namespace}", "{type}", "{component}"}
     # Also allow {type.<alias>} tokens
     type_alias_re = re.compile(r"\{type\.\w+\}")
@@ -179,8 +204,9 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
 
 def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
-    hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("id-patterns.types", {})
+    typed_config = _validate_config(config.get_raw())
+    hierarchy = typed_config.rules.hierarchy.model_dump()
+    types = dict(typed_config.id_patterns.types.items())
 
     if not isinstance(hierarchy, dict):
         return HealthCheck(
@@ -204,11 +230,12 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
         "allow_circular",
         "allow_orphans",
         "allow_structural_orphans",
+        "cross_repo_implements",
         "allowed",
     }
 
     for level, allowed_parents in hierarchy.items():
-        if level in non_level_keys:
+        if level in non_level_keys or allowed_parents is None:
             continue
         if level not in types:
             issues.append(f"Rule references unknown level '{level}'")
@@ -241,7 +268,8 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
 
 def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
-    spec_dirs = config.get("spec.directories", ["spec"])
+    typed_config = _validate_config(config.get_raw())
+    spec_dirs = typed_config.spec.directories
 
     if not isinstance(spec_dirs, list):
         return HealthCheck(
@@ -295,7 +323,8 @@ def check_config_project_type(config: ConfigLoader) -> HealthCheck:
             details={"errors": errors},
         )
 
-    project_type = raw.get("project", {}).get("type")
+    typed_config = _validate_config(raw)
+    project_type = typed_config.project.type
     if project_type:
         return HealthCheck(
             name="config.project_type",
@@ -316,7 +345,8 @@ def check_config_project_type(config: ConfigLoader) -> HealthCheck:
 
 def check_config_associated_section(raw: dict) -> HealthCheck:
     """Check that associated projects have a valid [associated] section."""
-    project_type = raw.get("project", {}).get("type")
+    typed_config = _validate_config(raw)
+    project_type = typed_config.project.type
     if project_type != "associated":
         return HealthCheck(
             name="config.associated_section",
@@ -326,7 +356,7 @@ def check_config_associated_section(raw: dict) -> HealthCheck:
             severity="info",
         )
 
-    associated = raw.get("associated", {})
+    associated = typed_config.associated
     if not associated:
         return HealthCheck(
             name="config.associated_section",
@@ -338,7 +368,7 @@ def check_config_associated_section(raw: dict) -> HealthCheck:
             category="config",
         )
 
-    prefix = associated.get("prefix", "")
+    prefix = associated.prefix or ""
     if not prefix:
         return HealthCheck(
             name="config.associated_section",

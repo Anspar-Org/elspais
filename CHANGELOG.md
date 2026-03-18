@@ -16,6 +16,7 @@ All notable changes to elspais will be documented in this file.
 
 - **`graph/factory.py` config migration** -- Converted 21 `config.get()` call chains to typed `ElspaisConfig` attribute access in `build_graph()` and `_resolve_spec_dir_config()`. Added `_validate_config()` helper for safe Pydantic conversion at function boundaries.
 - **`mcp/server.py` config migration** -- Converted 21 config dict access calls across 10 MCP workspace/tool functions to typed `ElspaisConfig` attribute access.
+- **Consumer config migration (Tasks 9-12)** -- Migrated all remaining `config.get()` calls to typed `ElspaisConfig` attribute access across `commands/health.py`, `commands/doctor.py`, `commands/fix_cmd.py`, `commands/changed.py`, `commands/example_cmd.py`, `commands/validate.py`, `graph/annotators.py`, `graph/analysis.py`, `associates.py`, `validation/format.py`, `content_rules.py`.
 
 ### Docs
 
