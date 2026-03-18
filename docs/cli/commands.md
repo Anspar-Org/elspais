@@ -294,21 +294,6 @@ Read the user guide.
   `--plain`      Plain text output (no ANSI colors)
   `--no-pager`   Disable paging (print to stdout)
 
-## completion
-
-Generate shell tab-completion scripts.
-
-  $ elspais completion            # Instructions
-  $ elspais completion --shell bash > ~/.elspais-complete.bash
-
-**Options:**
-
-  `--shell {bash,zsh,fish,tcsh}`  Generate for specific shell
-
-**Setup:**
-
-  $ elspais completion --install    # Auto-detect shell and install
-
 ## version
 
 Show version information.

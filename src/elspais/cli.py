@@ -17,7 +17,6 @@ from elspais.commands import (
     analysis_cmd,
     associate_cmd,
     changed,
-    completion,
     config_cmd,
     doctor,
     edit,
@@ -37,7 +36,6 @@ from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
     ChangedArgs,
-    CompletionArgs,
     ConfigAddArgs,
     ConfigArgs,
     ConfigGetArgs,
@@ -119,7 +117,6 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         ConfigArgs: "config",
         RulesArgs: "rules",
         DocsArgs: "docs",
-        CompletionArgs: "completion",
         AssociateArgs: "associate",
         PdfArgs: "pdf",
         InstallArgs: "install",
@@ -216,7 +213,6 @@ def main(argv: list[str] | None = None) -> int:
     # Handle no args or "help" — show help text
     if not argv or argv == ["help"]:
         _print_help()
-        completion.maybe_show_completion_hint()
         return 0
 
     # Implements: REQ-d00085-A+D
@@ -356,8 +352,6 @@ def main(argv: list[str] | None = None) -> int:
             return rules_cmd.run(args)
         elif args.command == "docs":
             return docs_command(args)
-        elif args.command == "completion":
-            return completion.run(args)
         elif args.command == "mcp":
             return mcp_command(args)
         elif args.command == "associate":
@@ -418,7 +412,6 @@ Commands:
   config      View and modify configuration (show, get, set, ...)
   rules       View and manage content rules (list, show)
   docs        Read the user guide
-  completion  Generate shell tab-completion scripts
   associate   Manage associate repository links
   pdf         Compile spec files into a PDF document
   install     Install elspais variants

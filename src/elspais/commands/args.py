@@ -451,23 +451,6 @@ class DocsArgs:
 
 
 # ---------------------------------------------------------------------------
-# Completion command
-# ---------------------------------------------------------------------------
-@dataclasses.dataclass
-class CompletionArgs:
-    """Generate shell tab-completion scripts."""
-
-    shell: Literal["bash", "zsh", "fish", "tcsh"] | None = None
-    """Generate script for specific shell."""
-
-    install: bool = False
-    """Auto-install completion in your shell rc file."""
-
-    uninstall: bool = False
-    """Remove completion from your shell rc file."""
-
-
-# ---------------------------------------------------------------------------
 # Associate command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -685,7 +668,6 @@ Command = (
     | Annotated[ConfigArgs, tyro.conf.subcommand("config")]
     | Annotated[RulesArgs, tyro.conf.subcommand("rules")]
     | Annotated[DocsArgs, tyro.conf.subcommand("docs")]
-    | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[AssociateArgs, tyro.conf.subcommand("associate")]
     | Annotated[PdfArgs, tyro.conf.subcommand("pdf")]
     | Annotated[InstallArgs, tyro.conf.subcommand("install")]
