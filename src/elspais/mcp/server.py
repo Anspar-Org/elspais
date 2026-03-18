@@ -2564,7 +2564,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
     REQ-d00066-A: SHALL accept req_id parameter identifying the target requirement.
     REQ-d00066-B: SHALL return TEST nodes by finding edges targeting the requirement.
-    REQ-d00066-C: SHALL return TEST_RESULT nodes linked to each TEST node.
+    REQ-d00066-C: SHALL return RESULT nodes linked to each TEST node.
     REQ-d00066-D: SHALL identify covered assertions via edge assertion_targets.
     REQ-d00066-E: SHALL return uncovered assertions as those with no incoming TEST edges.
     REQ-d00066-F: SHALL return coverage summary with percentage.

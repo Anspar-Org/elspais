@@ -61,8 +61,8 @@ class RollupMetrics:
         coverage_pct: Percentage of assertions covered (0-100)
         assertion_coverage: Map of assertion label to coverage contributors
         direct_tested: Assertions covered specifically by TEST nodes
-        validated: Assertions with passing TEST_RESULTs
-        has_failures: True if any TEST_RESULT is failed/error
+        validated: Assertions with passing RESULTs
+        has_failures: True if any RESULT is failed/error
     """
 
     total_assertions: int = 0
@@ -74,8 +74,8 @@ class RollupMetrics:
     assertion_coverage: dict[str, list[CoverageContribution]] = field(default_factory=dict)
     # Test-specific metrics
     direct_tested: int = 0  # Assertions with TEST coverage (not CODE)
-    validated: int = 0  # Assertions with passing TEST_RESULTs
-    has_failures: bool = False  # Any TEST_RESULT failed?
+    validated: int = 0  # Assertions with passing RESULTs
+    has_failures: bool = False  # Any RESULT failed?
     # Indirect coverage metrics (whole-req tests covering all assertions)
     indirect_coverage_pct: float = 0.0  # Coverage % including INDIRECT source
     validated_with_indirect: int = 0  # Assertions validated when including indirect

@@ -577,7 +577,7 @@ def build_graph(
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:
-    # REQUIREMENT ← CODE ← TEST ← TEST_RESULT
+    # REQUIREMENT ← CODE ← TEST ← RESULT
     if scan_code and scan_tests:
         from elspais.graph.test_code_linker import link_tests_to_code
 

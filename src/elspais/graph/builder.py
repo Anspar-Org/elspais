@@ -2018,7 +2018,7 @@ class GraphBuilder:
             hash_mode: Hash calculation mode ("full-text" or "normalized-text").
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
-                classification. Defaults to ASSERTION and TEST_RESULT.
+                classification. Defaults to ASSERTION and RESULT.
             multi_assertion_separator: Character joining multiple assertion
                 labels in compact references (e.g. "+" for REQ-x-A+B+C).
                 Empty string disables expansion.
@@ -2368,7 +2368,7 @@ class GraphBuilder:
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
 
-        Creates a TEST_RESULT node and queues a YIELDS edge to the
+        Creates a RESULT node and queues a YIELDS edge to the
         referenced TEST node (via test_id). Does NOT auto-create TEST
         nodes — if test_id doesn't exist at link resolution time, it
         becomes a broken reference (same as Implements: REQ-nonexistent).

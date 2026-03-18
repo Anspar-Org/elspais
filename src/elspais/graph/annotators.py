@@ -548,8 +548,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
     Test-specific metrics:
     - direct_tested: Assertions with TEST nodes (not CODE)
-    - validated: Assertions with passing TEST_RESULTs
-    - has_failures: Any TEST_RESULT is failed/error
+    - validated: Assertions with passing RESULTs
+    - has_failures: Any RESULT is failed/error
 
     Args:
         graph: The TraceGraph to annotate.
@@ -633,7 +633,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                                 )
                             )
 
-                # Transitive: CODE → TEST → TEST_RESULT (indirect test coverage)
+                # Transitive: CODE → TEST → RESULT (indirect test coverage)
                 # Check if this CODE node has TEST children via VERIFIES edges
                 for code_edge in target_node.iter_outgoing_edges():
                     if (
@@ -664,7 +664,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                                     )
                                 )
 
-                        # Track for TEST_RESULT lookup (use CODE's assertion_targets)
+                        # Track for RESULT lookup (use CODE's assertion_targets)
                         test_nodes_for_result_lookup.append((transitive_test, None))
 
             elif target_kind == NodeKind.REQUIREMENT:
@@ -691,7 +691,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                             )
                         )
 
-        # Process TEST children to find TEST_RESULT nodes
+        # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             for result in test_node.iter_children():
@@ -950,7 +950,7 @@ def annotate_keywords(
     - ASSERTION: SHALL statement (label)
     - USER_JOURNEY: title + actor + goal + description
     - REMAINDER: label + raw_text
-    - Others (CODE, TEST, TEST_RESULT): label only
+    - Others (CODE, TEST, RESULT): label only
 
     Keywords are stored in node._content["keywords"] as a list.
 
