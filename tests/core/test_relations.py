@@ -127,13 +127,19 @@ class TestEdgeSemantics:
         """VERIFIES edges (tests) contribute to coverage."""
         assert EdgeKind.VERIFIES.contributes_to_coverage() is True
 
-    def test_addresses_no_rollup_flag(self):
-        """ADDRESSES edges (journey links) don't affect coverage."""
-        assert EdgeKind.ADDRESSES.contributes_to_coverage() is False
-
     def test_contains_no_rollup_flag(self):
         """CONTAINS edges (file structure) don't affect coverage."""
         assert EdgeKind.CONTAINS.contributes_to_coverage() is False
+
+
+def test_validates_REQ_contributes_to_coverage():
+    """EdgeKind.VALIDATES contributes to coverage.
+
+    Validates REQ-d00069-A: VALIDATES edge kind contributes to coverage.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    assert EdgeKind.VALIDATES.contributes_to_coverage() is True
 
 
 class TestNodeEdgeIntegration:

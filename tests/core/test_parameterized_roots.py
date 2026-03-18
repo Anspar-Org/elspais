@@ -125,7 +125,7 @@ class TestIterRootsRequirement:
                 title="Journey",
                 actor="Dev",
                 goal="Test",
-                addresses=["REQ-p00001"],
+                validates=["REQ-p00001"],
             ),
         )
 

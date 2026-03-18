@@ -1,7 +1,7 @@
 """Tests for JourneyParser - Priority 60 user journey parser.
 
 Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-linking including addresses.
+linking including validates.
 """
 
 from elspais.graph.parsers import ParseContext
@@ -56,22 +56,22 @@ class TestJourneyParserBasic:
         assert len(results) == 0
 
 
-class TestJourneyParserAddresses:
-    """Tests for JourneyParser Addresses: field parsing.
+class TestJourneyParserValidates:
+    """Tests for JourneyParser Validates: field parsing.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
-    def test_REQ_o00050_C_addresses_multiple_refs(self):
-        """Journey with Addresses: REQ-p00012, REQ-d00042 parses both refs."""
+    def test_REQ_o00050_C_validates_multiple_refs(self):
+        """Journey with Validates: REQ-p00012, REQ-d00042 parses both refs."""
         parser = JourneyParser()
         lines = [
             (1, "## JNY-Dev-01: Development Workflow"),
             (2, ""),
             (3, "**Actor**: Developer"),
             (4, "**Goal**: Implement a feature"),
-            (5, "Addresses: REQ-p00012, REQ-d00042"),
+            (5, "Validates: REQ-p00012, REQ-d00042"),
             (6, ""),
             (7, "### Steps"),
             (8, "1. Read requirements"),
@@ -84,13 +84,13 @@ class TestJourneyParserAddresses:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        addresses = results[0].parsed_data["addresses"]
-        assert len(addresses) == 2
-        assert "REQ-p00012" in addresses
-        assert "REQ-d00042" in addresses
+        validates = results[0].parsed_data["validates"]
+        assert len(validates) == 2
+        assert "REQ-p00012" in validates
+        assert "REQ-d00042" in validates
 
-    def test_REQ_o00050_C_no_addresses_line_empty_list(self):
-        """Journey without Addresses: line has empty addresses list."""
+    def test_REQ_o00050_C_no_validates_line_empty_list(self):
+        """Journey without Validates: line has empty validates list."""
         parser = JourneyParser()
         lines = [
             (1, "## JNY-Dev-02: Simple Journey"),
@@ -108,18 +108,18 @@ class TestJourneyParserAddresses:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        addresses = results[0].parsed_data["addresses"]
-        assert addresses == []
+        validates = results[0].parsed_data["validates"]
+        assert validates == []
 
-    def test_REQ_o00050_C_single_address(self):
-        """Journey with single Addresses: REQ-p00012 parses one ref."""
+    def test_REQ_o00050_C_single_validates(self):
+        """Journey with single Validates: REQ-p00012 parses one ref."""
         parser = JourneyParser()
         lines = [
-            (1, "## JNY-Dev-03: Single Address Journey"),
+            (1, "## JNY-Dev-03: Single Validates Journey"),
             (2, ""),
             (3, "**Actor**: Developer"),
             (4, "**Goal**: Implement feature"),
-            (5, "Addresses: REQ-p00012"),
+            (5, "Validates: REQ-p00012"),
             (6, ""),
             (7, "### Steps"),
             (8, "1. Do work"),
@@ -131,19 +131,19 @@ class TestJourneyParserAddresses:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        addresses = results[0].parsed_data["addresses"]
-        assert len(addresses) == 1
-        assert addresses[0] == "REQ-p00012"
+        validates = results[0].parsed_data["validates"]
+        assert len(validates) == 1
+        assert validates[0] == "REQ-p00012"
 
-    def test_REQ_o00050_C_addresses_whitespace_padded(self):
-        """Journey with whitespace-padded refs in Addresses: line."""
+    def test_REQ_o00050_C_validates_whitespace_padded(self):
+        """Journey with whitespace-padded refs in Validates: line."""
         parser = JourneyParser()
         lines = [
             (1, "## JNY-Dev-04: Whitespace Journey"),
             (2, ""),
             (3, "**Actor**: Developer"),
             (4, "**Goal**: Test whitespace"),
-            (5, "Addresses:   REQ-p00012 ,  REQ-d00042  , REQ-o00005  "),
+            (5, "Validates:   REQ-p00012 ,  REQ-d00042  , REQ-o00005  "),
             (6, ""),
             (7, "### Steps"),
             (8, "1. Verify parsing"),
@@ -155,11 +155,35 @@ class TestJourneyParserAddresses:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        addresses = results[0].parsed_data["addresses"]
-        assert len(addresses) == 3
-        assert "REQ-p00012" in addresses
-        assert "REQ-d00042" in addresses
-        assert "REQ-o00005" in addresses
+        validates = results[0].parsed_data["validates"]
+        assert len(validates) == 3
+        assert "REQ-p00012" in validates
+        assert "REQ-d00042" in validates
+        assert "REQ-o00005" in validates
         # Verify no leading/trailing whitespace on parsed refs
-        for addr in addresses:
-            assert addr == addr.strip()
+        for val in validates:
+            assert val == val.strip()
+
+
+def test_journey_parser_REQ_validates_field():
+    """JourneyParser extracts Validates: field into parsed_data['validates'].
+
+    Validates REQ-d00069-A: journey parser supports validates field.
+    """
+    from elspais.graph.parsers.journey import JourneyParser
+
+    parser = JourneyParser()
+    lines_text = """\
+## JNY-TST-001: Test Journey
+**Actor**: Tester
+**Goal**: Verify something
+Validates: REQ-p00001, REQ-p00002
+*End* *JNY-TST-001*
+"""
+    lines = [(i + 1, line) for i, line in enumerate(lines_text.splitlines())]
+    results = list(parser.claim_and_parse(lines, context=None))
+    assert len(results) == 1
+    data = results[0].parsed_data
+    assert "validates" in data
+    assert "addresses" not in data
+    assert data["validates"] == ["REQ-p00001", "REQ-p00002"]

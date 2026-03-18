@@ -66,7 +66,7 @@ class JourneyItem:
     goal: str | None = None
     descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
     file: str = ""  # Source file path
-    referenced_reqs: list[str] = field(default_factory=list)  # REQs via ADDRESSES edges
+    referenced_reqs: list[str] = field(default_factory=list)  # REQs via VALIDATES edges
 
 
 @dataclass
@@ -984,9 +984,9 @@ class HTMLGenerator:
                 _rp = _fn.get_field("relative_path") or ""
                 file = Path(_rp).name if _rp else ""
 
-            # Extract referenced requirements from incoming ADDRESSES edges
+            # Extract referenced requirements from incoming VALIDATES edges
             referenced_reqs = sorted(
-                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
+                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES
             )
 
             journeys.append(

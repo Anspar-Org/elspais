@@ -361,11 +361,11 @@ class TestHTMLGeneratorJourneyBadges:
     """Tests for journey REQ pill badges in trace view.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
-    def test_REQ_o00050_C_journey_with_addresses_shows_badges(self):
-        """Journey with ADDRESSES edges renders ref badges in HTML."""
+    def test_REQ_o00050_C_journey_with_validates_shows_badges(self):
+        """Journey with VALIDATES edges renders ref badges in HTML."""
         graph = build_graph(
             make_requirement("REQ-p00001", level="PRD", title="Product Req"),
             make_journey(
@@ -373,7 +373,7 @@ class TestHTMLGeneratorJourneyBadges:
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
-                addresses=["REQ-p00001"],
+                validates=["REQ-p00001"],
             ),
         )
         generator = HTMLGenerator(graph)
@@ -384,8 +384,8 @@ class TestHTMLGeneratorJourneyBadges:
         assert "REQ-p00001" in result
         assert "switchToReqTab" in result
 
-    def test_REQ_o00050_C_journey_without_addresses_no_refs_section(self):
-        """Journey without ADDRESSES edges omits refs section in HTML."""
+    def test_REQ_o00050_C_journey_without_validates_no_refs_section(self):
+        """Journey without VALIDATES edges omits refs section in HTML."""
         graph = build_graph(
             make_journey(
                 "JNY-Dev-02",

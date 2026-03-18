@@ -9,7 +9,7 @@ Journeys for the internal project manager coordinating delivery and the DevOps e
 **Actor**: Elvira (Internal Project Manager)
 **Goal**: Monitor which requirements are implemented, changed, or orphaned during a two-week sprint
 **Context**: Elvira is managing a sprint focused on the reporting module. She needs to track progress against the planned requirements and identify any issues before the sprint review.
-Addresses: REQ-p00003, REQ-p00004, REQ-p00006
+Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
@@ -35,7 +35,7 @@ Elvira has a clear picture of sprint progress: which requirements are complete, 
 **Actor**: Elvira (Internal Project Manager)
 **Goal**: Facilitate a structured requirement review meeting with sponsor stakeholders using the collaborative review server
 **Context**: The sponsor QA team wants to review the latest batch of requirements before the next milestone. Elvira sets up the review server so participants can comment on specific requirements in real time.
-Addresses: REQ-p00006, REQ-p00007
+Validates: REQ-p00006, REQ-p00007
 
 ## Steps
 
@@ -61,7 +61,7 @@ The review session produced structured, requirement-level feedback from all stak
 **Actor**: Elvira (Internal Project Manager)
 **Goal**: Manage requirements that span the core platform and a sponsor-specific associated repository
 **Context**: The platform serves multiple sponsors. One sponsor needs custom features that extend the core platform requirements. Elvira needs to ensure the sponsor-specific requirements properly implement core PRD requirements and that the combined hierarchy is valid.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00005
+Validates: REQ-p00001, REQ-p00002, REQ-p00005
 
 ## Steps
 
@@ -86,7 +86,7 @@ The core platform and sponsor-specific requirements are validated together with 
 **Actor**: Alex (DevOps Engineer)
 **Goal**: Add automated requirement validation to the CI/CD pipeline so invalid specifications cannot be merged
 **Context**: The team wants to catch requirement formatting errors, broken links, and hash mismatches before they reach the main branch. Alex is adding Elspais validation as a required check in the pull request workflow.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00004
+Validates: REQ-p00001, REQ-p00002, REQ-p00004
 
 ## Steps
 

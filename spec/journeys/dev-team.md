@@ -9,7 +9,7 @@ Journeys for developers writing requirements and QA engineers mapping test cover
 **Actor**: Sarah (Developer)
 **Goal**: Create a validated DEV requirement that implements an existing PRD requirement, with proper format and hash
 **Context**: Sarah is starting work on a new feature. The product team has already defined the PRD-level requirement, and Sarah needs to create the corresponding DEV specification before writing code.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00004
+Validates: REQ-p00001, REQ-p00002, REQ-p00004
 
 ## Steps
 
@@ -36,7 +36,7 @@ Sarah has a validated DEV requirement properly linked to the parent PRD requirem
 **Actor**: Sarah (Developer)
 **Goal**: Use an AI coding assistant with the Elspais MCP server to search existing requirements and draft a new one
 **Context**: Sarah is working on a complex feature that touches several existing requirements. Rather than manually searching spec files, she wants to use her AI assistant to navigate the requirement graph and help draft a new requirement.
-Addresses: REQ-p00001, REQ-p00050, REQ-p00060
+Validates: REQ-p00001, REQ-p00050, REQ-p00060
 
 ## Steps
 
@@ -62,7 +62,7 @@ Sarah has efficiently navigated the requirement hierarchy and authored a well-st
 **Actor**: Marcus (QA Engineer)
 **Goal**: Verify that all requirement assertions have corresponding test coverage before a release
 **Context**: The team is preparing for a release milestone. Marcus needs to confirm that every assertion in the DEV requirements is covered by at least one test, and produce a coverage report for the project manager.
-Addresses: REQ-p00001, REQ-p00003, REQ-p00004
+Validates: REQ-p00001, REQ-p00003, REQ-p00004
 
 ## Steps
 

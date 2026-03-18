@@ -289,7 +289,7 @@ class TestRegenerateIndexAlignment:
                 title="Developer Onboarding Workflow",
                 actor="Developer",
                 goal="Get started",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
                 source_path=str(spec_dir / "journeys.md"),
             ),
         )
@@ -406,7 +406,7 @@ class TestRegenerateIndexAlignment:
                 title="Multi Addr",
                 actor="Developer",
                 goal="Test",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
                 source_path=str(spec_dir / "journeys.md"),
             ),
         )

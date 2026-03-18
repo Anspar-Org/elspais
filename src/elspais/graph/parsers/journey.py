@@ -31,7 +31,7 @@ class JourneyParser:
     HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>JNY-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
     ACTOR_PATTERN = re.compile(r"\*\*Actor\*\*:\s*(?P<actor>.+?)(?:\n|$)")
     GOAL_PATTERN = re.compile(r"\*\*Goal\*\*:\s*(?P<goal>.+?)(?:\n|$)")
-    ADDRESSES_PATTERN = re.compile(r"^Addresses:\s*(?P<addresses>.+?)$", re.MULTILINE)
+    VALIDATES_PATTERN = re.compile(r"^Validates:\s*(?P<validates>.+?)$", re.MULTILINE)
     END_MARKER_PATTERN = re.compile(r"^\*End\*\s+\*JNY-[^*]+\*", re.MULTILINE)
 
     def claim_and_parse(
@@ -121,7 +121,7 @@ class JourneyParser:
             "title": title,
             "actor": None,
             "goal": None,
-            "addresses": [],
+            "validates": [],
         }
 
         actor_match = self.ACTOR_PATTERN.search(text)
@@ -132,9 +132,9 @@ class JourneyParser:
         if goal_match:
             data["goal"] = goal_match.group("goal").strip()
 
-        addresses_match = self.ADDRESSES_PATTERN.search(text)
-        if addresses_match:
-            refs_str = addresses_match.group("addresses")
-            data["addresses"] = [ref.strip() for ref in refs_str.split(",") if ref.strip()]
+        validates_match = self.VALIDATES_PATTERN.search(text)
+        if validates_match:
+            refs_str = validates_match.group("validates")
+            data["validates"] = [ref.strip() for ref in refs_str.split(",") if ref.strip()]
 
         return data

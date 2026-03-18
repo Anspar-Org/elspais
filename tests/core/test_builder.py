@@ -994,15 +994,15 @@ class TestCanonicalTestIds:
         assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)
 
 
-class TestAddressesEdges:
-    """Tests for ADDRESSES edge creation in GraphBuilder.
+class TestValidatesEdges:
+    """Tests for VALIDATES edge creation in GraphBuilder.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
-    def test_REQ_o00050_C_journey_addresses_creates_edge(self):
-        """JNY with Addresses: REQ-p00012 creates ADDRESSES edge to REQ node."""
+    def test_REQ_o00050_C_journey_validates_creates_edge(self):
+        """JNY with Validates: REQ-p00012 creates VALIDATES edge to REQ node."""
         graph = build_graph(
             make_requirement("REQ-p00012", level="PRD", title="Product Requirement"),
             make_journey(
@@ -1010,7 +1010,7 @@ class TestAddressesEdges:
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
             ),
         )
 
@@ -1021,27 +1021,27 @@ class TestAddressesEdges:
         assert req_node is not None
 
         # The REQ node becomes the parent via target.link(source, edge_kind),
-        # so the JNY node has incoming ADDRESSES edges
+        # so the JNY node has incoming VALIDATES edges
         edges = incoming_edges_string(jny_node)
-        assert "REQ-p00012->JNY-Dev-01:addresses" in edges
+        assert "REQ-p00012->JNY-Dev-01:validates" in edges
 
-        # Verify edge kind is ADDRESSES
-        found_addresses_edge = False
+        # Verify edge kind is VALIDATES
+        found_validates_edge = False
         for edge in jny_node.iter_incoming_edges():
-            if edge.source.id == "REQ-p00012" and edge.kind == EdgeKind.ADDRESSES:
-                found_addresses_edge = True
+            if edge.source.id == "REQ-p00012" and edge.kind == EdgeKind.VALIDATES:
+                found_validates_edge = True
                 break
-        assert found_addresses_edge, "Expected ADDRESSES edge from REQ-p00012 to JNY-Dev-01"
+        assert found_validates_edge, "Expected VALIDATES edge from REQ-p00012 to JNY-Dev-01"
 
-    def test_REQ_o00050_C_journey_addresses_missing_target_broken_ref(self):
-        """JNY with Addresses: REQ-NONEXIST records broken reference."""
+    def test_REQ_o00050_C_journey_validates_missing_target_broken_ref(self):
+        """JNY with Validates: REQ-NONEXIST records broken reference."""
         graph = build_graph(
             make_journey(
                 "JNY-Dev-02",
                 title="Broken Ref Journey",
                 actor="Developer",
                 goal="Test broken ref",
-                addresses=["REQ-NONEXIST"],
+                validates=["REQ-NONEXIST"],
             ),
         )
 
@@ -1063,19 +1063,19 @@ class TestAddressesEdges:
             if br.source_id == "JNY-Dev-02" and br.target_id == "REQ-NONEXIST"
         ]
         assert len(broken) == 1
-        assert broken[0].edge_kind == "addresses"
+        assert broken[0].edge_kind == "validates"
 
-    def test_REQ_o00050_C_journey_addresses_multiple_targets(self):
-        """JNY with multiple Addresses creates edges to all targets."""
+    def test_REQ_o00050_C_journey_validates_multiple_targets(self):
+        """JNY with multiple Validates creates edges to all targets."""
         graph = build_graph(
             make_requirement("REQ-p00012", level="PRD"),
             make_requirement("REQ-d00042", level="DEV"),
             make_journey(
                 "JNY-Dev-03",
-                title="Multi Address Journey",
+                title="Multi Validates Journey",
                 actor="Developer",
-                goal="Test multiple addresses",
-                addresses=["REQ-p00012", "REQ-d00042"],
+                goal="Test multiple validates",
+                validates=["REQ-p00012", "REQ-d00042"],
             ),
         )
 
@@ -1083,8 +1083,8 @@ class TestAddressesEdges:
         assert jny_node is not None
 
         edges = incoming_edges_string(jny_node)
-        assert "REQ-d00042->JNY-Dev-03:addresses" in edges
-        assert "REQ-p00012->JNY-Dev-03:addresses" in edges
+        assert "REQ-d00042->JNY-Dev-03:validates" in edges
+        assert "REQ-p00012->JNY-Dev-03:validates" in edges
 
     def test_REQ_o00050_C_journey_is_orphan_without_children(self):
         """JNY nodes without meaningful children are orphans (REQ-d00071)."""

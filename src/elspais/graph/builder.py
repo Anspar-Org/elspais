@@ -2265,9 +2265,9 @@ class GraphBuilder:
         }
         self._nodes[journey_id] = node
 
-        # Queue addresses links for later resolution
-        for addr_ref in data.get("addresses", []):
-            self._pending_links.append((journey_id, addr_ref, EdgeKind.ADDRESSES))
+        # Queue validates links for later resolution
+        for addr_ref in data.get("validates", []):
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
 
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
@@ -2857,7 +2857,7 @@ class GraphBuilder:
         # Compute orphan candidates from graph structure instead of tracking
         # incrementally. A content node (not FILE, REMAINDER, ASSERTION) is an
         # orphan candidate if it has no content-level parent edges — i.e. no
-        # incoming IMPLEMENTS, REFINES, VERIFIES, ADDRESSES, or YIELDS edges.
+        # incoming IMPLEMENTS, REFINES, VERIFIES, VALIDATES, or YIELDS edges.
         # CONTAINS edges (from FILE nodes) don't count as content-level links.
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
         #        with at least one meaningful (non-satellite) child.
@@ -2867,7 +2867,7 @@ class GraphBuilder:
             EdgeKind.IMPLEMENTS,
             EdgeKind.REFINES,
             EdgeKind.VERIFIES,
-            EdgeKind.ADDRESSES,
+            EdgeKind.VALIDATES,
             EdgeKind.YIELDS,
         }
         roots = []
