@@ -299,19 +299,17 @@ class TestInitCLIIntegration:
 
     def test_cli_init_template_flag(self):
         """Test init --template flag is registered."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["init", "--template"])
+        args = parse_args(["init", "--template"])
         assert args.command == "init"
         assert args.template is True
 
     def test_cli_init_template_with_force(self):
         """Test init --template --force flags together."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["init", "--template", "--force"])
+        args = parse_args(["init", "--template", "--force"])
         assert args.template is True
         assert args.force is True
 

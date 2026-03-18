@@ -25,13 +25,13 @@ import tyro
 class HealthArgs:
     """Check repository and configuration health."""
 
-    spec_only: bool = False
+    spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
     """Run spec file checks only."""
 
-    code_only: bool = False
+    code_only: Annotated[bool, tyro.conf.arg(name="code")] = False
     """Run code reference checks only."""
 
-    tests_only: bool = False
+    tests_only: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Run test mapping checks only."""
 
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
@@ -46,7 +46,7 @@ class HealthArgs:
     include_passing_details: bool = False
     """Show full details for passing checks."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -60,7 +60,7 @@ class DoctorArgs:
     format: Literal["text", "json"] = "text"
     """Output format."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -80,13 +80,13 @@ class TraceArgs:
     body: bool = False
     """Show requirement body text in detail rows."""
 
-    show_assertions: bool = False
+    show_assertions: Annotated[bool, tyro.conf.arg(name="assertions")] = False
     """Show individual assertions in detail rows."""
 
-    show_tests: bool = False
+    show_tests: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Show test references in detail rows."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -112,7 +112,7 @@ class ViewerArgs:
     path: Path | None = None
     """Path to repository root (default: auto-detect from cwd)."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -123,7 +123,7 @@ class ViewerArgs:
 class GraphArgs:
     """Export the traceability graph structure as JSON."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -134,13 +134,13 @@ class GraphArgs:
 class FixArgs:
     """Auto-fix spec file issues (hashes, formatting)."""
 
-    req_id: str | None = None
+    req_id: tyro.conf.Positional[str | None] = None
     """Specific requirement ID to fix (hash only)."""
 
     dry_run: bool = False
     """Show what would be fixed without making changes."""
 
-    message: str | None = None
+    message: Annotated[str | None, tyro.conf.arg(aliases=["-m"])] = None
     """Changelog reason for Active requirement hash updates."""
 
     mode: Literal["core", "combined", "associate"] = "combined"
@@ -157,7 +157,7 @@ class SummaryArgs:
     format: Literal["text", "markdown", "json", "csv"] = "text"
     """Output format."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -174,10 +174,10 @@ class ChangedArgs:
     format: Literal["text", "json"] = "text"
     """Output format."""
 
-    all: bool = False
+    all: Annotated[bool, tyro.conf.arg(aliases=["-a"])] = False
     """Include all changed files (not just spec)."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -188,7 +188,7 @@ class ChangedArgs:
 class AnalysisArgs:
     """Analyze foundational requirement importance."""
 
-    top: int = 10
+    top: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 10
     """Number of top results to show."""
 
     weights: str | None = None
@@ -206,7 +206,7 @@ class AnalysisArgs:
     include_code: bool = False
     """Include CODE nodes in the analysis."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -217,7 +217,7 @@ class AnalysisArgs:
 class VersionArgs:
     """Show version and check for updates."""
 
-    check: str | None = None
+    check: tyro.conf.Positional[str | None] = None
     """Check for updates from PyPI."""
 
 
@@ -248,7 +248,9 @@ class InitArgs:
 class ExampleArgs:
     """Display requirement format examples and templates."""
 
-    example_type: Literal["requirement", "journey", "assertion", "ids"] | None = None
+    example_type: tyro.conf.Positional[
+        Literal["requirement", "journey", "assertion", "ids"] | None
+    ] = None
     """Example type to display."""
 
     full: bool = False
@@ -262,7 +264,7 @@ class ExampleArgs:
 class EditArgs:
     """Edit requirements in-place (implements, status, move)."""
 
-    req_id: str | None = None
+    req_id: tyro.conf.Positional[str | None] = None
     """Requirement ID to edit."""
 
     implements: str | None = None
@@ -297,7 +299,7 @@ class ConfigShowArgs:
     format: Literal["text", "json"] = "text"
     """Output format."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -305,13 +307,13 @@ class ConfigShowArgs:
 class ConfigGetArgs:
     """Get a configuration value."""
 
-    key: str = ""
+    key: tyro.conf.Positional[str] = ""
     """Configuration key (dot-notation, e.g., 'patterns.prefix')."""
 
     format: Literal["text", "json"] = "text"
     """Output format."""
 
-    output: Path | None = None
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
 
@@ -319,10 +321,10 @@ class ConfigGetArgs:
 class ConfigSetArgs:
     """Set a configuration value."""
 
-    key: str = ""
+    key: tyro.conf.Positional[str] = ""
     """Configuration key (dot-notation)."""
 
-    value: str = ""
+    value: tyro.conf.Positional[str] = ""
     """Value to set (auto-detected: bool, number, JSON array/object, string)."""
 
 
@@ -330,7 +332,7 @@ class ConfigSetArgs:
 class ConfigUnsetArgs:
     """Remove a configuration key."""
 
-    key: str = ""
+    key: tyro.conf.Positional[str] = ""
     """Configuration key to remove."""
 
 
@@ -338,10 +340,10 @@ class ConfigUnsetArgs:
 class ConfigAddArgs:
     """Add a value to an array configuration."""
 
-    key: str = ""
+    key: tyro.conf.Positional[str] = ""
     """Configuration key for array (e.g., 'directories.code')."""
 
-    value: str = ""
+    value: tyro.conf.Positional[str] = ""
     """Value to add to the array."""
 
 
@@ -349,10 +351,10 @@ class ConfigAddArgs:
 class ConfigRemoveArgs:
     """Remove a value from an array configuration."""
 
-    key: str = ""
+    key: tyro.conf.Positional[str] = ""
     """Configuration key for array."""
 
-    value: str = ""
+    value: tyro.conf.Positional[str] = ""
     """Value to remove from the array."""
 
 
@@ -376,7 +378,9 @@ ConfigAction = (
 class ConfigArgs:
     """View and modify configuration."""
 
-    action: ConfigAction = dataclasses.field(default_factory=lambda: ConfigShowArgs())
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[ConfigAction]] = (
+        dataclasses.field(default_factory=lambda: ConfigShowArgs())
+    )
     """Config subcommand (show, get, set, unset, add, remove, path)."""
 
 
@@ -392,7 +396,7 @@ class RulesListArgs:
 class RulesShowArgs:
     """Show content of a content rule file."""
 
-    file: str = ""
+    file: tyro.conf.Positional[str] = ""
     """Content rule file name (e.g., 'AI-AGENT.md')."""
 
 
@@ -406,7 +410,9 @@ RulesAction = (
 class RulesArgs:
     """View and manage content rules."""
 
-    action: RulesAction = dataclasses.field(default_factory=lambda: RulesListArgs())
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[RulesAction]] = (
+        dataclasses.field(default_factory=lambda: RulesListArgs())
+    )
     """Rules subcommand (list, show)."""
 
 
@@ -434,7 +440,7 @@ DOCS_TOPICS = Literal[
 class DocsArgs:
     """Read the user guide."""
 
-    topic: DOCS_TOPICS = "quickstart"
+    topic: tyro.conf.Positional[DOCS_TOPICS] = "quickstart"
     """Documentation topic."""
 
     plain: bool = False
@@ -468,7 +474,7 @@ class CompletionArgs:
 class AssociateArgs:
     """Manage associate repository links (link, list, unlink)."""
 
-    associate_path: str | None = None
+    associate_path: tyro.conf.Positional[str | None] = None
     """Path to associate repo or name to search for."""
 
     all: bool = False
@@ -534,7 +540,9 @@ InstallAction = Annotated[InstallLocalArgs, tyro.conf.subcommand("local")]
 class InstallArgs:
     """Install elspais variants."""
 
-    action: InstallAction = dataclasses.field(default_factory=InstallLocalArgs)
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[InstallAction]] = (
+        dataclasses.field(default_factory=InstallLocalArgs)
+    )
     """Install subcommand."""
 
 
@@ -562,7 +570,9 @@ UninstallAction = Annotated[UninstallLocalArgs, tyro.conf.subcommand("local")]
 class UninstallArgs:
     """Revert elspais installation."""
 
-    action: UninstallAction = dataclasses.field(default_factory=UninstallLocalArgs)
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[UninstallAction]] = (
+        dataclasses.field(default_factory=UninstallLocalArgs)
+    )
     """Uninstall subcommand."""
 
 
@@ -610,7 +620,9 @@ McpAction = (
 class McpArgs:
     """MCP server commands."""
 
-    action: McpAction = dataclasses.field(default_factory=McpServeArgs)
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[McpAction]] = (
+        dataclasses.field(default_factory=McpServeArgs)
+    )
     """MCP subcommand (serve, install, uninstall)."""
 
 
@@ -647,7 +659,9 @@ LinkAction = Annotated[LinkSuggestArgs, tyro.conf.subcommand("suggest")]
 class LinkArgs:
     """Link suggestion tools."""
 
-    action: LinkAction = dataclasses.field(default_factory=LinkSuggestArgs)
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[LinkAction]] = (
+        dataclasses.field(default_factory=LinkSuggestArgs)
+    )
     """Link subcommand."""
 
 
@@ -685,10 +699,10 @@ Command = (
 class GlobalArgs:
     """Requirements validation and traceability tools (L-Space)."""
 
-    command: Command
+    command: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[Command]]
     """Subcommand to execute."""
 
-    directory: Path | None = None
+    directory: Annotated[Path | None, tyro.conf.arg(aliases=["-C"])] = None
     """Run as if started in this directory (like git -C)."""
 
     config: Path | None = None
@@ -697,10 +711,10 @@ class GlobalArgs:
     spec_dir: Path | None = None
     """Override spec directory."""
 
-    verbose: bool = False
+    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
     """Verbose output."""
 
-    quiet: bool = False
+    quiet: Annotated[bool, tyro.conf.arg(aliases=["-q"])] = False
     """Suppress non-error output."""
 
     config_overrides: list[str] | None = None

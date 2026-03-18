@@ -104,92 +104,69 @@ class TestCliArgsDataclasses:
         assert h.output is None
 
     def test_REQ_p00001_A_tyro_parses_health(self) -> None:
-        """Tyro parses 'command:health --command.format json' into HealthArgs."""
+        """Tyro parses 'health --format json' into HealthArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["command:health", "--command.format", "json"],
+            args=["health", "--format", "json"],
         )
         assert isinstance(result.command, HealthArgs)
         assert result.command.format == "json"
 
     def test_REQ_p00001_A_tyro_parses_config_show(self) -> None:
-        """Tyro parses nested config show subcommand."""
+        """Tyro parses nested 'config show --format json'."""
         result = tyro.cli(
             GlobalArgs,
-            args=[
-                "command:config",
-                "command.action:show",
-                "--command.action.format",
-                "json",
-            ],
+            args=["config", "show", "--format", "json"],
         )
         assert isinstance(result.command, ConfigArgs)
         assert isinstance(result.command.action, ConfigShowArgs)
         assert result.command.action.format == "json"
 
     def test_REQ_p00001_A_tyro_parses_config_get(self) -> None:
-        """Tyro parses nested config get with key."""
+        """Tyro parses nested 'config get patterns.prefix' (positional key)."""
         result = tyro.cli(
             GlobalArgs,
-            args=[
-                "command:config",
-                "command.action:get",
-                "--command.action.key",
-                "patterns.prefix",
-            ],
+            args=["config", "get", "patterns.prefix"],
         )
         assert isinstance(result.command, ConfigArgs)
         assert isinstance(result.command.action, ConfigGetArgs)
         assert result.command.action.key == "patterns.prefix"
 
     def test_REQ_p00001_A_tyro_parses_mcp_serve(self) -> None:
-        """Tyro parses nested mcp serve subcommand."""
+        """Tyro parses nested 'mcp serve'."""
         result = tyro.cli(
             GlobalArgs,
-            args=["command:mcp", "command.action:serve"],
+            args=["mcp", "serve"],
         )
         assert isinstance(result.command, McpArgs)
         assert isinstance(result.command.action, McpServeArgs)
         assert result.command.action.transport == "stdio"
 
     def test_REQ_p00001_A_tyro_parses_mcp_install(self) -> None:
-        """Tyro parses mcp install with --global_scope."""
+        """Tyro parses 'mcp install --global-scope'."""
         result = tyro.cli(
             GlobalArgs,
-            args=[
-                "command:mcp",
-                "command.action:install",
-                "--command.action.global-scope",
-            ],
+            args=["mcp", "install", "--global-scope"],
         )
         assert isinstance(result.command, McpArgs)
         assert isinstance(result.command.action, McpInstallArgs)
         assert result.command.action.global_scope is True
 
     def test_REQ_p00001_A_tyro_parses_link_suggest(self) -> None:
-        """Tyro parses link suggest (single subcommand union)."""
+        """Tyro parses 'link --format json' (single subcommand union)."""
         result = tyro.cli(
             GlobalArgs,
-            args=[
-                "command:link",
-                "--command.action.format",
-                "json",
-            ],
+            args=["link", "--format", "json"],
         )
         assert isinstance(result.command, LinkArgs)
         assert isinstance(result.command.action, LinkSuggestArgs)
         assert result.command.action.format == "json"
 
     def test_REQ_p00001_A_tyro_parses_rules_show(self) -> None:
-        """Tyro parses nested rules show with file."""
+        """Tyro parses nested 'rules show AI-AGENT.md' (positional file)."""
         result = tyro.cli(
             GlobalArgs,
-            args=[
-                "command:rules",
-                "command.action:show",
-                "--command.action.file",
-                "AI-AGENT.md",
-            ],
+            args=["rules", "show", "AI-AGENT.md"],
         )
         assert isinstance(result.command, RulesArgs)
         assert isinstance(result.command.action, RulesShowArgs)
@@ -199,25 +176,25 @@ class TestCliArgsDataclasses:
         """Verbose flag passes through on GlobalArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["--verbose", "command:health"],
+            args=["--verbose", "health"],
         )
         assert result.verbose is True
         assert isinstance(result.command, HealthArgs)
 
     def test_REQ_p00001_A_tyro_parses_install_local(self) -> None:
-        """Tyro parses install local subcommand."""
+        """Tyro parses 'install' subcommand."""
         result = tyro.cli(
             GlobalArgs,
-            args=["command:install"],
+            args=["install"],
         )
         assert isinstance(result.command, InstallArgs)
         assert isinstance(result.command.action, InstallLocalArgs)
 
     def test_REQ_p00001_A_tyro_parses_uninstall_local(self) -> None:
-        """Tyro parses uninstall local subcommand."""
+        """Tyro parses 'uninstall' subcommand."""
         result = tyro.cli(
             GlobalArgs,
-            args=["command:uninstall"],
+            args=["uninstall"],
         )
         assert isinstance(result.command, UninstallArgs)
         assert isinstance(result.command.action, UninstallLocalArgs)

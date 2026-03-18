@@ -46,7 +46,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     config = load_config(config_path)
     base_path = config_path.parent
 
-    rules = load_content_rules(config, base_path)
+    rules = load_content_rules(config.get_raw(), base_path)
 
     if not rules:
         print("No content rules configured.")
@@ -85,7 +85,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     base_path = config_path.parent
 
     # Load all rules and find the matching one
-    rules = load_content_rules(config, base_path)
+    rules = load_content_rules(config.get_raw(), base_path)
 
     matching_rule = None
     for rule in rules:

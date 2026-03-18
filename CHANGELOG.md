@@ -16,9 +16,16 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **CLI rewrite: argparse replaced with Tyro** -- `cli.py` now uses `tyro.cli(GlobalArgs)` for argument parsing. `OmitSubcommandPrefixes` and `OmitArgPrefixes` markers maintain clean `elspais health --format json` syntax. Compatibility shim converts typed dataclasses to `argparse.Namespace` for existing command `run()` functions. All CLI flag names and short aliases (`-o`, `-v`, `-q`, `-C`, `-n`, `-m`, `-a`) preserved via `tyro.conf.arg()`.
 - **`graph/factory.py` config migration** -- Converted 21 `config.get()` call chains to typed `ElspaisConfig` attribute access in `build_graph()` and `_resolve_spec_dir_config()`. Added `_validate_config()` helper for safe Pydantic conversion at function boundaries.
 - **`mcp/server.py` config migration** -- Converted 21 config dict access calls across 10 MCP workspace/tool functions to typed `ElspaisConfig` attribute access.
 - **Consumer config migration (Tasks 9-12)** -- Migrated all remaining `config.get()` calls to typed `ElspaisConfig` attribute access across `commands/health.py`, `commands/doctor.py`, `commands/fix_cmd.py`, `commands/changed.py`, `commands/example_cmd.py`, `commands/validate.py`, `graph/annotators.py`, `graph/analysis.py`, `associates.py`, `validation/format.py`, `content_rules.py`.
+
+### Fixed
+
+- **`content_rules.py` config loading** -- `load_content_rules()` callers now pass `config.get_raw()` instead of `ConfigLoader` object, fixing `AttributeError: 'ConfigLoader' has no attribute 'items'` in `rules list`.
+- **`TypeConfig.aliases` made optional** -- The Pydantic schema now allows `aliases` to be omitted in `[id-patterns.types]`, fixing validation failures for configs that don't explicitly define type letter aliases.
+- **`ComponentConfig.max_length` added** -- The Pydantic schema now accepts `max_length` in `[id-patterns.component]`, fixing validation failures for named-component configs.
 
 ### Removed
 

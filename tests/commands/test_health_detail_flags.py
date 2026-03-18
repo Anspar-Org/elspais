@@ -54,7 +54,6 @@ def _make_args(**kwargs) -> argparse.Namespace:
         "verbose": False,
         "quiet": False,
         "lenient": False,
-        "skip_passing_details": True,
         "include_passing_details": False,
     }
     defaults.update(kwargs)
@@ -66,26 +65,23 @@ class TestPassingDetailFlagsCLI:
 
     def test_REQ_d00085_E_include_passing_details_flag_accepted(self) -> None:
         """The --include-passing-details flag is accepted by the health subcommand parser."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["health", "--include-passing-details"])
+        args = parse_args(["health", "--include-passing-details"])
         assert args.include_passing_details is True
 
-    def test_REQ_d00085_E_skip_passing_details_flag_accepted(self) -> None:
-        """The --skip-passing-details flag is accepted (this is the default)."""
-        from elspais.cli import create_parser
+    def test_REQ_d00085_E_no_include_passing_details_flag_accepted(self) -> None:
+        """The --no-include-passing-details flag is accepted (this is the default)."""
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["health", "--skip-passing-details"])
-        assert args.skip_passing_details is True
+        args = parse_args(["health", "--no-include-passing-details"])
+        assert args.include_passing_details is False
 
     def test_REQ_d00085_E_default_skips_passing_details(self) -> None:
         """Without either flag, passing details are skipped by default."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["health"])
+        args = parse_args(["health"])
         # Default behavior: skip passing details
         assert args.include_passing_details is False
 
@@ -105,9 +101,7 @@ class TestTextFormatPassingDetails:
     def test_REQ_d00085_E_text_skip_passing_details_hides_details(self) -> None:
         """Text format with default --skip-passing-details hides details for passing checks."""
         report = _make_passing_report()
-        args = _make_args(
-            format="text", verbose=True, skip_passing_details=True, include_passing_details=False
-        )
+        args = _make_args(format="text", verbose=True, include_passing_details=False)
         output = _format_report(report, args)
         # With skip-passing-details (default), passing check details should be hidden
         # even in verbose mode — details keys like total_refs should not appear
@@ -133,9 +127,7 @@ class TestMarkdownFormatPassingDetails:
     def test_REQ_d00085_F_markdown_skip_passing_details_hides_findings(self) -> None:
         """Markdown with --skip-passing-details hides findings for passing checks."""
         report = _make_passing_report()
-        args = _make_args(
-            format="markdown", skip_passing_details=True, include_passing_details=False
-        )
+        args = _make_args(format="markdown", include_passing_details=False)
         output = _format_report(report, args)
         # Passing check row should appear in the table
         assert "valid_references" in output
@@ -164,7 +156,7 @@ class TestJUnitFormatPassingDetails:
     def test_REQ_d00085_E_junit_skip_passing_details_no_system_out(self) -> None:
         """JUnit with --skip-passing-details omits <system-out> for passing checks."""
         report = _make_passing_report()
-        args = _make_args(format="junit", skip_passing_details=True, include_passing_details=False)
+        args = _make_args(format="junit", include_passing_details=False)
         output = _format_report(report, args)
         root = ET.fromstring(output)
         testcases = root.findall(".//testcase[@name='valid_references']")
@@ -182,7 +174,7 @@ class TestJSONFormatPassingDetails:
         """JSON format includes full details regardless of passing-detail flags."""
         report = _make_passing_report()
         # Even with skip-passing-details, JSON should include everything
-        args = _make_args(format="json", skip_passing_details=True, include_passing_details=False)
+        args = _make_args(format="json", include_passing_details=False)
         output = _format_report(report, args)
         data = json.loads(output)
         checks = data["checks"]
