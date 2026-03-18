@@ -142,6 +142,8 @@ jobs:
   self-validate:
     name: Self-Validate Specs
     runs-on: ubuntu-latest
+    env:
+      ELSPAIS_VERSION: "0.104.43"
 
     steps:
       - uses: actions/checkout@v4
