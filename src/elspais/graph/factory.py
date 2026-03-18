@@ -22,6 +22,7 @@ from elspais.config import (
     get_ignore_config,
     get_spec_directories,
 )
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
@@ -35,6 +36,31 @@ from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import build_resolver
 from elspais.utilities.reference_config import ReferenceResolver
+
+# Known schema fields (by alias and Python name) for filtering non-schema keys
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys.
+
+    The config dict from get_config() may contain legacy keys (e.g. 'patterns')
+    that were consumed by migration but not removed. We filter those out before
+    validation since ElspaisConfig uses extra='forbid'.
+
+    The 'associates' key may use legacy format (``{paths: [...]}`` instead of
+    ``{name: {path: ...}}``), which is incompatible with the schema. We strip
+    it when it has the legacy shape since factory.py accesses associates via
+    ``get_associates_config(config)`` on the raw dict.
+    """
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    # Strip legacy-format associates (contains 'paths' list instead of named entries)
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    return ElspaisConfig.model_validate(filtered)
 
 
 # Implements: REQ-d00128-C
@@ -279,8 +305,17 @@ def _resolve_spec_dir_config(
 
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
+
+    # Typed config conversion at function boundary
+    if isinstance(repo_config, dict):
+        typed_repo_config = _validate_config(repo_config)
+    else:
+        typed_repo_config = repo_config
+
     resolver = build_resolver(repo_config)
-    reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
+    reference_resolver = ReferenceResolver.from_config(
+        typed_repo_config.references.model_dump(by_alias=True)
+    )
 
     registry = ParserRegistry()
     registry.register(RequirementParser(resolver))
@@ -290,12 +325,14 @@ def _resolve_spec_dir_config(
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
-    spec_config = repo_config.get("spec", {})
+    patterns = typed_repo_config.spec.patterns
+    # patterns can be list[str] or dict — extract list if needed
+    file_patterns = patterns if isinstance(patterns, list) else ["*.md"]
     return SpecDirConfig(
         registry=registry,
-        file_patterns=spec_config.get("patterns", ["*.md"]),
-        skip_dirs=spec_config.get("skip_dirs", []),
-        skip_files=spec_config.get("skip_files", []),
+        file_patterns=file_patterns,
+        skip_dirs=list(typed_repo_config.spec.skip_dirs),
+        skip_files=list(typed_repo_config.spec.skip_files),
         ignore_config=get_ignore_config(repo_config),
     )
 
@@ -348,13 +385,21 @@ def build_graph(
     if config is None:
         config = get_config(config_path, repo_root)
 
+    # Typed config conversion at function boundary
+    if isinstance(config, dict):
+        typed_config = _validate_config(config)
+    else:
+        typed_config = config
+
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
     # 3. Create default resolver and reference resolver
     default_resolver = build_resolver(config)
-    default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
+    default_reference_resolver = ReferenceResolver.from_config(
+        typed_config.references.model_dump(by_alias=True)
+    )
 
     # Implements: REQ-d00128-G
     # Registry for code files (code parser + remainder)
@@ -369,9 +414,8 @@ def build_graph(
     test_registry.register(RemainderParser())
 
     # 4. Build graph from all spec directories
-    hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
-    graph_config = config.get("graph", {})
-    satellite_kinds = graph_config.get("satellite_kinds", None)
+    hash_mode = typed_config.validation.hash_mode
+    satellite_kinds = list(typed_config.graph.satellite_kinds)
     mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
@@ -437,8 +481,7 @@ def build_graph(
         scanned_code_files: set[str] = set()
 
         # 5a. Explicit scan_patterns (existing behavior)
-        traceability_config = config.get("traceability", {})
-        scan_patterns = traceability_config.get("scan_patterns", [])
+        scan_patterns = list(typed_config.traceability.scan_patterns)
 
         for pattern in scan_patterns:
             # Resolve glob pattern relative to repo_root
@@ -456,7 +499,7 @@ def build_graph(
 
         # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
-        ignore_dirs = config.get("directories", {}).get("ignore", [])
+        ignore_dirs = list(typed_config.directories.ignore)
 
         for code_dir in code_dirs:
             domain_file = DomainFile(
@@ -490,14 +533,14 @@ def build_graph(
 
     # 6. Scan test directories from testing config
     if scan_tests:
-        testing_config = config.get("testing", {})
-        if testing_config.get("enabled", False):
-            test_dirs = testing_config.get("test_dirs", [])
-            test_patterns = testing_config.get("patterns", ["*_test.*", "test_*.*"])
-            test_skip_dirs = testing_config.get("skip_dirs", [])
+        testing_cfg = typed_config.testing
+        if testing_cfg.enabled:
+            test_dirs = list(testing_cfg.test_dirs)
+            test_patterns = list(testing_cfg.patterns)
+            test_skip_dirs = list(testing_cfg.skip_dirs)
 
             # Run external prescan command if configured
-            prescan_command = testing_config.get("prescan_command", "")
+            prescan_command = testing_cfg.prescan_command
             prescan_data: dict[str, list[dict]] | None = None
             if prescan_command:
                 prescan_data = _run_prescan_command(
@@ -535,7 +578,7 @@ def build_graph(
             # 6b. Scan test result files (JUnit XML, pytest JSON)
             # Implements: REQ-d00128-H
             # RemainderParser is NOT registered for RESULT file types
-            result_files = testing_config.get("result_files", [])
+            result_files = list(testing_cfg.result_files)
             if result_files:
                 xml_registry = ParserRegistry()
                 xml_registry.register(
@@ -582,8 +625,7 @@ def build_graph(
         from elspais.graph.test_code_linker import link_tests_to_code
 
         # Get source roots from config (default: ["src", ""])
-        traceability_config = config.get("traceability", {})
-        source_roots = traceability_config.get("source_roots", None)
+        source_roots = typed_config.traceability.source_roots
         link_tests_to_code(graph, repo_root, source_roots)
 
     # Annotate keywords on all nodes so keyword search tools work
