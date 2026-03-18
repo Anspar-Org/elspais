@@ -87,7 +87,7 @@ def run(
             config_path=config_path,
             canonical_root=canonical_root,
         )
-        config_dict = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+        config_dict = get_config(config_path)
         config = ConfigLoader.from_dict(config_dict)
 
     outputs: list[str] = []

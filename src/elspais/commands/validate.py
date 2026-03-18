@@ -136,7 +136,8 @@ def run(args: argparse.Namespace) -> int:
         from elspais.config import get_config
 
         config_dict = get_config(
-            config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+            config_path,
+            start_path=repo_root,
         )
         associate_paths = config_dict.get("associates", {}).get("paths", [])
         if associate_paths:
@@ -204,7 +205,8 @@ def run(args: argparse.Namespace) -> int:
     from elspais.config import get_config
 
     validate_config = get_config(
-        config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+        config_path,
+        start_path=repo_root,
     )
     _typed_vc = _validate_config(validate_config)
     _hier = _typed_vc.rules.hierarchy
