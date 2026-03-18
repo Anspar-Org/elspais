@@ -3,6 +3,8 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from elspais.config import ConfigLoader, find_config_file, find_git_root, load_config
 
 
@@ -192,6 +194,26 @@ class TestFindGitRoot:
         root = find_git_root()
         # We're in a git repo, so should find something
         assert root is not None
+
+
+class TestPydanticShim:
+    """Tests for Pydantic schema validation in load_config()."""
+
+    def test_load_config_validates_schema(self, tmp_path):
+        """load_config() should validate against Pydantic schema."""
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text('version = 2\n[project]\nnamespace = "TEST"\n')
+
+        config = load_config(config_path)
+        assert config.get("project.namespace") == "TEST"
+
+    def test_load_config_rejects_unknown_key(self, tmp_path):
+        """load_config() should reject unknown TOML keys."""
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text('version = 2\nbogus_key = "oops"\n')
+
+        with pytest.raises(ValueError):
+            load_config(config_path)
 
 
 class TestChangelogConfig:

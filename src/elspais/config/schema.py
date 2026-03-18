@@ -58,7 +58,7 @@ class IdPatternsConfig(_StrictModel):
 
 class SpecConfig(_StrictModel):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
-    patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    patterns: list[str] | dict[str, Any] = Field(default_factory=lambda: ["*.md"])
     skip_files: list[str] = Field(default_factory=list)
     skip_dirs: list[str] = Field(default_factory=list)
     index_file: str | None = None
@@ -138,6 +138,7 @@ class ReferenceDefaultsConfig(_StrictModel):
 
 
 class ReferencesConfig(_StrictModel):
+    enabled: bool = True
     defaults: ReferenceDefaultsConfig = Field(default_factory=ReferenceDefaultsConfig)
     overrides: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -148,6 +149,8 @@ class KeywordsSearchConfig(_StrictModel):
 
 class ValidationConfig(_StrictModel):
     hash_mode: str = "normalized-text"
+    hash_algorithm: str | None = None
+    hash_length: int | None = None
     allow_unresolved_cross_repo: bool = False
     strict_hierarchy: bool | None = None
 
@@ -173,12 +176,17 @@ class DirectoriesConfig(_StrictModel):
     spec: list[str] | str | None = None
     code: list[str] | str = Field(default_factory=lambda: ["src"])
     docs: list[str] | str = Field(default_factory=lambda: ["docs"])
+    database: list[str] | str | None = None
     ignore: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
 
 
 class TraceabilityConfig(_StrictModel):
     scan_patterns: list[str] = Field(default_factory=list)
     source_roots: list[str] | None = None
+    output_formats: list[str] | None = None
+    output_dir: str | None = None
+    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
 
 
 class AssociateEntryConfig(_StrictModel):
