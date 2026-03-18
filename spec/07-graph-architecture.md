@@ -868,3 +868,22 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 *End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 00000000
 ---
+
+## REQ-d00209: Schema-Driven Init Template Generation
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults.
+
+## Assertions
+
+A. `generate_config("core")` SHALL produce TOML that passes `ElspaisConfig.model_validate()` without error.
+
+B. `generate_config("associated")` SHALL produce TOML that passes `ElspaisConfig.model_validate()` without error when given a valid prefix.
+
+C. The generated TOML SHALL include all sections present in the current hardcoded templates (project, directories, id-patterns, rules, etc.).
+
+D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
+
+*End* *Schema-Driven Init Template Generation* | **Hash**: 00000000
+---
