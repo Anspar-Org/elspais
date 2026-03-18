@@ -1,9 +1,9 @@
 """Config module - Configuration loading and management.
 
 Exports:
-- ConfigLoader: Configuration container with dot-notation access
 - load_config: Load config from TOML file
 - find_config_file: Find .elspais.toml in directory hierarchy
+- config_defaults: Get default config dict from Pydantic schema
 """
 
 from __future__ import annotations
@@ -18,148 +18,21 @@ from typing import Any
 
 import tomlkit
 
-# Default configuration values
-DEFAULT_CONFIG: dict[str, Any] = {
-    "project": {
-        "namespace": "REQ",
-    },
-    "id-patterns": {
-        "canonical": "{namespace}-{type.letter}{component}",
-        "aliases": {"short": "{type.letter}{component}"},
-        "types": {
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "ops": {"level": 2, "aliases": {"letter": "o"}},
-            "dev": {"level": 3, "aliases": {"letter": "d"}},
-        },
-        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-        "assertions": {
-            "label_style": "uppercase",
-            "max_count": 26,
-        },
-    },
-    "spec": {
-        "directories": ["spec"],
-        "patterns": ["*.md"],
-        "skip_files": [],
-        "skip_dirs": [],
-    },
-    "rules": {
-        "hierarchy": {
-            "dev": ["ops", "prd"],
-            "ops": ["prd"],
-            "prd": [],
-        },
-    },
-    "testing": {
-        "enabled": False,
-        "test_dirs": ["tests"],
-        "skip_dirs": [],
-        "patterns": ["test_*.py", "*_test.py"],
-        "result_files": [],
-        "run_meta_file": "",
-        "reference_patterns": [],
-        "reference_keyword": "Verifies",
-        "prescan_command": "",
-    },
-    "ignore": {
-        "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
-        "spec": ["README.md", "INDEX.md"],
-        "code": ["*_test.py", "conftest.py", "test_*.py"],
-        "test": ["fixtures/**", "__snapshots__"],
-    },
-    "references": {
-        "defaults": {
-            "separators": ["-", "_"],
-            "case_sensitive": False,
-            "prefix_optional": False,
-            "comment_styles": ["#", "//", "--"],
-            "keywords": {
-                "implements": ["Implements", "IMPLEMENTS"],
-                "verifies": ["Verifies", "VERIFIES"],
-                "refines": ["Refines", "REFINES"],
-                # Implements: REQ-d00069-H
-                "satisfies": ["Satisfies", "SATISFIES"],
-            },
-        },
-        "overrides": [],
-    },
-    "keywords": {
-        "min_length": 3,
-    },
-    "validation": {
-        "hash_mode": "normalized-text",
-        "allow_unresolved_cross_repo": False,
-    },
-    "graph": {
-        "satellite_kinds": ["assertion", "result"],
-    },
-    "changelog": {
-        "enforce": True,
-        "require_present": False,
-        "id_source": "gh",
-        "date_format": "iso",
-        "require_change_order": False,
-        "require_reason": True,
-        "require_author_name": True,
-        "require_author_id": True,
-        "author_id_format": "email",
-        "allowed_author_ids": "all",
-    },
-}
 
+# Implements: REQ-d00207-A
+def config_defaults() -> dict[str, Any]:
+    """Get default configuration dict derived from Pydantic schema.
 
-class ConfigLoader:
-    """Configuration container with dot-notation access."""
+    All defaults are defined as Pydantic field defaults in schema.py.
+    This function validates an empty dict to produce the full defaults,
+    then dumps to a hyphenated-key dict for backward compatibility.
 
-    def __init__(self, data: dict[str, Any]) -> None:
-        """Initialize with configuration data.
+    Returns:
+        Default configuration dictionary with hyphenated keys.
+    """
+    from elspais.config.schema import ElspaisConfig
 
-        Args:
-            data: Configuration dictionary.
-        """
-        self._data = data
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ConfigLoader:
-        """Create ConfigLoader from dictionary.
-
-        Args:
-            data: Configuration dictionary.
-
-        Returns:
-            ConfigLoader instance.
-        """
-        merged = _merge_configs(DEFAULT_CONFIG, data)
-        return cls(merged)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value by dot-notation key.
-
-        Args:
-            key: Dot-separated key path (e.g., "patterns.prefix").
-            default: Default value if key not found.
-
-        Returns:
-            Configuration value or default.
-        """
-        parts = key.split(".")
-        value = self._data
-
-        for part in parts:
-            if isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                return default
-
-        return value
-
-    def get_raw(self) -> dict[str, Any]:
-        """Get raw configuration dictionary.
-
-        Returns:
-            Complete configuration dictionary.
-        """
-        return self._data
+    return ElspaisConfig.model_validate({}).model_dump(by_alias=True, exclude_none=True)
 
 
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
@@ -184,7 +57,7 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     # Only migrate if [id-patterns] is still at defaults (user didn't define it)
     id_patterns = config.get("id-patterns", {})
     canonical = id_patterns.get("canonical")
-    default_canonical = DEFAULT_CONFIG["id-patterns"]["canonical"]
+    default_canonical = config_defaults()["id-patterns"]["canonical"]
     if canonical is not None and canonical != default_canonical:
         return config  # user has explicit [id-patterns], don't override
 
@@ -241,7 +114,7 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
     # Also set namespace from patterns.prefix if not already in [project]
     namespace = patterns.get("prefix", "REQ")
-    if config.get("project", {}).get("namespace") == DEFAULT_CONFIG["project"]["namespace"]:
+    if config.get("project", {}).get("namespace") == config_defaults()["project"]["namespace"]:
         config.setdefault("project", {})["namespace"] = namespace
 
     # Write synthesized [id-patterns]
@@ -263,22 +136,26 @@ MIGRATIONS: dict[int, Callable[[dict], dict]] = {
 }
 
 
-def load_config(config_path: Path) -> ConfigLoader:
+# Implements: REQ-d00207-B
+def load_config(config_path: Path) -> dict[str, Any]:
     """Load configuration from a TOML file.
 
     Loads config_path, then deep-merges .elspais.local.toml (if present
     alongside it) on top — following the docker-compose.override.yml / .env.local
     convention for developer-local overrides.
 
+    All defaults are provided by `ElspaisConfig` Pydantic field defaults.
+    Returns a plain dict produced by ``model_dump(by_alias=True)``.
+
     Args:
         config_path: Path to the .elspais.toml file.
 
     Returns:
-        ConfigLoader with merged configuration.
+        Configuration dictionary with hyphenated keys.
     """
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
-    merged = _merge_configs(DEFAULT_CONFIG, user_config)
+    merged = _merge_configs(config_defaults(), user_config)
 
     # Deep-merge developer-local overrides if present
     local_path = config_path.parent / ".elspais.local.toml"
@@ -314,14 +191,14 @@ def load_config(config_path: Path) -> ConfigLoader:
 
     validated = ElspaisConfig.model_validate(merged)
 
-    # Shim: produce hyphenated dict for backward-compatible config.get() access
-    shim_dict = validated.model_dump(by_alias=True, exclude_none=True)
+    # Produce hyphenated dict for backward-compatible access
+    result = validated.model_dump(by_alias=True, exclude_none=True)
 
-    # Restore stripped legacy keys so existing config.get() calls still work
+    # Restore stripped legacy keys so existing config access still works
     for key, value in stripped.items():
-        shim_dict[key] = value
+        result[key] = value
 
-    return ConfigLoader(shim_dict)
+    return result
 
 
 def find_git_root(start_path: Path | None = None) -> Path | None:
@@ -604,7 +481,7 @@ def get_config(
 
     if resolved_path and resolved_path.exists():
         try:
-            config = load_config(resolved_path).get_raw()
+            config = load_config(resolved_path)
         except Exception as e:
             # A config file that exists but can't be parsed is always an error.
             # Silently falling back to defaults would hide the problem and cause
@@ -615,7 +492,7 @@ def get_config(
             ) from e
     else:
         # Return defaults (no config file found)
-        config = dict(DEFAULT_CONFIG)
+        config = config_defaults()
 
     return config
 
@@ -899,7 +776,7 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
     during file scanning. It supports glob patterns and scope-specific rules.
 
     Args:
-        config: Configuration dictionary from get_config() or load_config().get_raw()
+        config: Configuration dictionary from get_config() or load_config()
 
     Returns:
         IgnoreConfig instance with patterns from [ignore] section or defaults.
@@ -926,8 +803,8 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
 
 
 __all__ = [
-    "ConfigLoader",
     "IgnoreConfig",
+    "config_defaults",
     "load_config",
     "find_config_file",
     "find_canonical_root",
@@ -938,7 +815,6 @@ __all__ = [
     "get_docs_directories",
     "get_test_directories",
     "get_ignore_config",
-    "DEFAULT_CONFIG",
     "parse_toml",
     "parse_toml_document",
     "get_status_roles",

@@ -15,7 +15,7 @@ from typing import Any
 
 import tomlkit
 
-from elspais.config import DEFAULT_CONFIG, find_config_file, load_config, parse_toml_document
+from elspais.config import config_defaults, find_config_file, load_config, parse_toml_document
 
 
 def run(args: argparse.Namespace) -> int:
@@ -57,7 +57,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         print("No configuration file found. Run 'elspais init' to create one.")
         return 1
 
-    config = load_config(config_path).get_raw()
+    config = load_config(config_path)
     section = getattr(args, "section", None)
 
     if section:
@@ -83,16 +83,15 @@ def cmd_get(args: argparse.Namespace) -> int:
         print("No configuration file found.", file=sys.stderr)
         return 1
 
-    config_loader = load_config(config_path)
+    config_dict = load_config(config_path)
     key = args.key
 
-    # Use ConfigLoader.get() for dot-notation access
-    value = config_loader.get(key)
+    # Use dot-notation path access
+    value = _get_by_path(config_dict, key)
     if value is None:
-        # Check if it's truly None vs not found using raw dict
-        raw = config_loader.get_raw()
+        # Check if it's truly None vs not found
         parts = key.split(".")
-        current = raw
+        current = config_dict
         for part in parts[:-1]:
             if part not in current:
                 print(f"Key not found: {key}", file=sys.stderr)
@@ -179,7 +178,7 @@ def cmd_add(args: argparse.Namespace) -> int:
 
     if current is None:
         # Check defaults for existing array
-        default_val = _get_by_path(DEFAULT_CONFIG, key)
+        default_val = _get_by_path(config_defaults(), key)
         if isinstance(default_val, list):
             current = list(default_val)  # Copy default
         else:
@@ -216,8 +215,8 @@ def cmd_remove(args: argparse.Namespace) -> int:
     user_config = _load_user_config_doc(config_path)
     merged_config = load_config(config_path)
 
-    # Get current merged value using ConfigLoader.get() for dot-notation access
-    current = merged_config.get(key)
+    # Get current merged value using dot-notation path access
+    current = _get_by_path(merged_config, key)
 
     if current is None or not isinstance(current, list):
         print(f"Error: {key} is not an array or doesn't exist", file=sys.stderr)

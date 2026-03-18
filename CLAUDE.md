@@ -23,10 +23,10 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - Hash computation: only in `utilities/hasher.py` (`compute_normalized_hash`, `calculate_hash`). Do NOT create alternative hash functions elsewhere.
 - Do NOT create hierarchy.py files in multiple locations
 
-**Minimal Dependencies**: Core requires only `tomlkit` (pure Python TOML library). Uses Python 3.10+ stdlib for everything else.
+**Minimal Dependencies**: Core requires `tomlkit` (pure Python TOML library), `pydantic>=2.0` (config schema validation), and `tyro>=0.9` (CLI generation). Uses Python 3.10+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels (PRD=1, OPS=2, DEV=3). Rules define allowed "implements" relationships (e.g., `dev -> ops, prd`).
 **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
-**Configuration System** (`config/__init__.py`) almost all parsible content is configurable.
+**Configuration System** (`config/__init__.py`) almost all parsible content is configurable. `load_config()` returns a plain `dict[str, Any]`; defaults come from the `ElspaisConfig` Pydantic model via `config_defaults()`. There is no `ConfigLoader` class or `DEFAULT_CONFIG` dict.
 **Format Validation** (`validation/format.py`)
 **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files.
 **Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.

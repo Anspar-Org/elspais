@@ -35,7 +35,7 @@ def test_v2_config_skips_migration():
 
 def test_migration_produces_valid_schema():
     """Migrated config must pass Pydantic validation."""
-    from elspais.config import DEFAULT_CONFIG, _merge_configs, _migrate_legacy_patterns
+    from elspais.config import _merge_configs, _migrate_legacy_patterns, config_defaults
     from elspais.config.schema import ElspaisConfig
 
     v1_config = {
@@ -51,7 +51,10 @@ def test_migration_produces_valid_schema():
         },
     }
 
-    merged = _merge_configs(copy.deepcopy(DEFAULT_CONFIG), v1_config)
+    defaults = copy.deepcopy(config_defaults())
+    # Remove version so migration treats this as a v1 config
+    defaults.pop("version", None)
+    merged = _merge_configs(defaults, v1_config)
     migrated = _migrate_legacy_patterns(merged)
 
     # Remove 'patterns' key (legacy, not in schema)

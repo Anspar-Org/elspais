@@ -14,13 +14,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from elspais.commands.health import HealthCheck, HealthReport
 from elspais.config.schema import ElspaisConfig
-
-if TYPE_CHECKING:
-    from elspais.config import ConfigLoader
 
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
     ElspaisConfig.model_fields.keys()
@@ -116,9 +113,9 @@ def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthChe
         )
 
 
-def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
+def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
     """Check that required configuration sections exist."""
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     missing = []
 
     if not typed_config.id_patterns.types:
@@ -155,11 +152,11 @@ def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
     )
 
 
-def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
+def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
     """Validate that the ID pattern template uses valid placeholders."""
     import re
 
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     template = typed_config.id_patterns.canonical
     valid_tokens = {"{namespace}", "{type}", "{component}"}
     # Also allow {type.<alias>} tokens
@@ -202,9 +199,9 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
     )
 
 
-def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
+def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     hierarchy = typed_config.rules.hierarchy.model_dump()
     types = dict(typed_config.id_patterns.types.items())
 
@@ -266,9 +263,9 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     )
 
 
-def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCheck:
+def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     spec_dirs = typed_config.spec.directories
 
     if not isinstance(spec_dirs, list):
@@ -307,11 +304,11 @@ def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCh
     )
 
 
-def check_config_project_type(config: ConfigLoader) -> HealthCheck:
+def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
     """Check project type configuration is consistent."""
     from pydantic import ValidationError
 
-    raw = config.get_raw()
+    raw = config
 
     try:
         typed_config = _validate_config(raw)
@@ -390,7 +387,7 @@ def check_config_associated_section(raw: dict) -> HealthCheck:
 
 
 def run_config_checks(
-    config_path: Path | None, config: ConfigLoader, start_path: Path
+    config_path: Path | None, config: dict[str, Any], start_path: Path
 ) -> list[HealthCheck]:
     """Run all configuration checks."""
     return [
@@ -398,7 +395,7 @@ def run_config_checks(
         check_config_syntax(config_path, start_path),
         check_config_required_fields(config),
         check_config_project_type(config),
-        check_config_associated_section(config.get_raw()),
+        check_config_associated_section(config),
         check_config_pattern_tokens(config),
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
@@ -679,7 +676,7 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
 
 def run(args: argparse.Namespace) -> int:
     """Run the doctor command."""
-    from elspais.config import ConfigLoader, find_config_file, find_git_root, get_config
+    from elspais.config import find_config_file, find_git_root, get_config
 
     config_path = getattr(args, "config", None)
     if config_path:
@@ -698,7 +695,7 @@ def run(args: argparse.Namespace) -> int:
             config_path,
             start_path=start_path,
         )
-        config = ConfigLoader.from_dict(config_dict)
+        config = config_dict
         for check in run_config_checks(config_path, config, start_path):
             report.add(check)
     except Exception as e:

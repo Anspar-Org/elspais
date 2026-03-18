@@ -835,4 +835,20 @@ F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 *End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d
+
+## REQ-d00207: Declarative Config Schema Cleanup
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+All configuration defaults and validation SHALL be provided by the Pydantic `ElspaisConfig` schema. Legacy `DEFAULT_CONFIG` dict and `ConfigLoader` wrapper class SHALL be removed; all consumer code SHALL access configuration via plain dicts produced by `ElspaisConfig.model_dump()`.
+
+## Assertions
+
+A. `DEFAULT_CONFIG` dict SHALL be removed from `config/__init__.py`; all default values SHALL be defined as Pydantic field defaults in `config/schema.py`.
+
+B. `ConfigLoader` class SHALL be removed; `load_config()` SHALL return a plain `dict[str, Any]` produced by `ElspaisConfig.model_validate()` + `model_dump(by_alias=True)`.
+
+C. All consumer code that references `ConfigLoader` (type annotations, imports, `.from_dict()`, `.get_raw()`, `.get()`) SHALL be updated to use plain dicts directly.
+
+*End* *Declarative Config Schema Cleanup* | **Hash**: 00000000
 ---

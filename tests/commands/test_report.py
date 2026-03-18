@@ -76,7 +76,7 @@ def _patch_graph_build():
     return [
         patch("elspais.graph.factory.build_graph", return_value=MagicMock()),
         patch("elspais.config.get_config", return_value={}),
-        patch("elspais.config.ConfigLoader.from_dict", return_value=MagicMock()),
+        patch("elspais.config.config_defaults", return_value={}),
     ]
 
 

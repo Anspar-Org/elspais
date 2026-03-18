@@ -14,7 +14,7 @@ from elspais.utilities.patterns import build_resolver
 
 def _make_resolver(config):
     """Build IdResolver from loaded config."""
-    return build_resolver(config.get_raw())
+    return build_resolver(config)
 
 
 def create_parser_registry(resolver) -> ParserRegistry:

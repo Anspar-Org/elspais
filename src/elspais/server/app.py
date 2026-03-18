@@ -842,8 +842,7 @@ def create_app(
             # Re-read config from disk so branch switches pick up changes
             config_path = Path(_state["working_dir"]) / ".elspais.toml"
             if config_path.exists():
-                loader = load_config(config_path)
-                _state["config"] = loader.get_raw()
+                _state["config"] = load_config(config_path)
 
             new_graph = build_graph(
                 config=_state["config"],

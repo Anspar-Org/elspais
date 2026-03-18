@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.config import ConfigLoader
+from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import NodeKind
@@ -56,9 +56,9 @@ def graph_with_code() -> TraceGraph:
 
 
 @pytest.fixture()
-def config() -> ConfigLoader:
-    """Create a minimal ConfigLoader."""
-    return ConfigLoader.from_dict({})
+def config() -> dict:
+    """Create a minimal config dict."""
+    return config_defaults()
 
 
 # === Tests ===
@@ -106,7 +106,7 @@ class TestFederatedGraphReadOnly:
         assert entry.error == "Config file not found"
 
     def test_REQ_d00200_B_from_single_creates_federation_of_one(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """from_single wraps a single TraceGraph into a FederatedGraph."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -118,7 +118,7 @@ class TestFederatedGraphReadOnly:
         assert repos[0].repo_root == Path("/repo/core")
 
     def test_REQ_d00200_D_find_by_id_delegates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """find_by_id delegates to underlying TraceGraph, returns None for missing."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -130,9 +130,7 @@ class TestFederatedGraphReadOnly:
         # Missing
         assert fed.find_by_id("REQ-NONEXISTENT") is None
 
-    def test_REQ_d00200_D_has_root_delegates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
-    ) -> None:
+    def test_REQ_d00200_D_has_root_delegates(self, simple_graph: TraceGraph, config: dict) -> None:
         """has_root checks root status correctly."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
         # REQ-p00001 is a root (PRD with no parents)
@@ -143,7 +141,7 @@ class TestFederatedGraphReadOnly:
         assert fed.has_root("REQ-MISSING") is False
 
     def test_REQ_d00200_E_iter_roots_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """iter_roots returns all roots from the underlying graph."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -152,7 +150,7 @@ class TestFederatedGraphReadOnly:
         assert "REQ-p00001" in root_ids
 
     def test_REQ_d00200_E_all_nodes_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """all_nodes yields all nodes from the underlying graph."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -161,21 +159,21 @@ class TestFederatedGraphReadOnly:
         assert fed_ids == graph_ids
 
     def test_REQ_d00200_E_node_count_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """node_count returns correct total from underlying graph."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
         assert fed.node_count() == simple_graph.node_count()
 
     def test_REQ_d00200_E_root_count_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """root_count returns correct total."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
         assert fed.root_count() == simple_graph.root_count()
 
     def test_REQ_d00200_E_iter_by_kind_aggregates(
-        self, graph_with_code: TraceGraph, config: ConfigLoader
+        self, graph_with_code: TraceGraph, config: dict
     ) -> None:
         """iter_by_kind filters by NodeKind correctly."""
         fed = FederatedGraph.from_single(graph_with_code, config, repo_root=Path("/repo/core"))
@@ -190,7 +188,7 @@ class TestFederatedGraphReadOnly:
         assert len(code_nodes) == len(graph_code)
 
     def test_REQ_d00200_E_orphaned_nodes_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """orphaned_nodes works through FederatedGraph."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -201,7 +199,7 @@ class TestFederatedGraphReadOnly:
         assert fed.has_orphans() == simple_graph.has_orphans()
         assert fed.orphan_count() == simple_graph.orphan_count()
 
-    def test_REQ_d00200_E_broken_references_aggregates(self, config: ConfigLoader) -> None:
+    def test_REQ_d00200_E_broken_references_aggregates(self, config: dict) -> None:
         """broken_references combines lists from all repos."""
         # Build graph with a broken reference (implements non-existent ID)
         graph = build_graph(
@@ -220,7 +218,7 @@ class TestFederatedGraphReadOnly:
         assert fed.has_broken_references() == graph.has_broken_references()
 
     def test_REQ_d00200_E_deleted_nodes_aggregates(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """deleted_nodes combines lists from all repos."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -237,7 +235,7 @@ class TestFederatedGraphReadOnly:
         good_entry = RepoEntry(
             name="good",
             graph=good_graph,
-            config=ConfigLoader.from_dict({}),
+            config=config_defaults(),
             repo_root=Path("/repo/good"),
         )
         error_entry = RepoEntry(
@@ -259,7 +257,7 @@ class TestFederatedGraphReadOnly:
         assert fed.find_by_id("REQ-p00001") is not None
 
     def test_REQ_d00200_G_repo_for_returns_entry(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """repo_for returns the RepoEntry owning a given node."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -269,7 +267,7 @@ class TestFederatedGraphReadOnly:
         assert entry.repo_root == Path("/repo/core")
 
     def test_REQ_d00200_G_config_for_returns_config(
-        self, simple_graph: TraceGraph, config: ConfigLoader
+        self, simple_graph: TraceGraph, config: dict
     ) -> None:
         """config_for returns the ConfigLoader for the repo owning a node."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -286,7 +284,7 @@ class TestFederatedGraphReadOnly:
             RepoEntry(
                 name="good",
                 graph=good_graph,
-                config=ConfigLoader.from_dict({}),
+                config=config_defaults(),
                 repo_root=Path("/repo/good"),
             ),
             RepoEntry(
@@ -305,7 +303,7 @@ class TestFederatedGraphReadOnly:
         assert names == {"good", "broken"}
 
     def test_REQ_d00200_C_is_reachable_to_requirement_works(
-        self, graph_with_code: TraceGraph, config: ConfigLoader
+        self, graph_with_code: TraceGraph, config: dict
     ) -> None:
         """is_reachable_to_requirement works through FederatedGraph."""
         fed = FederatedGraph.from_single(graph_with_code, config, repo_root=Path("/repo/core"))
@@ -350,7 +348,7 @@ class TestFederatedGraphMutations:
             ),
             repo_root=Path("/repo/core"),
         )
-        config = ConfigLoader.from_dict({})
+        config = config_defaults()
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     @pytest.fixture()
@@ -367,7 +365,7 @@ class TestFederatedGraphMutations:
             make_code_ref(["REQ-p00010"], source_path="src/feature.py"),
             repo_root=Path("/repo/core"),
         )
-        config = ConfigLoader.from_dict({})
+        config = config_defaults()
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     def test_REQ_d00201_A_rename_node_delegates_and_updates_ownership(

@@ -12,14 +12,13 @@ import copy
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
-    from elspais.config import ConfigLoader
     from elspais.graph.builder import TraceGraph
     from elspais.graph.mutations import BrokenReference
 
@@ -114,7 +113,7 @@ class RepoEntry:
     Attributes:
         name: Repository name (e.g. "root", "core", "module-a").
         graph: The repo's TraceGraph, or None if repo unavailable.
-        config: The repo's ConfigLoader, or None if repo unavailable.
+        config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.
         git_origin: Remote URL for clone assistance.
         error: Human-readable error message if repo is in error state.
@@ -122,7 +121,7 @@ class RepoEntry:
 
     name: str
     graph: TraceGraph | None
-    config: ConfigLoader | None
+    config: dict[str, Any] | None
     repo_root: Path
     git_origin: str | None = None
     error: str | None = None
@@ -217,7 +216,7 @@ class FederatedGraph:
     def from_single(
         cls,
         graph: TraceGraph,
-        config: ConfigLoader | None,
+        config: dict[str, Any] | None,
         repo_root: Path,
     ) -> FederatedGraph:
         """Create a federation-of-one from a single TraceGraph.
@@ -257,8 +256,8 @@ class FederatedGraph:
         return self._repos[repo_name]
 
     # Implements: REQ-d00200-G
-    def config_for(self, node_id: str) -> ConfigLoader | None:
-        """Return the ConfigLoader for the repo owning node_id.
+    def config_for(self, node_id: str) -> dict[str, Any] | None:
+        """Return the config dict for the repo owning node_id.
 
         # Strategy: by_id
         """
@@ -825,7 +824,7 @@ class FederatedGraph:
         for source_entry in self._repos.values():
             if source_entry.graph is None or source_entry.config is None:
                 continue
-            resolver = build_resolver(source_entry.config.get_raw())
+            resolver = build_resolver(source_entry.config)
             refs = source_entry.graph._broken_references
             for i, br in enumerate(refs):
                 if not br.presumed_foreign and not resolver.is_local_id(br.target_id):

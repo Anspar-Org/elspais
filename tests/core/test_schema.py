@@ -5,7 +5,7 @@ import pytest
 
 def test_default_config_preserves_legacy_values():
     """ElspaisConfig defaults must preserve all DEFAULT_CONFIG values."""
-    from elspais.config import DEFAULT_CONFIG
+    from elspais.config import config_defaults
     from elspais.config.schema import ElspaisConfig
 
     config = ElspaisConfig()
@@ -23,7 +23,7 @@ def test_default_config_preserves_legacy_values():
                 errors.append(f"Value mismatch at {full}: {v!r} != {schema[k]!r}")
         return errors
 
-    errors = _check_subset(DEFAULT_CONFIG, dumped)
+    errors = _check_subset(config_defaults(), dumped)
     assert not errors, "Schema/legacy mismatches:\n" + "\n".join(errors)
 
 

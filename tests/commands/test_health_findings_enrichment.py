@@ -19,15 +19,15 @@ from elspais.commands.health import (
     check_spec_refines_resolve,
     check_test_results,
 )
-from elspais.config import ConfigLoader, get_config
+from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 
 
-def _load_config(config_path: Path) -> ConfigLoader:
+def _load_config(config_path: Path) -> dict:
     raw = get_config(config_path)
-    return ConfigLoader.from_dict(raw)
+    return _merge_configs(config_defaults(), raw)
 
 
 def _make_config(tmp_path: Path) -> Path:

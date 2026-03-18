@@ -14,7 +14,7 @@ from elspais.commands.health import (
     check_config_pattern_tokens,
     check_config_required_fields,
 )
-from elspais.config import ConfigLoader
+from elspais.config import _merge_configs, config_defaults
 
 # =============================================================================
 # Test Data Structures
@@ -105,12 +105,13 @@ class TestConfigChecks:
 
     def test_required_fields_all_present(self):
         """Test required fields check with complete config."""
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "id-patterns": {"types": {"prd": {"level": 1}}},
                 "spec": {"directories": ["spec"]},
                 "rules": {"hierarchy": {"prd": []}},
-            }
+            },
         )
 
         check = check_config_required_fields(config)
@@ -118,7 +119,7 @@ class TestConfigChecks:
 
     def test_required_fields_present_with_defaults(self):
         """Test that default config has all required fields present."""
-        config = ConfigLoader.from_dict({})  # Will get defaults
+        config = config_defaults()  # Will get defaults
 
         # With defaults, all required fields should be present
         check = check_config_required_fields(config)
@@ -126,10 +127,11 @@ class TestConfigChecks:
 
     def test_pattern_tokens_valid(self):
         """Test pattern tokens with valid template."""
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "id-patterns": {"canonical": "{namespace}-{type}{component}"},
-            }
+            },
         )
 
         check = check_config_pattern_tokens(config)
@@ -137,10 +139,11 @@ class TestConfigChecks:
 
     def test_pattern_tokens_invalid(self):
         """Test pattern tokens with invalid token."""
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "id-patterns": {"canonical": "{namespace}-{invalid}{component}"},
-            }
+            },
         )
 
         check = check_config_pattern_tokens(config)
@@ -149,7 +152,8 @@ class TestConfigChecks:
 
     def test_hierarchy_rules_valid(self):
         """Test hierarchy rules check with valid config."""
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "id-patterns": {
                     "types": {
@@ -165,7 +169,7 @@ class TestConfigChecks:
                         "prd": [],
                     },
                 },
-            }
+            },
         )
 
         check = check_config_hierarchy_rules(config)
@@ -176,10 +180,11 @@ class TestConfigChecks:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "spec": {"directories": ["spec"]},
-            }
+            },
         )
 
         check = check_config_paths_exist(config, tmp_path)
@@ -187,10 +192,11 @@ class TestConfigChecks:
 
     def test_paths_missing(self, tmp_path):
         """Test paths exist check with missing directory."""
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "spec": {"directories": ["nonexistent"]},
-            }
+            },
         )
 
         check = check_config_paths_exist(config, tmp_path)
