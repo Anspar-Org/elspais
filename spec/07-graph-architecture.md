@@ -851,4 +851,20 @@ B. `ConfigLoader` class SHALL be removed; `load_config()` SHALL return a plain `
 C. All consumer code that references `ConfigLoader` (type annotations, imports, `.from_dict()`, `.get_raw()`, `.get()`) SHALL be updated to use plain dicts directly.
 
 *End* *Declarative Config Schema Cleanup* | **Hash**: 00000000
+
+## REQ-d00208: JSON Schema Export for IDE Autocomplete
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+The `ElspaisConfig` Pydantic model SHALL be exportable as a JSON Schema file for IDE autocomplete (e.g., Taplo). A CLI subcommand SHALL generate the schema on demand, and a committed schema file SHALL stay in sync with the model.
+
+## Assertions
+
+A. `elspais config schema` SHALL output the JSON Schema to stdout (or to a file with `--output`), generated from `ElspaisConfig.model_json_schema()`.
+
+B. A committed `src/elspais/config/elspais-schema.json` SHALL match the output of `ElspaisConfig.model_json_schema()`. A CI test SHALL verify this.
+
+C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
+
+*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 00000000
 ---

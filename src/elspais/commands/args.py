@@ -363,6 +363,14 @@ class ConfigPathArgs:
     """Show path to configuration file."""
 
 
+@dataclasses.dataclass
+class ConfigSchemaArgs:
+    """Output JSON Schema for .elspais.toml configuration."""
+
+    output: Annotated[str | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write schema to file instead of stdout."""
+
+
 ConfigAction = (
     Annotated[ConfigShowArgs, tyro.conf.subcommand("show")]
     | Annotated[ConfigGetArgs, tyro.conf.subcommand("get")]
@@ -371,6 +379,7 @@ ConfigAction = (
     | Annotated[ConfigAddArgs, tyro.conf.subcommand("add")]
     | Annotated[ConfigRemoveArgs, tyro.conf.subcommand("remove")]
     | Annotated[ConfigPathArgs, tyro.conf.subcommand("path")]
+    | Annotated[ConfigSchemaArgs, tyro.conf.subcommand("schema")]
 )
 
 

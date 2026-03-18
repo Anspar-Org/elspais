@@ -230,7 +230,13 @@ class ElspaisConfig(_StrictModel):
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     core: CoreConfig | None = None
     associated: AssociatedConfig | None = None
-    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+    # Implements: REQ-d00208-C
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        populate_by_name=True,
+        json_schema_extra={"$schema": "https://json-schema.org/draft/2020-12/schema"},
+    )
 
     @model_validator(mode="after")
     def check_associated_requires_core(self) -> ElspaisConfig:

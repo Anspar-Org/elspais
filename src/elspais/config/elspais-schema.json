@@ -1,0 +1,1199 @@
+{
+  "$defs": {
+    "AssertionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "label_style": {
+          "default": "uppercase",
+          "title": "Label Style",
+          "type": "string"
+        },
+        "max_count": {
+          "default": 26,
+          "title": "Max Count",
+          "type": "integer"
+        },
+        "zero_pad": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zero Pad"
+        },
+        "multi_separator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multi Separator"
+        }
+      },
+      "title": "AssertionConfig",
+      "type": "object"
+    },
+    "AssociateEntryConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "git": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AssociateEntryConfig",
+      "type": "object"
+    },
+    "AssociatedConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "id_range": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Range"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        },
+        "separator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Separator"
+        }
+      },
+      "title": "AssociatedConfig",
+      "type": "object"
+    },
+    "ChangelogConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enforce": {
+          "default": true,
+          "title": "Enforce",
+          "type": "boolean"
+        },
+        "require_present": {
+          "default": false,
+          "title": "Require Present",
+          "type": "boolean"
+        },
+        "id_source": {
+          "default": "gh",
+          "title": "Id Source",
+          "type": "string"
+        },
+        "date_format": {
+          "default": "iso",
+          "title": "Date Format",
+          "type": "string"
+        },
+        "require_change_order": {
+          "default": false,
+          "title": "Require Change Order",
+          "type": "boolean"
+        },
+        "require_reason": {
+          "default": true,
+          "title": "Require Reason",
+          "type": "boolean"
+        },
+        "require_author_name": {
+          "default": true,
+          "title": "Require Author Name",
+          "type": "boolean"
+        },
+        "require_author_id": {
+          "default": true,
+          "title": "Require Author Id",
+          "type": "boolean"
+        },
+        "author_id_format": {
+          "default": "email",
+          "title": "Author Id Format",
+          "type": "string"
+        },
+        "allowed_author_ids": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "default": "all",
+          "title": "Allowed Author Ids"
+        }
+      },
+      "title": "ChangelogConfig",
+      "type": "object"
+    },
+    "ComponentConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "default": "numeric",
+          "title": "Style",
+          "type": "string"
+        },
+        "digits": {
+          "default": 5,
+          "title": "Digits",
+          "type": "integer"
+        },
+        "leading_zeros": {
+          "default": true,
+          "title": "Leading Zeros",
+          "type": "boolean"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "max_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Length"
+        }
+      },
+      "title": "ComponentConfig",
+      "type": "object"
+    },
+    "CoreConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "CoreConfig",
+      "type": "object"
+    },
+    "DirectoriesConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "spec": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Code"
+        },
+        "docs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Docs"
+        },
+        "database": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "ignore": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ignore",
+          "type": "array"
+        }
+      },
+      "title": "DirectoriesConfig",
+      "type": "object"
+    },
+    "FormatConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "require_hash": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Require Hash"
+        },
+        "require_assertions": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Require Assertions"
+        },
+        "require_status": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Require Status"
+        },
+        "require_rationale": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Require Rationale"
+        },
+        "allowed_statuses": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Statuses"
+        },
+        "status_roles": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Roles"
+        }
+      },
+      "title": "FormatConfig",
+      "type": "object"
+    },
+    "GraphConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "satellite_kinds": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Satellite Kinds",
+          "type": "array"
+        }
+      },
+      "title": "GraphConfig",
+      "type": "object"
+    },
+    "HierarchyConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "dev": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dev",
+          "type": "array"
+        },
+        "ops": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ops",
+          "type": "array"
+        },
+        "prd": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Prd",
+          "type": "array"
+        },
+        "cross_repo_implements": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cross Repo Implements"
+        },
+        "allow_structural_orphans": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Structural Orphans"
+        },
+        "allow_circular": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Circular"
+        },
+        "allow_orphans": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allow Orphans"
+        }
+      },
+      "title": "HierarchyConfig",
+      "type": "object"
+    },
+    "IdPatternsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "default": "{namespace}-{type.letter}{component}",
+          "title": "Canonical",
+          "type": "string"
+        },
+        "aliases": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "object"
+        },
+        "types": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TypeConfig"
+          },
+          "title": "Types",
+          "type": "object"
+        },
+        "component": {
+          "$ref": "#/$defs/ComponentConfig"
+        },
+        "assertions": {
+          "$ref": "#/$defs/AssertionConfig"
+        },
+        "associated": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Associated"
+        }
+      },
+      "title": "IdPatternsConfig",
+      "type": "object"
+    },
+    "IgnoreSchemaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "global": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Global",
+          "type": "array"
+        },
+        "spec": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Spec",
+          "type": "array"
+        },
+        "code": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Code",
+          "type": "array"
+        },
+        "test": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Test",
+          "type": "array"
+        }
+      },
+      "title": "IgnoreSchemaConfig",
+      "type": "object"
+    },
+    "KeywordsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "implements": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Implements",
+          "type": "array"
+        },
+        "verifies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verifies",
+          "type": "array"
+        },
+        "refines": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Refines",
+          "type": "array"
+        },
+        "satisfies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Satisfies",
+          "type": "array"
+        }
+      },
+      "title": "KeywordsConfig",
+      "type": "object"
+    },
+    "KeywordsSearchConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "min_length": {
+          "default": 3,
+          "title": "Min Length",
+          "type": "integer"
+        }
+      },
+      "title": "KeywordsSearchConfig",
+      "type": "object"
+    },
+    "ProjectConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "default": "REQ",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "core",
+                "associated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        }
+      },
+      "title": "ProjectConfig",
+      "type": "object"
+    },
+    "ReferenceDefaultsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "separators": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Separators",
+          "type": "array"
+        },
+        "case_sensitive": {
+          "default": false,
+          "title": "Case Sensitive",
+          "type": "boolean"
+        },
+        "prefix_optional": {
+          "default": false,
+          "title": "Prefix Optional",
+          "type": "boolean"
+        },
+        "comment_styles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Comment Styles",
+          "type": "array"
+        },
+        "keywords": {
+          "$ref": "#/$defs/KeywordsConfig"
+        },
+        "multi_assertion_separator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multi Assertion Separator"
+        }
+      },
+      "title": "ReferenceDefaultsConfig",
+      "type": "object"
+    },
+    "ReferencesConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "defaults": {
+          "$ref": "#/$defs/ReferenceDefaultsConfig"
+        },
+        "overrides": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Overrides",
+          "type": "array"
+        }
+      },
+      "title": "ReferencesConfig",
+      "type": "object"
+    },
+    "RulesConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "hierarchy": {
+          "$ref": "#/$defs/HierarchyConfig"
+        },
+        "format": {
+          "$ref": "#/$defs/FormatConfig"
+        },
+        "content_rules": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Rules"
+        }
+      },
+      "title": "RulesConfig",
+      "type": "object"
+    },
+    "SpecConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Directories",
+          "type": "array"
+        },
+        "patterns": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          ],
+          "title": "Patterns"
+        },
+        "skip_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Files",
+          "type": "array"
+        },
+        "skip_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Dirs",
+          "type": "array"
+        },
+        "index_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index File"
+        }
+      },
+      "title": "SpecConfig",
+      "type": "object"
+    },
+    "TestingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "test_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Test Dirs",
+          "type": "array"
+        },
+        "skip_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Dirs",
+          "type": "array"
+        },
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patterns",
+          "type": "array"
+        },
+        "result_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Result Files",
+          "type": "array"
+        },
+        "run_meta_file": {
+          "default": "",
+          "title": "Run Meta File",
+          "type": "string"
+        },
+        "reference_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reference Patterns",
+          "type": "array"
+        },
+        "reference_keyword": {
+          "default": "Verifies",
+          "title": "Reference Keyword",
+          "type": "string"
+        },
+        "prescan_command": {
+          "default": "",
+          "title": "Prescan Command",
+          "type": "string"
+        }
+      },
+      "title": "TestingConfig",
+      "type": "object"
+    },
+    "TraceabilityConfig": {
+      "additionalProperties": true,
+      "properties": {
+        "scan_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scan Patterns",
+          "type": "array"
+        },
+        "source_roots": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Roots"
+        },
+        "output_formats": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Formats"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        }
+      },
+      "title": "TraceabilityConfig",
+      "type": "object"
+    },
+    "TypeAliases": {
+      "additionalProperties": false,
+      "properties": {
+        "letter": {
+          "title": "Letter",
+          "type": "string"
+        }
+      },
+      "required": [
+        "letter"
+      ],
+      "title": "TypeAliases",
+      "type": "object"
+    },
+    "TypeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "title": "Level",
+          "type": "integer"
+        },
+        "aliases": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeAliases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "level"
+      ],
+      "title": "TypeConfig",
+      "type": "object"
+    },
+    "ValidationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "hash_mode": {
+          "default": "normalized-text",
+          "title": "Hash Mode",
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash Algorithm"
+        },
+        "hash_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash Length"
+        },
+        "allow_unresolved_cross_repo": {
+          "default": false,
+          "title": "Allow Unresolved Cross Repo",
+          "type": "boolean"
+        },
+        "strict_hierarchy": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strict Hierarchy"
+        }
+      },
+      "title": "ValidationConfig",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "default": 2,
+      "title": "Version",
+      "type": "integer"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectConfig"
+    },
+    "id-patterns": {
+      "$ref": "#/$defs/IdPatternsConfig"
+    },
+    "spec": {
+      "$ref": "#/$defs/SpecConfig"
+    },
+    "rules": {
+      "$ref": "#/$defs/RulesConfig"
+    },
+    "testing": {
+      "$ref": "#/$defs/TestingConfig"
+    },
+    "ignore": {
+      "$ref": "#/$defs/IgnoreSchemaConfig"
+    },
+    "references": {
+      "$ref": "#/$defs/ReferencesConfig"
+    },
+    "keywords": {
+      "$ref": "#/$defs/KeywordsSearchConfig"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationConfig"
+    },
+    "graph": {
+      "$ref": "#/$defs/GraphConfig"
+    },
+    "changelog": {
+      "$ref": "#/$defs/ChangelogConfig"
+    },
+    "directories": {
+      "$ref": "#/$defs/DirectoriesConfig"
+    },
+    "traceability": {
+      "$ref": "#/$defs/TraceabilityConfig"
+    },
+    "associates": {
+      "additionalProperties": {
+        "$ref": "#/$defs/AssociateEntryConfig"
+      },
+      "title": "Associates",
+      "type": "object"
+    },
+    "core": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CoreConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "associated": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AssociatedConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "ElspaisConfig",
+  "type": "object"
+}
