@@ -34,7 +34,7 @@ Edges serve two distinct purposes:
 | Purpose | Edge Kinds | Meaning |
 |---------|-----------|---------|
 | **Structural** | CONTAINS, STRUCTURES | File organization, internal grouping |
-| **Traceability** | IMPLEMENTS, VERIFIES, YIELDS, REFINES, ADDRESSES, SATISFIES, INSTANCE, DEFINES | Requirement-to-artifact relationships |
+| **Traceability** | IMPLEMENTS, VERIFIES, YIELDS, REFINES, VALIDATES, SATISFIES, INSTANCE, DEFINES | Requirement-to-artifact relationships |
 
 CONTAINS edges represent "this node lives in this file." They are always present
 for well-formed nodes but say nothing about whether the node participates in
