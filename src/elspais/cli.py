@@ -41,6 +41,7 @@ from elspais.commands.args import (
     ConfigGetArgs,
     ConfigPathArgs,
     ConfigRemoveArgs,
+    ConfigSchemaArgs,
     ConfigSetArgs,
     ConfigShowArgs,
     ConfigUnsetArgs,
@@ -143,6 +144,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
             ConfigAddArgs: "add",
             ConfigRemoveArgs: "remove",
             ConfigPathArgs: "path",
+            ConfigSchemaArgs: "schema",
         }
         ns.config_action = _ACTION_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):

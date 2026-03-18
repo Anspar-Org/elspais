@@ -5,9 +5,10 @@
 elspais looks for `.elspais.toml` in the current directory
 or parent directories up to the git repository root.
 
-  $ elspais init          # Create default config
-  $ elspais config path   # Show config location
-  $ elspais config show   # View all settings
+  $ elspais init            # Create default config
+  $ elspais config path     # Show config location
+  $ elspais config show     # View all settings
+  $ elspais config schema   # Export JSON Schema
 
 ## Git Worktree Support
 
@@ -259,6 +260,19 @@ path = "../core"            # Path to core repository
   $ elspais config add spec.directories src/spec
   $ elspais config remove spec.directories src/spec
   $ elspais config path                   # Show file location
+  $ elspais config schema                 # Print JSON Schema to stdout
+  $ elspais config schema -o schema.json  # Write JSON Schema to file
+
+### Schema Export
+
+Generate the JSON Schema for `.elspais.toml` configuration:
+
+  $ elspais config schema                 # Print to stdout
+  $ elspais config schema --output schema.json
+
+The schema is derived from the Pydantic `ElspaisConfig` model and includes
+a `$schema` self-reference for IDE autocompletion. A committed copy lives at
+`src/elspais/config/elspais-schema.json` and is kept in sync via CI.
 
 ## Environment Variable Overrides
 
