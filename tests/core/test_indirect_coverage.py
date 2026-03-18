@@ -39,7 +39,7 @@ class TestIndirectCoverageSource:
         """INDIRECT is distinct from other coverage sources."""
         values = {s.value for s in CoverageSource}
         assert "indirect" in values
-        assert len(values) == 4  # DIRECT, EXPLICIT, INFERRED, INDIRECT
+        assert len(values) == 6  # DIRECT, EXPLICIT, INFERRED, INDIRECT, UAT_EXPLICIT, UAT_INFERRED
 
 
 class TestIndirectCoverageContributions:

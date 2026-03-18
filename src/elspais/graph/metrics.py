@@ -20,12 +20,19 @@ class CoverageSource(Enum):
     - DIRECT: High confidence - TEST verifies or CODE implements assertion
     - EXPLICIT: High confidence - REQ implements specific assertion(s) via syntax
     - INFERRED: Review recommended - REQ implements parent REQ (claims all assertions)
+    - INDIRECT: TEST verifies whole REQ (all assertions implied)
+    - UAT_EXPLICIT: JNY names specific assertion (Validates: REQ-xxx-A)
+    - UAT_INFERRED: JNY names whole REQ (Validates: REQ-xxx), all assertions implied
     """
 
     DIRECT = "direct"  # TEST/CODE verifies/implements assertion
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
     INDIRECT = "indirect"  # TEST verifies whole REQ (all assertions implied)
+    UAT_EXPLICIT = "uat_explicit"  # JNY names specific assertion (Validates: REQ-xxx-A)
+    UAT_INFERRED = (
+        "uat_inferred"  # JNY names whole REQ (Validates: REQ-xxx), all assertions implied
+    )
 
 
 @dataclass
@@ -63,6 +70,13 @@ class RollupMetrics:
         direct_tested: Assertions covered specifically by TEST nodes
         validated: Assertions with passing RESULTs
         has_failures: True if any RESULT is failed/error
+        uat_covered: Assertions with any UAT (JNY Validates) contribution
+        uat_direct_covered: Assertions explicitly named in Validates:
+        uat_inferred_covered: Assertions implied by whole-REQ Validates:
+        uat_coverage_pct: uat_covered / total_assertions * 100
+        uat_validated: Assertions covered by passing RESULT nodes via JNY
+        uat_has_failures: True if any JNY-linked RESULT is failed/error
+        uat_validated_pct: uat_validated / total_assertions * 100
     """
 
     total_assertions: int = 0
@@ -79,6 +93,14 @@ class RollupMetrics:
     # Indirect coverage metrics (whole-req tests covering all assertions)
     indirect_coverage_pct: float = 0.0  # Coverage % including INDIRECT source
     validated_with_indirect: int = 0  # Assertions validated when including indirect
+    # UAT coverage (JNY Validates)
+    uat_covered: int = 0  # assertions with any UAT contribution (union, for pct)
+    uat_direct_covered: int = 0  # assertions explicitly named in Validates:
+    uat_inferred_covered: int = 0  # assertions implied by whole-REQ Validates:
+    uat_coverage_pct: float = 0.0  # uat_covered / total_assertions * 100
+    uat_validated: int = 0  # assertions covered by passing RESULT nodes via JNY
+    uat_has_failures: bool = False  # any JNY-linked RESULT is failed/error
+    uat_validated_pct: float = 0.0  # uat_validated / total_assertions * 100 (fractional)
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.
@@ -105,6 +127,8 @@ class RollupMetrics:
         explicit_labels: set[str] = set()
         inferred_labels: set[str] = set()
         indirect_labels: set[str] = set()
+        uat_explicit_labels: set[str] = set()
+        uat_inferred_labels: set[str] = set()
 
         for label, contributions in self.assertion_coverage.items():
             for contrib in contributions:
@@ -116,6 +140,10 @@ class RollupMetrics:
                     inferred_labels.add(label)
                 elif contrib.source_type == CoverageSource.INDIRECT:
                     indirect_labels.add(label)
+                elif contrib.source_type == CoverageSource.UAT_EXPLICIT:
+                    uat_explicit_labels.add(label)
+                elif contrib.source_type == CoverageSource.UAT_INFERRED:
+                    uat_inferred_labels.add(label)
 
         # Count assertions with any coverage (strict: excludes INDIRECT)
         all_covered = direct_labels | explicit_labels | inferred_labels
@@ -130,6 +158,13 @@ class RollupMetrics:
         # Compute indirect percentage (includes INDIRECT)
         all_covered_with_indirect = all_covered | indirect_labels
         self.indirect_coverage_pct = (len(all_covered_with_indirect) / self.total_assertions) * 100
+
+        # Compute UAT coverage (JNY Validates)
+        uat_all = uat_explicit_labels | uat_inferred_labels
+        self.uat_covered = len(uat_all)
+        self.uat_direct_covered = len(uat_explicit_labels)
+        self.uat_inferred_covered = len(uat_inferred_labels)
+        self.uat_coverage_pct = (self.uat_covered / self.total_assertions) * 100
 
 
 __all__ = [

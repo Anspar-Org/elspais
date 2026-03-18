@@ -4,6 +4,11 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`CoverageSource.UAT_EXPLICIT` and `CoverageSource.UAT_INFERRED`** -- Two new enum values in `CoverageSource` for UAT coverage originating from JNY `Validates:` references. `UAT_EXPLICIT` covers assertions explicitly named (e.g., `Validates: REQ-xxx-A`); `UAT_INFERRED` covers all assertions implied by a whole-REQ reference (e.g., `Validates: REQ-xxx`).
+- **7 UAT fields in `RollupMetrics`** -- `uat_covered`, `uat_direct_covered`, `uat_inferred_covered`, `uat_coverage_pct`, `uat_validated`, `uat_has_failures`, `uat_validated_pct`. Computed by `finalize()` from UAT contributions; `uat_validated` and `uat_validated_pct` set by annotator post-finalize (same pattern as `validated`/`validated_with_indirect`).
+
 ### Changed
 
 - **`EdgeKind.ADDRESSES` replaced with `EdgeKind.VALIDATES`** -- JNY→REQ edges now use `VALIDATES` (value `"validates"`) instead of `ADDRESSES` (value `"addresses"`). `VALIDATES` contributes to coverage rollup (UAT coverage). All 5 `spec/journeys/` files migrated from `Addresses:` to `Validates:`. `JourneyParser` updated to parse `Validates:` field. `builder.py`, `html/generator.py`, and `mcp/server.py` updated. All test helpers and callsites updated.
