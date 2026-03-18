@@ -599,7 +599,7 @@ def build_graph(
         from elspais.config import get_associates_config, validate_no_transitive_associates
         from elspais.graph.federated import FederationError, RepoEntry
 
-        associates_config = get_associates_config(config)
+        associates_config = get_associates_config(config, repo_root=repo_root)
         if associates_config:
             entries: list[RepoEntry] = []
             # Root repo entry
