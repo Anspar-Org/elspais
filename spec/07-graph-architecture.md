@@ -904,3 +904,20 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 *End* *Documentation Drift Detection* | **Hash**: 00000000
 ---
+
+## REQ-d00211: Config-Driven Viewer UI Values
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+The viewer UI SHALL derive dropdown values and filter labels from `ElspaisConfig` rather than hardcoding them. The Flask template context SHALL include config-derived requirement types, allowed statuses, and user-selectable relationship kinds.
+
+## Assertions
+
+A. The Flask template context SHALL include a `config_types` variable containing requirement type definitions derived from `ElspaisConfig.id_patterns.types`.
+
+B. The Flask template context SHALL include a `config_relationship_kinds` variable listing user-selectable relationship kinds (implements, refines, satisfies).
+
+C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
+
+*End* *Config-Driven Viewer UI Values* | **Hash**: 00000000
+---
