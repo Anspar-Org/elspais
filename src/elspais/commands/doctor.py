@@ -627,9 +627,103 @@ def run_environment_checks(
     ]
 
 
+# =============================================================================
+# Docs Drift Check
+# =============================================================================
+
+
+# Implements: REQ-d00210
+# Schema sections to check (alias names for TOML keys).
+# Excludes project-type-conditional sections (associates, core, associated).
+_CONDITIONAL_SECTIONS = {"associates", "core", "associated"}
+
+_SCHEMA_SECTIONS: set[str] = set()
+
+
+def _get_schema_sections() -> set[str]:
+    """Return the set of required schema section names (cached)."""
+    global _SCHEMA_SECTIONS  # noqa: PLW0603
+    if _SCHEMA_SECTIONS:
+        return _SCHEMA_SECTIONS
+
+    sections: set[str] = set()
+    for name, field_info in ElspaisConfig.model_fields.items():
+        alias = field_info.alias or name
+        sections.add(alias)
+    _SCHEMA_SECTIONS = sections - _CONDITIONAL_SECTIONS
+    return _SCHEMA_SECTIONS
+
+
+def _parse_docs_sections(docs_path: Path) -> set[str]:
+    """Extract top-level TOML section headers from a docs markdown file.
+
+    Only looks inside fenced code blocks (```toml ... ```) and only
+    captures top-level sections (no dots in the name).
+    """
+    import re
+
+    content = docs_path.read_text(encoding="utf-8")
+    sections: set[str] = set()
+    in_toml_block = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```toml"):
+            in_toml_block = True
+            continue
+        if stripped.startswith("```") and in_toml_block:
+            in_toml_block = False
+            continue
+        if in_toml_block:
+            m = re.match(r"^\[([A-Za-z0-9_-]+)\]", stripped)
+            if m:
+                sections.add(m.group(1))
+    return sections
+
+
+def check_docs_drift(docs_path: Path) -> HealthCheck:
+    """Check for drift between ElspaisConfig schema and docs/configuration.md."""
+    if not docs_path.exists():
+        return HealthCheck(
+            name="docs.config_drift",
+            passed=True,
+            message="No docs/configuration.md found (skipping drift check)",
+            category="docs",
+            severity="info",
+        )
+
+    schema_sections = _get_schema_sections()
+    docs_sections = _parse_docs_sections(docs_path)
+
+    undocumented = sorted(schema_sections - docs_sections)
+    stale = sorted(docs_sections - schema_sections)
+
+    if not undocumented and not stale:
+        return HealthCheck(
+            name="docs.config_drift",
+            passed=True,
+            message="docs/configuration.md is in sync with schema",
+            category="docs",
+        )
+
+    parts = []
+    if undocumented:
+        parts.append(f"{len(undocumented)} undocumented: {', '.join(undocumented)}")
+    if stale:
+        parts.append(f"{len(stale)} stale: {', '.join(stale)}")
+
+    return HealthCheck(
+        name="docs.config_drift",
+        passed=False,
+        message=f"Config docs drift detected: {'; '.join(parts)}",
+        category="docs",
+        severity="warning",
+        details={"undocumented": undocumented, "stale": stale},
+    )
+
+
 def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
     """Print human-readable doctor report."""
-    categories = ["config", "environment"]
+    categories = ["config", "environment", "docs"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))
@@ -718,6 +812,10 @@ def run(args: argparse.Namespace) -> int:
         config_dict, git_root, canonical_root, actual_config_path, start_path
     ):
         report.add(check)
+
+    # Docs drift check
+    docs_path = (canonical_root or git_root or start_path) / "docs" / "configuration.md"
+    report.add(check_docs_drift(docs_path))
 
     # Output
     fmt = getattr(args, "format", "text") or "text"

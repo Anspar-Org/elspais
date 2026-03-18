@@ -28,6 +28,7 @@ Configuration checks always run as part of the full health check. For focused co
 | `config.pattern_tokens` | Validates pattern template tokens |
 | `config.hierarchy_rules` | Checks hierarchy rules consistency |
 | `config.paths_exist` | Verifies spec directories exist |
+| `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) |
 
 ### Spec File Checks (`--spec`)
 
