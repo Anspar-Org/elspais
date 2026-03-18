@@ -1,6 +1,6 @@
 # Known Issues
 
-[ ] Bug: Elspais should check the ENV var for ELSPAIS_VERSION and error if the current install is not compatible 
+[x] Bug: Elspais should check the ENV var for ELSPAIS_VERSION and error if the current install is not compatible
 
 [x] Tweak: allow_unresolved_cross_repo or similar in [validation], so we can run health and ignore unresolved refs to associated repos
 

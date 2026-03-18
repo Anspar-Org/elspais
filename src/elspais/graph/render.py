@@ -38,7 +38,7 @@ def render_node(node: GraphNode) -> str:
 
     Raises:
         ValueError: If the node kind cannot be rendered independently
-            (ASSERTION, TEST_RESULT).
+            (ASSERTION, RESULT).
     """
     # Implements: REQ-d00131-A
     kind = node.kind
@@ -59,9 +59,9 @@ def render_node(node: GraphNode) -> str:
         return _render_code(node)
     elif kind == NodeKind.TEST:
         return _render_test(node)
-    elif kind == NodeKind.TEST_RESULT:
+    elif kind == NodeKind.RESULT:
         # Implements: REQ-d00131-H
-        raise ValueError("TEST_RESULT nodes are read-only and cannot be rendered back to disk.")
+        raise ValueError("RESULT nodes are read-only and cannot be rendered back to disk.")
     elif kind == NodeKind.FILE:
         return render_file(node)
     else:

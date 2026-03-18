@@ -1374,7 +1374,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     """Check test result status from JUnit/pytest output."""
     from elspais.graph import NodeKind
 
-    result_nodes = list(graph.nodes_by_kind(NodeKind.TEST_RESULT))
+    result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
     run_meta = _read_run_meta(config)
     deselected = run_meta["deselected_count"]
 

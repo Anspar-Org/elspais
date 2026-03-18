@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`NodeKind.TEST_RESULT` renamed to `NodeKind.RESULT`** -- Pure symbol rename; the string value `"result"` is unchanged. All internal references updated across `graph/`, `html/`, `mcp/`, and `commands/` modules.
+
 ### Added
 
 - **`FederatedGraph` class** -- New `graph/federated.py` module with `RepoEntry` dataclass and `FederatedGraph` wrapper. Wraps one or more `TraceGraph` instances with per-repo config isolation. Implements all read-only methods with documented federation strategies (by_id, aggregate). Includes `from_single()` for federation-of-one, `repo_for()`, `config_for()`, `iter_repos()`. Error-state repos (graph=None) are skipped during aggregation.

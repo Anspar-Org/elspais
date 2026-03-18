@@ -412,8 +412,8 @@ class TestTestResultRender:
         """Calling render on a TEST_RESULT node raises ValueError."""
         from elspais.graph.render import render_node
 
-        node = GraphNode(id="result:1", kind=NodeKind.TEST_RESULT, label="test")
-        with pytest.raises(ValueError, match="TEST_RESULT"):
+        node = GraphNode(id="result:1", kind=NodeKind.RESULT, label="test")
+        with pytest.raises(ValueError, match="RESULT"):
             render_node(node)
 
 

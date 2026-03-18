@@ -33,7 +33,7 @@ def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
 # Implements: REQ-d00071-C
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
-_DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
+_DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.RESULT})
 
 # Traceability edges: all edge kinds except structural (CONTAINS, STRUCTURES)
 _STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.CONTAINS, EdgeKind.STRUCTURES})
@@ -2388,7 +2388,7 @@ class GraphBuilder:
 
         node = GraphNode(
             id=result_id,
-            kind=NodeKind.TEST_RESULT,
+            kind=NodeKind.RESULT,
             label=label,
         )
         node._content = {

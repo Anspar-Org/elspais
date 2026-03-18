@@ -93,7 +93,7 @@ def assertion_map_graph():
 
     result_node = GraphNode(
         id="result:test_encryption.py::test_data_encrypted",
-        kind=NodeKind.TEST_RESULT,
+        kind=NodeKind.RESULT,
         label="passed",
     )
     result_node._content = {"status": "passed", "duration": 0.5}
@@ -116,7 +116,7 @@ def assertion_map_graph():
 
     result_node2 = GraphNode(
         id="result:test_tls.py::test_tls_version",
-        kind=NodeKind.TEST_RESULT,
+        kind=NodeKind.RESULT,
         label="failed",
     )
     result_node2._content = {"status": "failed", "duration": 1.2}
@@ -139,7 +139,7 @@ def assertion_map_graph():
 
     result_node3 = GraphNode(
         id="result:test_security.py::test_full_security_suite",
-        kind=NodeKind.TEST_RESULT,
+        kind=NodeKind.RESULT,
         label="passed",
     )
     result_node3._content = {"status": "passed", "duration": 3.1}

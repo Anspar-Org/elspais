@@ -18,7 +18,7 @@ class TestNodeKind:
             "ASSERTION": "assertion",
             "CODE": "code",
             "TEST": "test",
-            "TEST_RESULT": "result",
+            "RESULT": "result",
             "USER_JOURNEY": "journey",
             "REMAINDER": "remainder",
         }

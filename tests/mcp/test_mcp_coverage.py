@@ -83,7 +83,7 @@ def coverage_graph():
     # Create TEST_RESULT for the test
     result_node = GraphNode(
         id="result:test_encryption.py::test_data_encrypted",
-        kind=NodeKind.TEST_RESULT,
+        kind=NodeKind.RESULT,
         label="passed",
     )
     result_node._content = {"status": "passed", "duration": 0.5}

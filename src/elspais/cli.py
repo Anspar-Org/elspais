@@ -1138,6 +1138,13 @@ def main(argv: list[str] | None = None) -> int:
 
     import os
 
+    # Check ELSPAIS_VERSION env var for minimum version requirement
+    from elspais.utilities.version_check import check_env_version_requirement
+
+    version_check_result = check_env_version_requirement()
+    if version_check_result is not None:
+        return version_check_result
+
     # Implements: REQ-d00085-A+D
     # Detect multi-section composition before argparse
     from elspais.commands.report import COMPOSABLE_SECTIONS

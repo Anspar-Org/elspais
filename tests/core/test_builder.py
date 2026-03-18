@@ -298,7 +298,7 @@ class TestBuilderContentTypes:
         children = list(test.iter_children())
         assert len(children) == 1
         assert children[0].id == "result-1"
-        assert children[0].kind == NodeKind.TEST_RESULT
+        assert children[0].kind == NodeKind.RESULT
 
     def test_test_result_without_test_id_not_linked(self):
         """TEST_RESULT without test_id should not be linked to any parent."""
@@ -576,7 +576,7 @@ class TestGeneralizedOrphanDetection:
         orphans = list(graph.orphaned_nodes())
         orphan_ids = {n.id for n in orphans}
         assert "result-orphan" in orphan_ids
-        assert any(n.kind == NodeKind.TEST_RESULT for n in orphans)
+        assert any(n.kind == NodeKind.RESULT for n in orphans)
 
         # Also a broken reference
         assert graph.has_broken_references()
@@ -729,7 +729,7 @@ class TestGeneralizedOrphanDetection:
 
         # TEST_RESULT is a child of the TEST
         child_kinds = {c.kind for c in test_node.iter_children()}
-        assert NodeKind.TEST_RESULT in child_kinds
+        assert NodeKind.RESULT in child_kinds
 
         # But TEST is still an orphan (TEST_RESULT is satellite)
         orphan_ids = {n.id for n in graph.orphaned_nodes()}

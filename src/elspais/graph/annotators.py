@@ -695,7 +695,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             for result in test_node.iter_children():
-                if result.kind == NodeKind.TEST_RESULT:
+                if result.kind == NodeKind.RESULT:
                     status = (result.get_field("status", "") or "").lower()
                     if status in ("passed", "pass", "success"):
                         if assertion_targets:

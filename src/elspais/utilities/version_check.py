@@ -103,6 +103,33 @@ def get_upgrade_command(method: str) -> str:
     return commands.get(method, commands["unknown"])
 
 
+def check_env_version_requirement() -> int | None:
+    """Check ELSPAIS_VERSION env var for minimum version requirement.
+
+    If ELSPAIS_VERSION is set, the installed version must be >= that value.
+    Returns None if check passes (or env var not set), or 1 if incompatible.
+    """
+    import os
+
+    required = os.environ.get("ELSPAIS_VERSION")
+    if not required:
+        return None
+
+    from elspais import __version__ as current_version
+
+    if is_newer(required, current_version):
+        method = detect_install_method()
+        cmd = get_upgrade_command(method)
+        print(
+            f"elspais {current_version} is installed, but ELSPAIS_VERSION={required} "
+            f"requires at least {required}.\n"
+            f"Upgrade with: {cmd}",
+            file=sys.stderr,
+        )
+        return 1
+    return None
+
+
 def check_for_updates(current_version: str) -> int:
     """Check PyPI for a newer version and print upgrade instructions.
 

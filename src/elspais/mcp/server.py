@@ -160,7 +160,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     """
     results: list[dict[str, Any]] = []
     for child in test_node.iter_children():
-        if child.kind == NodeKind.TEST_RESULT:
+        if child.kind == NodeKind.RESULT:
             results.append(
                 {
                     "id": child.id,
@@ -357,7 +357,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "function_name": node.get_field("function_name", ""),
             "class_name": node.get_field("class_name", ""),
         }
-    elif kind == NodeKind.TEST_RESULT:
+    elif kind == NodeKind.RESULT:
         properties = {
             "status": node.get_field("status", ""),
             "duration": node.get_field("duration", 0.0),
@@ -420,7 +420,7 @@ def _serialize_node_summary(node: Any) -> dict[str, Any]:
     elif kind == NodeKind.USER_JOURNEY:
         summary["actor"] = node.get_field("actor", "")
         summary["goal"] = node.get_field("goal", "")
-    elif kind == NodeKind.TEST_RESULT:
+    elif kind == NodeKind.RESULT:
         summary["status"] = node.get_field("status", "")
     elif kind == NodeKind.TEST:
         summary["function_name"] = node.get_field("function_name", "")

@@ -532,7 +532,7 @@ class TestTransitiveCoverageThroughCode:
         if with_result:
             result = GraphNode(
                 id="result:tests/test_auth.py::test_authenticate",
-                kind=NodeKind.TEST_RESULT,
+                kind=NodeKind.RESULT,
                 label="test_authenticate",
             )
             result.set_field("status", result_status)
@@ -614,7 +614,7 @@ class TestTransitiveCoverageThroughCode:
         # Add passing result for direct test
         direct_result = GraphNode(
             id="result:tests/test_auth.py::test_auth_direct",
-            kind=NodeKind.TEST_RESULT,
+            kind=NodeKind.RESULT,
         )
         direct_result.set_field("status", "passed")
         graph._index[direct_result.id] = direct_result

@@ -130,7 +130,7 @@ def coverage_graph():
     assertion_a.link(test_node, EdgeKind.VERIFIES)
 
     # Test result
-    result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.TEST_RESULT, label="passed")
+    result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.RESULT, label="passed")
     result_node._content = {"status": "passed", "duration": 0.5}
     test_node.link(result_node, EdgeKind.YIELDS)
 

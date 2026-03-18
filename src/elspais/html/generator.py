@@ -369,7 +369,7 @@ class HTMLGenerator:
             stats.test_count += 1
 
         # Count TEST_RESULT nodes
-        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+        for node in self.graph.nodes_by_kind(NodeKind.RESULT):
             stats.test_result_count += 1
             status = (node.get_field("status", "") or "").lower()
             if status in ("passed", "pass", "success"):
@@ -490,7 +490,7 @@ class HTMLGenerator:
         def has_test_result_children(node: GraphNode) -> bool:
             """Check if node has test result children."""
             for child in node.iter_children():
-                if child.kind == NodeKind.TEST_RESULT:
+                if child.kind == NodeKind.RESULT:
                     return True
             return False
 
@@ -517,13 +517,13 @@ class HTMLGenerator:
                 NodeKind.REQUIREMENT,
                 NodeKind.CODE,
                 NodeKind.TEST,
-                NodeKind.TEST_RESULT,
+                NodeKind.RESULT,
             ):
                 return
 
             is_code = node.kind == NodeKind.CODE
             is_test = node.kind == NodeKind.TEST
-            is_test_result = node.kind == NodeKind.TEST_RESULT
+            is_test_result = node.kind == NodeKind.RESULT
             is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
             coverage, coverage_indirect, has_failures = (
                 ("none", "none", False) if is_impl_node else compute_coverage(node)
@@ -640,7 +640,7 @@ class HTMLGenerator:
                     children_to_visit.append((child, None))
                 elif child.kind == NodeKind.TEST:
                     children_to_visit.append((child, None))
-                elif child.kind == NodeKind.TEST_RESULT:
+                elif child.kind == NodeKind.RESULT:
                     # TEST_RESULT children of TEST nodes
                     children_to_visit.append((child, None))
 
@@ -705,7 +705,7 @@ class HTMLGenerator:
 
             # Render TEST_RESULT children under this TEST node
             for child in node.iter_children():
-                if child.kind == NodeKind.TEST_RESULT:
+                if child.kind == NodeKind.RESULT:
                     child_source_file = (
                         child.file_node().get_field("relative_path") if child.file_node() else ""
                     )
@@ -741,7 +741,7 @@ class HTMLGenerator:
                     visited_node_ids.add(child.id)
 
         # Add orphan TEST_RESULT nodes (not visited via any TEST parent)
-        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+        for node in self.graph.nodes_by_kind(NodeKind.RESULT):
             if node.id in visited_node_ids:
                 continue
 
