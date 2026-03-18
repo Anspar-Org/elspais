@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _StrictModel(BaseModel):
@@ -222,3 +222,12 @@ class ElspaisConfig(_StrictModel):
     core: CoreConfig | None = None
     associated: AssociatedConfig | None = None
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    @model_validator(mode="after")
+    def check_associated_requires_core(self) -> ElspaisConfig:
+        if self.project.type == "associated" and self.core is None:
+            raise ValueError(
+                "project.type='associated' requires a [core] section "
+                "with 'path' to the core repository"
+            )
+        return self

@@ -65,3 +65,48 @@ def test_type_mismatch_rejected():
 
     with pytest.raises(ValidationError):
         ElspaisConfig.model_validate({"version": "not-an-int"})
+
+
+def test_associated_requires_core():
+    """project.type='associated' without [core] must fail."""
+    from pydantic import ValidationError
+
+    from elspais.config.schema import ElspaisConfig
+
+    with pytest.raises(ValidationError, match="core"):
+        ElspaisConfig.model_validate(
+            {
+                "project": {"type": "associated"},
+            }
+        )
+
+
+def test_associated_with_core_passes():
+    """project.type='associated' with [core] must pass."""
+    from elspais.config.schema import ElspaisConfig
+
+    config = ElspaisConfig.model_validate(
+        {
+            "project": {"type": "associated"},
+            "core": {"path": "../core"},
+        }
+    )
+    assert config.core is not None
+    assert config.core.path == "../core"
+
+
+def test_status_roles_reference_allowed_statuses():
+    """status_roles referencing known statuses should work."""
+    from elspais.config.schema import ElspaisConfig
+
+    config = ElspaisConfig.model_validate(
+        {
+            "rules": {
+                "format": {
+                    "allowed_statuses": ["Active", "Draft"],
+                    "status_roles": {"active": ["Active"], "provisional": ["Draft"]},
+                },
+            },
+        }
+    )
+    assert config.rules.format.allowed_statuses == ["Active", "Draft"]
