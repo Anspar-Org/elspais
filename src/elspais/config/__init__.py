@@ -1015,8 +1015,14 @@ __all__ = [
 
 
 # Implements: REQ-d00202-A+B+C
-def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
+def get_associates_config(
+    config: dict[str, Any],
+    repo_root: Path | None = None,
+) -> dict[str, dict]:
     """Read [associates] sections from config.
+
+    Supports both the new named format ([associates.<name>]) and the legacy
+    paths array format ([associates] paths = ["../repo"]).
 
     Each associate entry has:
     - path (str, required): relative path to the associate repo
@@ -1024,6 +1030,7 @@ def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
 
     Args:
         config: The project configuration dictionary.
+        repo_root: Repository root for resolving relative legacy paths.
 
     Returns:
         Dict mapping associate name to {"path": str, "git": str | None}.
@@ -1039,6 +1046,24 @@ def get_associates_config(config: dict[str, Any]) -> dict[str, dict]:
                 "path": entry["path"],
                 "git": entry.get("git"),
             }
+
+    # Support legacy [associates] paths = ["../repo"] format
+    if not result:
+        paths = associates.get("paths", [])
+        if isinstance(paths, list) and paths:
+            from elspais.associates import discover_associate_from_path
+
+            for path_str in paths:
+                repo_path = Path(path_str)
+                if not repo_path.is_absolute() and repo_root:
+                    repo_path = repo_root / repo_path
+                assoc = discover_associate_from_path(repo_path)
+                if not isinstance(assoc, str):
+                    result[assoc.name] = {
+                        "path": path_str,
+                        "git": None,
+                    }
+
     return result
 
 

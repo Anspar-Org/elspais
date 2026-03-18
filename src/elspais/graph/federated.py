@@ -781,13 +781,28 @@ class FederatedGraph:
     # Cross-Graph Edge Wiring
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Edge kinds that establish content-level parent relationships
+    _CONTENT_EDGE_KINDS = frozenset(
+        {
+            EdgeKind.IMPLEMENTS,
+            EdgeKind.REFINES,
+            EdgeKind.VERIFIES,
+            EdgeKind.VALIDATES,
+            EdgeKind.YIELDS,
+        }
+    )
+
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
 
         For each sub-graph's broken references, check if the target_id exists
         in another sub-graph. If found, create the edge using target_graph
-        parameter and remove the broken reference.
+        parameter and remove the broken reference. After wiring, demote any
+        source nodes from _roots that now have content-level parent edges.
         """
+        # Track source node IDs that got wired via content edges, keyed by repo
+        wired_sources: dict[str, set[str]] = {}
+
         for source_entry in self._repos.values():
             if source_entry.graph is None:
                 continue
@@ -805,9 +820,17 @@ class FederatedGraph:
                             target_graph=target_entry.graph,
                         )
                         resolved.append(i)
+                        if EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
+                            wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
             # Remove resolved broken references (reverse to preserve indices)
             for idx in reversed(resolved):
                 source_entry.graph._broken_references.pop(idx)
+
+        # Demote wired source nodes from _roots — they now have parent edges
+        for repo_name, source_ids in wired_sources.items():
+            graph = self._repos[repo_name].graph
+            if graph is not None:
+                graph._roots = [r for r in graph._roots if r.id not in source_ids]
 
     def _annotate_presumed_foreign_refs(self) -> None:
         """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
