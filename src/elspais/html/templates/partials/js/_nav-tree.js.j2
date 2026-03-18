@@ -10,7 +10,7 @@ function updateHeaderStats() {
     var rows = editState.treeData;
     if (!rows || rows.length === 0) return;
     var seen = {};
-    var counts = {prd: 0, ops: 0, dev: 0, main: 0};
+    var counts = { {% for t in config_types | default([{"name":"prd"},{"name":"ops"},{"name":"dev"}]) %}{{ t.name }}: 0, {% endfor %}main: 0};
     var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
     for (var i = 0; i < rows.length; i++) {
         var r = rows[i];

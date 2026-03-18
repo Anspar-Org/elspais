@@ -48,6 +48,47 @@ from elspais.mcp.server import (
     _undo_last_mutation,
 )
 
+# Implements: REQ-d00211
+# User-selectable relationship kinds for the edit UI.
+_USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
+
+
+def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Extract viewer-relevant values from the config dict.
+
+    Returns a dict with keys suitable for unpacking into the Jinja2
+    template context: config_types, config_relationship_kinds,
+    config_statuses.
+    """
+    from elspais.config.schema import ElspaisConfig
+
+    try:
+        typed = ElspaisConfig.model_validate(config)
+    except Exception:
+        typed = ElspaisConfig.model_validate({})
+
+    # Types: extract name, letter, level from id_patterns.types
+    config_types = []
+    for name, type_cfg in typed.id_patterns.types.items():
+        entry: dict[str, Any] = {"name": name, "level": type_cfg.level}
+        if type_cfg.aliases and type_cfg.aliases.letter:
+            entry["letter"] = type_cfg.aliases.letter
+        else:
+            entry["letter"] = name[0]
+        config_types.append(entry)
+    config_types.sort(key=lambda t: t["level"])
+
+    # Statuses: from allowed_statuses if configured
+    config_statuses: list[str] = []
+    if typed.rules.format.allowed_statuses:
+        config_statuses = list(typed.rules.format.allowed_statuses)
+
+    return {
+        "config_types": config_types,
+        "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
+        "config_statuses": config_statuses,
+    }
+
 
 def create_app(
     repo_root: Path,
@@ -145,6 +186,8 @@ def create_app(
             roles = get_status_roles(_state["config"])
             default_hidden = roles.default_hidden_statuses()
 
+            viewer_cfg = _extract_viewer_config(_state["config"])
+
             return render_template(
                 "trace_unified.html.j2",
                 mode="edit",
@@ -163,6 +206,7 @@ def create_app(
                 coverage_index={},
                 status_data={},
                 catalog=get_catalog(),
+                **viewer_cfg,
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
