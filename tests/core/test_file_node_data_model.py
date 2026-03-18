@@ -102,8 +102,8 @@ class TestEdgeKindCoverage:
         assert EdgeKind.IMPLEMENTS.contributes_to_coverage() is True
 
     def test_REQ_d00126_D_validates_still_coverage(self):
-        """VALIDATES edges still contribute to coverage (regression check)."""
-        assert EdgeKind.VALIDATES.contributes_to_coverage() is True
+        """VERIFIES edges still contribute to coverage (regression check)."""
+        assert EdgeKind.VERIFIES.contributes_to_coverage() is True
 
 
 class TestEdgeMetadata:

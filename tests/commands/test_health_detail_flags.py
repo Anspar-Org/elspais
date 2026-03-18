@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for --skip-passing-details / --include-passing-details CLI flags.
 
 Validates REQ-d00085-E and REQ-d00085-F: passing check detail control across

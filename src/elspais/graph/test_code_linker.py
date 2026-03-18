@@ -160,7 +160,7 @@ def link_tests_to_code(
     which source files it references. Then matches the test function
     name to source function names using heuristics.
 
-    Creates VALIDATES edges from CODE nodes to TEST nodes when matches
+    Creates VERIFIES edges from CODE nodes to TEST nodes when matches
     are found. Only creates edges for TEST nodes that don't already
     have a CODE parent.
 
@@ -187,7 +187,7 @@ def link_tests_to_code(
     # 3. For each TEST node, try to link to CODE nodes
     test_nodes = list(graph.nodes_by_kind(NodeKind.TEST))
     for test_node in test_nodes:
-        # Skip tests that already have CODE parents (via VALIDATES edges)
+        # Skip tests that already have CODE parents (via VERIFIES edges)
         has_code_parent = False
         for parent in test_node.iter_parents():
             if parent.kind == NodeKind.CODE:
@@ -242,9 +242,9 @@ def link_tests_to_code(
                 key = (src_path, candidate)
                 code_nodes = code_index.get(key)
                 if code_nodes:
-                    # Create VALIDATES edge: CODE → TEST
+                    # Create VERIFIES edge: CODE → TEST
                     for code_node in code_nodes:
-                        code_node.link(test_node, EdgeKind.VALIDATES)
+                        code_node.link(test_node, EdgeKind.VERIFIES)
                         edges_created += 1
                     matched = True
                     break

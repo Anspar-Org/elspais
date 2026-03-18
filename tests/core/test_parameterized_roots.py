@@ -1,5 +1,5 @@
-# Validates: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D,
-# Validates: REQ-d00130-E, REQ-d00130-F
+# Verifies: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D,
+# Verifies: REQ-d00130-E, REQ-d00130-F
 """Tests for parameterized iter_roots() and iter_by_kind().
 
 Verifies that iter_roots() accepts an optional NodeKind filter,

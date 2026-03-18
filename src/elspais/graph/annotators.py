@@ -538,9 +538,9 @@ def annotate_coverage(graph: FederatedGraph) -> None:
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
     - Edges have assertion_targets when they target specific assertions
-    - VALIDATES to TEST with assertion_targets → DIRECT coverage
+    - VERIFIES to TEST with assertion_targets → DIRECT coverage
     - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
-    - IMPLEMENTS to CODE → VALIDATES to TEST → INDIRECT coverage (transitive)
+    - IMPLEMENTS to CODE → VERIFIES to TEST → INDIRECT coverage (transitive)
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
 
@@ -594,7 +594,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
             target_kind = target_node.kind
 
             if target_kind == NodeKind.TEST:
-                # TEST validates assertion(s) → DIRECT coverage
+                # TEST verifies assertion(s) → DIRECT coverage
                 if edge.assertion_targets:
                     for label in edge.assertion_targets:
                         if label in assertion_labels:
@@ -634,10 +634,10 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                             )
 
                 # Transitive: CODE → TEST → TEST_RESULT (indirect test coverage)
-                # Check if this CODE node has TEST children via VALIDATES edges
+                # Check if this CODE node has TEST children via VERIFIES edges
                 for code_edge in target_node.iter_outgoing_edges():
                     if (
-                        code_edge.kind == EdgeKind.VALIDATES
+                        code_edge.kind == EdgeKind.VERIFIES
                         and code_edge.target.kind == NodeKind.TEST
                     ):
                         transitive_test = code_edge.target

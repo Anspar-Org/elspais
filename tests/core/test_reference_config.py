@@ -76,7 +76,7 @@ class TestReferenceConfig:
         assert config.prefix_optional is False
         assert config.comment_styles == ["#", "//", "--"]
         assert "implements" in config.keywords
-        assert "validates" in config.keywords
+        assert "verifies" in config.keywords
         assert "refines" in config.keywords
 
     def test_REQ_p00001_B_from_dict_full(self) -> None:
@@ -88,7 +88,7 @@ class TestReferenceConfig:
             "comment_styles": ["//"],
             "keywords": {
                 "implements": ["IMPL"],
-                "validates": ["TEST"],
+                "verifies": ["TEST"],
             },
         }
 
@@ -137,7 +137,7 @@ class TestReferenceConfig:
         assert merged.comment_styles == ["#"]
         assert merged.keywords["implements"] == ["IMPL"]
         # Original keywords should be preserved
-        assert "validates" in merged.keywords
+        assert "verifies" in merged.keywords
 
     def test_REQ_d00082_F_merge_with_partial_override(self) -> None:
         """Test merge_with only applies non-None values."""
@@ -415,11 +415,11 @@ class TestBuildCommentPattern:
     def test_REQ_p00001_B_validates_comment(
         self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
     ) -> None:
-        """Test pattern matches # Validates: comment."""
-        pattern = build_comment_pattern(default_pattern_config, default_ref_config, "validates")
+        """Test pattern matches # Verifies: comment."""
+        pattern = build_comment_pattern(default_pattern_config, default_ref_config, "verifies")
 
-        assert pattern.search("# Validates: REQ-p00001")
-        assert pattern.search("# Tests: REQ-p00001")
+        assert pattern.search("# Verifies: REQ-p00001")
+        assert pattern.search("# VERIFIES: REQ-p00001")
 
     def test_REQ_p00001_C_multiple_refs(
         self, default_pattern_config: IdResolver, default_ref_config: ReferenceConfig
@@ -464,12 +464,12 @@ class TestBuildBlockHeaderPattern:
         assert pattern.search("-- IMPLEMENTS REQUIREMENT:")
 
     def test_REQ_p00001_B_validates_header(self, default_ref_config: ReferenceConfig) -> None:
-        """Test pattern matches TESTS REQUIREMENTS: header."""
-        pattern = build_block_header_pattern(default_ref_config, "validates")
+        """Test pattern matches VERIFIES REQUIREMENTS: header."""
+        pattern = build_block_header_pattern(default_ref_config, "verifies")
 
-        assert pattern.search("# TESTS REQUIREMENTS:")
-        assert pattern.search("// Tests Requirements")
-        assert pattern.search("# VALIDATES REQUIREMENTS:")
+        assert pattern.search("# VERIFIES REQUIREMENTS:")
+        assert pattern.search("// Verifies Requirements")
+        assert pattern.search("# VERIFIES REQUIREMENT:")
 
 
 class TestBuildBlockRefPattern:

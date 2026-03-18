@@ -193,7 +193,7 @@ class RequirementParser:
         # Per spec: "hash SHALL be calculated from every line AFTER Header, BEFORE Footer"
         data["body_text"] = self._extract_body_text(text)
 
-        # Extract level and status
+        # Extract level and status only (implements collected via finditer below)
         level_match = self.LEVEL_STATUS_PATTERN.search(text)
         if level_match:
             raw_level = level_match.group("level") or "Unknown"
@@ -201,8 +201,6 @@ class RequirementParser:
             resolved = self.resolver.resolve_level(raw_level)
             data["level"] = resolved if resolved is not None else raw_level
             data["status"] = level_match.group("status") or "Unknown"
-            if level_match.group("implements"):
-                data["implements"] = self._parse_refs(level_match.group("implements"))
 
         # Try alternative status pattern
         if data["status"] == "Unknown":
@@ -210,16 +208,20 @@ class RequirementParser:
             if alt_match:
                 data["status"] = alt_match.group("status")
 
-        # Try alternative implements pattern
-        if not data["implements"]:
-            impl_match = self.IMPLEMENTS_PATTERN.search(text)
-            if impl_match:
-                data["implements"] = self._parse_refs(impl_match.group("implements"))
+        # Collect ALL **Implements**: occurrences (additive, any number of lines)
+        all_impl_refs: list[str] = list(data["implements"])  # seed with any from level_match
+        for m in self.IMPLEMENTS_PATTERN.finditer(text):
+            all_impl_refs.extend(self._parse_refs(m.group("implements")))
+        data["implements"], impl_had_dups = self._dedup_refs(all_impl_refs)
 
-        # Parse refines
-        refines_match = self.REFINES_PATTERN.search(text)
-        if refines_match:
-            data["refines"] = self._parse_refs(refines_match.group("refines"))
+        # Collect ALL **Refines**: occurrences (additive, any number of lines)
+        all_refines_refs: list[str] = []
+        for m in self.REFINES_PATTERN.finditer(text):
+            all_refines_refs.extend(self._parse_refs(m.group("refines")))
+        data["refines"], refines_had_dups = self._dedup_refs(all_refines_refs)
+
+        if impl_had_dups or refines_had_dups:
+            data["has_redundant_refs"] = True
 
         # Parse satisfies
         # Implements: REQ-d00069-H
@@ -242,6 +244,20 @@ class RequirementParser:
             data["hash"] = end_match.group("hash")
 
         return data
+
+    def _dedup_refs(self, refs: list[str]) -> tuple[list[str], bool]:
+        """Deduplicate a reference list, preserving first-seen order.
+
+        Returns:
+            (deduplicated list, True if any duplicates were removed)
+        """
+        seen: set[str] = set()
+        result: list[str] = []
+        for ref in refs:
+            if ref not in seen:
+                seen.add(ref)
+                result.append(ref)
+        return result, len(result) < len(refs)
 
     # Implements: REQ-p00002-A
     def _parse_refs(self, refs_str: str) -> list[str]:
@@ -476,6 +492,7 @@ class RequirementParser:
                 if not self.LEVEL_STATUS_PATTERN.search(ln)
                 and not self.ALT_STATUS_PATTERN.search(ln)
                 and not self.IMPLEMENTS_PATTERN.search(ln)
+                and not self.REFINES_PATTERN.search(ln)
                 and not self.SATISFIES_PATTERN.search(ln)
             ]
 

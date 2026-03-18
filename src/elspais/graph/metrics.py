@@ -17,15 +17,15 @@ class CoverageSource(Enum):
     """Source type for coverage contributions.
 
     Different sources have different confidence levels:
-    - DIRECT: High confidence - TEST validates or CODE implements assertion
+    - DIRECT: High confidence - TEST verifies or CODE implements assertion
     - EXPLICIT: High confidence - REQ implements specific assertion(s) via syntax
     - INFERRED: Review recommended - REQ implements parent REQ (claims all assertions)
     """
 
-    DIRECT = "direct"  # TEST/CODE validates/implements assertion
+    DIRECT = "direct"  # TEST/CODE verifies/implements assertion
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
-    INDIRECT = "indirect"  # TEST validates whole REQ (all assertions implied)
+    INDIRECT = "indirect"  # TEST verifies whole REQ (all assertions implied)
 
 
 @dataclass

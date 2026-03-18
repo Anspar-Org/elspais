@@ -1,4 +1,4 @@
-# Validates: REQ-p00002
+# Verifies: REQ-p00002
 """E2E tests focused on configuration variations.
 
 Tests various config permutations: ignore patterns, file patterns,
@@ -493,7 +493,7 @@ class TestTestingConfig:
         test_dir = tmp_path / "verification"
         test_dir.mkdir()
         test_file = test_dir / "verify_feature.py"
-        test_file.write_text("# Validates: REQ-d00001\ndef verify_feature():\n    assert True\n")
+        test_file.write_text("# Verifies: REQ-d00001\ndef verify_feature():\n    assert True\n")
 
         result = run_elspais("health", "--lenient", cwd=tmp_path)
         assert result.returncode == 0

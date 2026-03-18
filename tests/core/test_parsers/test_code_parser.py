@@ -35,7 +35,7 @@ class TestCodeParserBasic:
         parser = CodeParser()
         lines = [
             (1, "def test_auth():"),
-            (2, "    # Validates: REQ-p00001"),
+            (2, "    # Verifies: REQ-p00001"),
             (3, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_auth.py")
@@ -43,7 +43,7 @@ class TestCodeParserBasic:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert results[0].parsed_data["validates"] == ["REQ-p00001"]
+        assert results[0].parsed_data["verifies"] == ["REQ-p00001"]
 
     def test_no_code_refs_returns_empty(self):
         parser = CodeParser()
@@ -154,13 +154,13 @@ class TestCodeParserCustomReferenceResolver:
             comment_styles=["#", "//"],
             keywords={
                 "implements": ["Implements"],
-                "validates": ["Validates"],
+                "verifies": ["Verifies"],
             },
         )
         overrides = [
             ReferenceOverride(
                 match="tests/**",
-                keywords={"validates": ["TESTS", "Verifies"]},
+                keywords={"verifies": ["TESTS", "Verifies"]},
             ),
         ]
         resolver = ReferenceResolver(defaults, overrides)
@@ -168,7 +168,7 @@ class TestCodeParserCustomReferenceResolver:
         parser = CodeParser(reference_resolver=resolver)
         lines = [
             (1, "def test_auth():"),
-            (2, "    # TESTS: REQ-p00001"),
+            (2, "    # VERIFIES: REQ-p00001"),
             (3, "    assert True"),
         ]
         ctx = ParseContext(
@@ -179,7 +179,7 @@ class TestCodeParserCustomReferenceResolver:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert results[0].parsed_data["validates"] == ["REQ-p00001"]
+        assert results[0].parsed_data["verifies"] == ["REQ-p00001"]
 
     def test_REQ_d00082_I_resolver_uses_defaults_for_non_matching(self):
         """Test that ReferenceResolver falls back to defaults for non-matching files."""
@@ -193,13 +193,13 @@ class TestCodeParserCustomReferenceResolver:
             comment_styles=["#"],
             keywords={
                 "implements": ["Implements"],
-                "validates": ["Validates"],
+                "verifies": ["Verifies"],
             },
         )
         overrides = [
             ReferenceOverride(
                 match="tests/**",
-                keywords={"validates": ["TESTS"]},  # Only for tests
+                keywords={"verifies": ["TESTS"]},  # Only for tests
             ),
         ]
         resolver = ReferenceResolver(defaults, overrides)
@@ -207,7 +207,7 @@ class TestCodeParserCustomReferenceResolver:
         parser = CodeParser(reference_resolver=resolver)
         lines = [
             (1, "def validate():"),
-            (2, "    # Validates: REQ-p00002"),  # Standard keyword for src files
+            (2, "    # Verifies: REQ-p00002"),  # Standard keyword for src files
             (3, "    pass"),
         ]
         ctx = ParseContext(
@@ -218,7 +218,7 @@ class TestCodeParserCustomReferenceResolver:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert results[0].parsed_data["validates"] == ["REQ-p00002"]
+        assert results[0].parsed_data["verifies"] == ["REQ-p00002"]
 
 
 class TestCodeParserCustomKeywords:
@@ -234,7 +234,7 @@ class TestCodeParserCustomKeywords:
         ref_config = ReferenceConfig(
             keywords={
                 "implements": ["Implements"],
-                "validates": ["Verifies", "Checks"],
+                "verifies": ["Verifies", "Checks"],
             },
         )
         resolver = ReferenceResolver(ref_config, [])
@@ -253,7 +253,7 @@ class TestCodeParserCustomKeywords:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert results[0].parsed_data["validates"] == ["REQ-p00001"]
+        assert results[0].parsed_data["verifies"] == ["REQ-p00001"]
 
     def test_REQ_d00082_I_custom_implements_keyword(self):
         """Test alternate implements keywords (e.g., 'Satisfies:')."""
@@ -262,7 +262,7 @@ class TestCodeParserCustomKeywords:
         ref_config = ReferenceConfig(
             keywords={
                 "implements": ["Satisfies", "Fulfills"],
-                "validates": ["Validates"],
+                "verifies": ["Verifies"],
             },
         )
         resolver = ReferenceResolver(ref_config, [])
@@ -396,7 +396,7 @@ class TestCodeParserUnderscoreSeparators:
             separators=["-", "_"],
             keywords={
                 "implements": ["Implements"],
-                "validates": ["Validates"],
+                "verifies": ["Verifies"],
             },
         )
         resolver = ReferenceResolver(ref_config, [])
@@ -604,7 +604,7 @@ class TestCodeParserContextConfig:
         from elspais.utilities.reference_config import ReferenceConfig, ReferenceResolver
 
         ref_config = ReferenceConfig(
-            keywords={"validates": ["Checks"]},
+            keywords={"verifies": ["Checks"]},
         )
         resolver = ReferenceResolver(ref_config, [])
 
@@ -625,7 +625,7 @@ class TestCodeParserContextConfig:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert results[0].parsed_data["validates"] == ["REQ-p00001"]
+        assert results[0].parsed_data["verifies"] == ["REQ-p00001"]
 
     def test_REQ_d00082_I_instance_config_takes_precedence(self):
         """Test that instance config takes precedence over context config."""
@@ -709,7 +709,7 @@ class TestCodeParserMultipleRefs:
         parser = CodeParser()
         lines = [
             (1, "def test_multiple():"),
-            (2, "    # Validates: REQ-d00001-A, REQ-d00001-B"),
+            (2, "    # Verifies: REQ-d00001-A, REQ-d00001-B"),
             (3, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_multi.py")
@@ -717,7 +717,7 @@ class TestCodeParserMultipleRefs:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        val = results[0].parsed_data["validates"]
+        val = results[0].parsed_data["verifies"]
         assert len(val) == 2
         assert "REQ-d00001-A" in val
         assert "REQ-d00001-B" in val
@@ -1000,7 +1000,7 @@ class TestBuilderCodeRefFunctionContext:
             raw_text="# Implements: REQ-p00001",
             parsed_data={
                 "implements": ["REQ-p00001"],
-                "validates": [],
+                "verifies": [],
                 "function_name": "authenticate",
                 "class_name": None,
                 "function_line": 8,
@@ -1028,7 +1028,7 @@ class TestBuilderCodeRefFunctionContext:
             raw_text="# Implements: REQ-p00001",
             parsed_data={
                 "implements": ["REQ-p00001"],
-                "validates": [],
+                "verifies": [],
                 "function_name": "validate",
                 "class_name": "AuthService",
                 "function_line": 15,
@@ -1057,7 +1057,7 @@ class TestBuilderCodeRefFunctionContext:
             raw_text="# Implements: REQ-p00001",
             parsed_data={
                 "implements": ["REQ-p00001"],
-                "validates": [],
+                "verifies": [],
                 "function_name": None,
                 "class_name": None,
                 "function_line": 0,
@@ -1084,7 +1084,7 @@ class TestBuilderCodeRefFunctionContext:
             raw_text="# Implements: REQ-p00001",
             parsed_data={
                 "implements": ["REQ-p00001"],
-                "validates": [],
+                "verifies": [],
                 "function_name": "process",
                 "class_name": None,
                 "function_line": 3,
@@ -1111,7 +1111,7 @@ class TestBuilderCodeRefFunctionContext:
             raw_text="# Implements: REQ-p00001",
             parsed_data={
                 "implements": ["REQ-p00001"],
-                "validates": [],
+                "verifies": [],
                 "function_name": "render",
                 "class_name": "View",
                 "function_line": 20,

@@ -1,4 +1,4 @@
-# Validates: REQ-p00006-C
+# Verifies: REQ-p00006-C
 """Tests for HTML Generator file viewer: _collect_source_files and _get_pygments_css.
 
 Validates REQ-p00006-C: Embedded source file viewing with syntax highlighting.

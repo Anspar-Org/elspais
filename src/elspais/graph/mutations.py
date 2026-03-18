@@ -23,7 +23,7 @@ class BrokenReference:
     Attributes:
         source_id: ID of the node containing the reference.
         target_id: ID that was referenced but doesn't exist.
-        edge_kind: Type of relationship ("implements", "refines", "validates").
+        edge_kind: Type of relationship ("implements", "refines", "verifies").
         presumed_foreign: True when target_id does not match the source repo's
             ID pattern, indicating a likely cross-repo reference to a repo that
             isn't configured or available.

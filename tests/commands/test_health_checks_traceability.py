@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for traceability-focused health checks.
 
 Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
@@ -97,7 +97,7 @@ class TestCheckUnlinkedTests:
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
-                validates=["REQ-p00001"],
+                verifies=["REQ-p00001"],
                 source_path="tests/test_feature.py",
                 start_line=1,
                 end_line=5,
@@ -112,13 +112,13 @@ class TestCheckUnlinkedTests:
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
-                validates=["REQ-p00001"],
+                verifies=["REQ-p00001"],
                 source_path="tests/test_linked.py",
                 start_line=1,
                 end_line=5,
             ),
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_unlinked.py",
                 start_line=1,
                 end_line=5,
@@ -136,7 +136,7 @@ class TestCheckUnlinkedTests:
         """Findings for unlinked tests include file_path and node_id."""
         graph = build_graph(
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_orphan.py",
                 start_line=1,
                 end_line=5,
@@ -282,7 +282,7 @@ class TestCheckBrokenReferences:
             BrokenReference(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
-                edge_kind="validates",
+                edge_kind="verifies",
             ),
         ]
 
@@ -294,7 +294,7 @@ class TestCheckBrokenReferences:
         assert "REQ-p99999" in finding.message
 
     def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_foreign_namespace(self) -> None:
-        """Cross-repo refs are suppressed when allow_unresolved_cross_repo=True."""
+        """Foreign-namespace refs are suppressed when allow_unresolved_cross_repo=True."""
         from elspais.graph.mutations import BrokenReference
 
         graph = TraceGraph()

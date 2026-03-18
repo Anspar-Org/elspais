@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """E2E test verifying health check names in JSON output.
 
 Ensures the new traceability check names are present and the old
@@ -60,7 +60,7 @@ class TestHealthCheckNames:
                 "src/feature.py": {"implements": ["REQ-d00001"]},
             },
             test_files={
-                "tests/test_feature.py": {"validates": ["REQ-d00001"]},
+                "tests/test_feature.py": {"verifies": ["REQ-d00001"]},
             },
         )
         return tmp_path

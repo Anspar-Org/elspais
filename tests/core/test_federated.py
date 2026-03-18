@@ -1,5 +1,5 @@
-# Validates: REQ-d00200-A, REQ-d00200-B, REQ-d00200-C, REQ-d00200-D
-# Validates: REQ-d00200-E, REQ-d00200-F, REQ-d00200-G, REQ-d00200-H
+# Verifies: REQ-d00200-A, REQ-d00200-B, REQ-d00200-C, REQ-d00200-D
+# Verifies: REQ-d00200-E, REQ-d00200-F, REQ-d00200-G, REQ-d00200-H
 """Tests for FederatedGraph read-only delegation.
 
 Validates REQ-d00200: FederatedGraph wraps one or more TraceGraphs,

@@ -61,7 +61,7 @@ class TestIndirectCoverageContributions:
                 ],
             ),
             make_test_ref(
-                validates=["REQ-100"],  # Whole-req: no assertion suffix
+                verifies=["REQ-100"],  # Whole-req: no assertion suffix
                 source_path="tests/test_whole.py",
             ),
         )
@@ -93,7 +93,7 @@ class TestIndirectCoverageContributions:
                 ],
             ),
             make_test_ref(
-                validates=["REQ-100"],
+                verifies=["REQ-100"],
                 source_path="tests/test_whole.py",
             ),
         )
@@ -128,7 +128,7 @@ class TestDualCoverageMetrics:
                     {"label": "B", "text": "Assertion B"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
         )
 
         annotate_coverage(graph)
@@ -150,7 +150,7 @@ class TestDualCoverageMetrics:
                     {"label": "B", "text": "Assertion B"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_a.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
         )
 
         annotate_coverage(graph)
@@ -180,7 +180,7 @@ class TestValidatedWithIndirect:
                     {"label": "C", "text": "Assertion C"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
             make_test_result(
                 "result-whole",
                 status="passed",
@@ -207,8 +207,8 @@ class TestValidatedWithIndirect:
                     {"label": "B", "text": "Assertion B"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_a.py"),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
             make_test_result("result-a", status="passed", test_id="test:tests/test_a.py:1"),
             make_test_result("result-whole", status="passed", test_id="test:tests/test_whole.py:1"),
         )
@@ -238,11 +238,11 @@ class TestEdgeCase1MixedDirectIndirect:
         graph = build_graph(
             make_requirement("REQ-100", level="PRD", assertions=assertions),
             # 3 assertion-targeted tests
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_a.py"),
-            make_test_ref(validates=["REQ-100-B"], source_path="tests/test_b.py"),
-            make_test_ref(validates=["REQ-100-C"], source_path="tests/test_c.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
+            make_test_ref(verifies=["REQ-100-B"], source_path="tests/test_b.py"),
+            make_test_ref(verifies=["REQ-100-C"], source_path="tests/test_c.py"),
             # 1 whole-req test
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
         )
 
         annotate_coverage(graph)
@@ -276,9 +276,9 @@ class TestEdgeCase2MultipleTestsOneFailing:
                 level="PRD",
                 assertions=[{"label": "A", "text": "Assertion A"}],
             ),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_1.py"),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_2.py"),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_3.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_1.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_2.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_3.py"),
             make_test_result("r1", status="passed", test_id="test:tests/test_1.py:1"),
             make_test_result("r2", status="passed", test_id="test:tests/test_2.py:1"),
             make_test_result("r3", status="failed", test_id="test:tests/test_3.py:1"),
@@ -309,8 +309,8 @@ class TestEdgeCase3WholeReqMixedResults:
 
         graph = build_graph(
             make_requirement("REQ-100", level="PRD", assertions=assertions),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_pass.py"),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_fail.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_pass.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_fail.py"),
             make_test_result("r-pass", status="passed", test_id="test:tests/test_pass.py:1"),
             make_test_result("r-fail", status="failed", test_id="test:tests/test_fail.py:1"),
         )
@@ -341,9 +341,9 @@ class TestEdgeCase4NoWholeReqTest:
 
         graph = build_graph(
             make_requirement("REQ-100", level="PRD", assertions=assertions),
-            make_test_ref(validates=["REQ-100-A"], source_path="tests/test_a.py"),
-            make_test_ref(validates=["REQ-100-B"], source_path="tests/test_b.py"),
-            make_test_ref(validates=["REQ-100-C"], source_path="tests/test_c.py"),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
+            make_test_ref(verifies=["REQ-100-B"], source_path="tests/test_b.py"),
+            make_test_ref(verifies=["REQ-100-C"], source_path="tests/test_c.py"),
         )
 
         annotate_coverage(graph)
@@ -405,7 +405,7 @@ class TestIntegrationWholeReqTest:
                     {"label": "C", "text": "System shall do C"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
             make_test_result("result-whole", status="passed", test_id="test:tests/test_whole.py:1"),
         )
 
@@ -448,7 +448,7 @@ class TestIndirectWithExistingSources:
             # Child REQ implements parent (all assertions = INFERRED)
             make_requirement("REQ-020", level="OPS", implements=["REQ-100"]),
             # Whole-req test (all assertions = INDIRECT)
-            make_test_ref(validates=["REQ-100"], source_path="tests/test_whole.py"),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
         )
 
         annotate_coverage(graph)
@@ -526,7 +526,7 @@ class TestTransitiveCoverageThroughCode:
             kind=NodeKind.TEST,
         )
         graph._index[test.id] = test
-        code.link(test, EdgeKind.VALIDATES)
+        code.link(test, EdgeKind.VERIFIES)
 
         result_node = None
         if with_result:
@@ -609,7 +609,7 @@ class TestTransitiveCoverageThroughCode:
             kind=NodeKind.TEST,
         )
         graph._index[direct_test.id] = direct_test
-        req.link(direct_test, EdgeKind.VALIDATES, assertion_targets=["A"])
+        req.link(direct_test, EdgeKind.VERIFIES, assertion_targets=["A"])
 
         # Add passing result for direct test
         direct_result = GraphNode(
@@ -660,7 +660,7 @@ class TestTransitiveCoverageThroughCode:
             kind=NodeKind.TEST,
         )
         graph._index[test.id] = test
-        code.link(test, EdgeKind.VALIDATES)
+        code.link(test, EdgeKind.VERIFIES)
 
         annotate_coverage(graph)
 
@@ -709,7 +709,7 @@ class TestTransitiveCoverageThroughCode:
                 kind=NodeKind.TEST,
             )
             graph._index[test.id] = test
-            code.link(test, EdgeKind.VALIDATES)
+            code.link(test, EdgeKind.VERIFIES)
 
         annotate_coverage(graph)
 
@@ -843,7 +843,7 @@ class TestFactoryIntegration:
         for code_node in code_nodes:
             for edge in code_node.iter_outgoing_edges():
                 # No VALIDATES edges from CODE to TEST
-                assert edge.kind != EdgeKind.VALIDATES or edge.target.kind != NodeKind.TEST
+                assert edge.kind != EdgeKind.VERIFIES or edge.target.kind != NodeKind.TEST
 
     def test_factory_no_linker_when_code_disabled(self, tmp_path):
         """When scan_code=False, no linker is called."""
@@ -875,7 +875,7 @@ class TestFactoryIntegration:
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
         (test_dir / "test_auth.py").write_text(
-            "# Validates: REQ-p00001\n" "def test_authenticate():\n" "    pass\n"
+            "# Verifies: REQ-p00001\n" "def test_authenticate():\n" "    pass\n"
         )
 
         (spec_dir / "requirements.md").write_text(

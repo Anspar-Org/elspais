@@ -42,7 +42,7 @@ class ReferenceConfig:
     keywords: dict[str, list[str]] = field(
         default_factory=lambda: {
             "implements": ["Implements", "IMPLEMENTS"],
-            "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
+            "verifies": ["Verifies", "VERIFIES"],
             "refines": ["Refines", "REFINES"],
         }
     )
@@ -79,7 +79,7 @@ class ReferenceConfig:
                 "keywords",
                 {
                     "implements": ["Implements", "IMPLEMENTS"],
-                    "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
+                    "verifies": ["Verifies", "VERIFIES"],
                     "refines": ["Refines", "REFINES"],
                 },
             ),
@@ -435,12 +435,12 @@ def build_comment_pattern(
 
     Creates a pattern for single-line comments like:
     - # Implements: REQ-p00001
-    - // Validates: REQ-p00002, REQ-p00003
+    - // Verifies: REQ-p00002, REQ-p00003
 
     Args:
         resolver: IdResolver for ID structure
         ref_config: Configuration for comment styles and keywords
-        keyword_type: Type of keyword to match ("implements", "validates", "refines")
+        keyword_type: Type of keyword to match ("implements", "verifies", "refines")
 
     Returns:
         Compiled regex pattern for matching reference comments

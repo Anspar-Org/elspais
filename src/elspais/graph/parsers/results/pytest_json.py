@@ -118,7 +118,7 @@ class PytestJSONParser:
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
-            - validates: List of requirement IDs this test validates
+            - verifies: List of requirement IDs this test verifies
         """
         results: list[dict[str, Any]] = []
 
@@ -201,7 +201,7 @@ class PytestJSONParser:
                         break
 
         # Extract requirement references
-        validates = self._extract_req_ids(f"{classname} {name}", source_path)
+        verifies = self._extract_req_ids(f"{classname} {name}", source_path)
 
         # Generate canonical TEST node ID from nodeid (already has file path)
         test_id = build_test_id_from_nodeid(nodeid)
@@ -213,7 +213,7 @@ class PytestJSONParser:
             "status": status,
             "duration": duration,
             "message": message,
-            "validates": validates,
+            "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
         }
@@ -253,7 +253,7 @@ class PytestJSONParser:
         if message:
             message = str(message)[:200]
 
-        validates = self._extract_req_ids(f"{classname} {name}", source_path)
+        verifies = self._extract_req_ids(f"{classname} {name}", source_path)
 
         # Generate canonical TEST node ID using test_identity utility
         test_id = build_test_id_from_result(classname, name)
@@ -265,7 +265,7 @@ class PytestJSONParser:
             "status": status,
             "duration": duration,
             "message": message,
-            "validates": validates,
+            "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
         }

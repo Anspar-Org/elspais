@@ -89,7 +89,7 @@ def assertion_map_graph():
         "parse_end_line": None,
     }
     wire_file_parent(test_node, "tests/test_encryption.py", line=10, graph=graph)
-    assertion_a.link(test_node, EdgeKind.VALIDATES)
+    assertion_a.link(test_node, EdgeKind.VERIFIES)
 
     result_node = GraphNode(
         id="result:test_encryption.py::test_data_encrypted",
@@ -112,7 +112,7 @@ def assertion_map_graph():
         "parse_end_line": None,
     }
     wire_file_parent(test_node2, "tests/test_tls.py", line=25, graph=graph)
-    req_node.link(test_node2, EdgeKind.VALIDATES, assertion_targets=["B"])
+    req_node.link(test_node2, EdgeKind.VERIFIES, assertion_targets=["B"])
 
     result_node2 = GraphNode(
         id="result:test_tls.py::test_tls_version",
@@ -135,7 +135,7 @@ def assertion_map_graph():
         "parse_end_line": None,
     }
     wire_file_parent(test_node3, "tests/test_security.py", line=42, graph=graph)
-    req_node.link(test_node3, EdgeKind.VALIDATES)
+    req_node.link(test_node3, EdgeKind.VERIFIES)
 
     result_node3 = GraphNode(
         id="result:test_security.py::test_full_security_suite",
@@ -324,7 +324,7 @@ class TestGetAssertionTestMap:
         # Pattern 1 with assertion_targets=["A"] to create a duplicate path
         req_node = assertion_map_graph._index["REQ-p00001"]
         test_node = assertion_map_graph._index["test:test_encryption.py::test_data_encrypted"]
-        req_node.link(test_node, EdgeKind.VALIDATES, assertion_targets=["A"])
+        req_node.link(test_node, EdgeKind.VERIFIES, assertion_targets=["A"])
 
         result = _get_assertion_test_map(assertion_map_graph, "REQ-p00001")
 

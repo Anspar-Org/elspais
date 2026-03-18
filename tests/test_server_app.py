@@ -127,7 +127,7 @@ def coverage_graph():
         id="test:test_encrypt.py::test_encrypt", kind=NodeKind.TEST, label="test_encrypt"
     )
     test_node._content = {"file": "test_encrypt.py", "name": "test_encrypt"}
-    assertion_a.link(test_node, EdgeKind.VALIDATES)
+    assertion_a.link(test_node, EdgeKind.VERIFIES)
 
     # Test result
     result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.TEST_RESULT, label="passed")

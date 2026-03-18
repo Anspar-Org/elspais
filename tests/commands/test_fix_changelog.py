@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A
+# Verifies: REQ-p00004-A
 """Tests for fix command changelog enforcement.
 
 Tests REQ-p00004-A: When fixing Active requirements, a changelog entry

@@ -37,7 +37,7 @@ class EdgeKind(Enum):
     Each edge type has semantic meaning for coverage calculation:
     - IMPLEMENTS: Child claims to satisfy parent (coverage rollup)
     - REFINES: Child adds detail to parent (NO coverage rollup)
-    - VALIDATES: Test validates requirement/assertion (coverage rollup)
+    - VERIFIES: TEST/CODE verifies/implements assertion (coverage rollup)
     - ADDRESSES: Links to user journey (informational, no coverage)
     - CONTAINS: File structure containment (no coverage)
     - SATISFIES: Requirement satisfies a cross-cutting template (structural, no coverage)
@@ -45,7 +45,7 @@ class EdgeKind(Enum):
 
     IMPLEMENTS = "implements"
     REFINES = "refines"
-    VALIDATES = "validates"
+    VERIFIES = "verifies"
     ADDRESSES = "addresses"
     CONTAINS = "contains"
     # Implements: REQ-d00069-G
@@ -65,7 +65,7 @@ class EdgeKind(Enum):
             True if edges of this type should be included in coverage
             calculations, False otherwise.
         """
-        return self in (EdgeKind.IMPLEMENTS, EdgeKind.VALIDATES)
+        return self in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES)
 
 
 # Implements: REQ-p00050-A

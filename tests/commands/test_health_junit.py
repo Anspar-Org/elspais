@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for JUnit XML rendering of health reports.
 
 Validates REQ-d00085-H: The ``--format junit`` option SHALL render health

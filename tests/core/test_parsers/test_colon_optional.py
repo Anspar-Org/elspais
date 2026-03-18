@@ -120,16 +120,16 @@ class TestColonPresentValidates:
     """Tests/Validates keywords with colon -- previously broken for TestParser."""
 
     def test_colon_present_tests_keyword(self, pattern_config, ref_config):
-        """# Tests: REQ-p00001 -- colon present with 'Tests' keyword."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Tests: REQ-p00001")
+        """# Verifies: REQ-p00001 -- colon present with 'Tests' keyword."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies: REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
     def test_colon_present_validates_keyword(self, pattern_config, ref_config):
-        """# Validates: REQ-p00001 -- colon present with 'Validates' keyword."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Validates: REQ-p00001")
+        """# Verifies: REQ-p00001 -- colon present with 'Validates' keyword."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies: REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
@@ -143,16 +143,16 @@ class TestColonAbsentValidates:
     """Tests/Validates keywords without colon -- already worked."""
 
     def test_colon_absent_tests_keyword(self, pattern_config, ref_config):
-        """# Tests REQ-p00001 -- colon absent (the way TestParser already worked)."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Tests REQ-p00001")
+        """# Verifies REQ-p00001 -- colon absent (the way TestParser already worked)."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
     def test_colon_absent_validates_keyword(self, pattern_config, ref_config):
-        """# Validates REQ-p00001 -- colon absent."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Validates REQ-p00001")
+        """# Verifies REQ-p00001 -- colon absent."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
@@ -163,19 +163,19 @@ class TestColonAbsentValidates:
 
 
 class TestSlashSlashValidates:
-    """// Validates with and without colon."""
+    """// Verifies with and without colon."""
 
     def test_slash_validates_with_colon(self, pattern_config, ref_config):
-        """// Validates: REQ-p00001 -- colon present."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("// Validates: REQ-p00001")
+        """// Verifies: REQ-p00001 -- colon present."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("// Verifies: REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
     def test_slash_validates_without_colon(self, pattern_config, ref_config):
-        """// Validates REQ-p00001 -- colon absent."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("// Validates REQ-p00001")
+        """// Verifies REQ-p00001 -- colon absent."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("// Verifies REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
@@ -218,9 +218,9 @@ class TestFalsePositiveGuard:
         assert m is None
 
     def test_no_space_no_match_validates(self, pattern_config, ref_config):
-        """#TestsREQ-p00001 -- must not match (no space)."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("#TestsREQ-p00001")
+        """#VerifiesREQ-p00001 -- must not match (no space)."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("#VerifiesREQ-p00001")
         assert m is None
 
     def test_no_space_no_match_refines(self, pattern_config, ref_config):
@@ -253,16 +253,16 @@ class TestUppercaseKeywords:
         assert "REQ-p00001" in m.group("refs")
 
     def test_uppercase_tests_with_colon(self, pattern_config, ref_config):
-        """# TESTS: REQ-p00001 -- uppercase keyword, colon present."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# TESTS: REQ-p00001")
+        """# VERIFIES: REQ-p00001 -- uppercase keyword, colon present."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# VERIFIES: REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
     def test_uppercase_tests_without_colon(self, pattern_config, ref_config):
-        """# TESTS REQ-p00001 -- uppercase keyword, colon absent."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# TESTS REQ-p00001")
+        """# VERIFIES REQ-p00001 -- uppercase keyword, colon absent."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# VERIFIES REQ-p00001")
         assert m is not None
         assert "REQ-p00001" in m.group("refs")
 
@@ -308,9 +308,9 @@ class TestMultiRefComma:
         assert "REQ-p00002" in refs
 
     def test_multi_ref_three_ids_with_colon(self, pattern_config, ref_config):
-        """# Validates: REQ-p00001, REQ-p00002, REQ-d00003 -- three refs, colon."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Validates: REQ-p00001, REQ-p00002, REQ-d00003")
+        """# Verifies: REQ-p00001, REQ-p00002, REQ-d00003 -- three refs, colon."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies: REQ-p00001, REQ-p00002, REQ-d00003")
         assert m is not None
         refs = m.group("refs")
         assert "REQ-p00001" in refs
@@ -318,9 +318,9 @@ class TestMultiRefComma:
         assert "REQ-d00003" in refs
 
     def test_multi_ref_three_ids_without_colon(self, pattern_config, ref_config):
-        """# Validates REQ-p00001, REQ-p00002, REQ-d00003 -- three refs, no colon."""
-        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="validates")
-        m = pat.search("# Validates REQ-p00001, REQ-p00002, REQ-d00003")
+        """# Verifies REQ-p00001, REQ-p00002, REQ-d00003 -- three refs, no colon."""
+        pat = build_comment_pattern(pattern_config, ref_config, keyword_type="verifies")
+        m = pat.search("# Verifies REQ-p00001, REQ-p00002, REQ-d00003")
         assert m is not None
         refs = m.group("refs")
         assert "REQ-p00001" in refs

@@ -78,7 +78,7 @@ def coverage_graph():
     test_node._content = {"file": "test_encryption.py", "name": "test_data_encrypted"}
 
     # Link assertion to test (assertion has test as child with VALIDATES edge)
-    assertion_a.link(test_node, EdgeKind.VALIDATES)
+    assertion_a.link(test_node, EdgeKind.VERIFIES)
 
     # Create TEST_RESULT for the test
     result_node = GraphNode(

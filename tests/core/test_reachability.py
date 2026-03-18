@@ -1,4 +1,4 @@
-# Validates: REQ-d00071-A
+# Verifies: REQ-d00071-A
 """Tests for TraceGraph reachability methods.
 
 Tests is_reachable_to_requirement(), iter_unlinked(), and iter_structural_orphans().
@@ -28,13 +28,13 @@ def _make_graph_with_linked_and_unlinked_tests() -> TraceGraph:
     graph = build_graph(
         make_requirement("REQ-p00001", title="Parent Req", level="PRD"),
         make_test_ref(
-            validates=["REQ-p00001"],
+            verifies=["REQ-p00001"],
             source_path="tests/linked.py",
             start_line=1,
             end_line=5,
         ),
         make_test_ref(
-            validates=[],
+            verifies=[],
             source_path="tests/unlinked.py",
             start_line=1,
             end_line=5,

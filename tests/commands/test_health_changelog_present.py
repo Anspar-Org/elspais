@@ -1,4 +1,4 @@
-# Validates: REQ-d00004
+# Verifies: REQ-d00004
 """Tests for check_spec_changelog_present health check."""
 
 from pathlib import Path

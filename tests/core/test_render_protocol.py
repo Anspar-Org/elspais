@@ -8,7 +8,7 @@ Validates REQ-d00131-C: ASSERTION render raises ValueError
 Validates REQ-d00131-D: REMAINDER renders raw text verbatim
 Validates REQ-d00131-E: USER_JOURNEY renders full block
 Validates REQ-d00131-F: CODE renders # Implements: comment line(s)
-Validates REQ-d00131-G: TEST renders # Tests: / # Validates: comment line(s)
+Validates REQ-d00131-G: TEST renders # Verifies: comment line(s)
 Validates REQ-d00131-H: TEST_RESULT render raises ValueError
 Validates REQ-d00131-I: FILE node renders by walking CONTAINS children sorted by render_order
 Validates REQ-d00131-J: Order-independent assertion hashing

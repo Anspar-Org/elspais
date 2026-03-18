@@ -417,8 +417,8 @@ class TestParser:
 
         # Build patterns dynamically based on config
         test_name_pattern = self._build_test_name_pattern(resolver, ref_config)
-        comment_pattern = build_comment_pattern(resolver, ref_config, "validates")
-        block_header_pattern = build_block_header_pattern(ref_config, "validates")
+        comment_pattern = build_comment_pattern(resolver, ref_config, "verifies")
+        block_header_pattern = build_block_header_pattern(ref_config, "verifies")
         block_ref_pattern = build_block_ref_pattern(resolver, ref_config)
 
         # Detect expected-broken-links marker in file header
@@ -447,8 +447,8 @@ class TestParser:
         else:
             line_context, all_test_funcs, first_def_line = self._text_prescan(lines)
 
-        # Collect file-level default validates (# Tests REQ-xxx before first def/class)
-        file_default_validates: list[str] = []
+        # Collect file-level default verifies (# Tests REQ-xxx before first def/class)
+        file_default_verifies: list[str] = []
         for ln, text in lines:
             if first_def_line and ln >= first_def_line:
                 break
@@ -462,15 +462,15 @@ class TestParser:
                     re.IGNORECASE,
                 ):
                     ref = resolver.normalize_ref(ref_match.group(0))
-                    if ref not in file_default_validates:
-                        file_default_validates.append(ref)
+                    if ref not in file_default_verifies:
+                        file_default_verifies.append(ref)
 
         # Second pass: extract references with context
         emitted_func_lines: set[int] = set()  # Track which functions got emitted
         i = 0
         while i < len(lines):
             ln, text = lines[i]
-            validates: list[str] = []
+            verifies: list[str] = []
             func_name, class_name, func_line = line_context.get(ln, (None, None, 0))
 
             # Check for REQ in test function name
@@ -478,7 +478,7 @@ class TestParser:
             if name_match:
                 # Convert REQ_p00001 to REQ-p00001 and normalize prefix case
                 ref = resolver.normalize_ref(name_match.group("ref"))
-                validates.append(ref)
+                verifies.append(ref)
 
             # Check for REQ in comment (single-line)
             comment_match = comment_pattern.search(text)
@@ -490,15 +490,15 @@ class TestParser:
                     rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+", refs_str, re.IGNORECASE
                 ):
                     ref = resolver.normalize_ref(ref_match.group(0))
-                    validates.append(ref)
+                    verifies.append(ref)
 
-            if validates:
+            if verifies:
                 parsed_data: dict = {
-                    "validates": validates,
+                    "verifies": verifies,
                     "function_name": func_name,
                     "class_name": class_name,
                     "function_line": func_line,
-                    "file_default_validates": file_default_validates,
+                    "file_default_verifies": file_default_verifies,
                 }
                 if expected_broken_count > 0:
                     parsed_data["expected_broken_count"] = expected_broken_count
@@ -547,11 +547,11 @@ class TestParser:
                         end_line=end_ln,
                         raw_text="\n".join(raw_lines),
                         parsed_data={
-                            "validates": refs,
+                            "verifies": refs,
                             "function_name": func_name,
                             "class_name": class_name,
                             "function_line": func_line,
-                            "file_default_validates": file_default_validates,
+                            "file_default_verifies": file_default_verifies,
                         },
                     )
                 continue
@@ -562,18 +562,18 @@ class TestParser:
         # so they appear in the graph for result linking and traceability gaps
         for func_line, func_name, class_name in all_test_funcs:
             if func_line not in emitted_func_lines:
-                # Inherit file-level validates if present
-                validates = list(file_default_validates)
+                # Inherit file-level verifies if present
+                verifies = list(file_default_verifies)
                 yield ParsedContent(
                     content_type="test_ref",
                     start_line=func_line,
                     end_line=func_line,
                     raw_text="",
                     parsed_data={
-                        "validates": validates,
+                        "verifies": verifies,
                         "function_name": func_name,
                         "class_name": class_name,
                         "function_line": func_line,
-                        "file_default_validates": file_default_validates,
+                        "file_default_verifies": file_default_verifies,
                     },
                 )

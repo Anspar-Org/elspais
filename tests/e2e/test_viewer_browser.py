@@ -1,4 +1,4 @@
-# Validates: REQ-d00010
+# Verifies: REQ-d00010
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI

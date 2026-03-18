@@ -118,7 +118,7 @@ def discover_graph():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: _discover_requirements() helper — chaining produces correct minimal set
+# Verifies: _discover_requirements() helper — chaining produces correct minimal set
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -188,7 +188,7 @@ class TestDiscoverRequirementsChaining:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: pruned ancestors get superseded_by metadata
+# Verifies: pruned ancestors get superseded_by metadata
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -240,7 +240,7 @@ class TestDiscoverRequirementsPruning:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: pass-through when no ancestors in result set
+# Verifies: pass-through when no ancestors in result set
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -362,7 +362,7 @@ class TestDiscoverRequirementsPassThrough:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: discover_requirements MCP tool wrapper
+# Verifies: discover_requirements MCP tool wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 

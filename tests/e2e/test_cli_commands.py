@@ -1,4 +1,4 @@
-# Validates: REQ-p00002, REQ-p00003, REQ-p00004, REQ-d00080, REQ-d00010, REQ-p00080
+# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-d00080, REQ-d00010, REQ-p00080
 """End-to-end subprocess tests for elspais CLI commands.
 
 Each test invokes the elspais binary as a subprocess and validates

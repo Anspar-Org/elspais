@@ -81,7 +81,7 @@ class CodeParser:
     Recognizes comments like::
 
         # Implements: REQ-p00001
-        # Validates: REQ-p00001
+        # Verifies: REQ-p00001
         // Implements: REQ-p00001 (for JS/TS)
         // IMPLEMENTS REQUIREMENTS: (multiline block header)
         //   REQ-p00001: Description (multiline block item)
@@ -379,7 +379,7 @@ class CodeParser:
 
         # Build patterns dynamically based on config
         implements_pattern = build_comment_pattern(resolver, ref_config, "implements")
-        validates_pattern = build_comment_pattern(resolver, ref_config, "validates")
+        verifies_pattern = build_comment_pattern(resolver, ref_config, "verifies")
         block_header_pattern = build_block_header_pattern(ref_config, "implements")
         block_ref_pattern = build_block_ref_pattern(resolver, ref_config)
 
@@ -390,12 +390,12 @@ class CodeParser:
 
             # Check for single-line patterns first
             impl_match = implements_pattern.search(text)
-            val_match = validates_pattern.search(text)
+            val_match = verifies_pattern.search(text)
 
             if impl_match or val_match:
                 parsed_data: dict[str, Any] = {
                     "implements": [],
-                    "validates": [],
+                    "verifies": [],
                     "function_name": func_name,
                     "class_name": class_name,
                     "function_line": func_line,
@@ -407,7 +407,7 @@ class CodeParser:
 
                 if val_match:
                     refs = [r.strip() for r in val_match.group("refs").split(",")]
-                    parsed_data["validates"] = refs
+                    parsed_data["verifies"] = refs
 
                 yield ParsedContent(
                     content_type="code_ref",
@@ -451,7 +451,7 @@ class CodeParser:
                         raw_text="\n".join(raw_lines),
                         parsed_data={
                             "implements": refs,
-                            "validates": [],
+                            "verifies": [],
                             "function_name": func_name,
                             "class_name": class_name,
                             "function_line": func_line,

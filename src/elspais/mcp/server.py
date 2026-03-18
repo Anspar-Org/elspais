@@ -290,7 +290,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     }
                 )
 
-    # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
+    # ── Common: non-hierarchical links (ADDRESSES, VERIFIES, etc.) ──
     links = []
     for edge in node.iter_incoming_edges():
         if edge.kind not in (

@@ -25,6 +25,7 @@
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
+| REQ-p00061 | Requirement Decomposition Rules                  | requirements-spec.md     | fc1e85fe |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |
 
 ## OPS
@@ -79,7 +80,7 @@
 | REQ-d00069 | Indirect Coverage Source                                      | 07-graph-architecture.md | 114709f5 |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | 07-graph-architecture.md | d483becb |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | 07-graph-architecture.md | 46d2a3e2 |
-| REQ-d00072 | Link Suggestion Core Engine                                   | 07-graph-architecture.md | 2cd50cdc |
+| REQ-d00072 | Link Suggestion Core Engine                                   | 07-graph-architecture.md | b26954bd |
 | REQ-d00073 | Link Suggestion CLI Command                                   | 07-graph-architecture.md | 44fd54e9 |
 | REQ-d00074 | MCP Link Suggestion Tools                                     | 08-mcp-server.md         | e438ff5e |
 | REQ-d00075 | Subtree Extraction Implementation                             | 08-mcp-server.md         | a53f60cc |

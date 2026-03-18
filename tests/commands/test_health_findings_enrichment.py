@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests that health check functions populate findings with structured data.
 
 Validates REQ-d00085-I: Each check function should produce HealthFinding instances
@@ -395,3 +395,120 @@ A. The system SHALL do something.
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.message, "Finding should have a message"
+
+
+class TestCheckSpecNoDuplicateRefinesFindings:
+    """Findings should identify requirements with redundant refs detected at parse time.
+
+    Validates REQ-d00085-I: check_spec_needs_rewrite must produce HealthFinding
+    instances with node_id when a requirement has parse_dirty=True (set by the builder
+    when has_redundant_refs was True in parsed_data).
+    """
+
+    def test_REQ_d00085_I_duplicate_refines_have_findings(self, tmp_path: Path) -> None:
+        # Verifies: REQ-d00085-I
+        """A requirement with parse_dirty=True should produce a finding.
+
+        parse_dirty is set by the builder when the parser detected duplicate refs
+        (has_redundant_refs=True in parsed_data). The check reads parse_dirty instead
+        of counting **Refines**: occurrences in body_text, since multiple Refines lines
+        are now valid — only true duplicate refs should be flagged.
+        """
+        from elspais.commands.health import check_spec_needs_rewrite
+
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-p00001",
+            kind=NodeKind.REQUIREMENT,
+            label="Corrupted Requirement",
+        )
+        # Simulate what the builder sets when has_redundant_refs=True
+        node.set_field("parse_dirty", True)
+        node.set_field("body_text", "**Refines**: REQ-p00002\n\n**Refines**: REQ-p00002")
+        node.set_field("level", "PRD")
+        node.set_field("status", "Active")
+        graph._index["REQ-p00001"] = node
+
+        check = check_spec_needs_rewrite(graph)
+
+        assert not check.passed, "Expected check to fail with parse_dirty=True"
+        assert len(check.findings) > 0, "Expected findings for parse_dirty requirement"
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert finding.node_id is not None, "Finding should have node_id"
+        assert "REQ-p00001" in (finding.node_id or "")
+        assert finding.message, "Finding should have a message"
+
+    def test_REQ_d00085_I_single_refines_passes(self, tmp_path: Path) -> None:
+        # Verifies: REQ-d00085-I
+        """A requirement with a single distinct **Refines**: line (parse_dirty not set) passes."""
+        from elspais.commands.health import check_spec_needs_rewrite
+
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-p00002",
+            kind=NodeKind.REQUIREMENT,
+            label="Single Refines Requirement",
+        )
+        # parse_dirty is NOT set — no redundant refs were detected
+        node.set_field("body_text", "**Refines**: REQ-p00001")
+        node.set_field("level", "PRD")
+        node.set_field("status", "Active")
+        graph._index["REQ-p00002"] = node
+
+        check = check_spec_needs_rewrite(graph)
+
+        assert check.passed, "Expected check to pass when parse_dirty is not set"
+        assert len(check.findings) == 0, "Expected no findings when parse_dirty is absent"
+
+    def test_REQ_d00085_I_no_refines_passes(self, tmp_path: Path) -> None:
+        # Verifies: REQ-d00085-I
+        """A requirement with no parse_dirty should pass the check."""
+        from elspais.commands.health import check_spec_needs_rewrite
+
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-p00003",
+            kind=NodeKind.REQUIREMENT,
+            label="No Refines Requirement",
+        )
+        # parse_dirty is NOT set
+        node.set_field("body_text", "This requirement has no Refines metadata.")
+        node.set_field("level", "PRD")
+        node.set_field("status", "Active")
+        graph._index["REQ-p00003"] = node
+
+        check = check_spec_needs_rewrite(graph)
+
+        assert check.passed, "Expected check to pass when parse_dirty is not set"
+        assert len(check.findings) == 0, "Expected no findings when parse_dirty is absent"
+
+    def test_REQ_d00085_I_multiple_refines_without_duplicates_passes(self, tmp_path: Path) -> None:
+        # Verifies: REQ-d00085-I
+        """Multiple distinct **Refines**: lines (parse_dirty not set) should pass the check.
+
+        This confirms the new behaviour: multiple Refines lines are valid as long as
+        no duplicate refs were detected (parse_dirty remains unset).
+        """
+        from elspais.commands.health import check_spec_needs_rewrite
+
+        graph = TraceGraph()
+        node = GraphNode(
+            id="REQ-p00004",
+            kind=NodeKind.REQUIREMENT,
+            label="Multi Refines No Duplicates",
+        )
+        # Two distinct Refines lines — parse_dirty is NOT set because no duplicates
+        node.set_field("body_text", "**Refines**: REQ-p00001\n\n**Refines**: REQ-p00002")
+        node.set_field("level", "PRD")
+        node.set_field("status", "Active")
+        # parse_dirty deliberately not set
+        graph._index["REQ-p00004"] = node
+
+        check = check_spec_needs_rewrite(graph)
+
+        assert check.passed, (
+            "Expected check to pass when multiple distinct Refines lines exist "
+            "but parse_dirty is not set"
+        )
+        assert len(check.findings) == 0

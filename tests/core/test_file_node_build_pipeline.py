@@ -1,5 +1,5 @@
-# Validates: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-D,
-# Validates: REQ-d00128-E, REQ-d00128-F, REQ-d00128-G, REQ-d00128-H, REQ-d00128-I
+# Verifies: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-D,
+# Verifies: REQ-d00128-E, REQ-d00128-F, REQ-d00128-G, REQ-d00128-H, REQ-d00128-I
 """Tests for FILE node creation in the build pipeline.
 
 Verifies that factory.py creates FILE nodes for scanned files, builder.py

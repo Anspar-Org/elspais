@@ -99,7 +99,7 @@ def _make_two_repo_federation(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: REQ-d00205-A — workspace info includes federation details
+# Verifies: REQ-d00205-A — workspace info includes federation details
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -180,7 +180,7 @@ class TestWorkspaceInfoFederation:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: REQ-d00205-B — refresh_graph syncs config
+# Verifies: REQ-d00205-B — refresh_graph syncs config
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -224,7 +224,7 @@ class TestRefreshGraphSyncsConfig:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: REQ-d00205-C — node-specific config
+# Verifies: REQ-d00205-C — node-specific config
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -268,7 +268,7 @@ class TestNodeSpecificConfig:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: REQ-d00205-D — global ops use root config
+# Verifies: REQ-d00205-D — global ops use root config
 # ─────────────────────────────────────────────────────────────────────────────
 
 

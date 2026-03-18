@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A
+# Verifies: REQ-p00004-A
 """Tests for MCP save_mutations changelog enforcement."""
 
 from pathlib import Path

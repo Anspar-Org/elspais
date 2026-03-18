@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
-from elspais.utilities.hasher import compute_normalized_hash
+from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -155,8 +155,12 @@ def _render_requirement(node: GraphNode) -> str:
                 lines.append(content)
                 lines.append("")
 
-    # Compute hash using canonical hasher (DRY: utilities/hasher.py)
-    hash_val = compute_normalized_hash(assertions)
+    # Compute hash using configured mode (DRY: utilities/hasher.py)
+    hash_mode = node.get_field("hash_mode") or "normalized-text"
+    if hash_mode == "full-text":
+        hash_val = calculate_hash(node.get_field("body_text") or "")
+    else:
+        hash_val = compute_normalized_hash(assertions)
 
     # End marker (separator is a REMAINDER node, not part of the requirement)
     lines.append(f"*End* *{title}* | **Hash**: {hash_val}")
@@ -195,7 +199,7 @@ def _render_code(node: GraphNode) -> str:
 def _render_test(node: GraphNode) -> str:
     """Render a TEST node back to its comment line(s).
 
-    Returns the raw text of the # Tests: / # Validates: comment line(s).
+    Returns the raw text of the # Verifies: comment line(s).
     """
     return node.get_field("raw_text") or ""
 
@@ -420,6 +424,19 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             new_file_id = entry.after_state.get("id", "")
             if new_file_id:
                 dirty_file_ids.add(new_file_id)
+
+    # Also mark files containing requirements with structural parse-dirty reasons.
+    # "stale_hash" is excluded: that is a hash-value change only, handled by
+    # update_hash_in_file (targeted text replace). render_save is for structural
+    # changes (e.g. duplicate refs) that require a full re-render.
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not node.get_field("parse_dirty"):
+            continue
+        reasons = node.get_field("parse_dirty_reasons") or []
+        if not reasons or any(r != "stale_hash" for r in reasons):
+            fn = node.file_node()
+            if fn is not None:
+                dirty_file_ids.add(fn.id)
 
     return dirty_file_ids
 

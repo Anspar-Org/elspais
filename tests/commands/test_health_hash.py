@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for check_spec_hash_integrity health check."""
 
 from pathlib import Path

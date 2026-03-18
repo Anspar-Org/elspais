@@ -283,7 +283,7 @@ class TestNodeFiltering:
 
         req.link(assertion, EdgeKind.CONTAINS)
         req.link(code, EdgeKind.IMPLEMENTS)
-        req.link(test, EdgeKind.VALIDATES)
+        req.link(test, EdgeKind.VERIFIES)
 
         # Default include_kinds=None -> {REQUIREMENT, ASSERTION}
         centrality = analyze_centrality(

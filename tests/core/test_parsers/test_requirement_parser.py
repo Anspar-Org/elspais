@@ -283,6 +283,61 @@ class TestRoundTripLineNumbers:
         assert assertions[0]["line"] == 5
 
 
+class TestPreambleMetadataStripping:
+    """Tests that metadata lines are fully stripped from the preamble section.
+
+    Validates REQ-p00002-A: preamble REMAINDER must not contain any metadata
+    lines that are already parsed into structured fields (Level, Status,
+    Implements, Refines, Satisfies).
+    """
+
+    def test_refines_line_stripped_from_preamble(self, parser):
+        # Verifies: REQ-p00002-A
+        """Validates that **Refines**: metadata line is not included in preamble section.
+
+        Regression test: _flush_section must strip **Refines**: just like
+        **Level**: and **Implements**: lines, to prevent preamble REMAINDER from
+        bleeding into rendered output.
+        """
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active"),
+            (3, "**Refines**: REQ-p00002"),
+            (4, ""),
+            (5, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        sections = results[0].parsed_data["sections"]
+        preamble = next((s for s in sections if s["heading"] == "preamble"), None)
+        # Preamble should be absent or empty - not contain the Refines line
+        if preamble is not None:
+            assert "**Refines**" not in preamble["content"]
+
+    def test_multiple_refines_lines_all_stripped_from_preamble(self, parser):
+        # Verifies: REQ-p00002-A
+        """All **Refines**: lines in body are stripped from preamble - no matter how many."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active"),
+            (3, "**Refines**: REQ-p00002"),
+            (4, ""),
+            (5, "**Refines**: REQ-p00002"),
+            (6, ""),
+            (7, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        sections = results[0].parsed_data["sections"]
+        preamble = next((s for s in sections if s["heading"] == "preamble"), None)
+        if preamble is not None:
+            assert "**Refines**" not in preamble["content"]
+
+
 class TestChangelogParsing:
     """Changelog entry extraction from requirement body text.
 
@@ -400,3 +455,105 @@ class TestChangelogParsing:
         sections = results[0].parsed_data.get("sections", [])
         section_headings = [s["heading"] for s in sections]
         assert "Changelog" not in section_headings
+
+
+class TestAdditiveMetadataCollection:
+    """Tests that multiple **Implements**: and **Refines**: lines are merged additively.
+
+    Validates: REQ-p00002-A
+    """
+
+    def test_multiple_implements_lines_are_additive(self, parser):
+        # Verifies: REQ-p00002-A
+        """Two distinct **Implements**: lines are merged into one list."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active | **Implements**: REQ-p00002"),
+            (3, "**Implements**: REQ-p00003"),
+            (4, ""),
+            (5, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        assert set(results[0].parsed_data["implements"]) == {"REQ-p00002", "REQ-p00003"}
+        assert results[0].parsed_data.get("has_redundant_refs") is not True
+
+    def test_multiple_refines_lines_are_additive(self, parser):
+        # Verifies: REQ-p00002-A
+        """Two distinct **Refines**: lines are merged into one list."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active"),
+            (3, "**Refines**: REQ-p00002"),
+            (4, "**Refines**: REQ-p00003"),
+            (5, ""),
+            (6, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        assert set(results[0].parsed_data["refines"]) == {"REQ-p00002", "REQ-p00003"}
+        assert results[0].parsed_data.get("has_redundant_refs") is not True
+
+    def test_duplicate_implements_ref_sets_has_redundant_refs(self, parser):
+        # Verifies: REQ-p00002-A
+        """Same REQ ID appearing in two **Implements**: lines sets has_redundant_refs."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active | **Implements**: REQ-p00002"),
+            (3, "**Implements**: REQ-p00002"),
+            (4, ""),
+            (5, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        implements = results[0].parsed_data["implements"]
+        assert "REQ-p00002" in implements
+        assert implements.count("REQ-p00002") == 1  # deduplicated
+        assert results[0].parsed_data["has_redundant_refs"] is True
+
+    def test_duplicate_refines_ref_sets_has_redundant_refs(self, parser):
+        # Verifies: REQ-p00002-A
+        """Same REQ ID appearing in two **Refines**: lines sets has_redundant_refs."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active"),
+            (3, "**Refines**: REQ-p00002"),
+            (4, "**Refines**: REQ-p00002"),
+            (5, ""),
+            (6, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        refines = results[0].parsed_data["refines"]
+        assert refines.count("REQ-p00002") == 1  # deduplicated
+        assert results[0].parsed_data["has_redundant_refs"] is True
+
+    def test_no_redundant_refs_when_all_distinct(self, parser):
+        # Verifies: REQ-p00002-A
+        """has_redundant_refs is False/absent when all refs are unique."""
+        lines = [
+            (1, "## REQ-p00001: Title"),
+            (2, "**Level**: PRD | **Status**: Active | **Implements**: REQ-p00002"),
+            (3, "**Implements**: REQ-p00003"),
+            (4, "**Refines**: REQ-p00004"),
+            (5, ""),
+            (6, "*End* *Title*"),
+        ]
+        ctx = ParseContext(file_path="spec/test.md")
+
+        results = list(parser.claim_and_parse(lines, ctx))
+
+        assert len(results) == 1
+        assert not results[0].parsed_data.get("has_redundant_refs")

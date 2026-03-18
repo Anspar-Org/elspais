@@ -1,4 +1,4 @@
-# Validates: REQ-d00085-A
+# Verifies: REQ-d00085-A
 """End-to-end workflow tests for elspais CLI multi-command sequences.
 
 Each test invokes multiple elspais commands as subprocesses and validates

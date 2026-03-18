@@ -167,14 +167,14 @@ multi_assertion_separator = "+"      # Separator for REQ-xxx-A+B+C syntax
 
 [references.defaults.keywords]
 implements = ["Implements", "IMPLEMENTS"]
-validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
+verifies = ["Verifies", "VERIFIES"]
 refines = ["Refines", "REFINES"]
 
 # Override settings for specific file patterns
 [[references.overrides]]
 match = "*.java"
 comment_styles = ["//"]
-keywords = { implements = ["@Implements"], validates = ["@Tests"] }
+keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
 ```
 
 ### [validation] Section

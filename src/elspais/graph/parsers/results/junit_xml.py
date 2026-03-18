@@ -118,7 +118,7 @@ class JUnitXMLParser:
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
-            - validates: List of requirement IDs this test validates
+            - verifies: List of requirement IDs this test verifies
         """
         results: list[dict[str, Any]] = []
 
@@ -162,7 +162,7 @@ class JUnitXMLParser:
                     message = skipped.get("message") or skipped.text
 
                 # Extract requirement references from test name or classname
-                validates = self._extract_req_ids(f"{classname} {name}", source_path)
+                verifies = self._extract_req_ids(f"{classname} {name}", source_path)
 
                 # Generate canonical TEST node ID using test_identity utility
                 test_id = build_test_id_from_result(classname, name)
@@ -174,7 +174,7 @@ class JUnitXMLParser:
                     "status": status,
                     "duration": duration,
                     "message": message[:200] if message else None,
-                    "validates": validates,
+                    "verifies": verifies,
                     "source_path": source_path,
                     "test_id": test_id,
                 }

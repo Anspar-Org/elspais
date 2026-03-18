@@ -52,7 +52,7 @@ When a file implements many requirements, use block syntax:
 ```
 
 ```javascript
-// VALIDATES REQUIREMENTS:
+// VERIFIES REQUIREMENTS:
 //   REQ-d00010
 //   REQ-d00011
 ```
@@ -202,7 +202,7 @@ comment_styles = ["#", "//", "--"]
 
 [references.defaults.keywords]
 implements = ["Implements", "IMPLEMENTS"]
-validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
+verifies = ["Verifies", "VERIFIES"]
 refines = ["Refines", "REFINES"]
 ```
 
@@ -212,7 +212,7 @@ Override settings for specific files or directories:
 [[references.overrides]]
 match = "*.java"
 comment_styles = ["//"]
-keywords = { implements = ["@Implements"], validates = ["@Tests"] }
+keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
 ```
 
 See `elspais docs config` for the full configuration reference.

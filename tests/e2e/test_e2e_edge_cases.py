@@ -1,4 +1,4 @@
-# Validates: REQ-p00002, REQ-p00003, REQ-p00060
+# Verifies: REQ-p00002, REQ-p00003, REQ-p00060
 """E2E edge case tests for comprehensive coverage.
 
 Tests unusual configurations, boundary conditions, and

@@ -57,7 +57,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "result_files": [],
         "run_meta_file": "",
         "reference_patterns": [],
-        "reference_keyword": "Validates",
+        "reference_keyword": "Verifies",
         "prescan_command": "",
     },
     "ignore": {
@@ -74,7 +74,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "comment_styles": ["#", "//", "--"],
             "keywords": {
                 "implements": ["Implements", "IMPLEMENTS"],
-                "validates": ["Validates", "Tests", "VALIDATES", "TESTS"],
+                "verifies": ["Verifies", "VERIFIES"],
                 "refines": ["Refines", "REFINES"],
                 # Implements: REQ-d00069-H
                 "satisfies": ["Satisfies", "SATISFIES"],
@@ -173,7 +173,7 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """
     # v2+ configs must use [id-patterns] directly — skip migration
     config_version = config.get("version")
-    if config_version is not None and config_version >= 2:
+    if config_version is not None and isinstance(config_version, int) and config_version >= 2:
         return config
 
     patterns = config.get("patterns", {})

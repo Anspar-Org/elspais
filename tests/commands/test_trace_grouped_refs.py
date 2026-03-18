@@ -1,4 +1,4 @@
-# Validates: REQ-p00003-A, REQ-p00003-B
+# Verifies: REQ-p00003-A, REQ-p00003-B
 """Tests for test_refs_grouped in _get_node_data()."""
 
 import json
@@ -44,7 +44,7 @@ C. The system SHALL log events.
         # Test file targeting specific assertions via Validates comments
         test_assertion_a = test_dir / "test_input_validation.py"
         test_assertion_a.write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_validates_input():
     pass
 """
@@ -53,7 +53,7 @@ def test_REQ_p00001_A_validates_input():
         # Test file targeting assertion B
         test_assertion_b = test_dir / "test_output.py"
         test_assertion_b.write_text(
-            """# Validates: REQ-p00001-B
+            """# Verifies: REQ-p00001-B
 def test_REQ_p00001_B_produces_output():
     pass
 """
@@ -62,7 +62,7 @@ def test_REQ_p00001_B_produces_output():
         # Test file targeting whole requirement (no assertion)
         test_whole_req = test_dir / "test_whole_req.py"
         test_whole_req.write_text(
-            """# Validates: REQ-p00001
+            """# Verifies: REQ-p00001
 def test_REQ_p00001_general():
     pass
 """
@@ -71,7 +71,7 @@ def test_REQ_p00001_general():
         # Test file targeting multiple assertions (A and C)
         test_multi = test_dir / "test_multi_target.py"
         test_multi.write_text(
-            """# Validates: REQ-p00001-A, REQ-p00001-C
+            """# Verifies: REQ-p00001-A, REQ-p00001-C
 def test_REQ_p00001_A_and_C():
     pass
 """
@@ -276,7 +276,7 @@ C. The system SHALL log events.
 
         # Test targeting assertion A
         (test_dir / "test_input_validation.py").write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_validates_input():
     pass
 """
@@ -284,7 +284,7 @@ def test_REQ_p00001_A_validates_input():
 
         # Test targeting assertion B
         (test_dir / "test_output.py").write_text(
-            """# Validates: REQ-p00001-B
+            """# Verifies: REQ-p00001-B
 def test_REQ_p00001_B_produces_output():
     pass
 """
@@ -292,7 +292,7 @@ def test_REQ_p00001_B_produces_output():
 
         # Whole-requirement test (no assertion)
         (test_dir / "test_whole_req.py").write_text(
-            """# Validates: REQ-p00001
+            """# Verifies: REQ-p00001
 def test_REQ_p00001_general():
     pass
 """
@@ -300,7 +300,7 @@ def test_REQ_p00001_general():
 
         # Multi-target test (A and C)
         (test_dir / "test_multi_target.py").write_text(
-            """# Validates: REQ-p00001-A, REQ-p00001-C
+            """# Verifies: REQ-p00001-A, REQ-p00001-C
 def test_REQ_p00001_A_and_C():
     pass
 """
@@ -308,7 +308,7 @@ def test_REQ_p00001_A_and_C():
 
         # Another test targeting assertion A for count checks
         (test_dir / "test_input_extra.py").write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_extra_check():
     pass
 """
@@ -426,7 +426,7 @@ C. The system SHALL log events.
 
         # Test targeting assertion A
         (test_dir / "test_input_validation.py").write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_validates_input():
     pass
 """
@@ -434,7 +434,7 @@ def test_REQ_p00001_A_validates_input():
 
         # Test targeting assertion B
         (test_dir / "test_output.py").write_text(
-            """# Validates: REQ-p00001-B
+            """# Verifies: REQ-p00001-B
 def test_REQ_p00001_B_produces_output():
     pass
 """
@@ -442,7 +442,7 @@ def test_REQ_p00001_B_produces_output():
 
         # Whole-requirement test (no assertion)
         (test_dir / "test_whole_req.py").write_text(
-            """# Validates: REQ-p00001
+            """# Verifies: REQ-p00001
 def test_REQ_p00001_general():
     pass
 """
@@ -450,7 +450,7 @@ def test_REQ_p00001_general():
 
         # Multi-target test (A and C)
         (test_dir / "test_multi_target.py").write_text(
-            """# Validates: REQ-p00001-A, REQ-p00001-C
+            """# Verifies: REQ-p00001-A, REQ-p00001-C
 def test_REQ_p00001_A_and_C():
     pass
 """
@@ -561,7 +561,7 @@ C. The system SHALL log events.
 
         # Test targeting assertion A
         (test_dir / "test_input_validation.py").write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_validates_input():
     pass
 """
@@ -569,7 +569,7 @@ def test_REQ_p00001_A_validates_input():
 
         # Test targeting assertion B
         (test_dir / "test_output.py").write_text(
-            """# Validates: REQ-p00001-B
+            """# Verifies: REQ-p00001-B
 def test_REQ_p00001_B_produces_output():
     pass
 """
@@ -577,7 +577,7 @@ def test_REQ_p00001_B_produces_output():
 
         # Whole-requirement test (no assertion)
         (test_dir / "test_whole_req.py").write_text(
-            """# Validates: REQ-p00001
+            """# Verifies: REQ-p00001
 def test_REQ_p00001_general():
     pass
 """
@@ -693,7 +693,7 @@ C. The system SHALL log events.
 
         # Test targeting assertion A
         (test_dir / "test_input_validation.py").write_text(
-            """# Validates: REQ-p00001-A
+            """# Verifies: REQ-p00001-A
 def test_REQ_p00001_A_validates_input():
     pass
 """
@@ -701,7 +701,7 @@ def test_REQ_p00001_A_validates_input():
 
         # Test targeting assertion B
         (test_dir / "test_output.py").write_text(
-            """# Validates: REQ-p00001-B
+            """# Verifies: REQ-p00001-B
 def test_REQ_p00001_B_produces_output():
     pass
 """
@@ -709,7 +709,7 @@ def test_REQ_p00001_B_produces_output():
 
         # Whole-requirement test (no assertion)
         (test_dir / "test_whole_req.py").write_text(
-            """# Validates: REQ-p00001
+            """# Verifies: REQ-p00001
 def test_REQ_p00001_general():
     pass
 """
@@ -717,7 +717,7 @@ def test_REQ_p00001_general():
 
         # Multi-target test (A and C)
         (test_dir / "test_multi_target.py").write_text(
-            """# Validates: REQ-p00001-A, REQ-p00001-C
+            """# Verifies: REQ-p00001-A, REQ-p00001-C
 def test_REQ_p00001_A_and_C():
     pass
 """

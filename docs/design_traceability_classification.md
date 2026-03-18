@@ -12,7 +12,7 @@ to genuinely broken nodes.
 ## Current Behavior
 
 The builder tracks `_orphan_candidates` — any node that was never the source of
-a resolved pending link (IMPLEMENTS, VALIDATES, YIELDS, etc.). At build
+a resolved pending link (IMPLEMENTS, VERIFIES, YIELDS, etc.). At build
 finalization, candidates that aren't classified as roots become orphans. The
 `spec.orphans` health check reports all of them as a single warning.
 
@@ -34,7 +34,7 @@ Edges serve two distinct purposes:
 | Purpose | Edge Kinds | Meaning |
 |---------|-----------|---------|
 | **Structural** | CONTAINS, STRUCTURES | File organization, internal grouping |
-| **Traceability** | IMPLEMENTS, VALIDATES, YIELDS, REFINES, ADDRESSES, SATISFIES, INSTANCE, DEFINES | Requirement-to-artifact relationships |
+| **Traceability** | IMPLEMENTS, VERIFIES, YIELDS, REFINES, ADDRESSES, SATISFIES, INSTANCE, DEFINES | Requirement-to-artifact relationships |
 
 CONTAINS edges represent "this node lives in this file." They are always present
 for well-formed nodes but say nothing about whether the node participates in
@@ -49,8 +49,8 @@ traceability edges:
 | Status | Path | Meaning |
 |--------|------|---------|
 | **Implemented** | REQ <- CODE (IMPLEMENTS) | Code claims to implement the requirement |
-| **Validated** | REQ <- TEST (VALIDATES) | A test claims to validate the requirement |
-| **Reported** | REQ <- TEST <- TEST_RESULT (VALIDATES + YIELDS) | Test execution results exist |
+| **Verified** | REQ <- TEST (VERIFIES) | A test claims to verify the requirement |
+| **Reported** | REQ <- TEST <- TEST_RESULT (VERIFIES + YIELDS) | Test execution results exist |
 | **Refined** | REQ <- REQ (REFINES) | A child requirement refines it |
 
 These are not mutually exclusive. A requirement can be implemented, validated,

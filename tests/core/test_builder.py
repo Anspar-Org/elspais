@@ -504,7 +504,7 @@ class TestTestToRequirementLinking:
                 test_id="test:tests/test_misc.py::TestMisc::test_something_else",
                 name="test_something_else",
                 classname="tests.test_misc.TestMisc",
-                validates=[],  # No REQ references
+                verifies=[],  # No REQ references
             ),
         )
 
@@ -537,7 +537,7 @@ class TestGeneralizedOrphanDetection:
         """TEST referencing non-existent REQ is an orphan."""
         graph = build_graph(
             make_test_ref(
-                validates=["REQ-nonexistent"],
+                verifies=["REQ-nonexistent"],
                 source_path="tests/test_foo.py",
                 function_name="test_something",
             ),
@@ -553,7 +553,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
-                validates=["REQ-d00001"],
+                verifies=["REQ-d00001"],
                 source_path="tests/test_foo.py",
                 function_name="test_something",
             ),
@@ -631,7 +631,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
-                validates=["REQ-d00001"],
+                verifies=["REQ-d00001"],
                 source_path="tests/test_module.py",
                 function_name="test_func",
             ),
@@ -710,7 +710,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             # Create a TEST node with no validates (no parent link)
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_standalone.py",
                 function_name="test_standalone_func",
             ),
@@ -1264,7 +1264,7 @@ class TestMultiAssertionExpansion:
         )
         builder.add_parsed_content(
             make_test_ref(
-                validates=["REQ-d00001-A+B"],
+                verifies=["REQ-d00001-A+B"],
                 source_path="tests/test_auth.py",
                 start_line=5,
             ),
@@ -1282,3 +1282,63 @@ class TestMultiAssertionExpansion:
                     for at in edge.assertion_targets:
                         assertion_targets_found.add(at)
         assert {"A", "B"} == assertion_targets_found
+
+
+class TestParseDirtyFlag:
+    """Tests that has_redundant_refs in parsed_data causes parse_dirty on the built node.
+
+    Validates: REQ-p00002-A
+    """
+
+    def test_has_redundant_refs_sets_parse_dirty(self):
+        # Verifies: REQ-p00002-A
+        """Requirement built from parsed_data with has_redundant_refs=True has parse_dirty=True."""
+        content = ParsedContent(
+            content_type="requirement",
+            start_line=1,
+            end_line=5,
+            raw_text="",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Redundant Refs Req",
+                "level": "PRD",
+                "status": "Active",
+                "implements": ["REQ-p00002"],
+                "refines": [],
+                "assertions": [],
+                "has_redundant_refs": True,
+            },
+        )
+        builder = GraphBuilder()
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+        assert node.get_field("parse_dirty") is True
+
+    def test_no_redundant_refs_does_not_set_parse_dirty(self):
+        # Verifies: REQ-p00002-A
+        """A requirement without has_redundant_refs does NOT have parse_dirty=True."""
+        content = ParsedContent(
+            content_type="requirement",
+            start_line=1,
+            end_line=5,
+            raw_text="",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Clean Refs Req",
+                "level": "PRD",
+                "status": "Active",
+                "implements": ["REQ-p00002"],
+                "refines": [],
+                "assertions": [],
+            },
+        )
+        builder = GraphBuilder()
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+        assert not node.get_field("parse_dirty")

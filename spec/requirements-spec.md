@@ -57,24 +57,77 @@ Example:
 
 ## Requirement Header Grammar
 
-Each requirement MUST begin with a header in the following exact form:
+Each requirement MUST begin with a **header line** immediately followed by a **metadata block**.
 
-```markdown
-# REQ-{id}: {Short Descriptive Title}
+### Header Line
 
-**Level**: {PRD | Dev | Ops} | **Status**: {Draft | Review | Active | Deprecated} | **Implements**: {REQ-xNNNNN, REQ-yNNNNN | -}
-
-Addresses: {JNY-xxx-NN, ...}
+```text
+{#...} REQ-{id}: {Short Descriptive Title}
 ```
 
-Rules:
+The heading level (number of `#` characters) is unconstrained but SHOULD be consistent within a file.
 
-- `Implements` lists **only less-specific requirements**.
+### Metadata Block
+
+The metadata block immediately follows the header line. It consists of one or more **field declarations**.
+
+**Required fields** — each MUST appear exactly once and carry exactly one value:
+
+| Field | Allowed values |
+| ----- | -------------- |
+| `Level` | One of: `PRD`, `Dev`, `Ops` |
+| `Status` | One of: `Draft`, `Review`, `Active`, `Deprecated` |
+
+**Traceability fields** — each MAY appear zero or more times; each occurrence MAY carry a comma-delimited list of REQ IDs:
+
+| Field | Meaning |
+| ----- | ------- |
+| `Implements` | Parent requirements this requirement satisfies |
+| `Refines` | Parent requirements this requirement specialises |
+
+**Layout rules:**
+
+- Field declarations MAY appear in any order.
+- Field declarations MAY appear on the same line (separated by `|` or other punctuation) or on separate lines.
+- Any valid Markdown formatting MAY be applied to field names and values (e.g. `**Level**`, `Level`, `` `Level` `` are all equivalent).
+- Multiple occurrences of `Implements` or `Refines` are **additive**: all listed references are collected.
+- Use `-` to explicitly declare that no references exist (e.g. `Implements: -`).
+
+**Content rules:**
+
+- `Implements` and `Refines` list **only less-specific (parent) requirements**.
 - Parent requirements MUST NOT reference children.
-- Use `-` if the requirement has no parent.
-- `Addresses` is optional; when present, it lists User Journey IDs this requirement supports.
-- The `Addresses` line appears after the metadata line, before any section content.
-- The `Addresses` line is NOT part of the hashed content.
+- Duplicate references (the same REQ ID appearing more than once across all occurrences of a field) MUST be deduplicated to a single occurrence. A file containing duplicate references is considered malformed; tooling SHALL rewrite it on the next save to remove the redundancy.
+- `Addresses` is optional; when present it lists User Journey IDs this requirement supports. It appears after the metadata block, before any section content, and is NOT part of the hashed content.
+
+### Examples
+
+Traditional single-line form:
+
+```markdown
+**Level**: PRD | **Status**: Active | **Implements**: -
+```
+
+Split across lines:
+
+```markdown
+**Level**: Dev | **Status**: Draft
+**Implements**: REQ-p00001, REQ-p00002
+**Refines**: REQ-p00003-A, REQ-p00003-B
+```
+
+Multiple `Implements` occurrences (additive):
+
+```markdown
+**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00001, REQ-p00002
+**Implements**: REQ-p00003
+```
+
+Minimal formatting:
+
+```markdown
+Level: PRD | Status: Active | Implements: -
+```
 
 ---
 
@@ -88,6 +141,7 @@ All testable obligations MUST appear in an `## Assertions` section.
 ## Assertions
 
 A. The system SHALL ...
+
 B. The system SHALL ...
 ```
 
@@ -154,21 +208,21 @@ Composition is inferred, never declared.
 
 ---
 
-## Decomposition Rules
+## REQ-p00061: Requirement Decomposition Rules
 
-### Refinement
+**Level**: PRD | **Status**: Draft | **Implements**: -
 
-A child requirement refines a parent when it:
+A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
 
-- adds specificity,
-- adds constraints,
-- commits to mechanisms or guarantees.
+## Assertions
 
-The child MUST implement the parent via `Implements:`.
+A. A child requirement that adds specificity, constraints, or commits to mechanisms or guarantees SHALL declare its parent requirement using `Implements:` or `Refines:` in its metadata block.
 
-### Cascade
+B. `Implements:` and `Refines:` declarations apply to requirements only; code references and test nodes use their own linkage mechanisms.
 
-Multiple requirements MAY exist at the same Level refining a shared higher-level obligation. This is valid and expected.
+C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
+
+*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
 
 ---
 

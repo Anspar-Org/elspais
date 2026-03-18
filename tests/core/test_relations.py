@@ -124,8 +124,8 @@ class TestEdgeSemantics:
         assert EdgeKind.REFINES.contributes_to_coverage() is False
 
     def test_validates_rollup_flag(self):
-        """VALIDATES edges (tests) contribute to coverage."""
-        assert EdgeKind.VALIDATES.contributes_to_coverage() is True
+        """VERIFIES edges (tests) contribute to coverage."""
+        assert EdgeKind.VERIFIES.contributes_to_coverage() is True
 
     def test_addresses_no_rollup_flag(self):
         """ADDRESSES edges (journey links) don't affect coverage."""
