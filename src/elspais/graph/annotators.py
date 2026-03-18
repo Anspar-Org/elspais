@@ -744,7 +744,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                             )
                         )
 
-                # Implements: REQ-d00069-D
+                # Implements: REQ-d00069-A
                 # UAT roll-up: unconditional, mirrors automated EXPLICIT/INFERRED.
                 # If a child REQ implements this parent, UAT coverage from any JNY
                 # validating the child also propagates to this parent.
