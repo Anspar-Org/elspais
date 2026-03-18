@@ -261,13 +261,9 @@ class TestExampleTemplateContent:
 class TestCLIIntegration:
     """Integration tests using the CLI entry point."""
 
-    def test_cli_main_help_includes_example(self, capsys):
-        """Test main --help mentions example command."""
-        from elspais.cli import create_parser
+    def test_cli_main_help_includes_example(self):
+        """Test example subcommand is recognized by the parser."""
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        help_text = parser.format_help()
-
-        assert "example" in help_text
-        assert "elspais example" in help_text
-        assert "Documentation:" in help_text
+        args = parse_args(["example"])
+        assert args.command == "example"

@@ -3,10 +3,12 @@
 elspais.cli - Command-line interface.
 
 Main entry point for the elspais CLI tool.
+Uses Tyro for declarative CLI generation from dataclass definitions.
 """
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -31,1096 +33,157 @@ from elspais.commands import (
     trace,
     viewer,
 )
+from elspais.commands.args import (
+    AnalysisArgs,
+    AssociateArgs,
+    ChangedArgs,
+    CompletionArgs,
+    ConfigAddArgs,
+    ConfigArgs,
+    ConfigGetArgs,
+    ConfigPathArgs,
+    ConfigRemoveArgs,
+    ConfigSetArgs,
+    ConfigShowArgs,
+    ConfigUnsetArgs,
+    DocsArgs,
+    DoctorArgs,
+    EditArgs,
+    ExampleArgs,
+    FixArgs,
+    GlobalArgs,
+    GraphArgs,
+    HealthArgs,
+    InitArgs,
+    InstallArgs,
+    LinkArgs,
+    LinkSuggestArgs,
+    McpArgs,
+    McpInstallArgs,
+    McpServeArgs,
+    McpUninstallArgs,
+    PdfArgs,
+    RulesArgs,
+    RulesListArgs,
+    RulesShowArgs,
+    SummaryArgs,
+    TraceArgs,
+    UninstallArgs,
+    VersionArgs,
+    ViewerArgs,
+)
 
 
-class _FriendlyParser(argparse.ArgumentParser):
-    """ArgumentParser that suggests 'help' on errors."""
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    """Parse CLI arguments via Tyro and return an argparse.Namespace.
 
-    def error(self, message: str) -> None:
-        print(f"elspais: {message}", file=sys.stderr)
-        print("Try 'elspais help' or 'elspais --help' for usage.", file=sys.stderr)
-        raise SystemExit(2)
-
-
-def create_parser() -> argparse.ArgumentParser:
-    """Create the argument parser.
-
-    NOTE: When adding or modifying CLI commands, also update:
-    - docs/cli/*.md          (user-facing documentation)
-    - docs/configuration.md  (config reference if new config keys)
-    - commands/init.py       (generated .elspais.toml templates)
-    - Shell completion        (if new subcommands/args)
+    This is the Tyro-based replacement for create_parser().parse_args().
+    Used by tests and internal code that needs parsed args without running main().
     """
-    # Shared parent parser for --output flag (inherited by all output commands)
-    output_parent = argparse.ArgumentParser(add_help=False)
-    output_parent.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        help="Write output to file instead of stdout",
-        metavar="PATH",
-    )
+    import tyro
+
+    global_args = tyro.cli(GlobalArgs, args=argv)
+    return _to_namespace(global_args)
+
+
+def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
+    """Convert Tyro GlobalArgs to argparse.Namespace for backward compat.
+
+    Merges global fields and command-specific fields into a flat namespace
+    so existing command run() functions work without signature changes.
+    """
+    ns = argparse.Namespace()
+
+    # Copy global fields (except 'command')
+    for field in dataclasses.fields(global_args):
+        if field.name != "command":
+            setattr(ns, field.name, getattr(global_args, field.name))
+
+    cmd = global_args.command
+
+    # Determine the command name and nested action for dispatch
+    _CMD_MAP: dict[type, str] = {
+        HealthArgs: "health",
+        DoctorArgs: "doctor",
+        TraceArgs: "trace",
+        ViewerArgs: "viewer",
+        GraphArgs: "graph",
+        FixArgs: "fix",
+        SummaryArgs: "summary",
+        ChangedArgs: "changed",
+        AnalysisArgs: "analysis",
+        VersionArgs: "version",
+        InitArgs: "init",
+        ExampleArgs: "example",
+        EditArgs: "edit",
+        ConfigArgs: "config",
+        RulesArgs: "rules",
+        DocsArgs: "docs",
+        CompletionArgs: "completion",
+        AssociateArgs: "associate",
+        PdfArgs: "pdf",
+        InstallArgs: "install",
+        UninstallArgs: "uninstall",
+        McpArgs: "mcp",
+        LinkArgs: "link",
+    }
+    ns.command = _CMD_MAP.get(type(cmd), "")
+
+    # Copy command-specific fields
+    if hasattr(cmd, "__dataclass_fields__"):
+        for field in dataclasses.fields(cmd):
+            if field.name == "action":
+                continue
+            setattr(ns, field.name, getattr(cmd, field.name))
+
+    # Handle nested subcommands — map action to the appropriate dest attr
+    if isinstance(cmd, ConfigArgs):
+        _ACTION_MAP = {
+            ConfigShowArgs: "show",
+            ConfigGetArgs: "get",
+            ConfigSetArgs: "set",
+            ConfigUnsetArgs: "unset",
+            ConfigAddArgs: "add",
+            ConfigRemoveArgs: "remove",
+            ConfigPathArgs: "path",
+        }
+        ns.config_action = _ACTION_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, RulesArgs):
+        _RULES_MAP = {RulesListArgs: "list", RulesShowArgs: "show"}
+        ns.rules_action = _RULES_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, McpArgs):
+        _MCP_MAP = {
+            McpServeArgs: "serve",
+            McpInstallArgs: "install",
+            McpUninstallArgs: "uninstall",
+        }
+        ns.mcp_action = _MCP_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, LinkArgs):
+        ns.link_action = "suggest" if isinstance(cmd.action, LinkSuggestArgs) else None
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, InstallArgs):
+        ns.install_action = "local"
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, UninstallArgs):
+        ns.uninstall_action = "local"
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
 
-    parser = _FriendlyParser(
-        prog="elspais",
-        description="Requirements validation and traceability tools (L-Space)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais health                # Check project health (warnings/errors)
-  elspais summary               # Show coverage summary by level
-  elspais trace --format html   # Generate HTML traceability matrix
-  elspais viewer                # Start interactive viewer server
-  elspais viewer --static       # Generate interactive HTML file
-  elspais health summary trace  # Compose multiple report sections
-  elspais changed               # Show uncommitted spec changes
-  elspais fix                   # Auto-fix hashes and formatting
-
-Configuration:
-  elspais init                  # Create .elspais.toml in current directory
-  elspais config path           # Show config file location
-  elspais config show           # View all settings
-  elspais config --help         # Configuration guide with examples
-
-Documentation:
-  elspais example               # Quick requirement format reference
-  elspais example --full        # Full specification document
-  elspais completion            # Shell tab-completion setup
-
-For detailed command help: elspais <command> --help
-        """,
-    )
-
-    # Global options
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"elspais {__version__}",
-    )
-    parser.add_argument(
-        "-C",
-        "--directory",
-        type=Path,
-        help="Run as if started in this directory (like git -C)",
-        metavar="DIR",
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Path to configuration file",
-        metavar="PATH",
-    )
-    parser.add_argument(
-        "--spec-dir",
-        type=Path,
-        help="Override spec directory",
-        metavar="PATH",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Verbose output",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Suppress non-error output",
-    )
-    parser.add_argument(
-        "--set",
-        action="append",
-        dest="config_overrides",
-        metavar="KEY=VALUE",
-        help="Override config value (e.g. --set testing.enabled=false). Repeatable.",
-    )
-
-    # Subcommands
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # help command (alias for --help)
-    subparsers.add_parser(
-        "help",
-        help="Show this help message",
-    )
-
-    # health command
-    health_parser = subparsers.add_parser(
-        "health",
-        help="Check repository and configuration health",
-        parents=[output_parent],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais health              # Run all health checks
-  elspais health --spec       # Check spec files only
-  elspais health --code       # Check code references only
-  elspais health --tests      # Check test mappings only
-  elspais health --format json  # Output JSON for tooling
-  elspais health --format junit  # Output JUnit XML for CI
-  elspais health --format sarif  # Output SARIF for code scanning
-  elspais health -v           # Verbose output with details
-  elspais health --status Active Draft  # Include Draft in coverage
-  elspais health --include-passing-details  # Show details for passing checks
-
-Checks performed:
-  CONFIG: TOML syntax, required fields, pattern tokens, hierarchy rules, paths
-  SPEC:   File parsing, duplicate IDs, reference resolution, orphans
-  CODE:   Code→REQ reference validation, coverage statistics
-  TESTS:  Test→REQ mappings, result status, coverage statistics
-""",
-    )
-    health_parser.add_argument(
-        "--spec",
-        dest="spec_only",
-        action="store_true",
-        help="Run spec file checks only",
-    )
-    health_parser.add_argument(
-        "--code",
-        dest="code_only",
-        action="store_true",
-        help="Run code reference checks only",
-    )
-    health_parser.add_argument(
-        "--tests",
-        dest="tests_only",
-        action="store_true",
-        help="Run test mapping checks only",
-    )
-    health_parser.add_argument(
-        "--format",
-        choices=["text", "markdown", "json", "junit", "sarif"],
-        default="text",
-        help="Output format (default: text)",
-    )
-    health_parser.add_argument(
-        "--lenient",
-        action="store_true",
-        help="Allow warnings without affecting exit code",
-    )
-    health_parser.add_argument(
-        "--status",
-        nargs="+",
-        metavar="STATUS",
-        help="Statuses to include in coverage (default: Active). Example: --status Active Draft",
-    )
-    passing_group = health_parser.add_mutually_exclusive_group()
-    passing_group.add_argument(
-        "--skip-passing-details",
-        action="store_true",
-        default=True,
-        help="Hide details for passing checks (default)",
-    )
-    passing_group.add_argument(
-        "--include-passing-details",
-        action="store_true",
-        help="Show full details for passing checks",
-    )
-
-    # doctor command
-    doctor_parser = subparsers.add_parser(
-        "doctor",
-        parents=[output_parent],
-        help="Diagnose environment and installation health",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais doctor              # Check your elspais setup
-  elspais doctor --format json # Output as JSON
-  elspais doctor -v           # Verbose with details
-
-Checks performed:
-  CONFIG:      Configuration file exists, syntax valid, settings complete
-  ENVIRONMENT: Worktree detection, associate paths, local overrides
-""",
-    )
-    doctor_parser.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
-    )
-
-    # trace command
-    trace_parser = subparsers.add_parser(
-        "trace",
-        parents=[output_parent],
-        help="Generate traceability matrix",
-    )
-    trace_parser.add_argument(
-        "--format",
-        choices=["text", "markdown", "html", "json", "csv"],
-        default="markdown",
-        help="Output format (default: markdown)",
-    )
-    trace_parser.add_argument(
-        "--preset",
-        choices=["minimal", "standard", "full"],
-        help="Column preset (default: standard)",
-    )
-    trace_parser.add_argument(
-        "--body",
-        action="store_true",
-        help="Show requirement body text in detail rows",
-    )
-    trace_parser.add_argument(
-        "--assertions",
-        dest="show_assertions",
-        action="store_true",
-        help="Show individual assertions in detail rows",
-    )
-    trace_parser.add_argument(
-        "--tests",
-        dest="show_tests",
-        action="store_true",
-        help="Show test references in detail rows",
-    )
-
-    # viewer command — interactive traceability viewer
-    viewer_parser = subparsers.add_parser(
-        "viewer",
-        parents=[output_parent],
-        help="Interactive traceability viewer (live server or static HTML)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Interactive traceability viewer with search, filtering, and editing.
-
-Examples:
-  elspais viewer                          # Start server and open browser
-  elspais viewer --server                 # Start server without opening browser
-  elspais viewer --static                 # Generate interactive HTML file
-  elspais viewer --static --embed-content # HTML with embedded content (offline)
-  elspais viewer --path /my/repo          # Specify repository root
-""",
-    )
-    viewer_mode_group = viewer_parser.add_mutually_exclusive_group()
-    viewer_mode_group.add_argument(
-        "--server",
-        action="store_true",
-        help="Start server without opening browser",
-    )
-    viewer_mode_group.add_argument(
-        "--static",
-        action="store_true",
-        help="Generate interactive HTML file instead of starting server",
-    )
-    viewer_parser.add_argument(
-        "--embed-content",
-        action="store_true",
-        help="Embed full requirement content in HTML for offline viewing",
-    )
-    viewer_parser.add_argument(
-        "--port",
-        type=int,
-        default=None,
-        help="Port number for the server (default: 5001)",
-        metavar="PORT",
-    )
-    viewer_parser.add_argument(
-        "--path",
-        type=Path,
-        help="Path to repository root (default: auto-detect from cwd)",
-        metavar="DIR",
-    )
-
-    # graph command — export graph structure as JSON
-    subparsers.add_parser(
-        "graph",
-        parents=[output_parent],
-        help="Export the traceability graph structure as JSON",
-    )
-
-    # fix command
-    fix_parser = subparsers.add_parser(
-        "fix",
-        help="Auto-fix spec file issues (hashes, formatting)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais fix                   # Fix all issues
-  elspais fix --dry-run         # Preview fixes without applying
-  elspais fix REQ-p00001        # Fix hash for a specific requirement
-  elspais fix -m "Clarify API"  # Fix with changelog reason (Active reqs)
-""",
-    )
-    fix_parser.add_argument(
-        "req_id",
-        nargs="?",
-        help="Specific requirement ID to fix (hash only)",
-    )
-    fix_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be fixed without making changes",
-    )
-    fix_parser.add_argument(
-        "-m",
-        "--message",
-        help="Changelog reason for Active requirement hash updates",
-    )
-    fix_parser.add_argument(
-        "--mode",
-        choices=["core", "combined", "associate"],
-        default="combined",
-        help=(
-            "core: only local specs, associate: local only"
-            " (cross-repo warnings suppressed),"
-            " combined: include associated repos (default)"
-        ),
-    )
-
-    # summary command
-    summary_parser = subparsers.add_parser(
-        "summary",
-        parents=[output_parent],
-        help="Coverage summary by level (implemented, validated, passing)",
-    )
-    summary_parser.add_argument(
-        "--format",
-        choices=["text", "markdown", "json", "csv"],
-        default="text",
-        help="Output format (default: text)",
-    )
-
-    # changed command
-    changed_parser = subparsers.add_parser(
-        "changed",
-        parents=[output_parent],
-        help="Detect git changes to spec files",
-    )
-    changed_parser.add_argument(
-        "--base-branch",
-        default="main",
-        help="Base branch for comparison (default: main)",
-        metavar="BRANCH",
-    )
-    changed_parser.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
-    )
-    changed_parser.add_argument(
-        "-a",
-        "--all",
-        action="store_true",
-        help="Include all changed files (not just spec)",
-    )
-
-    # analysis command
-    analysis_parser = subparsers.add_parser(
-        "analysis",
-        parents=[output_parent],
-        help="Analyze foundational requirement importance",
-    )
-    analysis_parser.add_argument(
-        "-n",
-        "--top",
-        type=int,
-        default=10,
-        help="Number of top results to show (default: 10)",
-        metavar="N",
-    )
-    analysis_parser.add_argument(
-        "--weights",
-        help="Centrality,fan-in,neighborhood,uncovered weights (default: 0.3,0.2,0.2,0.3)",
-        metavar="W1,W2,W3,W4",
-    )
-    analysis_parser.add_argument(
-        "--format",
-        choices=["table", "json"],
-        default="table",
-        help="Output format (default: table)",
-    )
-    analysis_parser.add_argument(
-        "--show",
-        choices=["foundations", "leaves", "all"],
-        default="all",
-        help="Which sections to show (default: all)",
-    )
-    analysis_parser.add_argument(
-        "--level",
-        choices=["prd", "ops", "dev"],
-        help="Filter results by requirement level",
-    )
-    analysis_parser.add_argument(
-        "--include-code",
-        action="store_true",
-        help="Include CODE nodes in the analysis",
-    )
-
-    # version command
-    version_parser = subparsers.add_parser(
-        "version",
-        help="Show version and check for updates",
-    )
-    version_parser.add_argument(
-        "check",
-        nargs="?",
-        help="Check for updates from PyPI",
-    )
-
-    # init command
-    init_parser = subparsers.add_parser(
-        "init",
-        help="Create .elspais.toml configuration",
-    )
-    init_parser.add_argument(
-        "--type",
-        choices=["core", "associated"],
-        help="Repository type",
-    )
-    init_parser.add_argument(
-        "--associated-prefix",
-        help="Associated repo prefix (e.g., CAL)",
-        metavar="PREFIX",
-    )
-    init_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing configuration",
-    )
-    init_parser.add_argument(
-        "--template",
-        action="store_true",
-        help="Create an example requirement file in spec/",
-    )
-
-    # example command
-    example_parser = subparsers.add_parser(
-        "example",
-        help="Display requirement format examples and templates",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Subcommands:
-  elspais example             Quick reference (default)
-  elspais example requirement Full requirement template with all sections
-  elspais example journey     User journey template
-  elspais example assertion   Assertion rules and examples
-  elspais example ids         Show ID patterns from current config
-  elspais example --full      Display spec/requirements-spec.md (if exists)
-""",
-    )
-    example_parser.add_argument(
-        "example_type",
-        nargs="?",
-        choices=["requirement", "journey", "assertion", "ids"],
-        help="Example type to display",
-    )
-    example_parser.add_argument(
-        "--full",
-        action="store_true",
-        help="Display the full requirements specification file",
-    )
-
-    # edit command
-    edit_parser = subparsers.add_parser(
-        "edit",
-        help="Edit requirements in-place (implements, status, move)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais edit REQ-d00001 --status Draft
-  elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002
-  elspais edit REQ-d00001 --move-to roadmap/future.md
-  elspais edit --from-json edits.json
-
-JSON batch format:
-  [{"req_id": "...", "status": "...", "implements": [...]}]
-""",
-    )
-    edit_parser.add_argument(
-        "req_id",
-        nargs="?",
-        help="Requirement ID to edit",
-        metavar="REQ_ID",
-    )
-    edit_parser.add_argument(
-        "--implements",
-        help="New Implements value (comma-separated, empty string to clear)",
-        metavar="REFS",
-    )
-    edit_parser.add_argument(
-        "--status",
-        help="New Status value",
-        metavar="STATUS",
-    )
-    edit_parser.add_argument(
-        "--move-to",
-        help="Move requirement to file (relative to spec dir)",
-        metavar="FILE",
-    )
-    edit_parser.add_argument(
-        "--from-json",
-        help="Batch edit from JSON file (- for stdin)",
-        metavar="FILE",
-    )
-    edit_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show changes without applying",
-    )
-    edit_parser.add_argument(
-        "--validate-refs",
-        action="store_true",
-        help="Validate that implements references exist",
-    )
-
-    # config command
-    config_parser = subparsers.add_parser(
-        "config",
-        help="View and modify configuration (show, get, set, ...)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Configuration File:
-  elspais looks for .elspais.toml in the current directory or parent directories.
-  Create one with: elspais init
-
-  Location: elspais config path
-  View all: elspais config show
-
-Local Overrides:
-  Place a .elspais.local.toml alongside .elspais.toml for developer-local
-  settings (gitignored). It is deep-merged on top of the base config.
-
-Worktree Support:
-  Git worktrees are auto-detected. Relative [associates].paths resolve
-  from the canonical (main) repo root. Use -v to see detected roots.
-
-Quick Start (.elspais.toml):
-  [project]
-  name = "my-project"
-
-  [spec]
-  directories = ["spec"]         # Where requirement files live
-
-  [id-patterns]
-  canonical = "{namespace}-{type.letter}{component}"
-
-  [rules.hierarchy]
-  allowed = ["dev -> ops, prd", "ops -> prd"]
-
-Common Commands:
-  elspais config show            # View current config
-  elspais config get project.namespace
-  elspais config set project.name "MyApp"
-  elspais config path            # Show config file location
-
-Full Documentation:
-  See docs/configuration.md for all options.
-""",
-    )
-    config_subparsers = config_parser.add_subparsers(dest="config_action")
-
-    # config show
-    config_show = config_subparsers.add_parser(
-        "show",
-        parents=[output_parent],
-        help="Show current configuration",
-    )
-    config_show.add_argument(
-        "--section",
-        help="Show only a specific section (e.g., 'patterns', 'rules.format')",
-        metavar="SECTION",
-    )
-    config_show.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
-    )
-
-    # config get
-    config_get = config_subparsers.add_parser(
-        "get",
-        parents=[output_parent],
-        help="Get a configuration value",
-    )
-    config_get.add_argument(
-        "key",
-        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
-    )
-    config_get.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
-    )
-
-    # config set
-    config_set = config_subparsers.add_parser(
-        "set",
-        help="Set a configuration value",
-    )
-    config_set.add_argument(
-        "key",
-        help="Configuration key (dot-notation, e.g., 'patterns.prefix')",
-    )
-    config_set.add_argument(
-        "value",
-        help="Value to set (auto-detected: bool, number, JSON array/object, string)",
-    )
-
-    # config unset
-    config_unset = config_subparsers.add_parser(
-        "unset",
-        help="Remove a configuration key",
-    )
-    config_unset.add_argument(
-        "key",
-        help="Configuration key to remove",
-    )
-
-    # config add
-    config_add = config_subparsers.add_parser(
-        "add",
-        help="Add a value to an array configuration",
-    )
-    config_add.add_argument(
-        "key",
-        help="Configuration key for array (e.g., 'directories.code')",
-    )
-    config_add.add_argument(
-        "value",
-        help="Value to add to the array",
-    )
-
-    # config remove
-    config_remove = config_subparsers.add_parser(
-        "remove",
-        help="Remove a value from an array configuration",
-    )
-    config_remove.add_argument(
-        "key",
-        help="Configuration key for array (e.g., 'directories.code')",
-    )
-    config_remove.add_argument(
-        "value",
-        help="Value to remove from the array",
-    )
-
-    # config path
-    config_subparsers.add_parser(
-        "path",
-        help="Show path to configuration file",
-    )
-
-    # rules command
-    rules_parser = subparsers.add_parser(
-        "rules",
-        help="View and manage content rules (list, show)",
-    )
-    rules_subparsers = rules_parser.add_subparsers(dest="rules_action")
-
-    # rules list
-    rules_subparsers.add_parser(
-        "list",
-        help="List configured content rules",
-    )
-
-    # rules show
-    rules_show = rules_subparsers.add_parser(
-        "show",
-        help="Show content of a content rule file",
-    )
-    rules_show.add_argument(
-        "file",
-        help="Content rule file name (e.g., 'AI-AGENT.md')",
-    )
-
-    # docs command - comprehensive user documentation
-    docs_parser = subparsers.add_parser(
-        "docs",
-        help="Read the user guide (topics: quickstart, format, hierarchy, ...)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Available Topics:
-  quickstart   Getting started with elspais (default)
-  format       Requirement file format and structure
-  hierarchy    PRD → OPS → DEV levels and implements
-  assertions   Writing testable assertions with SHALL
-  traceability Linking requirements to code and tests
-  linking      How to link code and tests to requirements
-  validation   Running validation and fixing issues
-  git          Change detection and git integration
-  config       Configuration file reference
-  mcp          MCP server for AI integration
-  all          Show complete documentation
-
-Examples:
-  elspais docs                  # Quick start guide
-  elspais docs format           # Requirement format reference
-  elspais docs all              # Complete documentation
-  elspais docs all --no-pager   # Disable pager
-""",
-    )
-    docs_parser.add_argument(
-        "topic",
-        nargs="?",
-        default="quickstart",
-        choices=[
-            "quickstart",
-            "format",
-            "hierarchy",
-            "assertions",
-            "traceability",
-            "linking",
-            "validation",
-            "git",
-            "config",
-            "commands",
-            "health",
-            "mcp",
-            "all",
-        ],
-        help="Documentation topic (default: quickstart)",
-    )
-    docs_parser.add_argument(
-        "--plain",
-        action="store_true",
-        help="Plain text output (no ANSI colors)",
-    )
-    docs_parser.add_argument(
-        "--no-pager",
-        action="store_true",
-        help="Disable paging (print directly to stdout)",
-    )
-
-    # completion command - shell tab-completion setup
-    completion_parser = subparsers.add_parser(
-        "completion",
-        help="Generate shell tab-completion scripts",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Quick Setup:
-  elspais completion --install       # Auto-detect shell and install
-  elspais completion --uninstall     # Remove completion from rc file
-
-Manual Setup:
-  elspais completion                 # Show manual instructions
-  elspais completion --shell bash    # Generate script for specific shell
-
-Note: Requires the completion extra (pip install elspais[completion]).
-""",
-    )
-    completion_parser.add_argument(
-        "--shell",
-        choices=["bash", "zsh", "fish", "tcsh"],
-        help="Generate script for specific shell",
-    )
-    completion_parser.add_argument(
-        "--install",
-        action="store_true",
-        help="Auto-install completion in your shell rc file",
-    )
-    completion_parser.add_argument(
-        "--uninstall",
-        action="store_true",
-        help="Remove completion from your shell rc file",
-    )
-
-    # associate command
-    associate_parser = subparsers.add_parser(
-        "associate",
-        help="Manage associate repository links (link, list, unlink)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais associate /path/to/repo        # Link to specific associate
-  elspais associate callisto             # Find by name in sibling dirs
-  elspais associate --all                # Auto-discover and link all
-  elspais associate --list               # Show current links and status
-  elspais associate --unlink callisto    # Remove a link
-
-Associate configuration is written to .elspais.local.toml (gitignored).
-""",
-    )
-    associate_group = associate_parser.add_mutually_exclusive_group()
-    associate_parser.add_argument(
-        "associate_path",
-        nargs="?",
-        default=None,
-        help="Path to associate repo or name to search for",
-    )
-    associate_group.add_argument(
-        "--all",
-        action="store_true",
-        default=False,
-        help="Auto-discover and link all associates in sibling directories",
-    )
-    associate_group.add_argument(
-        "--list",
-        action="store_true",
-        default=False,
-        help="Show current associate links and status",
-    )
-    associate_group.add_argument(
-        "--unlink",
-        metavar="NAME",
-        help="Remove a linked associate (matches name, path, or prefix code)",
-    )
-
-    # pdf command
-    pdf_parser = subparsers.add_parser(
-        "pdf",
-        help="Compile spec files into a PDF document (requires pandoc + xelatex)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais pdf                                # Generate spec-output.pdf
-  elspais pdf --output review.pdf            # Custom output path
-  elspais pdf --title "My Project Specs"     # Custom title
-  elspais pdf --template custom.latex        # Custom LaTeX template
-  elspais pdf --engine lualatex              # Use lualatex instead of xelatex
-  elspais pdf --cover cover.md               # Custom cover page from Markdown file
-  elspais pdf --overview                     # PRD-only stakeholder overview
-  elspais pdf --overview --max-depth 2       # Overview with depth limit
-
-Prerequisites:
-  pandoc:   https://pandoc.org/installing.html
-  xelatex:  Install TeX Live, MiKTeX, or MacTeX
-""",
-    )
-    pdf_parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        default=Path("spec-output.pdf"),
-        help="Output PDF file path (default: spec-output.pdf)",
-        metavar="PATH",
-    )
-    pdf_parser.add_argument(
-        "--engine",
-        default="xelatex",
-        help="PDF engine: xelatex (default), lualatex, pdflatex",
-        metavar="ENGINE",
-    )
-    pdf_parser.add_argument(
-        "--template",
-        type=Path,
-        help="Custom pandoc LaTeX template (default: bundled template)",
-        metavar="PATH",
-    )
-    pdf_parser.add_argument(
-        "--title",
-        default=None,
-        help="Document title (default: project name from config)",
-        metavar="TITLE",
-    )
-    pdf_parser.add_argument(
-        "--cover",
-        type=Path,
-        default=None,
-        help="Markdown file for custom cover page (replaces default title page)",
-        metavar="PATH",
-    )
-    pdf_parser.add_argument(
-        "--overview",
-        action="store_true",
-        default=False,
-        help="Generate stakeholder overview (PRD requirements only, no OPS/DEV)",
-    )
-    pdf_parser.add_argument(
-        "--max-depth",
-        type=int,
-        default=None,
-        help="Max graph depth for core PRDs in overview mode (0=roots only, 1=+children, ...)",
-        metavar="N",
-    )
-
-    # install command
-    install_parser = subparsers.add_parser(
-        "install",
-        help="Install elspais variants (local dev version)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais install local                       Install from local source
-  elspais install local --extras all          With all extras
-  elspais install local --path /code/elspais  Explicit source path
-  elspais install local --tool uv             Force uv instead of pipx
-""",
-    )
-    install_subparsers = install_parser.add_subparsers(dest="install_action")
-    install_local_parser = install_subparsers.add_parser(
-        "local",
-        help="Install local source as editable (replaces PyPI version)",
-    )
-    install_local_parser.add_argument(
-        "--path",
-        help="Path to elspais source directory (auto-detected if omitted)",
-        metavar="PATH",
-    )
-    install_local_parser.add_argument(
-        "--extras",
-        help="Comma-separated extras to install (e.g., 'all', 'mcp,trace-view')",
-        metavar="EXTRAS",
-    )
-    install_local_parser.add_argument(
-        "--tool",
-        choices=["pipx", "uv"],
-        help="Package tool to use (auto-detected if omitted)",
-    )
-
-    # uninstall command
-    uninstall_parser = subparsers.add_parser(
-        "uninstall",
-        help="Revert elspais installation (back to PyPI)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais uninstall local                     Revert to latest PyPI release
-  elspais uninstall local --extras all        With all extras
-  elspais uninstall local --version 0.59.0    Specific version
-""",
-    )
-    uninstall_subparsers = uninstall_parser.add_subparsers(dest="uninstall_action")
-    uninstall_local_parser = uninstall_subparsers.add_parser(
-        "local",
-        help="Revert to PyPI release version",
-    )
-    uninstall_local_parser.add_argument(
-        "--extras",
-        help="Comma-separated extras to install (e.g., 'all', 'mcp,trace-view')",
-        metavar="EXTRAS",
-    )
-    uninstall_local_parser.add_argument(
-        "--version",
-        help="Specific PyPI version to install (default: latest)",
-        metavar="VERSION",
-    )
-    uninstall_local_parser.add_argument(
-        "--tool",
-        choices=["pipx", "uv"],
-        help="Package tool to use (auto-detected if omitted)",
-    )
-
-    # mcp command
-    mcp_parser = subparsers.add_parser(
-        "mcp",
-        help="MCP server commands (requires elspais[mcp])",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-elspais MCP Server - Model Context Protocol integration.
-
-Commands:
-  elspais mcp serve                       Start MCP server (stdio transport)
-  elspais mcp install                     Register with Claude Code (current project)
-  elspais mcp install --global            Register with Claude Code (all projects)
-  elspais mcp install --global --desktop  Register with Claude Code + Claude Desktop
-  elspais mcp uninstall                   Remove from Claude Code
-  elspais mcp uninstall --desktop         Also remove from Claude Desktop
-
-Quick start:
-  elspais mcp install --global --desktop  # One-time setup for both clients
-""",
-    )
-    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_action")
-
-    # mcp serve
-    mcp_serve = mcp_subparsers.add_parser(
-        "serve",
-        help="Start MCP server",
-    )
-    mcp_serve.add_argument(
-        "--transport",
-        choices=["stdio", "sse", "streamable-http"],
-        default="stdio",
-        help="Transport type (default: stdio)",
-    )
-
-    # mcp install
-    mcp_install = mcp_subparsers.add_parser(
-        "install",
-        help="Register elspais MCP server with Claude Code and/or Claude Desktop",
-    )
-    mcp_install.add_argument(
-        "--global",
-        dest="global_scope",
-        action="store_true",
-        help="Install for all projects (user scope) instead of current project only",
-    )
-    mcp_install.add_argument(
-        "--desktop",
-        action="store_true",
-        help="Also install into Claude Desktop (claude_desktop_config.json)",
-    )
-
-    # mcp uninstall
-    mcp_uninstall = mcp_subparsers.add_parser(
-        "uninstall",
-        help="Remove elspais MCP server from Claude Code and/or Claude Desktop",
-    )
-    mcp_uninstall.add_argument(
-        "--global",
-        dest="global_scope",
-        action="store_true",
-        help="Remove from user scope",
-    )
-    mcp_uninstall.add_argument(
-        "--desktop",
-        action="store_true",
-        help="Also remove from Claude Desktop (claude_desktop_config.json)",
-    )
-
-    # link command
-    link_parser = subparsers.add_parser(
-        "link",
-        help="Link suggestion tools (suggest links between tests and requirements)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  elspais link suggest                          # Scan all unlinked tests
-  elspais link suggest --file tests/test_foo.py # Single file
-  elspais link suggest --format json            # Machine-readable output
-  elspais link suggest --min-confidence high    # Only high-confidence
-  elspais link suggest --apply --dry-run        # Preview changes
-  elspais link suggest --apply                  # Apply suggestions
-""",
-    )
-    link_subparsers = link_parser.add_subparsers(dest="link_action", help="Link actions")
-
-    suggest_parser = link_subparsers.add_parser(
-        "suggest",
-        help="Suggest requirement links for unlinked tests",
-    )
-    suggest_parser.add_argument(
-        "--file",
-        type=Path,
-        help="Restrict analysis to a single file",
-        metavar="PATH",
-    )
-    suggest_parser.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
-    )
-    suggest_parser.add_argument(
-        "--min-confidence",
-        choices=["high", "medium", "low"],
-        help="Minimum confidence band to show",
-    )
-    suggest_parser.add_argument(
-        "--limit",
-        type=int,
-        default=50,
-        help="Maximum suggestions to return (default: 50)",
-    )
-    suggest_parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Apply suggestions by inserting # Implements: comments",
-    )
-    suggest_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without modifying files (use with --apply)",
-    )
-
-    return parser
+    return ns
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1145,13 +208,23 @@ def main(argv: list[str] | None = None) -> int:
     if version_check_result is not None:
         return version_check_result
 
+    # Handle --version before Tyro parsing
+    if "--version" in argv:
+        print(f"elspais {__version__}")
+        return 0
+
+    # Handle no args or "help" — show help text
+    if not argv or argv == ["help"]:
+        _print_help()
+        completion.maybe_show_completion_hint()
+        return 0
+
     # Implements: REQ-d00085-A+D
-    # Detect multi-section composition before argparse
+    # Detect multi-section composition before Tyro parsing
     from elspais.commands.report import COMPOSABLE_SECTIONS
 
     # Extract -C/--directory before multi-section detection since global
     # args precede subcommands in argv
-
     start_dir = Path.cwd()
     filtered_argv: list[str] = []
     skip_next = False
@@ -1189,25 +262,16 @@ def main(argv: list[str] | None = None) -> int:
 
         return report.run(sections, argv[i:], canonical_root=canonical_root)
 
-    # Single command — normal argparse dispatch (REQ-d00085-D)
-    parser = create_parser()
+    # Single command — Tyro parsing
+    import tyro
 
-    # Enable shell tab-completion if argcomplete is installed
-    # Setup: elspais completion --install
     try:
-        import argcomplete
+        global_args = tyro.cli(GlobalArgs, args=argv)
+    except SystemExit as e:
+        # Tyro calls sys.exit on parse errors and --help
+        return e.code if isinstance(e.code, int) else 2
 
-        argcomplete.autocomplete(parser)
-    except ImportError:
-        pass
-
-    args = parser.parse_args(argv)
-
-    # Handle no command or "help" subcommand
-    if not args.command or args.command == "help":
-        parser.print_help()
-        completion.maybe_show_completion_hint()
-        return 0
+    args = _to_namespace(global_args)
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
@@ -1311,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "uninstall":
             return install_cmd.run_uninstall(args)
         else:
-            parser.print_help()
+            _print_help()
             return 1
 
     except KeyboardInterrupt:
@@ -1328,6 +392,58 @@ def main(argv: list[str] | None = None) -> int:
             output_file.close()
             if not getattr(args, "quiet", False):
                 print(f"Generated: {output_path}", file=sys.stderr)
+
+
+def _print_help() -> None:
+    """Print help text matching the original argparse output."""
+    print(
+        f"""elspais {__version__} — Requirements validation and traceability tools (L-Space)
+
+Usage: elspais [options] <command> [command-options]
+
+Commands:
+  health      Check repository and configuration health
+  doctor      Diagnose environment and installation health
+  trace       Generate traceability matrix
+  viewer      Interactive traceability viewer (live server or static HTML)
+  graph       Export the traceability graph structure as JSON
+  fix         Auto-fix spec file issues (hashes, formatting)
+  summary     Coverage summary by level
+  changed     Detect git changes to spec files
+  analysis    Analyze foundational requirement importance
+  version     Show version and check for updates
+  init        Create .elspais.toml configuration
+  example     Display requirement format examples and templates
+  edit        Edit requirements in-place
+  config      View and modify configuration (show, get, set, ...)
+  rules       View and manage content rules (list, show)
+  docs        Read the user guide
+  completion  Generate shell tab-completion scripts
+  associate   Manage associate repository links
+  pdf         Compile spec files into a PDF document
+  install     Install elspais variants
+  uninstall   Revert elspais installation
+  mcp         MCP server commands
+  link        Link suggestion tools
+
+Global options:
+  --verbose, -v       Verbose output
+  --quiet, -q         Suppress non-error output
+  --directory, -C DIR Run as if started in this directory
+  --config PATH       Path to configuration file
+  --spec-dir PATH     Override spec directory
+  --version           Show version and exit
+
+Examples:
+  elspais health                # Check project health
+  elspais summary               # Show coverage summary
+  elspais trace --format html   # Generate HTML traceability matrix
+  elspais viewer                # Start interactive viewer
+  elspais health summary trace  # Compose multiple report sections
+  elspais config show           # View all settings
+
+For command help: elspais <command> --help"""
+    )
 
 
 def docs_command(args: argparse.Namespace) -> int:

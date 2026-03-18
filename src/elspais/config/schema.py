@@ -24,7 +24,7 @@ class TypeAliases(_StrictModel):
 
 class TypeConfig(_StrictModel):
     level: int
-    aliases: TypeAliases
+    aliases: TypeAliases | None = None
 
 
 class ComponentConfig(_StrictModel):
@@ -32,6 +32,7 @@ class ComponentConfig(_StrictModel):
     digits: int = 5
     leading_zeros: bool = True
     pattern: str | None = None
+    max_length: int | None = None
 
 
 class AssertionConfig(_StrictModel):
