@@ -19,7 +19,7 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
-from elspais.config import get_project_name, get_status_roles
+from elspais.config import get_status_roles
 from elspais.graph import NodeKind
 from elspais.graph.federated import FederatedGraph
 from elspais.html.theme import get_catalog
@@ -155,7 +155,7 @@ def create_app(
                 default_hidden_statuses=sorted(default_hidden),
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
-                repo_name=get_project_name(_state["config"]),
+                repo_name=_state["config"].get("project", {}).get("name") or "unknown",
                 pygments_css=get_pygments_css(),
                 pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data

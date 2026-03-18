@@ -394,18 +394,6 @@ def find_canonical_root(start_path: Path | None = None) -> Path | None:
     return git_root
 
 
-def get_project_name(config: dict[str, Any] | None = None) -> str:
-    """Get the project name from config.
-
-    Returns config["project"]["name"] if set, otherwise "unknown".
-    """
-    if config:
-        name = config.get("project", {}).get("name")
-        if name:
-            return name
-    return "unknown"
-
-
 def find_config_file(start_path: Path) -> Path | None:
     """Find .elspais.toml configuration file.
 
@@ -896,67 +884,6 @@ class IgnoreConfig:
         return patterns
 
 
-class ConfigValidationError(Exception):
-    """Raised when configuration validation fails."""
-
-    pass
-
-
-def validate_project_config(config: dict[str, Any]) -> list[str]:
-    """Validate project type configuration consistency.
-
-    Checks that project.type matches the presence of [core] and [associated] sections:
-    - project.type = "core" → [associated] MAY exist (defines associated repos)
-    - project.type = "associated" → [core] MUST exist (specifies core repo path)
-    - project.type not set → [core] and [associated] sections are ERRORS
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-
-    project_type = config.get("project", {}).get("type")
-    has_core_section = "core" in config and isinstance(config["core"], dict)
-    has_associated_section = "associated" in config and isinstance(config["associated"], dict)
-
-    if project_type == "associated":
-        # Associated repos MUST have a [core] section
-        if not has_core_section:
-            errors.append(
-                "project.type='associated' requires a [core] section with 'path' "
-                "to the core repository"
-            )
-        elif not config["core"].get("path"):
-            errors.append(
-                "[core] section must specify 'path' to core repository " "for associated projects"
-            )
-    elif project_type == "core":
-        # Core repos MAY have [associated] section - no validation needed
-        pass
-    elif project_type is None:
-        # No project type set - [core] and [associated] sections are errors
-        if has_core_section:
-            errors.append(
-                "[core] section found but project.type is not set. "
-                "Set project.type='associated' to use this section"
-            )
-        if has_associated_section:
-            errors.append(
-                "[associated] section found but project.type is not set. "
-                "Set project.type='core' or 'associated' to use this section"
-            )
-    else:
-        # Unknown project type
-        errors.append(
-            f"Unknown project.type='{project_type}'. " "Valid values: 'core', 'associated'"
-        )
-
-    return errors
-
-
 def get_test_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -1032,7 +959,6 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
 
 __all__ = [
     "ConfigLoader",
-    "ConfigValidationError",
     "IgnoreConfig",
     "load_config",
     "find_config_file",
@@ -1044,7 +970,6 @@ __all__ = [
     "get_docs_directories",
     "get_test_directories",
     "get_ignore_config",
-    "validate_project_config",
     "DEFAULT_CONFIG",
     "parse_toml",
     "parse_toml_document",

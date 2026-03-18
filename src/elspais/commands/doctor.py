@@ -309,21 +309,22 @@ def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCh
 
 def check_config_project_type(config: ConfigLoader) -> HealthCheck:
     """Check project type configuration is consistent."""
-    from elspais.config import validate_project_config
+    from pydantic import ValidationError
 
     raw = config.get_raw()
-    errors = validate_project_config(raw)
 
-    if errors:
+    try:
+        typed_config = _validate_config(raw)
+    except ValidationError as exc:
+        errors = [str(e["msg"]) for e in exc.errors()]
         return HealthCheck(
             name="config.project_type",
             passed=False,
-            message=errors[0],
+            message=errors[0] if errors else str(exc),
             category="config",
             details={"errors": errors},
         )
 
-    typed_config = _validate_config(raw)
     project_type = typed_config.project.type
     if project_type:
         return HealthCheck(
