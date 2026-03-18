@@ -17,12 +17,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 
 if TYPE_CHECKING:
     from elspais.config import ConfigLoader
     from elspais.graph.federated import FederatedGraph
     from elspais.utilities.patterns import IdResolver
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
 
 
 # Implements: REQ-d00085-I, REQ-d00204-D
@@ -397,7 +415,7 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
         "cross_repo_implements",
     }
     for key, value in hierarchy.items():
-        if key in non_level_keys:
+        if key in non_level_keys or value is None:
             continue
         if isinstance(value, list):
             result[key.lower()] = [v.lower() for v in value]
@@ -409,9 +427,10 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: ConfigLoader) -> 
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
 
-    hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("id-patterns.types", {})
-    strict_hierarchy = config.get("validation.strict_hierarchy", False)
+    typed_config = _validate_config(config.get_raw())
+    hierarchy = typed_config.rules.hierarchy.model_dump()
+    types = dict(typed_config.id_patterns.types.items())
+    strict_hierarchy = typed_config.validation.strict_hierarchy or False
 
     # Parse hierarchy rules
     allowed_parents_map = _parse_hierarchy_rules(hierarchy)
@@ -553,7 +572,17 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     broken = graph.broken_references()
 
     suppressed_count = 0
-    if config is not None and config.get("validation.allow_unresolved_cross_repo", False):
+    if config is not None:
+        _raw = (
+            config.get_raw()
+            if hasattr(config, "get_raw")
+            else (config if isinstance(config, dict) else {})
+        )
+        _tc = _validate_config(_raw) if _raw else None
+        _allow_unresolved = _tc.validation.allow_unresolved_cross_repo if _tc else False
+    else:
+        _allow_unresolved = False
+    if _allow_unresolved:
         local_broken = [br for br in broken if not br.presumed_foreign]
         suppressed_count = len(broken) - len(local_broken)
         broken = local_broken
@@ -805,7 +834,8 @@ def check_spec_changelog_present(graph: FederatedGraph, config: ConfigLoader) ->
     """Check that all Active requirements have at least one changelog entry."""
     from elspais.graph import NodeKind
 
-    require_present = config.get("changelog.require_present", False)
+    typed_config = _validate_config(config.get_raw())
+    require_present = typed_config.changelog.require_present
     if not require_present:
         return HealthCheck(
             name="spec.changelog_present",
@@ -856,7 +886,8 @@ def check_spec_changelog_current(graph: FederatedGraph, config: ConfigLoader) ->
     """Check that Active requirements' changelog hashes match stored hashes."""
     from elspais.graph import NodeKind
 
-    changelog_enforce = config.get("changelog.enforce", True)
+    typed_config = _validate_config(config.get_raw())
+    changelog_enforce = typed_config.changelog.enforce
     if not changelog_enforce:
         return HealthCheck(
             name="spec.changelog_current",
@@ -912,7 +943,8 @@ def check_spec_changelog_format(graph: FederatedGraph, config: ConfigLoader) -> 
     """Validate changelog entry fields per config requirements."""
     from elspais.graph import NodeKind
 
-    changelog_enforce = config.get("changelog.enforce", True)
+    typed_config = _validate_config(config.get_raw())
+    changelog_enforce = typed_config.changelog.enforce
     if not changelog_enforce:
         return HealthCheck(
             name="spec.changelog_format",
@@ -922,10 +954,10 @@ def check_spec_changelog_format(graph: FederatedGraph, config: ConfigLoader) -> 
             severity="info",
         )
 
-    require_reason = config.get("changelog.require_reason", True)
-    require_author_name = config.get("changelog.require_author_name", True)
-    require_author_id = config.get("changelog.require_author_id", True)
-    require_change_order = config.get("changelog.require_change_order", False)
+    require_reason = typed_config.changelog.require_reason
+    require_author_name = typed_config.changelog.require_author_name
+    require_author_id = typed_config.changelog.require_author_id
+    require_change_order = typed_config.changelog.require_change_order
 
     violations = []
 
@@ -1156,14 +1188,17 @@ def run_spec_checks(
                 entry.name,
             )
         )
+        _typed_repo = _validate_config(repo_config.get_raw())
+        _allow_so = (
+            _typed_repo.rules.hierarchy.allow_structural_orphans
+            if _typed_repo.rules.hierarchy.allow_structural_orphans is not None
+            else (_typed_repo.rules.hierarchy.allow_orphans or False)
+        )
         checks.append(
             _annotate_findings(
                 check_structural_orphans(
                     repo_graph,
-                    allow_structural_orphans=repo_config.get(
-                        "rules.hierarchy.allow_structural_orphans",
-                        repo_config.get("rules.hierarchy.allow_orphans", False),
-                    ),
+                    allow_structural_orphans=_allow_so,
                 ),
                 entry.name,
             )
@@ -1354,7 +1389,11 @@ def _read_run_meta(config: dict | None) -> dict:
     from pathlib import Path
 
     defaults = {"deselected_count": 0, "runner": ""}
-    meta_file = (config or {}).get("testing", {}).get("run_meta_file", "")
+    if config:
+        _tc = _validate_config(config)
+        meta_file = _tc.testing.run_meta_file
+    else:
+        meta_file = ""
     if not meta_file:
         return defaults
     meta_path = Path(meta_file)
@@ -1380,7 +1419,11 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
     if not result_nodes:
         # Check if result scanning is actually configured
-        result_files = (config or {}).get("testing", {}).get("result_files", [])
+        if config:
+            _tc = _validate_config(config)
+            result_files = _tc.testing.result_files
+        else:
+            result_files = []
         if not result_files:
             message = "No result files configured"
         else:

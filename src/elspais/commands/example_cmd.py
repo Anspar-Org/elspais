@@ -6,6 +6,27 @@ Quick reference command for requirement format discovery.
 
 import argparse
 from pathlib import Path
+from typing import Any
+
+from elspais.config.schema import ElspaisConfig
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
+
 
 # ============================================================================
 # Requirement Format Templates
@@ -265,10 +286,14 @@ def show_id_patterns(args: argparse.Namespace) -> int:
             },
         }
 
-    namespace = config.get("project", {}).get("namespace", "REQ")
-    id_patterns = config.get("id-patterns", {})
-    canonical = id_patterns.get("canonical", "{namespace}-{type.letter}{component}")
-    types = id_patterns.get("types", {})
+    raw = config.get_raw() if hasattr(config, "get_raw") else config
+    typed_config = _validate_config(raw)
+    namespace = typed_config.project.namespace
+    canonical = typed_config.id_patterns.canonical
+    types = {
+        k: {"level": v.level, "aliases": {"letter": v.aliases.letter}}
+        for k, v in typed_config.id_patterns.types.items()
+    }
 
     # Format types section
     types_text = ""
@@ -297,7 +322,14 @@ def show_full_spec(args: argparse.Namespace) -> int:
     except Exception:
         config = {"directories": {"spec": "spec"}}
 
-    spec_dir = config.get("directories", {}).get("spec", "spec")
+    raw = config.get_raw() if hasattr(config, "get_raw") else config
+    typed_config = _validate_config(raw)
+    _dirs_spec = typed_config.directories.spec
+    spec_dir = (
+        _dirs_spec[0]
+        if isinstance(_dirs_spec, list) and _dirs_spec
+        else (_dirs_spec if isinstance(_dirs_spec, str) and _dirs_spec else "spec")
+    )
     spec_path = Path.cwd() / spec_dir / "requirements-spec.md"
 
     # Also check for requirements-format.md (alternative name)

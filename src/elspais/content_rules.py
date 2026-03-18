@@ -9,6 +9,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from elspais.config.schema import ElspaisConfig
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
+
 
 @dataclass
 class ContentRule:
@@ -162,8 +181,8 @@ def load_content_rules(
     Returns:
         List of ContentRule objects (missing files are skipped)
     """
-    rules_config = config.get("rules", {})
-    rule_paths = rules_config.get("content_rules", [])
+    typed_config = _validate_config(config)
+    rule_paths = typed_config.rules.content_rules or []
 
     rules = []
     for rel_path in rule_paths:

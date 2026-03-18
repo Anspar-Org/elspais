@@ -14,9 +14,28 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.GraphNode import GraphNode, NodeKind
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        del filtered["associates"]
+    proj = filtered.get("project", {})
+    if isinstance(proj, dict) and proj.get("type") == "associated":
+        if "core" not in filtered or not filtered["core"]:
+            filtered["core"] = {"path": "."}
+    return ElspaisConfig.model_validate(filtered)
+
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -332,7 +351,8 @@ def analyze_foundations(
 
     # Build status roles from config
     if config is not None:
-        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        typed_config = _validate_config(config)
+        status_roles_data = typed_config.rules.format.status_roles
         roles = (
             StatusRolesConfig.from_dict(status_roles_data)
             if status_roles_data
