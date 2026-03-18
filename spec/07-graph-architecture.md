@@ -887,3 +887,20 @@ D. The generated TOML SHALL include human-readable comments derived from Pydanti
 
 *End* *Schema-Driven Init Template Generation* | **Hash**: 00000000
 ---
+
+## REQ-d00210: Documentation Drift Detection
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+The `elspais doctor` command SHALL detect drift between `ElspaisConfig` Pydantic schema fields and `docs/configuration.md`. Undocumented schema fields and stale documentation sections SHALL be reported as health check findings.
+
+## Assertions
+
+A. `elspais doctor` SHALL include a `docs.config_drift` health check that compares schema top-level sections against documented sections.
+
+B. The drift detection SHALL report undocumented sections (in schema but not in docs) and stale sections (in docs but not in schema).
+
+C. The drift check SHALL pass when all schema sections are documented and no stale sections exist, and fail otherwise.
+
+*End* *Documentation Drift Detection* | **Hash**: 00000000
+---
