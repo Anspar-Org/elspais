@@ -286,7 +286,7 @@ def show_id_patterns(args: argparse.Namespace) -> int:
             },
         }
 
-    raw = config.get_raw() if hasattr(config, "get_raw") else config
+    raw = config
     typed_config = _validate_config(raw)
     namespace = typed_config.project.namespace
     canonical = typed_config.id_patterns.canonical
@@ -322,7 +322,7 @@ def show_full_spec(args: argparse.Namespace) -> int:
     except Exception:
         config = {"directories": {"spec": "spec"}}
 
-    raw = config.get_raw() if hasattr(config, "get_raw") else config
+    raw = config
     typed_config = _validate_config(raw)
     _dirs_spec = typed_config.directories.spec
     spec_dir = (

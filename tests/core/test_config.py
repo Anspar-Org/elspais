@@ -5,34 +5,39 @@ from pathlib import Path
 
 import pytest
 
-from elspais.config import ConfigLoader, find_config_file, find_git_root, load_config
+from elspais.config import config_defaults, find_config_file, find_git_root, load_config
 
 
-class TestConfigLoader:
-    """Tests for ConfigLoader class."""
+class TestConfigDefaults:
+    """Tests for config_defaults() function (replaces ConfigLoader.from_dict)."""
 
-    def test_load_from_dict(self):
+    def test_load_from_dict_merges_with_defaults(self):
+        from elspais.config import _merge_configs
+
         data = {
             "patterns": {"prefix": "REQ"},
             "spec": {"directories": ["spec"]},
         }
-        loader = ConfigLoader.from_dict(data)
+        merged = _merge_configs(config_defaults(), data)
 
-        assert loader.get("patterns.prefix") == "REQ"
-        assert loader.get("spec.directories") == ["spec"]
+        assert merged["patterns"]["prefix"] == "REQ"
+        assert merged["spec"]["directories"] == ["spec"]
 
     def test_get_with_default(self):
-        loader = ConfigLoader.from_dict({})
+        defaults = config_defaults()
 
-        result = loader.get("nonexistent.key", default="fallback")
+        result = defaults.get("nonexistent_key", "fallback")
 
         assert result == "fallback"
 
     def test_get_nested_key(self):
-        loader = ConfigLoader.from_dict({"patterns": {"types": {"prd": {"id": "p", "level": 1}}}})
+        from elspais.config import _merge_configs
 
-        assert loader.get("patterns.types.prd.id") == "p"
-        assert loader.get("patterns.types.prd.level") == 1
+        data = {"patterns": {"types": {"prd": {"id": "p", "level": 1}}}}
+        merged = _merge_configs(config_defaults(), data)
+
+        assert merged["patterns"]["types"]["prd"]["id"] == "p"
+        assert merged["patterns"]["types"]["prd"]["level"] == 1
 
 
 class TestLoadConfig:
@@ -53,8 +58,8 @@ directories = ["specs"]
 
             config = load_config(Path(f.name))
 
-            assert config.get("patterns.prefix") == "MYREQ"
-            assert config.get("spec.directories") == ["specs"]
+            assert config["patterns"]["prefix"] == "MYREQ"
+            assert config["spec"]["directories"] == ["specs"]
 
     def test_load_applies_defaults(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
@@ -64,10 +69,10 @@ directories = ["specs"]
             config = load_config(Path(f.name))
 
             # Should have the explicitly-set value
-            assert config.get("patterns.prefix") == "REQ"
+            assert config["patterns"]["prefix"] == "REQ"
             # Should also have default values NOT in the toml file
-            assert config.get("testing.enabled") is False
-            assert config.get("spec.directories") == ["spec"]
+            assert config.get("testing", {}).get("enabled") is False
+            assert config["spec"]["directories"] == ["spec"]
 
 
 class TestLocalConfigOverride:
@@ -83,8 +88,8 @@ class TestLocalConfigOverride:
 
             config = load_config(base)
 
-            assert config.get("patterns.prefix") == "REQ"
-            assert config.get("associates.paths") == ["/home/dev/other-repo"]
+            assert config["patterns"]["prefix"] == "REQ"
+            assert config["associates"]["paths"] == ["/home/dev/other-repo"]
 
     def test_local_toml_overrides_base_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -96,7 +101,7 @@ class TestLocalConfigOverride:
 
             config = load_config(base)
 
-            assert config.get("patterns.prefix") == "LOCAL"
+            assert config["patterns"]["prefix"] == "LOCAL"
 
     def test_missing_local_toml_is_silently_ignored(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
@@ -105,7 +110,7 @@ class TestLocalConfigOverride:
 
             config = load_config(Path(f.name))
 
-            assert config.get("patterns.prefix") == "REQ"
+            assert config["patterns"]["prefix"] == "REQ"
 
     def test_local_toml_deep_merges_nested_sections(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -117,9 +122,9 @@ class TestLocalConfigOverride:
 
             config = load_config(base)
 
-            assert config.get("spec.directories") == ["spec", "extra-specs"]
+            assert config["spec"]["directories"] == ["spec", "extra-specs"]
             # patterns should remain from base (deep-merge preserves siblings)
-            assert config.get("spec.patterns") == ["*.md"]
+            assert config["spec"]["patterns"] == ["*.md"]
 
 
 class TestFindConfigFile:
@@ -205,7 +210,7 @@ class TestPydanticShim:
         config_path.write_text('version = 2\n[project]\nnamespace = "TEST"\n')
 
         config = load_config(config_path)
-        assert config.get("project.namespace") == "TEST"
+        assert config["project"]["namespace"] == "TEST"
 
     def test_load_config_rejects_unknown_key(self, tmp_path):
         """load_config() should reject unknown TOML keys."""
@@ -220,8 +225,8 @@ class TestChangelogConfig:
     """Validates REQ-p00002-A: Changelog configuration defaults and overrides."""
 
     def test_REQ_p00002_A_changelog_defaults_present(self):
-        """ConfigLoader.from_dict({}) includes changelog section with all expected keys."""
-        config = ConfigLoader.from_dict({})
+        """config_defaults() includes changelog section with all expected keys."""
+        config = config_defaults()
         changelog = config.get("changelog")
         assert changelog is not None
         assert isinstance(changelog, dict)
@@ -236,17 +241,19 @@ class TestChangelogConfig:
 
     def test_REQ_p00002_A_changelog_defaults_values(self):
         """Verify default values for changelog configuration."""
-        config = ConfigLoader.from_dict({})
-        assert config.get("changelog.enforce") is True
-        assert config.get("changelog.id_source") == "gh"
-        assert config.get("changelog.date_format") == "iso"
-        assert config.get("changelog.require_change_order") is False
-        assert config.get("changelog.require_reason") is True
+        config = config_defaults()
+        assert config["changelog"]["enforce"] is True
+        assert config["changelog"]["id_source"] == "gh"
+        assert config["changelog"]["date_format"] == "iso"
+        assert config["changelog"]["require_change_order"] is False
+        assert config["changelog"]["require_reason"] is True
 
     def test_REQ_p00002_A_changelog_user_override(self):
         """User config overrides changelog defaults."""
-        config = ConfigLoader.from_dict({"changelog": {"enforce": False}})
-        assert config.get("changelog.enforce") is False
+        from elspais.config import _merge_configs
+
+        config = _merge_configs(config_defaults(), {"changelog": {"enforce": False}})
+        assert config["changelog"]["enforce"] is False
         # Non-overridden defaults should still be present
-        assert config.get("changelog.id_source") == "gh"
-        assert config.get("changelog.require_reason") is True
+        assert config["changelog"]["id_source"] == "gh"
+        assert config["changelog"]["require_reason"] is True

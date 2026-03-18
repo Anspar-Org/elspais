@@ -47,14 +47,15 @@ class TestDoctorConfigChecks:
 
     def test_REQ_p00001_A_run_config_checks_returns_list(self, tmp_path):
         from elspais.commands.doctor import run_config_checks
-        from elspais.config import ConfigLoader
+        from elspais.config import _merge_configs, config_defaults
 
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
                 "patterns": {"id_template": "{prefix}-{type}{id}", "types": {"prd": {"level": 1}}},
                 "spec": {"directories": ["spec"]},
                 "rules": {"hierarchy": {}},
-            }
+            },
         )
         results = run_config_checks(None, config, tmp_path)
         assert isinstance(results, list)

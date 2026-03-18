@@ -605,11 +605,7 @@ def _refresh_graph(
     if hasattr(new_graph, "iter_repos"):
         for entry in new_graph.iter_repos():
             if entry.config is not None:
-                from elspais.config import ConfigLoader
-
-                root_config = (
-                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
-                )
+                root_config = entry.config
                 break
 
     return {
@@ -1738,11 +1734,7 @@ def _get_workspace_info(
     if config is None and graph is not None and hasattr(graph, "iter_repos"):
         for entry in graph.iter_repos():
             if entry.config is not None:
-                from elspais.config import ConfigLoader
-
-                config = (
-                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
-                )
+                config = entry.config
                 break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)

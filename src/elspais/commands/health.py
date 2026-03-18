@@ -21,7 +21,6 @@ from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 
 if TYPE_CHECKING:
-    from elspais.config import ConfigLoader
     from elspais.graph.federated import FederatedGraph
     from elspais.utilities.patterns import IdResolver
 
@@ -423,11 +422,11 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
-def check_spec_hierarchy_levels(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     hierarchy = typed_config.rules.hierarchy.model_dump()
     types = dict(typed_config.id_patterns.types.items())
     strict_hierarchy = typed_config.validation.strict_hierarchy or False
@@ -573,12 +572,7 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
 
     suppressed_count = 0
     if config is not None:
-        _raw = (
-            config.get_raw()
-            if hasattr(config, "get_raw")
-            else (config if isinstance(config, dict) else {})
-        )
-        _tc = _validate_config(_raw) if _raw else None
+        _tc = _validate_config(config)
         _allow_unresolved = _tc.validation.allow_unresolved_cross_repo if _tc else False
     else:
         _allow_unresolved = False
@@ -670,13 +664,13 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
 
 
 def check_spec_format_rules(
-    graph: FederatedGraph, config: ConfigLoader, resolver: IdResolver | None = None
+    graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
-    rules = get_format_rules_config(config.get_raw())
+    rules = get_format_rules_config(config)
 
     # Check if any rules are enabled
     rules_enabled = any(
@@ -830,11 +824,11 @@ def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
     )
 
 
-def check_spec_changelog_present(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that all Active requirements have at least one changelog entry."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     require_present = typed_config.changelog.require_present
     if not require_present:
         return HealthCheck(
@@ -882,11 +876,11 @@ def check_spec_changelog_present(graph: FederatedGraph, config: ConfigLoader) ->
     )
 
 
-def check_spec_changelog_current(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.enforce
     if not changelog_enforce:
         return HealthCheck(
@@ -939,11 +933,11 @@ def check_spec_changelog_current(graph: FederatedGraph, config: ConfigLoader) ->
     )
 
 
-def check_spec_changelog_format(graph: FederatedGraph, config: ConfigLoader) -> HealthCheck:
+def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Validate changelog entry fields per config requirements."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config.get_raw())
+    typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.enforce
     if not changelog_enforce:
         return HealthCheck(
@@ -1120,7 +1114,7 @@ def _downgrade_retired_findings(
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
-    config: ConfigLoader,
+    config: dict[str, Any],
     spec_dirs: list[Path] | None = None,
 ) -> list[HealthCheck]:
     """Run all spec file health checks.
@@ -1133,13 +1127,12 @@ def run_spec_checks(
     are preserved in the detailed report but do not count as errors
     for health scoring.
     """
-    from elspais.config import ConfigLoader as CL
     from elspais.config import get_status_roles
     from elspais.graph import NodeKind as NK
     from elspais.graph.federated import FederatedGraph as FG
 
     # Build the set of retired requirement IDs for post-processing
-    roles = get_status_roles(config.get_raw())
+    roles = get_status_roles(config)
     retired_ids: set[str] = set()
     for node in graph.nodes_by_kind(NK.REQUIREMENT):
         if roles.role_of(node.status) == StatusRole.RETIRED:
@@ -1159,10 +1152,9 @@ def run_spec_checks(
             continue
         from elspais.utilities.patterns import build_resolver
 
-        # Normalize config: may be raw dict or ConfigLoader
-        repo_config = entry.config if isinstance(entry.config, CL) else CL.from_dict(entry.config)
+        repo_config = entry.config
         repo_graph = FG.from_single(entry.graph, repo_config, entry.repo_root)
-        repo_resolver = build_resolver(repo_config.get_raw())
+        repo_resolver = build_resolver(repo_config)
 
         checks.append(
             _annotate_findings(
@@ -1188,7 +1180,7 @@ def run_spec_checks(
                 entry.name,
             )
         )
-        _typed_repo = _validate_config(repo_config.get_raw())
+        _typed_repo = _validate_config(repo_config)
         _allow_so = (
             _typed_repo.rules.hierarchy.allow_structural_orphans
             if _typed_repo.rules.hierarchy.allow_structural_orphans is not None
@@ -1613,7 +1605,7 @@ def run_test_checks(
 # Implements: REQ-d00085-A
 def render_section(
     graph: FederatedGraph | None,
-    config: ConfigLoader | None,
+    config: dict[str, Any] | None,
     args: argparse.Namespace,
 ) -> tuple[str, int]:
     """Render health as a composed report section.
@@ -1633,11 +1625,11 @@ def render_section(
         from elspais.config import get_spec_directories
 
         spec_dir = getattr(args, "spec_dir", None)
-        resolved_spec_dirs = get_spec_directories(spec_dir, config.get_raw())
+        resolved_spec_dirs = get_spec_directories(spec_dir, config)
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
-        raw_config = config.get_raw() if config else {}
+        raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
         for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
@@ -1661,7 +1653,7 @@ def run(args: argparse.Namespace) -> int:
     Performs comprehensive health checks on the elspais configuration
     and repository structure.
     """
-    from elspais.config import ConfigLoader, get_config
+    from elspais.config import get_config
     from elspais.graph.factory import build_graph
 
     spec_dir = getattr(args, "spec_dir", None)
@@ -1694,7 +1686,7 @@ def run(args: argparse.Namespace) -> int:
                 config_path,
                 start_path=start_path,
             )
-            config = ConfigLoader.from_dict(config_dict)
+            config = config_dict
             for check in _run_config_checks(config_path, config, start_path):
                 report.add(check)
         except Exception as e:
@@ -1725,7 +1717,7 @@ def run(args: argparse.Namespace) -> int:
                     config_path,
                     start_path=start_path,
                 )
-                config = ConfigLoader.from_dict(config_dict)
+                config = config_dict
         except Exception as e:
             report.add(
                 HealthCheck(
@@ -1741,13 +1733,13 @@ def run(args: argparse.Namespace) -> int:
     if run_spec and graph and config:
         from elspais.config import get_spec_directories
 
-        config_dict = config.get_raw()
+        config_dict = config
         resolved_spec_dirs = get_spec_directories(spec_dir, config_dict)
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
 
     # Code checks
-    raw_config = config.get_raw() if config else {}
+    raw_config = config if config else {}
     exclude_status = _resolve_exclude_status(args, config=raw_config)
     if run_code and graph:
         for check in run_code_checks(graph, exclude_status=exclude_status):

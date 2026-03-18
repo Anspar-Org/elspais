@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from elspais.config import ConfigLoader
+from elspais.config import _merge_configs, config_defaults
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
@@ -23,8 +23,8 @@ from elspais.graph.relations import EdgeKind
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _make_config(**overrides: Any) -> ConfigLoader:
-    """Create a ConfigLoader with specific project settings."""
+def _make_config(**overrides: Any) -> dict[str, Any]:
+    """Create a config dict with specific project settings."""
     data: dict[str, Any] = {}
     for key, value in overrides.items():
         parts = key.split(".")
@@ -32,7 +32,7 @@ def _make_config(**overrides: Any) -> ConfigLoader:
         for part in parts[:-1]:
             d = d.setdefault(part, {})
         d[parts[-1]] = value
-    return ConfigLoader.from_dict(data)
+    return _merge_configs(config_defaults(), data)
 
 
 def _make_simple_graph(
@@ -52,8 +52,8 @@ def _make_simple_graph(
 
 def _make_two_repo_federation(
     *,
-    root_config: ConfigLoader | None = None,
-    assoc_config: ConfigLoader | None = None,
+    root_config: dict[str, Any] | None = None,
+    assoc_config: dict[str, Any] | None = None,
     assoc_error: str | None = None,
 ) -> FederatedGraph:
     """Build a 2-repo FederatedGraph for testing.
@@ -116,8 +116,7 @@ class TestWorkspaceInfoFederation:
         from elspais.mcp.server import _get_workspace_info
 
         fed = _make_two_repo_federation()
-        root_cfg = fed._repos["root"].config
-        config_dict = root_cfg._data if root_cfg else {}
+        config_dict = fed._repos["root"].config or {}
 
         result = _get_workspace_info(
             Path("/repo/root"),
@@ -156,8 +155,7 @@ class TestWorkspaceInfoFederation:
         from elspais.mcp.server import _get_workspace_info
 
         fed = _make_two_repo_federation(assoc_error="Clone failed: repo not found")
-        root_cfg = fed._repos["root"].config
-        config_dict = root_cfg._data if root_cfg else {}
+        config_dict = fed._repos["root"].config or {}
 
         result = _get_workspace_info(
             Path("/repo/root"),
@@ -247,17 +245,10 @@ class TestNodeSpecificConfig:
         assoc_cfg = _make_config(**{"project.name": "Assoc", "project.namespace": "REQ"})
         fed = _make_two_repo_federation(root_config=root_cfg, assoc_config=assoc_cfg)
 
-        from elspais.config import ConfigLoader
-
         # Get per-repo config via graph.config_for() — the correct pattern
         # Note: use REQ-p00001 (root node, type 'p') since 'a' isn't a valid type letter
-        root_config_loader = fed.config_for("REQ-p00001")
-        assert root_config_loader is not None
-        root_config_dict = (
-            root_config_loader._data
-            if isinstance(root_config_loader, ConfigLoader)
-            else root_config_loader
-        )
+        root_config_dict = fed.config_for("REQ-p00001")
+        assert root_config_dict is not None
         result = _normalize_assertion_targets(
             targets=["REQ-p00001-A"],
             target_id="REQ-p00001",

@@ -17,7 +17,7 @@ from elspais.commands.health import (
     check_broken_references,
     run_spec_checks,
 )
-from elspais.config import ConfigLoader
+from elspais.config import _merge_configs, config_defaults
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from tests.core.graph_test_helpers import build_graph, make_requirement
 
@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 # === Helpers ===
 
 
-def _make_config(hierarchy_rules: dict | None = None, **overrides) -> ConfigLoader:
-    """Create a ConfigLoader with specific settings.
+def _make_config(hierarchy_rules: dict | None = None, **overrides) -> dict:
+    """Create a config dict with specific settings.
 
     Args:
         hierarchy_rules: Dict mapping child level -> list of allowed parent levels.
@@ -45,14 +45,14 @@ def _make_config(hierarchy_rules: dict | None = None, **overrides) -> ConfigLoad
         for part in parts[:-1]:
             d = d.setdefault(part, {})
         d[parts[-1]] = value
-    return ConfigLoader.from_dict(data)
+    return _merge_configs(config_defaults(), data)
 
 
 def _build_two_repo_federation(
     alpha_graph: TraceGraph,
-    alpha_config: ConfigLoader,
+    alpha_config: dict,
     beta_graph: TraceGraph,
-    beta_config: ConfigLoader,
+    beta_config: dict,
 ) -> FederatedGraph:
     """Build a 2-repo federation from two (graph, config) pairs."""
     alpha_entry = RepoEntry(

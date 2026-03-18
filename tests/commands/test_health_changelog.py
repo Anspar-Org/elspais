@@ -7,7 +7,7 @@ from elspais.commands.health import (
     check_spec_changelog_current,
     check_spec_changelog_format,
 )
-from elspais.config import ConfigLoader, get_config
+from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.factory import build_graph
 from elspais.utilities.hasher import compute_normalized_hash
 
@@ -55,9 +55,9 @@ def _build(tmp_path: Path, config_path: Path):
     )
 
 
-def _load_config(config_path: Path) -> ConfigLoader:
+def _load_config(config_path: Path) -> dict:
     raw = get_config(config_path)
-    return ConfigLoader.from_dict(raw)
+    return _merge_configs(config_defaults(), raw)
 
 
 class TestChangelogCurrent:

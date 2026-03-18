@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.config import ConfigLoader
+from elspais.config import config_defaults
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
@@ -49,7 +49,7 @@ def _add_implements_edge(child: GraphNode, parent: GraphNode) -> None:
 
 def _wrap_federated(graph: TraceGraph) -> FederatedGraph:
     """Wrap a TraceGraph in a FederatedGraph for the MCP helpers."""
-    config = ConfigLoader.from_dict({})
+    config = config_defaults()
     return FederatedGraph.from_single(graph, config, Path("/test/repo"))
 
 
