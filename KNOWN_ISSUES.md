@@ -1,5 +1,31 @@
 # Known Issues
 
+[x] Bug: Elspais should check the ENV var for ELSPAIS_VERSION and error if the current install is not compatible
+
+[x] Tweak: allow_unresolved_cross_repo or similar in [validation], so we can run health and ignore unresolved refs to associated repos
+
+[x] Change: We now define User Journeys to "Validate" Requirements (or Assertions).
+- Implemented: JNYs declare `Validates: REQ-xxx-A+B` to create VALIDATES edges in the traceability graph.
+- UAT coverage is now calculated separately from automated test coverage (CoverageSource.UAT).
+- RollupMetrics tracks `uat_covered` and `uat_total` alongside standard coverage fields.
+- Multi-assertion syntax supported (e.g., `Validates: REQ-p00001-A+B` expands to two edges).
+- We can now calculate a second 'coverage' 'Validated' value: which REQs (or Assertions) are validated by a JNY?
+- This will be used for UAT: we treat the JNYs as a the set of manual tests to run that will cover all the REQs and demonstrate the correct functionality.
+- This corresponds to the PQ
+
+[ ] Parsing Schema
+- formal schema for REQUIREMENTS
+- formal schema for USER-JOURNEYS (the PQ of PQ/EQ/IQ system)
+
+
+[ ] Bug: Fix get_requirement() MCP/API call to NOT return a uselessly large result. 
+- LLMs confidently say "give me everything", but that's not what they really need.
+- Lets define a better set of MCP endpoints that return practical info. 
+- There is use-case for just hiearchy info (REQs and ASSERTION and refines: and implements:), 
+- ...and for details (like the original text and all the Structure Nodes)
+- but there is rarely a use-case for "all the tests and code and results"
+
+
 [x] Feature: Change the current auto-publish-on-merge-to-main.
 - Implemented: add the `publish` label to a PR before merging to trigger release + PyPI + Homebrew publish.
 - Merges without the label are silent (no publish, no spam).

@@ -2,7 +2,7 @@
 """Tests for INDEX.md JNY section in index command.
 
 Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-linking including addresses.
+linking including validates.
 """
 
 import argparse
@@ -19,7 +19,7 @@ class TestIndexRegenerateJNY:
     """Tests for _regenerate_index JNY section output.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
     def test_REQ_o00050_C_regenerate_includes_jny_section(self, tmp_path):
@@ -38,7 +38,7 @@ class TestIndexRegenerateJNY:
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
                 source_path=str(spec_dir / "journeys.md"),
             ),
         )
@@ -66,7 +66,7 @@ class TestIndexRegenerateJNY:
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
                 source_path=str(spec_dir / "journeys.md"),
             ),
         )
@@ -101,7 +101,7 @@ class TestIndexRegenerateJNY:
                 title="Multi Addr",
                 actor="Developer",
                 goal="Test",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
                 source_path=str(spec_dir / "journeys.md"),
             ),
         )
@@ -140,7 +140,7 @@ class TestIndexValidateJNY:
     """Tests for _validate_index JNY ID checking.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
     def test_REQ_o00050_C_validate_detects_missing_jny(self, tmp_path):

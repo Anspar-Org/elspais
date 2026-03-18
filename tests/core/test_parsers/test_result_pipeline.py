@@ -73,7 +73,7 @@ class TestJUnitXMLClaimAndParse:
         assert "classname" in data
         assert "status" in data
         assert "duration" in data
-        assert "validates" in data
+        assert "verifies" in data
         assert "test_id" in data
         assert data["name"] == "test_REQ_d00054_pass"
         assert data["classname"] == "tests.test_check.TestCheck"
@@ -165,7 +165,7 @@ class TestPytestJSONClaimAndParse:
         assert "classname" in data
         assert "status" in data
         assert "duration" in data
-        assert "validates" in data
+        assert "verifies" in data
         assert "test_id" in data
         assert data["status"] == "passed"
         assert data["duration"] == 0.05

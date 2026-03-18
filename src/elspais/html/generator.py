@@ -43,7 +43,7 @@ class TreeRow:
     is_roadmap: bool
     is_code: bool
     is_test: bool  # TEST node for traceability
-    is_test_result: bool  # TEST_RESULT node (test execution result)
+    is_test_result: bool  # RESULT node (test execution result)
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
@@ -52,7 +52,7 @@ class TreeRow:
     validation_tip: str = ""  # Hover tooltip explaining the validation color
     source_file: str = ""  # Relative path to source file
     source_line: int = 0  # Line number in source file
-    result_status: str = ""  # For TEST_RESULT: passed/failed/error/skipped
+    result_status: str = ""  # For RESULT: passed/failed/error/skipped
 
 
 @dataclass
@@ -66,7 +66,7 @@ class JourneyItem:
     goal: str | None = None
     descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
     file: str = ""  # Source file path
-    referenced_reqs: list[str] = field(default_factory=list)  # REQs via ADDRESSES edges
+    referenced_reqs: list[str] = field(default_factory=list)  # REQs via VALIDATES edges
 
 
 @dataclass
@@ -79,16 +79,16 @@ class ViewStats:
     total_count: int = 0
     code_count: int = 0  # Number of unique CODE nodes in the graph
     test_count: int = 0  # Number of unique TEST nodes in the graph
-    test_result_count: int = 0  # Number of TEST_RESULT nodes
-    test_passed_count: int = 0  # Number of passed TEST_RESULT nodes
-    test_failed_count: int = 0  # Number of failed TEST_RESULT nodes
+    test_result_count: int = 0  # Number of RESULT nodes
+    test_passed_count: int = 0  # Number of passed RESULT nodes
+    test_failed_count: int = 0  # Number of failed RESULT nodes
     associated_count: int = 0
     journey_count: int = 0
     # Assertion-level metrics
     assertion_count: int = 0  # Total unique assertions
     assertions_implemented: int = 0  # Assertions with CODE coverage
     assertions_tested: int = 0  # Assertions with TEST coverage
-    assertions_validated: int = 0  # Assertions with passing TEST_RESULTs
+    assertions_validated: int = 0  # Assertions with passing RESULTs
 
 
 def _val_tier(key: str) -> tuple[str, str]:
@@ -368,8 +368,8 @@ class HTMLGenerator:
         for _ in self.graph.nodes_by_kind(NodeKind.TEST):
             stats.test_count += 1
 
-        # Count TEST_RESULT nodes
-        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+        # Count RESULT nodes
+        for node in self.graph.nodes_by_kind(NodeKind.RESULT):
             stats.test_result_count += 1
             status = (node.get_field("status", "") or "").lower()
             if status in ("passed", "pass", "success"):
@@ -490,7 +490,7 @@ class HTMLGenerator:
         def has_test_result_children(node: GraphNode) -> bool:
             """Check if node has test result children."""
             for child in node.iter_children():
-                if child.kind == NodeKind.TEST_RESULT:
+                if child.kind == NodeKind.RESULT:
                     return True
             return False
 
@@ -517,13 +517,13 @@ class HTMLGenerator:
                 NodeKind.REQUIREMENT,
                 NodeKind.CODE,
                 NodeKind.TEST,
-                NodeKind.TEST_RESULT,
+                NodeKind.RESULT,
             ):
                 return
 
             is_code = node.kind == NodeKind.CODE
             is_test = node.kind == NodeKind.TEST
-            is_test_result = node.kind == NodeKind.TEST_RESULT
+            is_test_result = node.kind == NodeKind.RESULT
             is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
             coverage, coverage_indirect, has_failures = (
                 ("none", "none", False) if is_impl_node else compute_coverage(node)
@@ -539,17 +539,17 @@ class HTMLGenerator:
             source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
             source_line = node.get_field("parse_line") or 0
 
-            # Get result status for TEST_RESULT nodes
+            # Get result status for RESULT nodes
             result_status = ""
             if is_test_result:
                 result_status = (node.get_field("status", "") or "").lower()
 
             # Determine has_children based on node kind
             if is_test:
-                # TEST nodes can have TEST_RESULT children
+                # TEST nodes can have RESULT children
                 node_has_children = has_test_result_children(node)
             elif is_test_result:
-                # TEST_RESULT nodes don't have children
+                # RESULT nodes don't have children
                 node_has_children = False
             else:
                 # REQ and CODE nodes
@@ -640,8 +640,8 @@ class HTMLGenerator:
                     children_to_visit.append((child, None))
                 elif child.kind == NodeKind.TEST:
                     children_to_visit.append((child, None))
-                elif child.kind == NodeKind.TEST_RESULT:
-                    # TEST_RESULT children of TEST nodes
+                elif child.kind == NodeKind.RESULT:
+                    # RESULT children of TEST nodes
                     children_to_visit.append((child, None))
 
             # Sort children: assertion-specific first (by letter), then general (by ID)
@@ -667,7 +667,7 @@ class HTMLGenerator:
                 traverse(root, 0, None)
 
         # Add unvisited TEST nodes (orphan or not reached from root traversal)
-        # These appear as root-level items with their TEST_RESULT children
+        # These appear as root-level items with their RESULT children
         for node in self.graph.nodes_by_kind(NodeKind.TEST):
             if node.id in visited_node_ids:
                 continue
@@ -703,9 +703,9 @@ class HTMLGenerator:
             rows.append(row)
             visited_node_ids.add(node.id)
 
-            # Render TEST_RESULT children under this TEST node
+            # Render RESULT children under this TEST node
             for child in node.iter_children():
-                if child.kind == NodeKind.TEST_RESULT:
+                if child.kind == NodeKind.RESULT:
                     child_source_file = (
                         child.file_node().get_field("relative_path") if child.file_node() else ""
                     )
@@ -740,8 +740,8 @@ class HTMLGenerator:
                     rows.append(child_row)
                     visited_node_ids.add(child.id)
 
-        # Add orphan TEST_RESULT nodes (not visited via any TEST parent)
-        for node in self.graph.nodes_by_kind(NodeKind.TEST_RESULT):
+        # Add orphan RESULT nodes (not visited via any TEST parent)
+        for node in self.graph.nodes_by_kind(NodeKind.RESULT):
             if node.id in visited_node_ids:
                 continue
 
@@ -984,9 +984,9 @@ class HTMLGenerator:
                 _rp = _fn.get_field("relative_path") or ""
                 file = Path(_rp).name if _rp else ""
 
-            # Extract referenced requirements from incoming ADDRESSES edges
+            # Extract referenced requirements from incoming VALIDATES edges
             referenced_reqs = sorted(
-                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.ADDRESSES
+                e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES
             )
 
             journeys.append(

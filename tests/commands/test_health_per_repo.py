@@ -1,5 +1,5 @@
-# Validates: REQ-d00204-A, REQ-d00204-B, REQ-d00204-C, REQ-d00204-D
-# Validates: REQ-d00204-E, REQ-d00204-F
+# Verifies: REQ-d00204-A, REQ-d00204-B, REQ-d00204-C, REQ-d00204-D
+# Verifies: REQ-d00204-E, REQ-d00204-F
 """Tests for per-repo health check delegation in federated graphs.
 
 Validates REQ-d00204: Config-sensitive health checks run per-repo with

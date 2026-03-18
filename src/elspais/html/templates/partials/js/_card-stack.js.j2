@@ -386,7 +386,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '</div></div>';
 
     // Referenced Requirements (from links array — ADDRESSES edges)
-    var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'addresses'; });
+    var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
     if (refs.length > 0) {
         html += '<div class="card-section"><div class="card-section-label">Addresses (' + refs.length + ')</div>';
         html += '<div class="card-parents">';
@@ -413,7 +413,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 }
 
 // =====================================================================
-// Generic Card — fallback for TEST, CODE, TEST_RESULT, etc.
+// Generic Card — fallback for TEST, CODE, RESULT, etc.
 // =====================================================================
 
 function buildGenericCardHtml(nodeId, data, collapsed) {

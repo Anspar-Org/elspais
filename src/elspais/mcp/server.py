@@ -160,7 +160,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     """
     results: list[dict[str, Any]] = []
     for child in test_node.iter_children():
-        if child.kind == NodeKind.TEST_RESULT:
+        if child.kind == NodeKind.RESULT:
             results.append(
                 {
                     "id": child.id,
@@ -290,7 +290,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     }
                 )
 
-    # ── Common: non-hierarchical links (ADDRESSES, VALIDATES, etc.) ──
+    # ── Common: non-hierarchical links (VALIDATES, VERIFIES, etc.) ──
     links = []
     for edge in node.iter_incoming_edges():
         if edge.kind not in (
@@ -357,7 +357,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "function_name": node.get_field("function_name", ""),
             "class_name": node.get_field("class_name", ""),
         }
-    elif kind == NodeKind.TEST_RESULT:
+    elif kind == NodeKind.RESULT:
         properties = {
             "status": node.get_field("status", ""),
             "duration": node.get_field("duration", 0.0),
@@ -420,7 +420,7 @@ def _serialize_node_summary(node: Any) -> dict[str, Any]:
     elif kind == NodeKind.USER_JOURNEY:
         summary["actor"] = node.get_field("actor", "")
         summary["goal"] = node.get_field("goal", "")
-    elif kind == NodeKind.TEST_RESULT:
+    elif kind == NodeKind.RESULT:
         summary["status"] = node.get_field("status", "")
     elif kind == NodeKind.TEST:
         summary["function_name"] = node.get_field("function_name", "")
@@ -2564,7 +2564,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
     REQ-d00066-A: SHALL accept req_id parameter identifying the target requirement.
     REQ-d00066-B: SHALL return TEST nodes by finding edges targeting the requirement.
-    REQ-d00066-C: SHALL return TEST_RESULT nodes linked to each TEST node.
+    REQ-d00066-C: SHALL return RESULT nodes linked to each TEST node.
     REQ-d00066-D: SHALL identify covered assertions via edge assertion_targets.
     REQ-d00066-E: SHALL return uncovered assertions as those with no incoming TEST edges.
     REQ-d00066-F: SHALL return coverage summary with percentage.
@@ -2623,6 +2623,37 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     covered_count = len(covered_assertions)
     coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
 
+    # UAT coverage via JNY Validates edges
+    seen_jny_ids: set[str] = set()
+    jny_nodes: list[dict[str, Any]] = []
+    covered_uat_assertion_ids: set[str] = set()
+
+    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+        # Track covered assertions
+        for label in labels:
+            if label in label_to_id:
+                covered_uat_assertion_ids.add(label_to_id[label])
+
+        if jny_node.id in seen_jny_ids:
+            continue
+        seen_jny_ids.add(jny_node.id)
+
+        file_node = jny_node.file_node()
+        jny_nodes.append(
+            {
+                "id": jny_node.id,
+                "title": jny_node.get_label(),
+                "file": file_node.get_field("relative_path") if file_node else None,
+            }
+        )
+
+    uat_covered_count = len(covered_uat_assertion_ids)
+    uat_coverage_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
+
+    # Read uat_validated_pct from rollup_metrics if available
+    rollup = node.get_metric("rollup_metrics")
+    uat_validated_pct = rollup.uat_validated_pct if rollup is not None else 0.0
+
     return {
         "success": True,
         "req_id": req_id,
@@ -2633,6 +2664,13 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "total_assertions": total,
         "covered_count": covered_count,
         "coverage_pct": round(coverage_pct, 1),
+        "uat": {
+            "jny_nodes": jny_nodes,
+            "covered_assertions": sorted(covered_uat_assertion_ids),
+            "covered_count": uat_covered_count,
+            "coverage_pct": round(uat_coverage_pct, 1),
+            "validated_pct": round(uat_validated_pct, 1),
+        },
     }
 
 
@@ -2760,6 +2798,7 @@ def _get_uncovered_assertions(
     graph: FederatedGraph,
     req_id: str | None = None,
     limit: int = 100,
+    source: str = "test",
 ) -> dict[str, Any]:
     """Find assertions lacking test coverage.
 
@@ -2769,6 +2808,7 @@ def _get_uncovered_assertions(
     REQ-d00067-D: SHALL return assertion details: id, text, label, parent requirement context.
     REQ-d00067-E: SHALL return parent requirement id and title for context.
     REQ-d00067-F: SHALL limit results to prevent unbounded response sizes.
+    REQ-d00069-A: SHALL accept source parameter ('test', 'uat', 'both') to filter coverage source.
 
     Uses ``_iter_assertion_coverage`` to build the covered-labels set,
     which correctly handles indirect coverage (tests with no
@@ -2778,16 +2818,21 @@ def _get_uncovered_assertions(
         graph: The TraceGraph to query.
         req_id: Optional requirement ID to filter by. If None, scan all requirements.
         limit: Maximum number of results to return.
+        source: Coverage source to consider: 'test' (default), 'uat', or 'both'.
 
     Returns:
         Dict with success and list of uncovered assertions with parent context.
     """
 
     def _covered_labels_for_req(req_node: Any) -> set[str]:
-        """Return the set of assertion labels covered by at least one TEST."""
+        """Return the set of assertion labels covered by at least one matching source."""
         covered: set[str] = set()
-        for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
-            covered.update(labels)
+        if source in ("test", "both"):
+            for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
+                covered.update(labels)
+        if source in ("uat", "both"):
+            for _jny_node, labels in _iter_assertion_coverage(req_node, NodeKind.USER_JOURNEY):
+                covered.update(labels)
         return covered
 
     uncovered: list[dict[str, Any]] = []
@@ -2859,6 +2904,7 @@ def _get_uncovered_assertions(
     return {
         "success": True,
         "assertions": uncovered,
+        "uncovered_assertions": uncovered,
         "count": len(uncovered),
     }
 
@@ -4633,15 +4679,19 @@ def create_server(
         return _get_test_coverage(_state["graph"], req_id)
 
     @mcp.tool()
-    def get_uncovered_assertions(req_id: str | None = None) -> dict[str, Any]:
+    def get_uncovered_assertions(
+        req_id: str | None = None,
+        source: str = "test",
+    ) -> dict[str, Any]:
         """Find assertions that have no tests validating them.
 
         Use when: identifying test gaps — assertions that need tests written.
 
         Args:
             req_id: Optional requirement ID to check. When None, scans ALL requirements.
+            source: Coverage source to consider: 'test' (default), 'uat', or 'both'.
         """
-        return _get_uncovered_assertions(_state["graph"], req_id)
+        return _get_uncovered_assertions(_state["graph"], req_id, source=source)
 
     @mcp.tool()
     def find_assertions_by_keywords(

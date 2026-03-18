@@ -1,4 +1,4 @@
-# Validates: REQ-p00002, REQ-p00003, REQ-d00080
+# Verifies: REQ-p00002, REQ-p00003, REQ-d00080
 """E2E tests for health, summary, trace, and doctor CLI commands.
 
 Each test builds a unique project from scratch in tmp_path with specific
@@ -618,7 +618,7 @@ class TestCodeRefsAndTesting:
             },
             test_files={
                 "tests/test_validator.py": {
-                    "validates": ["REQ-d00001"],
+                    "verifies": ["REQ-d00001"],
                     "content": "def test_validate():\n    assert True",
                 },
             },
@@ -737,7 +737,7 @@ class TestHealthScopeFlags:
                 "src/scoped.py": {"implements": ["REQ-d00001"]},
             },
             test_files={
-                "tests/test_scoped.py": {"validates": ["REQ-d00001"]},
+                "tests/test_scoped.py": {"verifies": ["REQ-d00001"]},
             },
         )
         return tmp_path

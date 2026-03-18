@@ -5,7 +5,7 @@
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
 # Implements: REQ-d00051-E, REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
-# Implements: REQ-d00069-B, REQ-d00069-D
+# Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.
@@ -527,6 +527,56 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     return counts
 
 
+def _compute_coverage_from_source(
+    req_node,
+    assertion_labels: list,
+    edge_kind,
+    direct_source_type,
+    inferred_source_type,
+) -> tuple:
+    """Walk req_node outgoing edges of edge_kind (e.g. VERIFIES->TEST or VALIDATES->JNY).
+
+    Returns a tuple of:
+    - contributions: list of CoverageContribution
+    - source_nodes_with_targets: list of (source_node, assertion_targets_or_None)
+      for downstream result lookup
+
+    Implements: REQ-d00069-B
+    """
+    from elspais.graph.metrics import CoverageContribution
+
+    contributions = []
+    source_nodes = []
+
+    for edge in req_node.iter_outgoing_edges():
+        if edge.kind != edge_kind:
+            continue
+        target_node = edge.target
+        if edge.assertion_targets:
+            for label in edge.assertion_targets:
+                if label in assertion_labels:
+                    contributions.append(
+                        CoverageContribution(
+                            source_id=target_node.id,
+                            source_type=direct_source_type,
+                            assertion_label=label,
+                        )
+                    )
+            source_nodes.append((target_node, list(edge.assertion_targets)))
+        else:
+            for label in assertion_labels:
+                contributions.append(
+                    CoverageContribution(
+                        source_id=target_node.id,
+                        source_type=inferred_source_type,
+                        assertion_label=label,
+                    )
+                )
+            source_nodes.append((target_node, None))
+
+    return contributions, source_nodes
+
+
 def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
@@ -538,9 +588,9 @@ def annotate_coverage(graph: FederatedGraph) -> None:
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
     - Edges have assertion_targets when they target specific assertions
-    - VALIDATES to TEST with assertion_targets → DIRECT coverage
+    - VERIFIES to TEST with assertion_targets → DIRECT coverage
     - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
-    - IMPLEMENTS to CODE → VALIDATES to TEST → INDIRECT coverage (transitive)
+    - IMPLEMENTS to CODE → VERIFIES to TEST → INDIRECT coverage (transitive)
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
 
@@ -548,8 +598,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
     Test-specific metrics:
     - direct_tested: Assertions with TEST nodes (not CODE)
-    - validated: Assertions with passing TEST_RESULTs
-    - has_failures: Any TEST_RESULT is failed/error
+    - validated: Assertions with passing RESULTs
+    - has_failures: Any RESULT is failed/error
 
     Args:
         graph: The TraceGraph to annotate.
@@ -581,10 +631,35 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         tested_labels: set[str] = set()  # Assertions with TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
-        test_nodes_for_result_lookup: list[tuple[GraphNode, list[str] | None]] = []
+
+        # Implements: REQ-d00069-B
+        # Compute TEST (VERIFIES) coverage contributions via shared helper
+        test_contribs, test_nodes_for_result_lookup = _compute_coverage_from_source(
+            node,
+            assertion_labels,
+            EdgeKind.VERIFIES,
+            CoverageSource.DIRECT,
+            CoverageSource.INDIRECT,
+        )
+        for c in test_contribs:
+            metrics.add_contribution(c)
+            if c.source_type == CoverageSource.DIRECT:
+                tested_labels.add(c.assertion_label)
+
+        # Implements: REQ-d00069-A
+        # Compute JNY (VALIDATES) UAT coverage contributions via shared helper
+        jny_contribs, jny_nodes_for_result_lookup = _compute_coverage_from_source(
+            node,
+            assertion_labels,
+            EdgeKind.VALIDATES,
+            CoverageSource.UAT_EXPLICIT,
+            CoverageSource.UAT_INFERRED,
+        )
+        for c in jny_contribs:
+            metrics.add_contribution(c)
 
         # Check outgoing edges from this requirement
-        # The builder links TEST/CODE/REQ as children of parent REQ with assertion_targets
+        # The builder links CODE/REQ as children of parent REQ with assertion_targets
         for edge in node.iter_outgoing_edges():
             if not edge.kind.contributes_to_coverage():
                 # REFINES doesn't count
@@ -594,31 +669,9 @@ def annotate_coverage(graph: FederatedGraph) -> None:
             target_kind = target_node.kind
 
             if target_kind == NodeKind.TEST:
-                # TEST validates assertion(s) → DIRECT coverage
-                if edge.assertion_targets:
-                    for label in edge.assertion_targets:
-                        if label in assertion_labels:
-                            metrics.add_contribution(
-                                CoverageContribution(
-                                    source_id=target_node.id,
-                                    source_type=CoverageSource.DIRECT,
-                                    assertion_label=label,
-                                )
-                            )
-                            tested_labels.add(label)
-                else:
-                    # Whole-req test (no assertion targets) → INDIRECT for all assertions
-                    for label in assertion_labels:
-                        metrics.add_contribution(
-                            CoverageContribution(
-                                source_id=target_node.id,
-                                source_type=CoverageSource.INDIRECT,
-                                assertion_label=label,
-                            )
-                        )
-
-                # Track this TEST node for result lookup later
-                test_nodes_for_result_lookup.append((target_node, edge.assertion_targets))
+                # TEST already handled via _compute_coverage_from_source above;
+                # skip to avoid double-counting
+                pass
 
             elif target_kind == NodeKind.CODE:
                 # CODE implements assertion(s) → DIRECT coverage
@@ -633,11 +686,11 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                                 )
                             )
 
-                # Transitive: CODE → TEST → TEST_RESULT (indirect test coverage)
-                # Check if this CODE node has TEST children via VALIDATES edges
+                # Transitive: CODE → TEST → RESULT (indirect test coverage)
+                # Check if this CODE node has TEST children via VERIFIES edges
                 for code_edge in target_node.iter_outgoing_edges():
                     if (
-                        code_edge.kind == EdgeKind.VALIDATES
+                        code_edge.kind == EdgeKind.VERIFIES
                         and code_edge.target.kind == NodeKind.TEST
                     ):
                         transitive_test = code_edge.target
@@ -664,7 +717,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                                     )
                                 )
 
-                        # Track for TEST_RESULT lookup (use CODE's assertion_targets)
+                        # Track for RESULT lookup (use CODE's assertion_targets)
                         test_nodes_for_result_lookup.append((transitive_test, None))
 
             elif target_kind == NodeKind.REQUIREMENT:
@@ -691,11 +744,35 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                             )
                         )
 
-        # Process TEST children to find TEST_RESULT nodes
+                # Implements: REQ-d00069-A
+                # UAT roll-up: unconditional, mirrors automated EXPLICIT/INFERRED.
+                # If a child REQ implements this parent, UAT coverage from any JNY
+                # validating the child also propagates to this parent.
+                if edge.assertion_targets:
+                    for label in edge.assertion_targets:
+                        if label in assertion_labels:
+                            metrics.add_contribution(
+                                CoverageContribution(
+                                    source_id=target_node.id,
+                                    source_type=CoverageSource.UAT_EXPLICIT,
+                                    assertion_label=label,
+                                )
+                            )
+                else:
+                    for label in assertion_labels:
+                        metrics.add_contribution(
+                            CoverageContribution(
+                                source_id=target_node.id,
+                                source_type=CoverageSource.UAT_INFERRED,
+                                assertion_label=label,
+                            )
+                        )
+
+        # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             for result in test_node.iter_children():
-                if result.kind == NodeKind.TEST_RESULT:
+                if result.kind == NodeKind.RESULT:
                     status = (result.get_field("status", "") or "").lower()
                     if status in ("passed", "pass", "success"):
                         if assertion_targets:
@@ -710,14 +787,39 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                     elif status in ("failed", "fail", "failure", "error"):
                         has_failures = True
 
+        # Implements: REQ-d00069-A
+        # Process JNY children to find RESULT nodes (UAT)
+        uat_validated_labels: set[str] = set()
+        uat_has_failures = False
+        for jny_node, assertion_targets in jny_nodes_for_result_lookup:
+            for result in jny_node.iter_children():
+                if result.kind == NodeKind.RESULT:
+                    status = (result.get_field("status", "") or "").lower()
+                    if status in ("passed", "pass", "success"):
+                        if assertion_targets:
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    uat_validated_labels.add(label)
+                        else:
+                            for label in assertion_labels:
+                                uat_validated_labels.add(label)
+                    elif status in ("failed", "fail", "failure", "error"):
+                        uat_has_failures = True
+
         # Set test-specific metrics before finalize
         metrics.direct_tested = len(tested_labels)
         metrics.validated = len(validated_labels)
         metrics.validated_with_indirect = len(validated_labels | validated_indirect_labels)
         metrics.has_failures = has_failures
+        metrics.uat_has_failures = uat_has_failures
 
         # Finalize metrics (computes aggregate coverage counts)
         metrics.finalize()
+
+        # Set UAT validated count (needs finalize to have run for total_assertions)
+        metrics.uat_validated = len(uat_validated_labels)
+        if metrics.total_assertions > 0:
+            metrics.uat_validated_pct = (metrics.uat_validated / metrics.total_assertions) * 100
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
@@ -950,7 +1052,7 @@ def annotate_keywords(
     - ASSERTION: SHALL statement (label)
     - USER_JOURNEY: title + actor + goal + description
     - REMAINDER: label + raw_text
-    - Others (CODE, TEST, TEST_RESULT): label only
+    - Others (CODE, TEST, RESULT): label only
 
     Keywords are stored in node._content["keywords"] as a list.
 

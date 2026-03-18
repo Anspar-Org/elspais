@@ -23,16 +23,21 @@ class BrokenReference:
     Attributes:
         source_id: ID of the node containing the reference.
         target_id: ID that was referenced but doesn't exist.
-        edge_kind: Type of relationship ("implements", "refines", "validates").
+        edge_kind: Type of relationship ("implements", "refines", "verifies").
+        presumed_foreign: True when target_id does not match the source repo's
+            ID pattern, indicating a likely cross-repo reference to a repo that
+            isn't configured or available.
     """
 
     source_id: str
     target_id: str
     edge_kind: str
+    presumed_foreign: bool = False
 
     def __str__(self) -> str:
         """Human-readable representation."""
-        return f"{self.source_id} --[{self.edge_kind}]--> {self.target_id} (missing)"
+        foreign = " [foreign]" if self.presumed_foreign else ""
+        return f"{self.source_id} --[{self.edge_kind}]--> {self.target_id} (missing{foreign})"
 
 
 @dataclass

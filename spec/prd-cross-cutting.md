@@ -90,7 +90,7 @@ Two edge kinds support the template-instance pattern:
 class EdgeKind(Enum):
     IMPLEMENTS = "implements"
     REFINES = "refines"
-    VALIDATES = "validates"
+    VERIFIES = "verifies"
     ADDRESSES = "addresses"
     CONTAINS = "contains"
     SATISFIES = "satisfies"    # declaring REQ -> cloned template root
@@ -186,7 +186,7 @@ Configuration in `.elspais.toml`:
 
 ```toml
 [references.defaults]
-keywords = ["implements", "validates", "refines", "satisfies"]
+keywords = ["implements", "verifies", "refines", "satisfies"]
 ```
 
 ### 10. What Changes

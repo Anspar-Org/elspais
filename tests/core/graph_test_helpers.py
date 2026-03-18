@@ -169,7 +169,7 @@ def make_journey(
     title: str = "",
     actor: str = "User",
     goal: str = "",
-    addresses: list[str] | None = None,
+    validates: list[str] | None = None,
     source_path: str = "spec/journeys.md",
     start_line: int = 1,
     end_line: int = 10,
@@ -181,7 +181,7 @@ def make_journey(
         title: Journey title
         actor: Actor performing the journey
         goal: Journey goal
-        addresses: List of requirement IDs this journey addresses
+        validates: List of requirement IDs this journey validates
         source_path: Source file path
         start_line: Start line in source
         end_line: End line in source
@@ -199,7 +199,7 @@ def make_journey(
             "title": title or journey_id,
             "actor": actor,
             "goal": goal,
-            "addresses": addresses or [],
+            "validates": validates or [],
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)
@@ -237,7 +237,7 @@ def make_code_ref(
 
 
 def make_test_ref(
-    validates: list[str],
+    verifies: list[str],
     source_path: str = "tests/test_module.py",
     start_line: int = 1,
     end_line: int = 10,
@@ -248,7 +248,7 @@ def make_test_ref(
     """Factory for creating test references.
 
     Args:
-        validates: List of requirement IDs this test validates
+        verifies: List of requirement IDs this test verifies
         source_path: Source file path
         start_line: Start line in source
         end_line: End line in source
@@ -260,7 +260,7 @@ def make_test_ref(
         ParsedContent ready for GraphBuilder.add_parsed_content()
     """
     parsed_data: dict = {
-        "validates": validates,
+        "verifies": verifies,
     }
     if function_name is not None:
         parsed_data["function_name"] = function_name
@@ -288,7 +288,7 @@ def make_test_result(
     source_path: str = "results/test_results.xml",
     start_line: int = 1,
     end_line: int = 1,
-    validates: list[str] | None = None,
+    verifies: list[str] | None = None,
     name: str = "",
     classname: str = "",
 ) -> ParsedContent:
@@ -302,7 +302,7 @@ def make_test_result(
         source_path: Path to results file
         start_line: Start line in results file
         end_line: End line in results file
-        validates: List of REQ IDs this test validates (extracted from name)
+        verifies: List of REQ IDs this test verifies (extracted from name)
         name: Test function name
         classname: Test class/module name
 
@@ -319,7 +319,7 @@ def make_test_result(
             "status": status,
             "test_id": test_id,
             "duration": duration,
-            "validates": validates or [],
+            "verifies": verifies or [],
             "name": name,
             "classname": classname,
         },

@@ -9,7 +9,7 @@ Journeys for the sponsor QA lead verifying test coverage, reviewing requirement 
 **Actor**: Rita (Sponsor QA Lead)
 **Goal**: Confirm that every requirement assertion has passing test coverage before accepting a delivery
 **Context**: The development team has submitted a release candidate with test results. Rita needs to verify that all assertions across every requirement are covered by at least one test, and that all referenced tests passed.
-Addresses: REQ-p00001, REQ-p00003
+Validates: REQ-p00001, REQ-p00003
 
 ## Steps
 
@@ -35,7 +35,7 @@ Rita has verified that every testable obligation in the requirements is covered 
 **Actor**: Rita (Sponsor QA Lead)
 **Goal**: Review requirement specifications for testability and clarity, providing structured feedback the development team can act on
 **Context**: The project manager has requested Rita's input on a new batch of requirements before they are finalized. Rita wants to review each requirement for testability, identify ambiguous assertions, and provide comments that are linked directly to specific requirements.
-Addresses: REQ-p00006, REQ-p00007
+Validates: REQ-p00006, REQ-p00007
 
 ## Steps
 
@@ -61,7 +61,7 @@ Rita has provided traceable, requirement-level feedback that the development tea
 **Actor**: Rita (Sponsor QA Lead)
 **Goal**: Verify that a bug fix includes the necessary requirement updates and corresponding test coverage
 **Context**: A bug was discovered in production: session timeouts are inconsistent. The development team has fixed the bug and updated the relevant requirement assertion. Rita needs to verify that the requirement change is properly documented and tested.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00004
+Validates: REQ-p00001, REQ-p00002, REQ-p00004
 
 ## Steps
 

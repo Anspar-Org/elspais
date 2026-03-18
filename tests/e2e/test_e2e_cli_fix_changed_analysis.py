@@ -1,4 +1,4 @@
-# Validates: REQ-p00004, REQ-p00002
+# Verifies: REQ-p00004, REQ-p00002
 """E2E tests for fix, changed, analysis, config, and init CLI commands.
 
 Each test builds a unique project from scratch with specific config

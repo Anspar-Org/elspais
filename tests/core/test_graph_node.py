@@ -18,7 +18,7 @@ class TestNodeKind:
             "ASSERTION": "assertion",
             "CODE": "code",
             "TEST": "test",
-            "TEST_RESULT": "result",
+            "RESULT": "result",
             "USER_JOURNEY": "journey",
             "REMAINDER": "remainder",
         }
@@ -258,7 +258,7 @@ class TestEdgeOperations:
         """Link can specify assertion targets."""
         test = GraphNode(id="test:t1", kind=NodeKind.TEST)
         req = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
-        edge = test.link(req, EdgeKind.VALIDATES, assertion_targets=["A", "B"])
+        edge = test.link(req, EdgeKind.VERIFIES, assertion_targets=["A", "B"])
 
         assert edge.assertion_targets == ["A", "B"]
 
@@ -266,7 +266,7 @@ class TestEdgeOperations:
         """Edge source and target are correct."""
         test = GraphNode(id="test:t1", kind=NodeKind.TEST)
         req = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
-        test.link(req, EdgeKind.VALIDATES)
+        test.link(req, EdgeKind.VERIFIES)
 
         edges = list(test.iter_outgoing_edges())
         assert edges[0].source is test

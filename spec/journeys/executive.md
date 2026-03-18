@@ -9,7 +9,7 @@ Journeys for the CEO preparing project health summaries, sponsor evidence packag
 **Actor**: Priya (CEO)
 **Goal**: Prepare a visual summary of project compliance and requirement coverage for a board presentation
 **Context**: A board meeting is scheduled next week. Priya needs to demonstrate that the development project is on track, requirements are well-managed, and the team is ready for upcoming regulatory milestones.
-Addresses: REQ-p00003, REQ-p00006
+Validates: REQ-p00003, REQ-p00006
 
 ## Steps
 
@@ -34,7 +34,7 @@ Priya has concrete, tool-generated evidence of project health. Her board present
 **Actor**: Priya (CEO)
 **Goal**: Demonstrate delivery quality and requirements traceability to justify a sponsor contract renewal
 **Context**: A sponsor contract is up for renewal. Priya needs to show that her company has delivered on every contracted requirement, maintained quality throughout, and has the infrastructure for continued delivery.
-Addresses: REQ-p00003, REQ-p00004, REQ-p00005, REQ-p00006
+Validates: REQ-p00003, REQ-p00004, REQ-p00005, REQ-p00006
 
 ## Steps
 
@@ -59,7 +59,7 @@ Priya has a comprehensive evidence package demonstrating that every contracted r
 **Actor**: Priya (CEO)
 **Goal**: Provide complete requirements documentation and traceability evidence for a regulatory pre-approval inspection
 **Context**: A regulatory agency has scheduled a pre-approval inspection. The inspector will want to see the requirements documentation, traceability to tests, and evidence of change control. Priya coordinates with her team to prepare the evidence package.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00006
+Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 

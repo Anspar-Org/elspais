@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for HealthFinding dataclass and its integration with HealthCheck/HealthReport.
 
 Validates REQ-d00085-I: HealthFinding dataclass with message, file_path, line,

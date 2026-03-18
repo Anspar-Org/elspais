@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for traceability-focused health checks.
 
 Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
@@ -97,7 +97,7 @@ class TestCheckUnlinkedTests:
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
-                validates=["REQ-p00001"],
+                verifies=["REQ-p00001"],
                 source_path="tests/test_feature.py",
                 start_line=1,
                 end_line=5,
@@ -112,13 +112,13 @@ class TestCheckUnlinkedTests:
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
-                validates=["REQ-p00001"],
+                verifies=["REQ-p00001"],
                 source_path="tests/test_linked.py",
                 start_line=1,
                 end_line=5,
             ),
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_unlinked.py",
                 start_line=1,
                 end_line=5,
@@ -136,7 +136,7 @@ class TestCheckUnlinkedTests:
         """Findings for unlinked tests include file_path and node_id."""
         graph = build_graph(
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_orphan.py",
                 start_line=1,
                 end_line=5,
@@ -282,7 +282,7 @@ class TestCheckBrokenReferences:
             BrokenReference(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
-                edge_kind="validates",
+                edge_kind="verifies",
             ),
         ]
 
@@ -292,6 +292,49 @@ class TestCheckBrokenReferences:
         assert isinstance(finding, HealthFinding)
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
+
+    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_foreign_namespace(self) -> None:
+        """Foreign-namespace refs are suppressed when allow_unresolved_cross_repo=True."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        # Foreign namespace (HHT-*) — cross-repo; config gives IdResolver the local namespace
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+
+        # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
+        fed = _wrap(graph, config)
+        check = check_broken_references(fed, config)
+        assert check.passed
+        assert "suppressed" in check.message
+
+    def test_REQ_d00085_allow_unresolved_cross_repo_keeps_local_refs(self) -> None:
+        """Same-namespace broken refs are still flagged with allow_unresolved_cross_repo=True."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+
+        check = check_broken_references(_wrap(graph, config), config)
+        assert not check.passed
+
+    def test_REQ_d00085_allow_unresolved_cross_repo_default_false(self) -> None:
+        """Without the config flag, foreign-namespace broken refs are still reported."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({})
+
+        check = check_broken_references(_wrap(graph, config))
+        assert not check.passed
 
 
 # =============================================================================

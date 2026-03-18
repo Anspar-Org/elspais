@@ -19,7 +19,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "passed"
         assert results[0]["name"] == "test_login_REQ_p00001"
-        assert "REQ-p00001" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
 
     def test_parse_failing_test(self):
         """Parses a failing test case."""
@@ -95,7 +95,7 @@ class TestJUnitXMLParserReqExtraction:
 
         results = parser.parse(xml, "results.xml")
 
-        assert "REQ-p00001" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
 
     def test_extracts_multiple_reqs(self):
         """Extracts multiple REQ IDs from test name."""
@@ -107,8 +107,8 @@ class TestJUnitXMLParserReqExtraction:
 
         results = parser.parse(xml, "results.xml")
 
-        assert "REQ-p00001" in results[0]["validates"]
-        assert "REQ-o00002" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
+        assert "REQ-o00002" in results[0]["verifies"]
 
     def test_extracts_assertion_refs(self):
         """Extracts assertion references like REQ-p00001-A."""
@@ -120,7 +120,7 @@ class TestJUnitXMLParserReqExtraction:
 
         results = parser.parse(xml, "results.xml")
 
-        assert "REQ-p00001-A" in results[0]["validates"]
+        assert "REQ-p00001-A" in results[0]["verifies"]
 
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
@@ -250,7 +250,7 @@ class TestJUnitXMLParserCustomConfig:
         results = parser.parse(xml, "results.xml")
 
         assert len(results) == 1
-        assert "SPEC-p00102" in results[0]["validates"]
+        assert "SPEC-p00102" in results[0]["verifies"]
 
     def test_REQ_d00082_K_instantiation_with_pattern_config_and_resolver(self):
         """REQ-d00082-K: Parser instantiation with IdResolver and ReferenceResolver."""
@@ -329,4 +329,4 @@ class TestJUnitXMLParserCustomConfig:
         results = parser.parse(xml, "results.xml")
 
         assert len(results) == 1
-        assert "TASK-d00102" in results[0]["validates"]
+        assert "TASK-d00102" in results[0]["verifies"]

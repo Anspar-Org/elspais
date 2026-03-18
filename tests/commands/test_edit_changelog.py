@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A
+# Verifies: REQ-p00004-A
 """Tests for edit command Draft->Active changelog entry.
 
 When ``elspais edit --status Active`` is applied to a Draft requirement,

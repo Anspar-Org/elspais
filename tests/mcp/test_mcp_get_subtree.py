@@ -126,7 +126,7 @@ def subtree_graph():
         label="test_encryption",
     )
     test_node._content = {"file": "test_enc.py", "name": "test_encryption"}
-    assertion_a.link(test_node, EdgeKind.VALIDATES)
+    assertion_a.link(test_node, EdgeKind.VERIFIES)
 
     # Register all nodes in graph index
     graph._index = {

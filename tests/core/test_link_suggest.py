@@ -158,7 +158,7 @@ class TestFindUnlinkedTests:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
         test = _add_test(graph, "test:1")
-        req.link(test, EdgeKind.VALIDATES)
+        req.link(test, EdgeKind.VERIFIES)
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
@@ -169,7 +169,7 @@ class TestFindUnlinkedTests:
         graph._index["REQ-1-A"] = assertion
         req.link(assertion, EdgeKind.STRUCTURES)
         test = _add_test(graph, "test:1")
-        assertion.link(test, EdgeKind.VALIDATES)
+        assertion.link(test, EdgeKind.VERIFIES)
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
@@ -180,7 +180,7 @@ class TestFindUnlinkedTests:
         graph._index["code:1"] = code
         req.link(code, EdgeKind.IMPLEMENTS)
         test = _add_test(graph, "test:1")
-        code.link(test, EdgeKind.VALIDATES)
+        code.link(test, EdgeKind.VERIFIES)
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
@@ -208,7 +208,7 @@ class TestFindUnlinkedTests:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
         linked = _add_test(graph, "test:linked")
-        req.link(linked, EdgeKind.VALIDATES)
+        req.link(linked, EdgeKind.VERIFIES)
         _add_test(graph, "test:unlinked")
         result = _find_unlinked_tests(graph)
         assert len(result) == 1
@@ -407,7 +407,7 @@ class TestSuggestLinks:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
         test = _add_test(graph, "test:1", function_name="test_foo", file_path="tests/test_foo.py")
-        req.link(test, EdgeKind.VALIDATES)
+        req.link(test, EdgeKind.VERIFIES)
         discover_fn = _make_discover_fn([])
         result = suggest_links(graph, Path("/repo"), discover_fn=discover_fn)
         assert result == []

@@ -79,7 +79,7 @@ def scoped_cursor_state(scoped_cursor_graph):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: open_cursor with scoped_search
+# Verifies: open_cursor with scoped_search
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -184,7 +184,7 @@ class TestOpenCursorScopedSearch:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: cursor_next with scoped_search results
+# Verifies: cursor_next with scoped_search results
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -288,7 +288,7 @@ class TestCursorNextScopedSearch:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: cursor_info with scoped_search results
+# Verifies: cursor_info with scoped_search results
 # ─────────────────────────────────────────────────────────────────────────────
 
 

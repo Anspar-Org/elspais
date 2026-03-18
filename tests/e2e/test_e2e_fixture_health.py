@@ -1,4 +1,4 @@
-# Validates: REQ-p00002
+# Verifies: REQ-p00002
 """E2E health check validation on test fixtures.
 
 Invokes `elspais health` as a subprocess on each fixture project directory,

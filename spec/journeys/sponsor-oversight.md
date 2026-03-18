@@ -9,7 +9,7 @@ Journeys for the sponsor project manager overseeing deliverables and the validat
 **Actor**: Dr. Chen (Sponsor Project Manager)
 **Goal**: Verify that a milestone delivery meets the contracted requirement coverage before approving payment
 **Context**: The development team has submitted a milestone delivery. Dr. Chen needs to confirm that all requirements committed to for this milestone are implemented, tested, and traceable before signing off.
-Addresses: REQ-p00003, REQ-p00004, REQ-p00006
+Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
@@ -35,7 +35,7 @@ Dr. Chen has verified that the milestone delivery meets contractual obligations.
 **Actor**: Dr. Chen (Sponsor Project Manager)
 **Goal**: Generate a report showing only the requirements specific to her sponsorship, separate from the shared platform
 **Context**: The platform serves multiple sponsors. Dr. Chen wants to see only the requirements relevant to her organization's project, without being distracted by other sponsors' customizations or the full core platform.
-Addresses: REQ-p00005, REQ-p00006
+Validates: REQ-p00005, REQ-p00006
 
 ## Steps
 
@@ -59,7 +59,7 @@ Dr. Chen has a clean, sponsor-scoped view of the requirements relevant to her pr
 **Actor**: Janet (Validation Consultant)
 **Goal**: Verify requirement integrity, traceability, and hash consistency for a regulatory submission package
 **Context**: The system is being prepared for regulatory review. Janet, an independent validation consultant engaged by the sponsor, needs to verify that the requirements meet documentation standards: complete traceability, no orphaned requirements, and tamper-evident content hashes.
-Addresses: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
+Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 
 ## Steps
 
@@ -85,7 +85,7 @@ Janet has independently verified the integrity and completeness of the requireme
 **Actor**: Janet (Validation Consultant)
 **Goal**: Trace and evaluate requirement modifications between two releases to assess their impact
 **Context**: A new release candidate is being prepared. Janet needs to identify every requirement that changed since the last validated release, understand the nature of each change, and verify that downstream requirements were updated accordingly.
-Addresses: REQ-p00003, REQ-p00004
+Validates: REQ-p00003, REQ-p00004
 
 ## Steps
 

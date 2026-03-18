@@ -298,7 +298,7 @@ class TestBuilderContentTypes:
         children = list(test.iter_children())
         assert len(children) == 1
         assert children[0].id == "result-1"
-        assert children[0].kind == NodeKind.TEST_RESULT
+        assert children[0].kind == NodeKind.RESULT
 
     def test_test_result_without_test_id_not_linked(self):
         """TEST_RESULT without test_id should not be linked to any parent."""
@@ -504,7 +504,7 @@ class TestTestToRequirementLinking:
                 test_id="test:tests/test_misc.py::TestMisc::test_something_else",
                 name="test_something_else",
                 classname="tests.test_misc.TestMisc",
-                validates=[],  # No REQ references
+                verifies=[],  # No REQ references
             ),
         )
 
@@ -537,7 +537,7 @@ class TestGeneralizedOrphanDetection:
         """TEST referencing non-existent REQ is an orphan."""
         graph = build_graph(
             make_test_ref(
-                validates=["REQ-nonexistent"],
+                verifies=["REQ-nonexistent"],
                 source_path="tests/test_foo.py",
                 function_name="test_something",
             ),
@@ -553,7 +553,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
-                validates=["REQ-d00001"],
+                verifies=["REQ-d00001"],
                 source_path="tests/test_foo.py",
                 function_name="test_something",
             ),
@@ -576,7 +576,7 @@ class TestGeneralizedOrphanDetection:
         orphans = list(graph.orphaned_nodes())
         orphan_ids = {n.id for n in orphans}
         assert "result-orphan" in orphan_ids
-        assert any(n.kind == NodeKind.TEST_RESULT for n in orphans)
+        assert any(n.kind == NodeKind.RESULT for n in orphans)
 
         # Also a broken reference
         assert graph.has_broken_references()
@@ -631,7 +631,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             make_requirement("REQ-d00001", level="DEV"),
             make_test_ref(
-                validates=["REQ-d00001"],
+                verifies=["REQ-d00001"],
                 source_path="tests/test_module.py",
                 function_name="test_func",
             ),
@@ -710,7 +710,7 @@ class TestGeneralizedOrphanDetection:
         graph = build_graph(
             # Create a TEST node with no validates (no parent link)
             make_test_ref(
-                validates=[],
+                verifies=[],
                 source_path="tests/test_standalone.py",
                 function_name="test_standalone_func",
             ),
@@ -729,7 +729,7 @@ class TestGeneralizedOrphanDetection:
 
         # TEST_RESULT is a child of the TEST
         child_kinds = {c.kind for c in test_node.iter_children()}
-        assert NodeKind.TEST_RESULT in child_kinds
+        assert NodeKind.RESULT in child_kinds
 
         # But TEST is still an orphan (TEST_RESULT is satellite)
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
@@ -994,15 +994,15 @@ class TestCanonicalTestIds:
         assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)
 
 
-class TestAddressesEdges:
-    """Tests for ADDRESSES edge creation in GraphBuilder.
+class TestValidatesEdges:
+    """Tests for VALIDATES edge creation in GraphBuilder.
 
     Validates REQ-o00050-C: TraceGraphBuilder SHALL handle all relationship
-    linking including addresses.
+    linking including validates.
     """
 
-    def test_REQ_o00050_C_journey_addresses_creates_edge(self):
-        """JNY with Addresses: REQ-p00012 creates ADDRESSES edge to REQ node."""
+    def test_REQ_o00050_C_journey_validates_creates_edge(self):
+        """JNY with Validates: REQ-p00012 creates VALIDATES edge to REQ node."""
         graph = build_graph(
             make_requirement("REQ-p00012", level="PRD", title="Product Requirement"),
             make_journey(
@@ -1010,7 +1010,7 @@ class TestAddressesEdges:
                 title="Dev Workflow",
                 actor="Developer",
                 goal="Implement feature",
-                addresses=["REQ-p00012"],
+                validates=["REQ-p00012"],
             ),
         )
 
@@ -1021,27 +1021,27 @@ class TestAddressesEdges:
         assert req_node is not None
 
         # The REQ node becomes the parent via target.link(source, edge_kind),
-        # so the JNY node has incoming ADDRESSES edges
+        # so the JNY node has incoming VALIDATES edges
         edges = incoming_edges_string(jny_node)
-        assert "REQ-p00012->JNY-Dev-01:addresses" in edges
+        assert "REQ-p00012->JNY-Dev-01:validates" in edges
 
-        # Verify edge kind is ADDRESSES
-        found_addresses_edge = False
+        # Verify edge kind is VALIDATES
+        found_validates_edge = False
         for edge in jny_node.iter_incoming_edges():
-            if edge.source.id == "REQ-p00012" and edge.kind == EdgeKind.ADDRESSES:
-                found_addresses_edge = True
+            if edge.source.id == "REQ-p00012" and edge.kind == EdgeKind.VALIDATES:
+                found_validates_edge = True
                 break
-        assert found_addresses_edge, "Expected ADDRESSES edge from REQ-p00012 to JNY-Dev-01"
+        assert found_validates_edge, "Expected VALIDATES edge from REQ-p00012 to JNY-Dev-01"
 
-    def test_REQ_o00050_C_journey_addresses_missing_target_broken_ref(self):
-        """JNY with Addresses: REQ-NONEXIST records broken reference."""
+    def test_REQ_o00050_C_journey_validates_missing_target_broken_ref(self):
+        """JNY with Validates: REQ-NONEXIST records broken reference."""
         graph = build_graph(
             make_journey(
                 "JNY-Dev-02",
                 title="Broken Ref Journey",
                 actor="Developer",
                 goal="Test broken ref",
-                addresses=["REQ-NONEXIST"],
+                validates=["REQ-NONEXIST"],
             ),
         )
 
@@ -1063,19 +1063,19 @@ class TestAddressesEdges:
             if br.source_id == "JNY-Dev-02" and br.target_id == "REQ-NONEXIST"
         ]
         assert len(broken) == 1
-        assert broken[0].edge_kind == "addresses"
+        assert broken[0].edge_kind == "validates"
 
-    def test_REQ_o00050_C_journey_addresses_multiple_targets(self):
-        """JNY with multiple Addresses creates edges to all targets."""
+    def test_REQ_o00050_C_journey_validates_multiple_targets(self):
+        """JNY with multiple Validates creates edges to all targets."""
         graph = build_graph(
             make_requirement("REQ-p00012", level="PRD"),
             make_requirement("REQ-d00042", level="DEV"),
             make_journey(
                 "JNY-Dev-03",
-                title="Multi Address Journey",
+                title="Multi Validates Journey",
                 actor="Developer",
-                goal="Test multiple addresses",
-                addresses=["REQ-p00012", "REQ-d00042"],
+                goal="Test multiple validates",
+                validates=["REQ-p00012", "REQ-d00042"],
             ),
         )
 
@@ -1083,8 +1083,8 @@ class TestAddressesEdges:
         assert jny_node is not None
 
         edges = incoming_edges_string(jny_node)
-        assert "REQ-d00042->JNY-Dev-03:addresses" in edges
-        assert "REQ-p00012->JNY-Dev-03:addresses" in edges
+        assert "REQ-d00042->JNY-Dev-03:validates" in edges
+        assert "REQ-p00012->JNY-Dev-03:validates" in edges
 
     def test_REQ_o00050_C_journey_is_orphan_without_children(self):
         """JNY nodes without meaningful children are orphans (REQ-d00071)."""
@@ -1264,7 +1264,7 @@ class TestMultiAssertionExpansion:
         )
         builder.add_parsed_content(
             make_test_ref(
-                validates=["REQ-d00001-A+B"],
+                verifies=["REQ-d00001-A+B"],
                 source_path="tests/test_auth.py",
                 start_line=5,
             ),
@@ -1282,3 +1282,63 @@ class TestMultiAssertionExpansion:
                     for at in edge.assertion_targets:
                         assertion_targets_found.add(at)
         assert {"A", "B"} == assertion_targets_found
+
+
+class TestParseDirtyFlag:
+    """Tests that has_redundant_refs in parsed_data causes parse_dirty on the built node.
+
+    Validates: REQ-p00002-A
+    """
+
+    def test_has_redundant_refs_sets_parse_dirty(self):
+        # Verifies: REQ-p00002-A
+        """Requirement built from parsed_data with has_redundant_refs=True has parse_dirty=True."""
+        content = ParsedContent(
+            content_type="requirement",
+            start_line=1,
+            end_line=5,
+            raw_text="",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Redundant Refs Req",
+                "level": "PRD",
+                "status": "Active",
+                "implements": ["REQ-p00002"],
+                "refines": [],
+                "assertions": [],
+                "has_redundant_refs": True,
+            },
+        )
+        builder = GraphBuilder()
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+        assert node.get_field("parse_dirty") is True
+
+    def test_no_redundant_refs_does_not_set_parse_dirty(self):
+        # Verifies: REQ-p00002-A
+        """A requirement without has_redundant_refs does NOT have parse_dirty=True."""
+        content = ParsedContent(
+            content_type="requirement",
+            start_line=1,
+            end_line=5,
+            raw_text="",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Clean Refs Req",
+                "level": "PRD",
+                "status": "Active",
+                "implements": ["REQ-p00002"],
+                "refines": [],
+                "assertions": [],
+            },
+        )
+        builder = GraphBuilder()
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        node = graph.find_by_id("REQ-p00001")
+        assert node is not None
+        assert not node.get_field("parse_dirty")

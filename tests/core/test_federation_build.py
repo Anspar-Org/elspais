@@ -1,4 +1,4 @@
-# Validates: REQ-d00203-A, REQ-d00203-B, REQ-d00203-C, REQ-d00203-D, REQ-d00203-E
+# Verifies: REQ-d00203-A, REQ-d00203-B, REQ-d00203-C, REQ-d00203-D, REQ-d00203-E
 """Tests for multi-repo federation building in factory.build_graph().
 
 Validates REQ-d00203-A: build_graph() builds separate TraceGraphs per repo

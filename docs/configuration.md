@@ -453,7 +453,7 @@ comment_styles = ["#", "//", "--"]
 # Keywords for different reference types
 [references.defaults.keywords]
 implements = ["Implements", "IMPLEMENTS"]
-validates = ["Validates", "Tests", "VALIDATES", "TESTS"]
+verifies = ["Verifies", "VERIFIES"]
 refines = ["Refines", "REFINES"]
 
 # Override: Python files (underscore only, hash comments)

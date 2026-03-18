@@ -202,7 +202,7 @@ class TestCodeAndTestOrphans:
 
         test_content = ParsedContent(
             content_type="test_ref",
-            parsed_data={"validates": [fake_reqs.FAKE_NONEXISTENT_REQ]},
+            parsed_data={"verifies": [fake_reqs.FAKE_NONEXISTENT_REQ]},
             start_line=100,
             end_line=100,
             raw_text=fake_reqs.TEST_RAW_TEXT_NONEXISTENT,
@@ -216,7 +216,7 @@ class TestCodeAndTestOrphans:
         broken = graph.broken_references()
         assert len(broken) == 1
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
-        assert broken[0].edge_kind == "validates"
+        assert broken[0].edge_kind == "verifies"
 
 
 class TestIntegration:

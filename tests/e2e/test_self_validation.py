@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-C
+# Verifies: REQ-p00013-C
 """Self-validation end-to-end tests for elspais CLI.
 
 Runs elspais against its own repository to verify the tool

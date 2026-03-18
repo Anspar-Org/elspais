@@ -354,6 +354,51 @@ class TestConsistencyCheck:
         assert "Rebuild failed" in result["consistency"]["details"]
 
 
+class TestParseDirtyFileDetection:
+    """Validates that a FILE node with a parse_dirty REQUIREMENT child is included in dirty set.
+
+    Validates: REQ-p00002-A
+    """
+
+    def test_parse_dirty_requirement_marks_file_dirty_without_mutations(self, tmp_path: Path):
+        # Verifies: REQ-p00002-A
+        """A FILE node whose REQUIREMENT child has parse_dirty=True appears in dirty set
+        even when the mutation log is empty (no explicit mutations were made)."""
+        from elspais.graph.render import render_save
+
+        graph, spec_file, file_node = _build_graph_with_spec(tmp_path)
+
+        # Ensure no mutations have been made
+        assert len(graph.mutation_log) == 0
+
+        # Mark the requirement as parse_dirty to simulate redundant refs detected at parse time
+        req_node = graph.find_by_id("REQ-t00001")
+        assert req_node is not None
+        req_node.set_field("parse_dirty", True)
+
+        # render_save should detect parse_dirty and include the file
+        result = render_save(graph, tmp_path)
+
+        assert result["success"] is True
+        assert (
+            result["saved_count"] >= 1
+        ), "Expected file to be saved because its requirement child has parse_dirty=True"
+
+    def test_no_parse_dirty_no_save_without_mutations(self, tmp_path: Path):
+        # Verifies: REQ-p00002-A
+        """Without parse_dirty or mutations, no file is saved."""
+        from elspais.graph.render import render_save
+
+        graph, spec_file, _ = _build_graph_with_spec(tmp_path)
+
+        assert len(graph.mutation_log) == 0
+
+        result = render_save(graph, tmp_path)
+
+        assert result["success"] is True
+        assert result["saved_count"] == 0
+
+
 class TestPersistenceDeleted:
     """Validates REQ-d00132-D: persistence.py is deleted."""
 

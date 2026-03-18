@@ -28,6 +28,12 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands import validate
 
     dry_run = getattr(args, "dry_run", False)
+
+    # Fix parse-dirty nodes (e.g. duplicate refs) via render_save before
+    # running validate, so hash mismatches caused by dirty nodes are resolved
+    # in one pass rather than two.
+    _fix_parse_dirty(args, dry_run)
+
     validate.run(_make_validate_args(args))
 
     # Fix stale INDEX.md if present
@@ -41,6 +47,47 @@ def run(args: argparse.Namespace) -> int:
     recheck.fix = False
     recheck.quiet = True
     return validate.run(recheck)
+
+
+def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
+    """Rewrite files that contain parse-dirty requirements (e.g. duplicate refs).
+
+    Uses render_save() so the rendered output is canonical: one Implements/
+    Refines line, deduplicated refs, recomputed hash.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.factory import build_graph
+    from elspais.graph.render import render_save
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+    repo_root = getattr(args, "git_root", None) or Path.cwd()
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        repo_root=repo_root,
+        scan_code=False,
+        scan_tests=False,
+        canonical_root=canonical_root,
+    )
+
+    dirty_nodes = [
+        node for node in graph.nodes_by_kind(NodeKind.REQUIREMENT) if node.get_field("parse_dirty")
+    ]
+    if not dirty_nodes:
+        return
+
+    if dry_run:
+        for node in dirty_nodes:
+            reasons = node.get_field("parse_dirty_reasons") or []
+            print(f"Would rewrite {node.id}: {', '.join(reasons)}")
+        return
+
+    result = render_save(graph, repo_root=repo_root)
+    for file_path in result.get("written", []):
+        print(f"Rewrote {file_path} (duplicate refs removed)")
 
 
 def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:

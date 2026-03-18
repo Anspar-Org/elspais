@@ -1,4 +1,4 @@
-# Validates: REQ-o00065
+# Verifies: REQ-o00065
 """Tests for _discover_assertions() helper in the MCP server.
 
 Validates REQ-o00065: Suggestion engine — assertion-level search and discovery.

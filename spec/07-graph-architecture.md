@@ -305,7 +305,7 @@ The system SHALL provide an agent-assisted link suggestion engine that analyzes 
 
 ## Assertions
 
-A. The suggestion engine SHALL identify unlinked TEST nodes (those without REQUIREMENT parents via VALIDATES edges) as suggestion candidates.
+A. The suggestion engine SHALL identify unlinked TEST nodes (those without REQUIREMENT parents via VERIFIES edges) as suggestion candidates.
 
 B. The suggestion engine SHALL score suggestions using multiple heuristics: import chain analysis, function name matching, file path proximity, and keyword overlap.
 
@@ -321,7 +321,7 @@ F. The suggestion engine SHALL support applying suggestions by inserting `# Impl
 
 Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close traceability gaps systematically.
 
-*End* *Agent-Assisted Link Suggestion* | **Hash**: 7c449e0c
+*End* *Agent-Assisted Link Suggestion* | **Hash**: 17851ae2
 ---
 
 ## REQ-d00072: Link Suggestion Core Engine

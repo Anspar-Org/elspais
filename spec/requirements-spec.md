@@ -57,24 +57,78 @@ Example:
 
 ## Requirement Header Grammar
 
-Each requirement MUST begin with a header in the following exact form:
+Each requirement MUST begin with a **header line** immediately followed by a **metadata block**.
 
-```markdown
-# REQ-{id}: {Short Descriptive Title}
+### Header Line
 
-**Level**: {PRD | Dev | Ops} | **Status**: {Draft | Review | Active | Deprecated} | **Implements**: {REQ-xNNNNN, REQ-yNNNNN | -}
-
-Addresses: {JNY-xxx-NN, ...}
+```text
+{#...} REQ-{id}: {Short Descriptive Title}
 ```
 
-Rules:
+The heading level (number of `#` characters) is unconstrained but SHOULD be consistent within a file.
 
-- `Implements` lists **only less-specific requirements**.
+### Metadata Block
+
+The metadata block immediately follows the header line. It consists of one or more **field declarations**.
+
+**Required fields** — each MUST appear exactly once and carry exactly one value:
+
+| Field | Allowed values |
+| ----- | -------------- |
+| `Level` | One of: `PRD`, `Dev`, `Ops` |
+| `Status` | One of: `Draft`, `Review`, `Active`, `Deprecated` |
+
+**Traceability fields** — each MAY appear zero or more times; each occurrence MAY carry a comma-delimited list of REQ IDs:
+
+| Field | Meaning |
+| ----- | ------- |
+| `Implements` | Parent requirements this requirement satisfies |
+| `Refines` | Parent requirements this requirement specialises |
+
+**Layout rules:**
+
+- Field declarations MAY appear in any order.
+- Field declarations MAY appear on the same line (separated by `|` or other punctuation) or on separate lines.
+- Any valid Markdown formatting MAY be applied to field names and values (e.g. `**Level**`, `Level`, `` `Level` `` are all equivalent).
+- Multiple occurrences of `Implements` or `Refines` are **additive**: all listed references are collected.
+- Use `-` to explicitly declare that no references exist (e.g. `Implements: -`).
+
+**Content rules:**
+
+- `Implements` and `Refines` list **only less-specific (parent) requirements**.
 - Parent requirements MUST NOT reference children.
-- Use `-` if the requirement has no parent.
-- `Addresses` is optional; when present, it lists User Journey IDs this requirement supports.
-- The `Addresses` line appears after the metadata line, before any section content.
-- The `Addresses` line is NOT part of the hashed content.
+- Duplicate references (the same REQ ID appearing more than once across all occurrences of a field) MUST be deduplicated to a single occurrence. A file containing duplicate references is considered malformed; tooling SHALL rewrite it on the next save to remove the redundancy.
+- `Addresses` is optional; when present it lists User Journey IDs this requirement supports. It appears after the metadata block, before any section content, and is NOT part of the hashed content.
+- `Validates` (on JNY nodes) is optional; when present on a User Journey it lists REQ IDs or assertion references (e.g., `REQ-p00001-A`) that this journey validates. Multi-assertion syntax is supported (e.g., `Validates: REQ-p00001-A+B`). The `Validates:` field contributes to UAT coverage metrics.
+
+### Examples
+
+Traditional single-line form:
+
+```markdown
+**Level**: PRD | **Status**: Active | **Implements**: -
+```
+
+Split across lines:
+
+```markdown
+**Level**: Dev | **Status**: Draft
+**Implements**: REQ-p00001, REQ-p00002
+**Refines**: REQ-p00003-A, REQ-p00003-B
+```
+
+Multiple `Implements` occurrences (additive):
+
+```markdown
+**Level**: Dev | **Status**: Draft | **Implements**: REQ-p00001, REQ-p00002
+**Implements**: REQ-p00003
+```
+
+Minimal formatting:
+
+```markdown
+Level: PRD | Status: Active | Implements: -
+```
 
 ---
 
@@ -88,6 +142,7 @@ All testable obligations MUST appear in an `## Assertions` section.
 ## Assertions
 
 A. The system SHALL ...
+
 B. The system SHALL ...
 ```
 
@@ -154,21 +209,21 @@ Composition is inferred, never declared.
 
 ---
 
-## Decomposition Rules
+## REQ-p00061: Requirement Decomposition Rules
 
-### Refinement
+**Level**: PRD | **Status**: Draft | **Implements**: -
 
-A child requirement refines a parent when it:
+A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
 
-- adds specificity,
-- adds constraints,
-- commits to mechanisms or guarantees.
+## Assertions
 
-The child MUST implement the parent via `Implements:`.
+A. A child requirement that adds specificity, constraints, or commits to mechanisms or guarantees SHALL declare its parent requirement using `Implements:` or `Refines:` in its metadata block.
 
-### Cascade
+B. `Implements:` and `Refines:` declarations apply to requirements only; code references and test nodes use their own linkage mechanisms.
 
-Multiple requirements MAY exist at the same Level refining a shared higher-level obligation. This is valid and expected.
+C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
+
+*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
 
 ---
 
@@ -232,7 +287,9 @@ User Journeys exist to:
 - provide context for why requirements exist,
 - help stakeholders understand the system from the user's point of view.
 
-User Journeys are **non-normative**. They do not define obligations and are not subject to automated validation.
+User Journeys are **non-normative** with respect to obligations — they do not define system requirements and SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
+
+However, User Journeys MAY declare `Validates:` references that link them to specific requirements or assertions. These links contribute to UAT coverage metrics and represent planned manual acceptance tests.
 
 User Journeys SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
@@ -267,6 +324,8 @@ A User Journey SHOULD follow this structure:
 **Goal**: {what the user wants to achieve}
 **Context**: {situational background that sets up the scenario}
 
+Validates: REQ-pXXXXX-A, REQ-pXXXXX-B+C
+
 ## Steps
 
 1. {User action or system response}
@@ -285,6 +344,7 @@ Field guidance:
 - **Actor**: Include a persona name and role in parentheses for readability (e.g., "Dr. Lisa Chen (Principal Investigator)")
 - **Goal**: A single sentence describing what the user wants to achieve
 - **Context**: Optional but recommended; provides situational background (e.g., "Trial sponsor's IT team has deployed the portal. Dr. Chen has been designated as the first administrator.")
+- **Validates**: Optional; lists REQ IDs or assertion references this journey validates (e.g., `Validates: REQ-p00001-A, REQ-p00002-A+B`). Multi-assertion syntax is supported. Contributes to UAT coverage metrics.
 - **Steps**: Numbered sequence of user actions and system responses
 - **Expected Outcome**: Brief statement of success from the user's perspective
 - **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative)
@@ -311,6 +371,34 @@ The `Addresses:` line:
 - indicates which user journeys this requirement supports,
 - is NOT part of the hashed content.
 
+### User Journeys Declaring Validation Relationships
+
+User Journeys MAY declare which requirements or assertions they validate using the `Validates:` field. This is the primary mechanism for UAT coverage:
+
+```markdown
+# JNY-Admin-Portal-01: Manage Admin Users
+
+**Actor**: Dr. Lisa Chen (Principal Investigator)
+**Goal**: Add a new administrator to the portal
+
+Validates: REQ-p00001-A, REQ-p00002-A+B
+
+## Steps
+...
+
+*End* *JNY-Admin-Portal-01*
+```
+
+The `Validates:` line:
+
+- is optional,
+- appears after the JNY header block but before the `## Steps` section,
+- lists REQ IDs or assertion references separated by commas,
+- supports multi-assertion syntax (e.g., `REQ-p00001-A+B` expands to `REQ-p00001-A` and `REQ-p00001-B`),
+- creates `VALIDATES` edges in the traceability graph,
+- contributes to UAT coverage metrics (separate from automated test coverage),
+- is NOT part of the hashed content (JNYs have no hash).
+
 ### Do's and Don'ts
 
 **DO:**
@@ -335,11 +423,12 @@ The `Addresses:` line:
 | ------ | ------------------ | ----------------- |
 | Purpose | Describe user experience | Define obligations |
 | Language | Descriptive ("User clicks...") | Prescriptive ("System SHALL...") |
-| Validation | Manual walkthrough | Automated/formal verification |
+| Validation | Manual walkthrough (`Validates:`) | Automated/formal verification |
 | Granularity | Major flows only | Every testable obligation |
 | Normative | No | Yes |
+| Coverage role | UAT coverage via `Validates:` | Subject of coverage |
 
-User Journeys provide **context**; Requirements provide **contracts**.
+User Journeys provide **context** and **UAT validation paths**; Requirements provide **contracts**.
 
 ---
 

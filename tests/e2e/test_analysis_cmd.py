@@ -1,4 +1,4 @@
-# Validates: REQ-d00125-A, REQ-d00125-B, REQ-d00125-C, REQ-d00125-D,
+# Verifies: REQ-d00125-A, REQ-d00125-B, REQ-d00125-C, REQ-d00125-D,
 #            REQ-d00125-E, REQ-d00125-F, REQ-d00125-G, REQ-d00125-H
 """End-to-end subprocess tests for elspais analysis CLI command.
 

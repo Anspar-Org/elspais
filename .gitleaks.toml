@@ -1,0 +1,8 @@
+[allowlist]
+description = "False positives in test files"
+
+# tests/mcp/test_discover_assertions.py:156 — "direct_match=True" in a test
+# assertion string matched gitleaks generic-api-key heuristic. Not a real secret.
+commits = [
+    "da91224b3836831ce32860b0116ae806834ee774",
+]

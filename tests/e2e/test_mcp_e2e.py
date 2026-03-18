@@ -1,4 +1,4 @@
-# Validates: REQ-p00060
+# Verifies: REQ-p00060
 """Extended MCP protocol tests for elspais.
 
 Starts the MCP server as a subprocess using stdio transport

@@ -1,4 +1,4 @@
-# Validates: REQ-p00005
+# Verifies: REQ-p00005
 """E2E tests for associated repository features.
 
 Tests multi-repo scenarios: core + associate, cross-repo implements,

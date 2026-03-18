@@ -77,7 +77,7 @@ class TestAnnotateCoverageDirect:
                 level="PRD",
                 assertions=[{"label": "A", "text": "The system shall..."}],
             ),
-            make_test_ref(validates=["REQ-100-A"]),
+            make_test_ref(verifies=["REQ-100-A"]),
         )
 
         annotate_coverage(graph)
@@ -237,7 +237,7 @@ class TestAnnotateCoverageMixed:
                     {"label": "D", "text": "Assertion D"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100-A"]),  # A - direct
+            make_test_ref(verifies=["REQ-100-A"]),  # A - direct
             make_requirement(
                 "REQ-020",
                 level="OPS",
@@ -300,11 +300,11 @@ class TestUserExample:
                 implements=["REQ-100-B"],  # IMPLEMENTS B - explicit
             ),
             make_test_ref(
-                validates=["REQ-100-A"],
+                verifies=["REQ-100-A"],
                 source_path="tests/test_a.py",
             ),
             make_test_ref(
-                validates=["REQ-100-B"],
+                verifies=["REQ-100-B"],
                 source_path="tests/test_b.py",
             ),
         )
@@ -381,7 +381,7 @@ class TestCoveragePercentStored:
                     {"label": "B", "text": "Assertion B"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100-A"]),  # 1/2 = 50%
+            make_test_ref(verifies=["REQ-100-A"]),  # 1/2 = 50%
         )
 
         annotate_coverage(graph)
@@ -411,7 +411,7 @@ class TestTestSpecificMetrics:
                     {"label": "C", "text": "Assertion C"},
                 ],
             ),
-            make_test_ref(validates=["REQ-100-A"]),  # TEST covers A
+            make_test_ref(verifies=["REQ-100-A"]),  # TEST covers A
             make_code_ref(implements=["REQ-100-B"]),  # CODE covers B
             # C has no coverage
         )
@@ -438,11 +438,11 @@ class TestTestSpecificMetrics:
                 ],
             ),
             make_test_ref(
-                validates=["REQ-100-A"],
+                verifies=["REQ-100-A"],
                 source_path="tests/test_a.py",
             ),
             make_test_ref(
-                validates=["REQ-100-B"],
+                verifies=["REQ-100-B"],
                 source_path="tests/test_b.py",
             ),
             make_test_result(
@@ -476,7 +476,7 @@ class TestTestSpecificMetrics:
                 level="PRD",
                 assertions=[{"label": "A", "text": "Assertion A"}],
             ),
-            make_test_ref(validates=["REQ-100-A"]),
+            make_test_ref(verifies=["REQ-100-A"]),
             make_test_result("result-1", status="error", test_id="test:tests/test_module.py:1"),
         )
 
@@ -497,7 +497,7 @@ class TestTestSpecificMetrics:
                 level="PRD",
                 assertions=[{"label": "A", "text": "Assertion A"}],
             ),
-            make_test_ref(validates=["REQ-100-A"]),
+            make_test_ref(verifies=["REQ-100-A"]),
             make_test_result("result-1", status="passed", test_id="test:tests/test_module.py:1"),
         )
 

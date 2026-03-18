@@ -232,7 +232,7 @@ class TestLinkTestsToCode:
         # Check edge was created
         found_edge = False
         for edge in code_node.iter_outgoing_edges():
-            if edge.target is test_node and edge.kind == EdgeKind.VALIDATES:
+            if edge.target is test_node and edge.kind == EdgeKind.VERIFIES:
                 found_edge = True
         assert found_edge
 
@@ -267,7 +267,7 @@ class TestLinkTestsToCode:
         graph._index[test_node.id] = test_node
 
         # Pre-link: CODE already has TEST as child
-        code_node.link(test_node, EdgeKind.VALIDATES)
+        code_node.link(test_node, EdgeKind.VERIFIES)
 
         result = link_tests_to_code(graph, tmp_path)
         assert result == 0  # No new edges

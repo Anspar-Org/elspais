@@ -81,7 +81,7 @@ def _patch_graph_build():
 
 
 # ===========================================================================
-# Tests: Multiple sections concatenated in order (REQ-d00085-A)
+# Verifies: Multiple sections concatenated in order (REQ-d00085-A)
 # ===========================================================================
 
 
@@ -141,7 +141,7 @@ class TestMultipleSectionsConcatenated:
 
 
 # ===========================================================================
-# Tests: Shared flags apply globally (REQ-d00085-B)
+# Verifies: Shared flags apply globally (REQ-d00085-B)
 # ===========================================================================
 
 
@@ -189,7 +189,7 @@ class TestSharedFlagsApplyGlobally:
 
 
 # ===========================================================================
-# Tests: Exit code is worst-of-all-sections (REQ-d00085-C)
+# Verifies: Exit code is worst-of-all-sections (REQ-d00085-C)
 # ===========================================================================
 
 
@@ -235,7 +235,7 @@ class TestWorstExitCode:
 
 
 # ===========================================================================
-# Tests: Single section behaves identically to standalone (REQ-d00085-D)
+# Verifies: Single section behaves identically to standalone (REQ-d00085-D)
 # ===========================================================================
 
 
@@ -271,7 +271,7 @@ class TestSingleSectionIdentical:
 
 
 # ===========================================================================
-# Tests: Format support validation (REQ-d00085-E)
+# Verifies: Format support validation (REQ-d00085-E)
 # ===========================================================================
 
 
@@ -324,7 +324,7 @@ class TestFormatSupportValidation:
 
 
 # ===========================================================================
-# Tests: Quiet mode (REQ-d00085-F)
+# Verifies: Quiet mode (REQ-d00085-F)
 # ===========================================================================
 
 
@@ -368,7 +368,7 @@ class TestQuietMode:
 
 
 # ===========================================================================
-# Tests: Lenient mode (REQ-d00085-G)
+# Verifies: Lenient mode (REQ-d00085-G)
 # ===========================================================================
 
 
@@ -407,7 +407,7 @@ class TestLenientMode:
 
 
 # ===========================================================================
-# Tests: Output to file (--output)
+# Verifies: Output to file (--output)
 # ===========================================================================
 
 
@@ -436,7 +436,7 @@ class TestOutputFile:
 
 
 # ===========================================================================
-# Tests: CLI dispatch integration (REQ-d00085-A)
+# Verifies: CLI dispatch integration (REQ-d00085-A)
 # ===========================================================================
 
 
@@ -475,7 +475,7 @@ class TestCLIDispatch:
 
 
 # ===========================================================================
-# Tests: COMPOSABLE_SECTIONS constant
+# Verifies: COMPOSABLE_SECTIONS constant
 # ===========================================================================
 
 
@@ -491,7 +491,7 @@ class TestComposableSections:
 
 
 # ===========================================================================
-# Tests: Integration with real spec dir
+# Verifies: Integration with real spec dir
 # ===========================================================================
 
 

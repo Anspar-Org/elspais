@@ -1,4 +1,4 @@
-# Validates: REQ-p00060
+# Verifies: REQ-p00060
 """Comprehensive MCP e2e tests.
 
 Each test builds a project, starts an MCP server, and exercises
@@ -113,7 +113,7 @@ def _build_standard_project(tmp_path):
             "src/notifications.py": {"implements": ["REQ-d00002"]},
         },
         test_files={
-            "tests/test_users.py": {"validates": ["REQ-d00001"]},
+            "tests/test_users.py": {"verifies": ["REQ-d00001"]},
         },
     )
     return tmp_path

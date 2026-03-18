@@ -171,7 +171,7 @@ class TestFullPipeline:
         assert len(assertions) == 5
 
 
-# Validates: REQ-d00081-D+E+G
+# Verifies: REQ-d00081-D+E+G
 class TestMultiAssertionPipelineExpansion:
     """Integration tests for multi-assertion expansion in the full pipeline.
 

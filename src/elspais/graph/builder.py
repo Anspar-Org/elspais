@@ -33,7 +33,7 @@ def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
 # Implements: REQ-d00071-C
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
-_DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.TEST_RESULT})
+_DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.RESULT})
 
 # Traceability edges: all edge kinds except structural (CONTAINS, STRUCTURES)
 _STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.CONTAINS, EdgeKind.STRUCTURES})
@@ -228,7 +228,7 @@ class TraceGraph:
 
         Traverses ancestors excluding structural edges (CONTAINS, STRUCTURES).
         A node is "linked" if it can reach a REQUIREMENT through traceability
-        edges like IMPLEMENTS, VALIDATES, YIELDS, etc.
+        edges like IMPLEMENTS, VERIFIES, YIELDS, etc.
         """
         for ancestor in node.ancestors(edge_kinds=_TRACEABILITY_EDGE_KINDS):
             if ancestor.kind == NodeKind.REQUIREMENT:
@@ -1092,23 +1092,16 @@ class TraceGraph:
         pattern = re.compile(rf"^{re.escape(old_label)}(\.\s+.*)$", re.MULTILINE)
         return pattern.sub(rf"{new_label}\1", body_text)
 
-    def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
-        """Recompute hash for a requirement.
+    def _compute_hash(self, req_node: GraphNode) -> str:
+        """Compute the expected hash for a requirement node without modifying it.
 
         Supports two modes (configurable via [validation].hash_mode):
         - full-text: hash every line between header and footer (body_text)
         - normalized-text: hash normalized assertion text only
-
-        Args:
-            req_node: The requirement node to recompute hash for.
-
-        Returns:
-            The new hash value.
         """
         from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
 
         if self.hash_mode == "normalized-text":
-            # Collect assertions in physical order from child nodes
             assertions = []
             for child in req_node.iter_children():
                 if child.kind == NodeKind.ASSERTION:
@@ -1116,12 +1109,18 @@ class TraceGraph:
                     text = child.get_label() or ""
                     if label and text:
                         assertions.append((label, text))
-            new_hash = compute_normalized_hash(assertions)
+            return compute_normalized_hash(assertions)
         else:
-            # full-text mode: hash body_text (per original spec)
             body_text = req_node.get_field("body_text", "")
-            new_hash = calculate_hash(body_text)
+            return calculate_hash(body_text)
 
+    def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
+        """Recompute and store the hash for a requirement node.
+
+        Returns:
+            The new hash value.
+        """
+        new_hash = self._compute_hash(req_node)
         req_node.set_field("hash", new_hash)
         return new_hash
 
@@ -2019,7 +2018,7 @@ class GraphBuilder:
             hash_mode: Hash calculation mode ("full-text" or "normalized-text").
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
-                classification. Defaults to ASSERTION and TEST_RESULT.
+                classification. Defaults to ASSERTION and RESULT.
             multi_assertion_separator: Character joining multiple assertion
                 labels in compact references (e.g. "+" for REQ-x-A+B+C).
                 Empty string disables expansion.
@@ -2165,6 +2164,7 @@ class GraphBuilder:
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
             "heading_level": data.get("heading_level", 2),
+            "hash_mode": self.hash_mode,
         }
         # Extract rationale from sections for format validation (require_rationale)
         for section in data.get("sections", []):
@@ -2220,6 +2220,21 @@ class GraphBuilder:
         for _line, child_node in children_with_lines:
             node.link(child_node, EdgeKind.STRUCTURES)
 
+        # Mark node dirty for any condition that would change the file on save
+        parse_dirty_reasons: list[str] = []
+        if data.get("has_redundant_refs"):
+            parse_dirty_reasons.append("duplicate_refs")
+        stored_hash = data.get("hash")
+        if stored_hash:
+            from elspais.commands.validate import compute_hash_for_node
+
+            computed = compute_hash_for_node(node, self.hash_mode)
+            if computed and stored_hash != computed:
+                parse_dirty_reasons.append("stale_hash")
+        if parse_dirty_reasons:
+            node._content["parse_dirty"] = True
+            node._content["parse_dirty_reasons"] = parse_dirty_reasons
+
         # Queue implements/refines links for later resolution
         for impl_ref in data.get("implements", []):
             self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS))
@@ -2250,9 +2265,9 @@ class GraphBuilder:
         }
         self._nodes[journey_id] = node
 
-        # Queue addresses links for later resolution
-        for addr_ref in data.get("addresses", []):
-            self._pending_links.append((journey_id, addr_ref, EdgeKind.ADDRESSES))
+        # Queue validates links for later resolution
+        for addr_ref in data.get("validates", []):
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
 
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
@@ -2347,13 +2362,13 @@ class GraphBuilder:
                 node.set_metric("_expected_broken_count", expected_broken)
             self._nodes[test_id] = node
 
-        for val_ref in data.get("validates", []):
-            self._pending_links.append((test_id, val_ref, EdgeKind.VALIDATES))
+        for val_ref in data.get("verifies", []):
+            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES))
 
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
 
-        Creates a TEST_RESULT node and queues a YIELDS edge to the
+        Creates a RESULT node and queues a YIELDS edge to the
         referenced TEST node (via test_id). Does NOT auto-create TEST
         nodes — if test_id doesn't exist at link resolution time, it
         becomes a broken reference (same as Implements: REQ-nonexistent).
@@ -2373,7 +2388,7 @@ class GraphBuilder:
 
         node = GraphNode(
             id=result_id,
-            kind=NodeKind.TEST_RESULT,
+            kind=NodeKind.RESULT,
             label=label,
         )
         node._content = {
@@ -2842,7 +2857,7 @@ class GraphBuilder:
         # Compute orphan candidates from graph structure instead of tracking
         # incrementally. A content node (not FILE, REMAINDER, ASSERTION) is an
         # orphan candidate if it has no content-level parent edges — i.e. no
-        # incoming IMPLEMENTS, REFINES, VALIDATES, ADDRESSES, or YIELDS edges.
+        # incoming IMPLEMENTS, REFINES, VERIFIES, VALIDATES, or YIELDS edges.
         # CONTAINS edges (from FILE nodes) don't count as content-level links.
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
         #        with at least one meaningful (non-satellite) child.
@@ -2851,8 +2866,8 @@ class GraphBuilder:
         _content_edge_kinds = {
             EdgeKind.IMPLEMENTS,
             EdgeKind.REFINES,
+            EdgeKind.VERIFIES,
             EdgeKind.VALIDATES,
-            EdgeKind.ADDRESSES,
             EdgeKind.YIELDS,
         }
         roots = []

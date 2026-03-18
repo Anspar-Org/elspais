@@ -29,13 +29,13 @@ class TestTestParserBasic:
 
         assert len(results) == 1
         assert results[0].content_type == "test_ref"
-        assert "REQ-p00001" in results[0].parsed_data["validates"]
+        assert "REQ-p00001" in results[0].parsed_data["verifies"]
 
     def test_claims_test_with_inline_marker(self):
         parser = _TestParser()
         lines = [
             (1, "def test_something():"),
-            (2, "    # Tests REQ-p00001"),
+            (2, "    # Verifies: REQ-p00001"),
             (3, "    assert True"),
         ]
         ctx = ParseContext(file_path="tests/test_auth.py")
@@ -43,7 +43,7 @@ class TestTestParserBasic:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert "REQ-p00001" in results[0].parsed_data["validates"]
+        assert "REQ-p00001" in results[0].parsed_data["verifies"]
 
     def test_no_test_refs_emits_unlinked_test(self):
         """Test functions without requirement refs still emit as unlinked tests."""
@@ -58,7 +58,7 @@ class TestTestParserBasic:
 
         assert len(results) == 1
         assert results[0].parsed_data["function_name"] == "test_unrelated"
-        assert results[0].parsed_data["validates"] == []
+        assert results[0].parsed_data["verifies"] == []
 
     def test_REQ_d00066_D_validates_assertion_level_reference(self):
         """REQ-d00066-D: Test names with assertion labels are validated."""
@@ -74,7 +74,7 @@ class TestTestParserBasic:
         assert len(results) == 1
         assert results[0].content_type == "test_ref"
         # Should validate the full reference including assertion label
-        assert "REQ-d00060-A" in results[0].parsed_data["validates"]
+        assert "REQ-d00060-A" in results[0].parsed_data["verifies"]
 
     def test_REQ_d00066_D_validates_multi_assertion_reference(self):
         """REQ-d00066-D: Test names with multiple assertion labels are validated."""
@@ -89,7 +89,7 @@ class TestTestParserBasic:
 
         assert len(results) == 1
         # Should validate REQ-d00060-A-B (multi-assertion syntax)
-        assert "REQ-d00060-A-B" in results[0].parsed_data["validates"]
+        assert "REQ-d00060-A-B" in results[0].parsed_data["verifies"]
 
 
 class TestTestParserCustomConfig:
@@ -131,7 +131,7 @@ class TestTestParserCustomConfig:
         results = list(parser.claim_and_parse(lines, ctx))
 
         assert len(results) == 1
-        assert "SPEC-d00101" in results[0].parsed_data["validates"]
+        assert "SPEC-d00101" in results[0].parsed_data["verifies"]
 
     def test_REQ_d00082_J_custom_comment_styles_with_resolver(self):
         """REQ-d00082-J: Parser uses custom comment styles from ReferenceResolver."""
@@ -226,14 +226,14 @@ class TestTestParserCustomConfig:
 
         assert len(results) == 1
         # Should normalize underscores to hyphens in output
-        assert "REQ-d00082-J" in results[0].parsed_data["validates"]
+        assert "REQ-d00082-J" in results[0].parsed_data["verifies"]
 
 
 class TestTestParserFunctionTracking:
     """Tests for function/class context tracking in TestParser.
 
     REQ-d00054-A: TestParser tracks function_name, class_name,
-    function_line, and file_default_validates in parsed_data.
+    function_line, and file_default_verifies in parsed_data.
     """
 
     def test_REQ_d00054_A_tracks_function_name(self):
@@ -270,7 +270,7 @@ class TestTestParserFunctionTracking:
         """Module-level comments have no function or class context."""
         parser = _TestParser()
         lines = [
-            (1, "# Tests REQ-p00001"),
+            (1, "# Verifies: REQ-p00001"),
             (2, ""),
             (3, "def test_unrelated():"),
             (4, "    pass"),
@@ -285,11 +285,11 @@ class TestTestParserFunctionTracking:
         assert module_result[0].parsed_data["function_name"] is None
         assert module_result[0].parsed_data["class_name"] is None
 
-    def test_REQ_d00054_A_file_default_validates(self):
-        """File-level REQ comment populates file_default_validates for all items."""
+    def test_REQ_d00054_A_file_default_verifies(self):
+        """File-level REQ comment populates file_default_verifies for all items."""
         parser = _TestParser()
         lines = [
-            (1, "# Tests REQ-p00001"),
+            (1, "# Verifies: REQ-p00001"),
             (2, ""),
             (3, "class TestFoo:"),
             (4, "    def test_REQ_p00002_bar(self):"),
@@ -301,14 +301,14 @@ class TestTestParserFunctionTracking:
 
         # All results should carry the file-level default
         for result in results:
-            assert "REQ-p00001" in result.parsed_data["file_default_validates"]
+            assert "REQ-p00001" in result.parsed_data["file_default_verifies"]
 
     def test_REQ_d00054_A_function_line_tracks_def_line(self):
         """function_line is the line number of the def statement, not the REQ reference."""
         parser = _TestParser()
         lines = [
             (1, "def test_something():"),
-            (2, "    # Tests REQ-p00001"),
+            (2, "    # Verifies: REQ-p00001"),
             (3, "    assert True"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
@@ -326,7 +326,7 @@ class TestTestParserFunctionTracking:
         lines = [
             (1, "class TestFoo:"),
             (2, "    def test_something(self):"),
-            (3, "        # Tests REQ-d00001"),
+            (3, "        # Verifies: REQ-d00001"),
             (4, "        assert True"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
@@ -336,7 +336,7 @@ class TestTestParserFunctionTracking:
         assert len(results) == 1
         assert results[0].parsed_data["function_name"] == "test_something"
         assert results[0].parsed_data["class_name"] == "TestFoo"
-        assert "REQ-d00001" in results[0].parsed_data["validates"]
+        assert "REQ-d00001" in results[0].parsed_data["verifies"]
 
 
 class TestAstPrescan:
@@ -359,7 +359,7 @@ class TestAstPrescan:
             (7, "        assert True"),
             (8, ""),
             (9, "    def test_other(self):"),
-            (10, "        # Tests REQ-p00001"),
+            (10, "        # Verifies: REQ-p00001"),
             (11, "        pass"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
@@ -381,14 +381,14 @@ class TestAstPrescan:
             (1, "import asyncio"),
             (2, ""),
             (3, "async def test_async_thing():"),
-            (4, "    # Tests REQ-p00001"),
+            (4, "    # Verifies: REQ-p00001"),
             (5, "    await asyncio.sleep(0)"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
 
         results = list(parser.claim_and_parse(lines, context))
 
-        ref_results = [r for r in results if r.parsed_data["validates"]]
+        ref_results = [r for r in results if r.parsed_data["verifies"]]
         assert len(ref_results) == 1
         assert ref_results[0].parsed_data["function_name"] == "test_async_thing"
         assert ref_results[0].parsed_data["class_name"] is None
@@ -408,7 +408,7 @@ class TestAstPrescan:
 
         results = list(parser.claim_and_parse(lines, context))
 
-        ref_results = [r for r in results if r.parsed_data["validates"]]
+        ref_results = [r for r in results if r.parsed_data["verifies"]]
         assert len(ref_results) == 1
         assert ref_results[0].parsed_data["class_name"] == "TestOuter"
         assert ref_results[0].parsed_data["function_name"] == "test_REQ_p00001_works"
@@ -428,7 +428,7 @@ class TestAstPrescan:
 
         results = list(parser.claim_and_parse(lines, context))
 
-        ref_results = [r for r in results if r.parsed_data["validates"]]
+        ref_results = [r for r in results if r.parsed_data["verifies"]]
         assert len(ref_results) == 1
         assert ref_results[0].parsed_data["class_name"] == "TestDecorated"
         assert ref_results[0].parsed_data["function_name"] == "test_REQ_p00001_param"
@@ -490,14 +490,14 @@ class TestExternalPrescan:
             (3, "class TestSuite:"),
             (4, ""),
             (5, "    def test_alpha(self):"),
-            (6, "        # Tests REQ-p00001"),
+            (6, "        # Verifies: REQ-p00001"),
             (7, "        assert True"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
 
         results = list(parser.claim_and_parse(lines, context))
 
-        ref_results = [r for r in results if r.parsed_data["validates"]]
+        ref_results = [r for r in results if r.parsed_data["verifies"]]
         assert len(ref_results) == 1
         assert ref_results[0].parsed_data["function_name"] == "test_alpha"
         assert ref_results[0].parsed_data["class_name"] == "TestSuite"
@@ -515,12 +515,12 @@ class TestExternalPrescan:
             (1, "# header"),
             (2, ""),
             (3, "    def test_one(self):"),
-            (4, "        # Tests REQ-p00001"),
+            (4, "        # Verifies: REQ-p00001"),
             (5, "        pass"),
             (6, ""),
             (7, ""),
             (8, "    def test_two(self):"),
-            (9, "        # Tests REQ-p00002"),
+            (9, "        # Verifies: REQ-p00002"),
             (10, "        pass"),
         ]
         context = ParseContext(file_path="tests/test_example.py")
@@ -528,7 +528,7 @@ class TestExternalPrescan:
         results = list(parser.claim_and_parse(lines, context))
 
         ref_results = sorted(
-            [r for r in results if r.parsed_data["validates"]],
+            [r for r in results if r.parsed_data["verifies"]],
             key=lambda r: r.start_line,
         )
         assert len(ref_results) == 2
@@ -561,4 +561,4 @@ class TestPrescanFallback:
         # Text prescan should still find the test function
         assert len(results) == 1
         assert results[0].parsed_data["function_name"] == "test_REQ_p00001_widget"
-        assert "REQ-p00001" in results[0].parsed_data["validates"]
+        assert "REQ-p00001" in results[0].parsed_data["verifies"]

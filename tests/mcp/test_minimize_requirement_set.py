@@ -139,7 +139,7 @@ def disjoint_graph():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: _minimize_requirement_set() helper
+# Verifies: _minimize_requirement_set() helper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -336,7 +336,7 @@ class TestMinimizeRequirementSetHelper:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tests: minimize_requirement_set MCP tool wrapper
+# Verifies: minimize_requirement_set MCP tool wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 

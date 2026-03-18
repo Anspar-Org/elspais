@@ -273,6 +273,15 @@ class IdResolver:
                 return self._match_to_parsed_id(m, alias_used)
         return None
 
+    def is_local_id(self, raw_id: str) -> bool:
+        """Return True if raw_id matches this repo's ID pattern.
+
+        Uses parse() to validate against all configured canonical forms and
+        aliases. Returns False for IDs belonging to other repos (different
+        namespace or format) and for INSTANCE IDs.
+        """
+        return self.parse(raw_id) is not None
+
     def _match_to_parsed_id(self, m: re.Match, alias_used: str | None) -> ParsedId:
         """Convert regex match to ParsedId."""
         groups = m.groupdict()

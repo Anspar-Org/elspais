@@ -25,6 +25,7 @@
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
 | REQ-p00050 | Unified Graph Architecture                       | 07-graph-architecture.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | 08-mcp-server.md         | 3ebc237a |
+| REQ-p00061 | Requirement Decomposition Rules                  | requirements-spec.md     | fc1e85fe |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |
 
 ## OPS
@@ -38,7 +39,7 @@
 | REQ-o00062 | MCP Graph Mutation Tools            | 08-mcp-server.md         | 064271fb |
 | REQ-o00063 | MCP File Mutation Tools             | 08-mcp-server.md         | dee88649 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | 08-mcp-server.md         | 82d8f37e |
-| REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 7c449e0c |
+| REQ-o00065 | Agent-Assisted Link Suggestion      | 07-graph-architecture.md | 17851ae2 |
 | REQ-o00066 | CI/CD Pipeline Enforcement          | ops-cicd.md              | 909c62a1 |
 | REQ-o00067 | MCP Subtree Extraction Tool         | 08-mcp-server.md         | ab29e315 |
 | REQ-o00068 | MCP Cursor Protocol                 | 08-mcp-server.md         | 743877c3 |
@@ -79,7 +80,7 @@
 | REQ-d00069 | Indirect Coverage Source                                      | 07-graph-architecture.md | 114709f5 |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | 07-graph-architecture.md | d483becb |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | 07-graph-architecture.md | 46d2a3e2 |
-| REQ-d00072 | Link Suggestion Core Engine                                   | 07-graph-architecture.md | 2cd50cdc |
+| REQ-d00072 | Link Suggestion Core Engine                                   | 07-graph-architecture.md | b26954bd |
 | REQ-d00073 | Link Suggestion CLI Command                                   | 07-graph-architecture.md | 44fd54e9 |
 | REQ-d00074 | MCP Link Suggestion Tools                                     | 08-mcp-server.md         | e438ff5e |
 | REQ-d00075 | Subtree Extraction Implementation                             | 08-mcp-server.md         | a53f60cc |
@@ -115,22 +116,23 @@
 
 ## User Journeys
 
-| ID                          | Title                                             | Actor                              | File                  |
-| --------------------------- | ------------------------------------------------- | ---------------------------------- | --------------------- |
-| JNY-Auditor-Change-01       | Investigate Requirement Changes                   | Janet (Validation Consultant)      | sponsor-oversight.md  |
-| JNY-Auditor-Validate-01     | Conduct a Compliance Audit                        | Janet (Validation Consultant)      | sponsor-oversight.md  |
-| JNY-CEO-Audit-01            | Support a Regulatory Inspection                   | Priya (CEO)                        | executive.md          |
-| JNY-CEO-Dashboard-01        | Assess Project Health for a Board Meeting         | Priya (CEO)                        | executive.md          |
-| JNY-CEO-Sponsor-01          | Prepare Evidence for Sponsor Contract Renewal     | Priya (CEO)                        | executive.md          |
-| JNY-Dev-MCP-01              | Use AI Assistant to Query and Author Requirements | Sarah (Developer)                  | dev-team.md           |
-| JNY-Dev-Setup-01            | Set Up Requirements for a New Feature             | Sarah (Developer)                  | dev-team.md           |
-| JNY-DevOps-CI-01            | Set Up CI/CD Requirement Validation               | Alex (DevOps Engineer)             | project-management.md |
-| JNY-PM-MultiRepo-01         | Coordinate Cross-Repository Requirements          | Elvira (Internal Project Manager)  | project-management.md |
-| JNY-PM-Review-01            | Run a Stakeholder Review Session                  | Elvira (Internal Project Manager)  | project-management.md |
-| JNY-PM-Sprint-01            | Track Requirement Status During a Sprint          | Elvira (Internal Project Manager)  | project-management.md |
-| JNY-QA-Coverage-01          | Map Tests to Requirements for Coverage            | Marcus (QA Engineer)               | dev-team.md           |
-| JNY-Sponsor-PM-01           | Review Milestone Deliverables                     | Dr. Chen (Sponsor Project Manager) | sponsor-oversight.md  |
-| JNY-Sponsor-PM-02           | Filter Sponsor-Specific Requirements              | Dr. Chen (Sponsor Project Manager) | sponsor-oversight.md  |
-| JNY-SponsorQA-Coverage-01   | Verify Test Coverage Before Release               | Rita (Sponsor QA Lead)             | quality-assurance.md  |
-| JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates        | Rita (Sponsor QA Lead)             | quality-assurance.md  |
-| JNY-SponsorQA-Review-01     | Provide Structured Feedback on Requirements       | Rita (Sponsor QA Lead)             | quality-assurance.md  |
+| ID                          | Title                                             | Actor                                  | File                  |
+| --------------------------- | ------------------------------------------------- | -------------------------------------- | --------------------- |
+| JNY-Admin-Portal-01         | Manage Admin Users                                | Dr. Lisa Chen (Principal Investigator) | requirements-spec.md  |
+| JNY-Auditor-Change-01       | Investigate Requirement Changes                   | Janet (Validation Consultant)          | sponsor-oversight.md  |
+| JNY-Auditor-Validate-01     | Conduct a Compliance Audit                        | Janet (Validation Consultant)          | sponsor-oversight.md  |
+| JNY-CEO-Audit-01            | Support a Regulatory Inspection                   | Priya (CEO)                            | executive.md          |
+| JNY-CEO-Dashboard-01        | Assess Project Health for a Board Meeting         | Priya (CEO)                            | executive.md          |
+| JNY-CEO-Sponsor-01          | Prepare Evidence for Sponsor Contract Renewal     | Priya (CEO)                            | executive.md          |
+| JNY-Dev-MCP-01              | Use AI Assistant to Query and Author Requirements | Sarah (Developer)                      | dev-team.md           |
+| JNY-Dev-Setup-01            | Set Up Requirements for a New Feature             | Sarah (Developer)                      | dev-team.md           |
+| JNY-DevOps-CI-01            | Set Up CI/CD Requirement Validation               | Alex (DevOps Engineer)                 | project-management.md |
+| JNY-PM-MultiRepo-01         | Coordinate Cross-Repository Requirements          | Elvira (Internal Project Manager)      | project-management.md |
+| JNY-PM-Review-01            | Run a Stakeholder Review Session                  | Elvira (Internal Project Manager)      | project-management.md |
+| JNY-PM-Sprint-01            | Track Requirement Status During a Sprint          | Elvira (Internal Project Manager)      | project-management.md |
+| JNY-QA-Coverage-01          | Map Tests to Requirements for Coverage            | Marcus (QA Engineer)                   | dev-team.md           |
+| JNY-Sponsor-PM-01           | Review Milestone Deliverables                     | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
+| JNY-Sponsor-PM-02           | Filter Sponsor-Specific Requirements              | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
+| JNY-SponsorQA-Coverage-01   | Verify Test Coverage Before Release               | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
+| JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates        | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
+| JNY-SponsorQA-Review-01     | Provide Structured Feedback on Requirements       | Rita (Sponsor QA Lead)                 | quality-assurance.md  |

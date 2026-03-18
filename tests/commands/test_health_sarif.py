@@ -1,4 +1,4 @@
-# Validates: REQ-d00085
+# Verifies: REQ-d00085
 """Tests for SARIF v2.1.0 JSON rendering of health reports.
 
 Validates REQ-d00085-J: The ``--format sarif`` option SHALL render health

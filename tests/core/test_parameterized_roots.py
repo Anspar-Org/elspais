@@ -1,5 +1,5 @@
-# Validates: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D,
-# Validates: REQ-d00130-E, REQ-d00130-F
+# Verifies: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D,
+# Verifies: REQ-d00130-E, REQ-d00130-F
 """Tests for parameterized iter_roots() and iter_by_kind().
 
 Verifies that iter_roots() accepts an optional NodeKind filter,
@@ -125,12 +125,12 @@ class TestIterRootsRequirement:
                 title="Journey",
                 actor="Dev",
                 goal="Test",
-                addresses=["REQ-p00001"],
+                validates=["REQ-p00001"],
             ),
         )
 
         req_roots = list(graph.iter_roots(NodeKind.REQUIREMENT))
-        # The REQ is a child of the journey via ADDRESSES, so no REQ roots
+        # The REQ is a child of the journey via VALIDATES, so no REQ roots
         # But the req is still in _roots if it has no parent... depends on linking
         # Just verify kind filtering works
         assert all(n.kind == NodeKind.REQUIREMENT for n in req_roots)

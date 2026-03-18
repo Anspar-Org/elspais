@@ -1,4 +1,4 @@
-# Validates: REQ-d00085-A
+# Verifies: REQ-d00085-A
 """E2E tests for complex multi-command workflows.
 
 Each test exercises multiple commands in sequence, validating

@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A
+# Verifies: REQ-p00004-A
 """Tests for fix command INDEX.md regeneration."""
 
 import re

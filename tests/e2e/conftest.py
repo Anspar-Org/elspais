@@ -1,4 +1,4 @@
-# Validates: REQ-p00013-B
+# Verifies: REQ-p00013-B
 """Shared fixtures and helpers for end-to-end CLI tests.
 
 Provides subprocess helpers, path constants, and skip markers.

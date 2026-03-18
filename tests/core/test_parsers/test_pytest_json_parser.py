@@ -26,7 +26,7 @@ class TestPytestJSONParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "passed"
         assert results[0]["name"] == "test_login_REQ_p00001"
-        assert "REQ-p00001" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
 
     def test_parse_failing_test(self):
         """Parses a failing test case."""
@@ -133,7 +133,7 @@ class TestPytestJSONParserReqExtraction:
 
         results = parser.parse(json_content, "results.json")
 
-        assert "REQ-p00001" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
 
     def test_extracts_multiple_reqs(self):
         """Extracts multiple REQ IDs from test name."""
@@ -152,8 +152,8 @@ class TestPytestJSONParserReqExtraction:
 
         results = parser.parse(json_content, "results.json")
 
-        assert "REQ-p00001" in results[0]["validates"]
-        assert "REQ-o00002" in results[0]["validates"]
+        assert "REQ-p00001" in results[0]["verifies"]
+        assert "REQ-o00002" in results[0]["verifies"]
 
     def test_extracts_assertion_refs(self):
         """Extracts assertion references like REQ-p00001-A."""
@@ -172,7 +172,7 @@ class TestPytestJSONParserReqExtraction:
 
         results = parser.parse(json_content, "results.json")
 
-        assert "REQ-p00001-A" in results[0]["validates"]
+        assert "REQ-p00001-A" in results[0]["verifies"]
 
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
@@ -359,7 +359,7 @@ class TestPytestJSONParserCustomConfig:
         results = parser.parse(json_content, "results.json")
 
         assert len(results) == 1
-        assert "SPEC-p00103" in results[0]["validates"]
+        assert "SPEC-p00103" in results[0]["verifies"]
 
     def test_REQ_d00082_L_instantiation_with_pattern_config_and_resolver(self):
         """REQ-d00082-L: Parser instantiation with IdResolver and ReferenceResolver."""
@@ -445,4 +445,4 @@ class TestPytestJSONParserCustomConfig:
         results = parser.parse(json_content, "results.json")
 
         assert len(results) == 1
-        assert "TASK-d00103" in results[0]["validates"]
+        assert "TASK-d00103" in results[0]["verifies"]

@@ -1,4 +1,4 @@
-# Validates: REQ-p00004
+# Verifies: REQ-p00004
 """E2E tests for git change detection via elspais CLI.
 
 Tests the `elspais changed` command to verify git-based change detection

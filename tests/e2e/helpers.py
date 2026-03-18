@@ -1,4 +1,4 @@
-# Validates: REQ-p00013
+# Verifies: REQ-p00013
 """Shared helpers for building temporary elspais projects in e2e tests.
 
 Every e2e test builds its own project from scratch in tmp_path.
@@ -231,15 +231,15 @@ def write_js_code(
 
 def write_python_test(
     path: Path,
-    validates: list[str] | None = None,
+    verifies: list[str] | None = None,
     content: str = "",
 ) -> Path:
-    """Write a Python test file with Validates comments."""
+    """Write a Python test file with Verifies comments."""
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = []
-    if validates:
-        for ref in validates:
-            lines.append(f"# Validates: {ref}")
+    if verifies:
+        for ref in verifies:
+            lines.append(f"# Verifies: {ref}")
     lines.append("")
     if content:
         lines.append(content)
@@ -515,7 +515,7 @@ def build_project(
         config: Config dict (written as .elspais.toml).
         spec_files: Map of relative path -> list of Requirements.
         code_files: Map of relative path -> {"implements": [...], "content": "..."}.
-        test_files: Map of relative path -> {"validates": [...], "content": "..."}.
+        test_files: Map of relative path -> {"verifies": [...], "content": "..."}.
         extra_files: Map of relative path -> raw text content.
         init_git: Whether to git init the project.
 
@@ -542,7 +542,7 @@ def build_project(
         for rel_path, info in test_files.items():
             write_python_test(
                 root / rel_path,
-                validates=info.get("validates"),
+                verifies=info.get("verifies"),
                 content=info.get("content", ""),
             )
 
