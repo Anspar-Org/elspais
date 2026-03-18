@@ -294,7 +294,34 @@ def load_config(config_path: Path) -> ConfigLoader:
         if v in MIGRATIONS:
             merged = MIGRATIONS[v](merged)
 
-    return ConfigLoader(merged)
+    # Strip legacy/unknown keys before Pydantic validation, but keep them
+    # for backward-compatible config.get() access afterwards.
+    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths"}
+    stripped: dict[str, Any] = {}
+    for key in _LEGACY_TOP_LEVEL_KEYS:
+        if key in merged:
+            stripped[key] = merged.pop(key)
+
+    # Legacy associates.paths (list) is incompatible with schema's
+    # dict[str, AssociateEntryConfig] — preserve it in the shim but
+    # don't send it through Pydantic.
+    assoc = merged.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        stripped["associates"] = merged.pop("associates")
+
+    # Validate via Pydantic schema
+    from elspais.config.schema import ElspaisConfig
+
+    validated = ElspaisConfig.model_validate(merged)
+
+    # Shim: produce hyphenated dict for backward-compatible config.get() access
+    shim_dict = validated.model_dump(by_alias=True, exclude_none=True)
+
+    # Restore stripped legacy keys so existing config.get() calls still work
+    for key, value in stripped.items():
+        shim_dict[key] = value
+
+    return ConfigLoader(shim_dict)
 
 
 def find_git_root(start_path: Path | None = None) -> Path | None:
