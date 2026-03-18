@@ -11,6 +11,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -182,7 +183,9 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
     # Only migrate if [id-patterns] is still at defaults (user didn't define it)
     id_patterns = config.get("id-patterns", {})
-    if id_patterns.get("canonical") != DEFAULT_CONFIG["id-patterns"]["canonical"]:
+    canonical = id_patterns.get("canonical")
+    default_canonical = DEFAULT_CONFIG["id-patterns"]["canonical"]
+    if canonical is not None and canonical != default_canonical:
         return config  # user has explicit [id-patterns], don't override
 
     # Build type definitions: old types.*.id -> new types.*.aliases.letter
@@ -253,6 +256,13 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+CURRENT_CONFIG_VERSION = 2
+
+MIGRATIONS: dict[int, Callable[[dict], dict]] = {
+    1: _migrate_legacy_patterns,  # [patterns] -> [id-patterns]
+}
+
+
 def load_config(config_path: Path) -> ConfigLoader:
     """Load configuration from a TOML file.
 
@@ -277,7 +287,13 @@ def load_config(config_path: Path) -> ConfigLoader:
         merged = _merge_configs(merged, local_config)
 
     merged = _apply_env_overrides(merged)
-    merged = _migrate_legacy_patterns(merged)
+
+    # Version-gated sequential migration
+    version = merged.get("version", 1)
+    for v in range(version, CURRENT_CONFIG_VERSION):
+        if v in MIGRATIONS:
+            merged = MIGRATIONS[v](merged)
+
     return ConfigLoader(merged)
 
 
