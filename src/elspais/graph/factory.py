@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from elspais.config import (
+    ConfigLoader,
     IgnoreConfig,
     get_code_directories,
     get_config,
@@ -606,7 +607,7 @@ def build_graph(
                 RepoEntry(
                     name="root",
                     graph=graph,
-                    config=config,
+                    config=ConfigLoader.from_dict(config),
                     repo_root=repo_root,
                 )
             )
@@ -653,7 +654,7 @@ def build_graph(
                     RepoEntry(
                         name=assoc_name,
                         graph=assoc_graph,
-                        config=assoc_config,
+                        config=ConfigLoader.from_dict(assoc_config),
                         repo_root=assoc_path,
                         git_origin=git_origin,
                     )
@@ -661,7 +662,7 @@ def build_graph(
 
             return FederatedGraph(entries, root_repo="root")
 
-    return FederatedGraph.from_single(graph, config, repo_root)
+    return FederatedGraph.from_single(graph, ConfigLoader.from_dict(config), repo_root)
 
 
 __all__ = ["build_graph"]

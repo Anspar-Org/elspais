@@ -67,7 +67,7 @@ A. The system SHALL work.
 
         assert result.passed is True
         assert result.name == "spec.hash_integrity"
-        assert "up to date" in result.message
+        assert "No Satisfies: templates in use" == result.message
 
     def test_REQ_d00085_hash_mismatch_fails(self, tmp_path: Path):
         """Check fails when stored hash doesn't match computed hash."""

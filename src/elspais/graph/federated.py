@@ -166,6 +166,7 @@ class FederatedGraph:
         # Wire cross-graph edges after ownership is established
         if len([e for e in repos if e.graph is not None]) > 1:
             self._wire_cross_graph_edges()
+        self._annotate_presumed_foreign_refs()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
@@ -807,6 +808,33 @@ class FederatedGraph:
             # Remove resolved broken references (reverse to preserve indices)
             for idx in reversed(resolved):
                 source_entry.graph._broken_references.pop(idx)
+
+    def _annotate_presumed_foreign_refs(self) -> None:
+        """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
+
+        Called after _wire_cross_graph_edges(). Any broken ref whose target_id
+        cannot be parsed by the source repo's IdResolver is presumed to belong
+        to a foreign repo (different namespace/format) and is replaced with a
+        BrokenReference with presumed_foreign=True.
+
+        Skipped for repos with no config (annotation requires pattern knowledge).
+        """
+        from elspais.graph.mutations import BrokenReference
+        from elspais.utilities.patterns import build_resolver
+
+        for source_entry in self._repos.values():
+            if source_entry.graph is None or source_entry.config is None:
+                continue
+            resolver = build_resolver(source_entry.config.get_raw())
+            refs = source_entry.graph._broken_references
+            for i, br in enumerate(refs):
+                if not br.presumed_foreign and not resolver.is_local_id(br.target_id):
+                    refs[i] = BrokenReference(
+                        source_id=br.source_id,
+                        target_id=br.target_id,
+                        edge_kind=br.edge_kind,
+                        presumed_foreign=True,
+                    )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Undo Operations

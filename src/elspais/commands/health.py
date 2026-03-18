@@ -72,8 +72,12 @@ class HealthReport:
     checks: list[HealthCheck] = field(default_factory=list)
 
     @property
+    def skipped(self) -> int:
+        return sum(1 for c in self.checks if c.severity == "info")
+
+    @property
     def passed(self) -> int:
-        return sum(1 for c in self.checks if c.passed)
+        return sum(1 for c in self.checks if c.passed and c.severity != "info")
 
     @property
     def failed(self) -> int:
@@ -107,6 +111,7 @@ class HealthReport:
                 "passed": self.passed,
                 "failed": self.failed,
                 "warnings": self.warnings,
+                "skipped": self.skipped,
             },
             "checks": [
                 {
@@ -328,6 +333,52 @@ def check_spec_refines_resolve(
     )
 
 
+# Implements: REQ-d00085-I
+def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
+    """Check for requirements that would change the file on next save.
+
+    A requirement is marked parse_dirty at build time when any condition is
+    detected that means the in-memory state differs from the file on disk:
+    - duplicate_refs: same REQ ID appears more than once in Implements/Refines
+    - stale_hash: stored hash does not match the computed hash
+    """
+    from elspais.graph import NodeKind
+
+    findings: list[HealthFinding] = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.get_field("parse_dirty"):
+            fn = node.file_node()
+            file_path = fn.get_field("relative_path") if fn is not None else None
+            reasons = node.get_field("parse_dirty_reasons") or []
+            findings.append(
+                HealthFinding(
+                    message=f"Will be rewritten on next save: {', '.join(reasons)}",
+                    node_id=node.id,
+                    file_path=file_path,
+                    line=node.get_field("parse_line"),
+                )
+            )
+
+    if findings:
+        return HealthCheck(
+            name="spec.needs_rewrite",
+            passed=False,
+            message=f"{len(findings)} requirement(s) will be rewritten on next save",
+            category="spec",
+            severity="warning",
+            details={"count": len(findings)},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="spec.needs_rewrite",
+        passed=True,
+        message="No requirements need rewriting",
+        category="spec",
+    )
+
+
 def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     """Parse hierarchy rules from config.
 
@@ -488,14 +539,24 @@ def check_structural_orphans(
 
 
 # Implements: REQ-d00204-E
-def check_broken_references(graph: FederatedGraph) -> HealthCheck:
+def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     """Check for edges targeting non-existent nodes.
 
     Distinguishes within-repo broken references (error severity) from
     cross-repo references where the target repo is in error state
     (warning severity with clone assistance info).
+
+    When validation.allow_unresolved_cross_repo is True, broken references
+    whose target ID uses a different namespace prefix than the current repo
+    are silently suppressed.
     """
     broken = graph.broken_references()
+
+    suppressed_count = 0
+    if config is not None and config.get("validation.allow_unresolved_cross_repo", False):
+        local_broken = [br for br in broken if not br.presumed_foreign]
+        suppressed_count = len(broken) - len(local_broken)
+        broken = local_broken
 
     if broken:
         # Identify error-state repos and collect all known node IDs
@@ -568,10 +629,13 @@ def check_broken_references(graph: FederatedGraph) -> HealthCheck:
             findings=all_findings,
         )
 
+    message = "No broken references"
+    if suppressed_count:
+        message += f" ({suppressed_count} cross-repo suppressed)"
     return HealthCheck(
         name="spec.broken_references",
         passed=True,
-        message="No broken references",
+        message=message,
         category="spec",
     )
 
@@ -669,57 +733,41 @@ def check_spec_format_rules(
 
 # Implements: REQ-p00004
 def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
-    """Check that stored requirement hashes match computed hashes."""
-    from elspais.commands.validate import compute_hash_for_node
-    from elspais.graph import NodeKind
+    """Flag Satisfies-linked requirements for review when their template has a stale hash.
 
-    mismatches = []
+    Stale hash detection happens at build time (parse_dirty_reasons contains
+    "stale_hash"). This check adds the Satisfies annotation: when a template
+    requirement is stale, any requirement that Satisfies it needs review.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
     findings: list[HealthFinding] = []
-    checked = 0
+    mismatches = []
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        stored = node.hash
-        if not stored:
+        reasons = node.get_field("parse_dirty_reasons") or []
+        if "stale_hash" not in reasons:
             continue
-        checked += 1
-        computed = compute_hash_for_node(node, graph.hash_mode)
-        if computed and stored != computed:
-            mismatches.append({"id": node.id, "stored": stored, "computed": computed})
-            # Flag requirements that Satisfy this template for review
-            # Instance clones have incoming INSTANCE edges from template
-            from elspais.graph.relations import EdgeKind
-
-            for edge in node.iter_incoming_edges():
-                if edge.kind == EdgeKind.INSTANCE:
-                    # edge.source is the clone, find the declaring req
-                    # by looking for the clone's parent with SATISFIES edge
-                    clone = edge.source
-                    for parent in clone.iter_parents():
-                        for parent_edge in parent.iter_outgoing_edges():
-                            if (
-                                parent_edge.kind == EdgeKind.SATISFIES
-                                and parent_edge.target is clone
-                            ):
-                                findings.append(
-                                    HealthFinding(
-                                        message=(
-                                            f"Template {node.id} content changed;"
-                                            f" review {parent.id}"
-                                            f" (Satisfies: {node.id})"
-                                        ),
-                                        node_id=parent.id,
-                                        related=[node.id],
-                                    )
+        stored = node.hash
+        mismatches.append({"id": node.id, "stored": stored})
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.INSTANCE:
+                clone = edge.source
+                for parent in clone.iter_parents():
+                    for parent_edge in parent.iter_outgoing_edges():
+                        if parent_edge.kind == EdgeKind.SATISFIES and parent_edge.target is clone:
+                            findings.append(
+                                HealthFinding(
+                                    message=(
+                                        f"Template {node.id} content changed;"
+                                        f" review {parent.id}"
+                                        f" (Satisfies: {node.id})"
+                                    ),
+                                    node_id=parent.id,
+                                    related=[node.id],
                                 )
-
-    if not checked:
-        return HealthCheck(
-            name="spec.hash_integrity",
-            passed=True,
-            message="No requirements with hashes to check",
-            category="spec",
-            severity="info",
-        )
+                            )
 
     if mismatches:
         ids = [m["id"] for m in mismatches]
@@ -732,15 +780,24 @@ def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
             ),
             category="spec",
             severity="warning",
-            details={"mismatches": mismatches, "checked": checked},
+            details={"mismatches": mismatches},
             findings=findings,
         )
 
+    has_satisfies = any(
+        edge.kind == EdgeKind.SATISFIES
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+        for edge in node.iter_outgoing_edges()
+    )
+    message = (
+        "All template hashes up to date" if has_satisfies else "No Satisfies: templates in use"
+    )
     return HealthCheck(
         name="spec.hash_integrity",
         passed=True,
-        message=f"All {checked} requirement hashes are up to date",
+        message=message,
         category="spec",
+        severity="info",
     )
 
 
@@ -1060,7 +1117,7 @@ def run_spec_checks(
     checks: list[HealthCheck] = [
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
-        check_broken_references(graph),
+        check_broken_references(graph, config),
         check_spec_hash_integrity(graph),
     ]
 
@@ -1084,6 +1141,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_refines_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_needs_rewrite(repo_graph),
                 entry.name,
             )
         )
@@ -1713,8 +1776,9 @@ def _print_text_report(
             continue
 
         # Category header
-        passed = sum(1 for c in checks if c.passed)
-        total = len(checks)
+        skipped = sum(1 for c in checks if c.severity == "info")
+        passed = sum(1 for c in checks if c.passed and c.severity != "info")
+        total = len(checks) - skipped
         has_errors = any(not c.passed and c.severity == "error" for c in checks)
         has_warnings = any(not c.passed and c.severity == "warning" for c in checks)
         if passed == total:
@@ -1723,15 +1787,19 @@ def _print_text_report(
             status = "✗"
         else:
             status = "⚠"
-        warn_suffix = ""
+        suffix = ""
         if has_warnings and not has_errors:
             warn_count = sum(1 for c in checks if not c.passed and c.severity == "warning")
-            warn_suffix = f", {warn_count} warnings"
-        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{warn_suffix})")
+            suffix = f", {warn_count} warnings"
+        if skipped:
+            suffix += f", {skipped} skipped"
+        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{suffix})")
         print("-" * 40)
 
         for check in checks:
-            if check.passed:
+            if check.severity == "info":
+                icon = "~"
+            elif check.passed:
                 icon = "✓"
             elif check.severity == "warning":
                 icon = "⚠"
@@ -1762,17 +1830,19 @@ def _print_text_report(
 
 def _print_summary_line(report: HealthReport) -> None:
     """Print a single summary line."""
-    total = len(report.checks)
-    if report.failed == 0 and report.warnings == 0 and report.passed == total:
-        print(f"HEALTHY: {total}/{total} checks passed")
+    counted = len(report.checks) - report.skipped
+    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
+    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
+        if report.skipped:
+            print(f"HEALTHY: {counted}/{counted} checks passed{skip_suffix}")
+        else:
+            print(f"HEALTHY: {counted}/{counted} checks passed")
     elif report.failed == 0 and report.warnings == 0:
-        # Info-severity failures only
-        infos = total - report.passed
-        print(f"{report.passed}/{total} checks passed, {infos} info")
+        print(f"{report.passed}/{counted} checks passed{skip_suffix}")
     elif report.failed == 0:
-        print(f"{report.passed}/{total} checks passed," f" {report.warnings} warnings")
+        print(f"{report.passed}/{counted} checks passed, {report.warnings} warnings{skip_suffix}")
     else:
-        print(f"UNHEALTHY: {report.failed} errors," f" {report.warnings} warnings")
+        print(f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}")
 
 
 def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
@@ -1868,16 +1938,20 @@ def _render_markdown(
         lines.append("")
 
     # Summary
-    total = len(report.checks)
-    if report.failed == 0 and report.warnings == 0 and report.passed == total:
-        lines.append(f"**HEALTHY**: {total}/{total} checks passed")
+    counted = len(report.checks) - report.skipped
+    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
+    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
+        lines.append(f"**HEALTHY**: {counted}/{counted} checks passed{skip_suffix}")
     elif report.failed == 0 and report.warnings == 0:
-        infos = total - report.passed
-        lines.append(f"**{report.passed}/{total}** checks passed, {infos} info")
+        lines.append(f"**{report.passed}/{counted}** checks passed{skip_suffix}")
     elif report.failed == 0:
-        lines.append(f"**{report.passed}/{total}** checks passed," f" {report.warnings} warnings")
+        lines.append(
+            f"**{report.passed}/{counted}** checks passed, {report.warnings} warnings{skip_suffix}"
+        )
     else:
-        lines.append(f"**UNHEALTHY**: {report.failed} errors," f" {report.warnings} warnings")
+        lines.append(
+            f"**UNHEALTHY**: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
+        )
 
     return "\n".join(lines)
 

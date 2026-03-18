@@ -87,6 +87,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "validation": {
         "hash_mode": "normalized-text",
+        "allow_unresolved_cross_repo": False,
     },
     "graph": {
         "satellite_kinds": ["assertion", "result"],

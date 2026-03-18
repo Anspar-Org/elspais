@@ -293,6 +293,49 @@ class TestCheckBrokenReferences:
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
 
+    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_foreign_namespace(self) -> None:
+        """Cross-repo refs are suppressed when allow_unresolved_cross_repo=True."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        # Foreign namespace (HHT-*) — cross-repo; config gives IdResolver the local namespace
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+
+        # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
+        fed = _wrap(graph, config)
+        check = check_broken_references(fed, config)
+        assert check.passed
+        assert "suppressed" in check.message
+
+    def test_REQ_d00085_allow_unresolved_cross_repo_keeps_local_refs(self) -> None:
+        """Same-namespace broken refs are still flagged with allow_unresolved_cross_repo=True."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+
+        check = check_broken_references(_wrap(graph, config), config)
+        assert not check.passed
+
+    def test_REQ_d00085_allow_unresolved_cross_repo_default_false(self) -> None:
+        """Without the config flag, foreign-namespace broken refs are still reported."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        config = ConfigLoader.from_dict({})
+
+        check = check_broken_references(_wrap(graph, config))
+        assert not check.passed
+
 
 # =============================================================================
 # Config backward compatibility: allow_orphans -> allow_structural_orphans
