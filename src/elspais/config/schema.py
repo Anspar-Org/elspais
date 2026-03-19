@@ -194,6 +194,7 @@ class ElspaisConfig(_StrictModel):
     changelog: ChangelogConfig = Field(default_factory=ChangelogConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
+    stats: str | None = Field(default=None, description="File path for MCP tool usage statistics")
     # Implements: REQ-d00208-C
     model_config = ConfigDict(
         extra="forbid",

@@ -4950,6 +4950,17 @@ def create_server(
         """Check cursor state: current position, total items, and how many remain."""
         return _cursor_info(_state)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Optional usage stats (stats key in config / ELSPAIS_STATS env var)
+    # ─────────────────────────────────────────────────────────────────────
+    stats_path = _state["config"].get("stats")
+    if stats_path:
+        from elspais.mcp.stats import ToolStats, instrument
+
+        _stats = ToolStats(stats_path)
+        for tool in mcp._tool_manager._tools.values():
+            tool.fn = instrument(tool.fn, tool.name, _stats)
+
     return mcp
 
 
