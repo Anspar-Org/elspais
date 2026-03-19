@@ -850,7 +850,7 @@ B. `ConfigLoader` class SHALL be removed; `load_config()` SHALL return a plain `
 
 C. All consumer code that references `ConfigLoader` (type annotations, imports, `.from_dict()`, `.get_raw()`, `.get()`) SHALL be updated to use plain dicts directly.
 
-*End* *Declarative Config Schema Cleanup* | **Hash**: 00000000
+*End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
 
 ## REQ-d00208: JSON Schema Export for IDE Autocomplete
 
@@ -866,7 +866,7 @@ B. A committed `src/elspais/config/elspais-schema.json` SHALL match the output o
 
 C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
-*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 00000000
+*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
 ---
 
 ## REQ-d00209: Schema-Driven Init Template Generation
@@ -885,7 +885,7 @@ C. The generated TOML SHALL include all sections present in the current hardcode
 
 D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
 
-*End* *Schema-Driven Init Template Generation* | **Hash**: 00000000
+*End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
 ---
 
 ## REQ-d00210: Documentation Drift Detection
@@ -902,7 +902,7 @@ B. The drift detection SHALL report undocumented sections (in schema but not in 
 
 C. The drift check SHALL pass when all schema sections are documented and no stale sections exist, and fail otherwise.
 
-*End* *Documentation Drift Detection* | **Hash**: 00000000
+*End* *Documentation Drift Detection* | **Hash**: eb94434a
 ---
 
 ## REQ-d00211: Config-Driven Viewer UI Values
@@ -919,7 +919,7 @@ B. The Flask template context SHALL include a `config_relationship_kinds` variab
 
 C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: 00000000
+*End* *Config-Driven Viewer UI Values* | **Hash**: b322b22e
 ---
 
 ## REQ-d00212: Config Schema v3 Models
@@ -952,5 +952,5 @@ J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and 
 
 K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
 
-*End* *Config Schema v3 Models* | **Hash**: 00000000
+*End* *Config Schema v3 Models* | **Hash**: 039007e7
 ---
