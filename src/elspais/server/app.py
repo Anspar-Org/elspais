@@ -603,7 +603,9 @@ def create_app(
         import os
 
         build_time = _state.get("build_time", 0)
-        spec_dirs = _state["config"].get("spec", {}).get("directories", ["spec"])
+        spec_dirs = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])
+        )
         working_dir = _state["working_dir"]
 
         stale_files: list[str] = []
@@ -906,7 +908,9 @@ def create_app(
         """GET /api/git/status - Git status summary for the viewer UI."""
         from elspais.utilities.git import git_status_summary
 
-        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        spec_dir = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
+        )
         result = git_status_summary(_state["working_dir"], spec_dir=spec_dir)
         return jsonify(result)
 
@@ -934,7 +938,9 @@ def create_app(
         message = data.get("message", "").strip()
         if not message:
             return jsonify({"success": False, "error": "commit message required"}), 400
-        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        spec_dir = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
+        )
         result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
         # Always return 200 so the modal JS can display the error inline.
         # The result contains success=false with an error message on failure.
