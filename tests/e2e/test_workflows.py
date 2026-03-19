@@ -118,7 +118,10 @@ class TestFixThenHealth:
     def test_REQ_d00085_A_fix_then_health_on_fixture(self, tmp_path):
         # Create minimal config
         config = tmp_path / ".elspais.toml"
-        config.write_text('[patterns]\nprefix = "REQ"\n\n' '[paths]\nspec_dirs = ["spec"]\n')
+        config.write_text(
+            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+        )
 
         # Create spec directory and a requirement with a wrong hash
         spec_dir = tmp_path / "spec"

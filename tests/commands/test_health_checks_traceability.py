@@ -351,16 +351,13 @@ class TestConfigBackwardCompat:
         """run_spec_checks() falls back to allow_orphans when allow_structural_orphans is absent."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-compat"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [rules.hierarchy]
 allow_orphans = true
@@ -387,16 +384,13 @@ allow_orphans = true
         """allow_structural_orphans takes precedence over allow_orphans."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-precedence"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [rules.hierarchy]
 allow_orphans = true

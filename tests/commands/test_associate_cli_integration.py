@@ -17,7 +17,7 @@ def _make_core_repo(tmp_path):
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        '[project]\nname = "core"\ntype = "core"\n\n' '[directories]\nspec = "spec"\n'
+        'version = 3\n[project]\nname = "core"\n\n' '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir()
     return tmp_path
@@ -28,9 +28,8 @@ def _make_associate_repo(base, name, prefix):
     repo = base / name
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        f'[project]\nname = "{name}"\ntype = "associated"\n\n'
-        f'[associated]\nprefix = "{prefix}"\n\n'
-        f'[directories]\nspec = "spec"\n'
+        f'version = 3\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
+        f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir()
     return repo

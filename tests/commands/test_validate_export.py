@@ -43,11 +43,14 @@ def spec_repo(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """
+version = 3
+
 [project]
 name = "test-project"
+namespace = "REQ"
 
-[patterns]
-prefix = "REQ"
+[scanning.spec]
+directories = ["spec"]
 """
     )
 

@@ -67,14 +67,11 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         typed = ElspaisConfig.model_validate({})
 
-    # Types: extract name, letter, level from id_patterns.types
+    # Types: extract name, letter, rank from levels
     config_types = []
-    for name, type_cfg in typed.id_patterns.types.items():
-        entry: dict[str, Any] = {"name": name, "level": type_cfg.level}
-        if type_cfg.aliases and type_cfg.aliases.letter:
-            entry["letter"] = type_cfg.aliases.letter
-        else:
-            entry["letter"] = name[0]
+    for name, level_cfg in typed.levels.items():
+        entry: dict[str, Any] = {"name": name, "level": level_cfg.rank}
+        entry["letter"] = level_cfg.letter or name[0]
         config_types.append(entry)
     config_types.sort(key=lambda t: t["level"])
 

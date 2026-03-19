@@ -21,7 +21,8 @@ def test_v1_patterns_migrated_to_v2():
 
     result = _migrate_legacy_patterns(v1_config)
     assert "id-patterns" in result
-    assert result["id-patterns"]["types"]["prd"]["level"] == 1
+    assert "levels" in result
+    assert result["levels"]["prd"]["rank"] == 1
 
 
 def test_v2_config_skips_migration():

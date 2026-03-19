@@ -841,7 +841,7 @@ class TestGetFileContent:
 
         # Write a .elspais.toml that marks this as an associated repo
         (assoc_repo / ".elspais.toml").write_text(
-            '[project]\nname = "assoc"\ntype = "associated"\n\n[associated]\nprefix = "A"\n'
+            'version = 3\n[project]\nname = "assoc"\n\n[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
         # Write a spec file in the associate repo
@@ -1112,7 +1112,9 @@ class TestGitStatus:
         """GET /api/git/status passes spec dir from config."""
         from unittest.mock import patch
 
-        config = {"spec": {"directories": ["requirements"]}}
+        config = {
+            "scanning": {"spec": {"directories": ["requirements"]}},
+        }
         application = create_app(repo_root=Path("/test/repo"), graph=sample_graph, config=config)
         application.config["TESTING"] = True
 
@@ -2168,7 +2170,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
         "REQ-p00001-A": a1,
     }
 
-    config = {"spec": {"directories": [spec_subdir]}}
+    config = {"scanning": {"spec": {"directories": [spec_subdir]}}}
     app = create_app(repo_root=tmp_path, graph=graph, config=config)
     app.config["TESTING"] = True
 

@@ -23,9 +23,11 @@ def _write_config(tmp_path: Path, extra: str = "") -> Path:
 [project]
 name = "test-file-nodes"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 {extra}
 """,
         encoding="utf-8",

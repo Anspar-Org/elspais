@@ -89,7 +89,10 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     # Try to load config to find spec directory
     try:
         config = load_config(args.config if hasattr(args, "config") else None)
-        spec_dir_name = config.get("directories", {}).get("spec", "spec")
+        scanning = config.get("scanning", {})
+        spec_config = scanning.get("spec", {})
+        spec_dirs = spec_config.get("directories", ["spec"])
+        spec_dir_name = spec_dirs[0] if spec_dirs else "spec"
     except Exception:
         spec_dir_name = "spec"
 
@@ -124,12 +127,16 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 # Section-level comments for the generated TOML, keyed by TOML section path.
 _SECTION_COMMENTS: dict[str, str] = {
     "project": "Project identity",
-    "directories": "Directory scanning paths",
     "id-patterns": "Requirement ID format and type definitions",
     "id-patterns.assertions": ('"uppercase" | "numeric" | "alphanumeric" | "numeric_1based"'),
-    "spec": "Spec file scanning configuration",
+    "levels": "Requirement level definitions with hierarchy rules",
+    "scanning": "File scanning configuration",
+    "scanning.spec": "Spec file scanning",
+    "scanning.code": "Code file scanning",
+    "scanning.test": "Test file scanning and reference detection",
+    "scanning.result": "Test result file scanning",
     "rules": "Validation rules",
-    "rules.hierarchy": "Allowed implements relationships between levels",
+    "rules.hierarchy": "Global hierarchy settings",
     "rules.format": "Format enforcement rules",
     "rules.format.status_roles": (
         "Status role classification (determines behavior in metrics/viewer)\n"
@@ -139,31 +146,55 @@ _SECTION_COMMENTS: dict[str, str] = {
         "# retired: concluded - excluded from everything"
     ),
     "changelog": "Changelog enforcement",
-    "testing": "Test file scanning and reference detection",
     "references": "Reference parsing configuration",
-    "references.defaults": "Default reference parsing settings",
-    "ignore": "File/directory ignore patterns",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",
-    "graph": "Graph construction settings",
-    "traceability": "Traceability output settings",
-    "associated": "Associated repository identity",
-    "core": "Path to core repository (relative or absolute)",
+    "output": "Output settings",
+    "associates": "Associated repository definitions",
 }
 
 # Per-project-type overrides applied on top of schema defaults.
 _CORE_OVERRIDES: dict[str, Any] = {
-    "project": {"name": "my-project", "type": "core"},
-    "directories": {"code": ["src", "apps", "packages"]},
-    "spec": {
-        "index_file": "INDEX.md",
-        "skip_files": ["README.md", "requirements-format.md", "INDEX.md"],
+    "project": {"name": "my-project"},
+    "levels": {
+        "prd": {
+            "rank": 1,
+            "letter": "p",
+            "display_name": "Product",
+            "implements": ["prd"],
+        },
+        "ops": {
+            "rank": 2,
+            "letter": "o",
+            "display_name": "Operations",
+            "implements": ["ops", "prd"],
+        },
+        "dev": {
+            "rank": 3,
+            "letter": "d",
+            "display_name": "Development",
+            "implements": ["dev", "ops", "prd"],
+        },
+    },
+    "scanning": {
+        "skip": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
+        "spec": {
+            "directories": ["spec"],
+            "file_patterns": ["*.md"],
+            "skip_files": ["README.md", "requirements-format.md", "INDEX.md"],
+        },
+        "code": {
+            "directories": ["src", "apps", "packages"],
+        },
+        "test": {
+            "enabled": False,
+            "directories": ["tests"],
+            "file_patterns": ["test_*.py", "*_test.py"],
+            "reference_keyword": "Verifies",
+        },
     },
     "rules": {
         "hierarchy": {
-            "dev": ["dev", "ops", "prd"],
-            "ops": ["ops", "prd"],
-            "prd": ["prd"],
             "allow_circular": False,
             "allow_structural_orphans": False,
         },
@@ -194,61 +225,36 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "change_order": False,
         },
     },
-    "testing": {
-        "enabled": False,
-        "test_dirs": ["tests"],
-        "patterns": ["test_*.py", "*_test.py"],
-        "reference_keyword": "Validates",
-    },
-    "references": {
-        "defaults": {
-            "separators": ["-", "_"],
-            "multi_assertion_separator": "+",
-        },
-    },
-    "ignore": {
-        "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
-        "spec": ["README.md", "INDEX.md", "drafts/**"],
-        "code": ["*_test.py", "conftest.py", "test_*.py"],
-        "test": ["fixtures/**", "__snapshots__"],
-    },
 }
 
 # Sections to include in core template (order determines output order).
 _CORE_SECTIONS = [
     "version",
     "project",
-    "directories",
     "id-patterns",
-    "spec",
+    "levels",
+    "scanning",
     "rules",
     "changelog",
-    "testing",
     "references",
-    "ignore",
     "keywords",
     "validation",
-    "graph",
-    "traceability",
+    "output",
 ]
 
 # Sections to include in associated template.
 _ASSOCIATED_SECTIONS = [
     "version",
     "project",
-    "associated",
-    "core",
-    "directories",
     "id-patterns",
-    "spec",
+    "levels",
+    "scanning",
     "rules",
-    "testing",
     "references",
-    "ignore",
     "keywords",
     "validation",
-    "graph",
-    "traceability",
+    "output",
+    "associates",
 ]
 
 
@@ -314,29 +320,34 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
         overrides: dict[str, Any] = {
             "project": {
                 "name": f"{associated_prefix.lower()}-project",
-                "type": "associated",
+                "namespace": associated_prefix,
             },
-            "associated": {
-                "prefix": associated_prefix,
-                "id_range": [1, 99999],
-            },
-            "core": {"path": "../core"},
-            "directories": {"code": ["src", "lib"]},
-            "id-patterns": {
-                **defaults.get("id-patterns", {}),
-                "associated": {
-                    "enabled": True,
-                    "position": "after_prefix",
-                    "format": "uppercase",
-                    "length": 3,
-                    "separator": "-",
+            "levels": {
+                "prd": {
+                    "rank": 1,
+                    "letter": "p",
+                    "display_name": "Product",
+                    "implements": ["prd"],
                 },
+                "ops": {
+                    "rank": 2,
+                    "letter": "o",
+                    "display_name": "Operations",
+                    "implements": ["ops", "prd"],
+                },
+                "dev": {
+                    "rank": 3,
+                    "letter": "d",
+                    "display_name": "Development",
+                    "implements": ["dev", "ops", "prd"],
+                },
+            },
+            "scanning": {
+                "spec": {"directories": ["spec"]},
+                "code": {"directories": ["src", "lib"]},
             },
             "rules": {
                 "hierarchy": {
-                    "dev": ["dev", "ops", "prd"],
-                    "ops": ["ops", "prd"],
-                    "prd": ["prd"],
                     "cross_repo_implements": True,
                     "allow_structural_orphans": True,
                 },

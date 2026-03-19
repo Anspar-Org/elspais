@@ -24,12 +24,12 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         """Create a minimal associate repo with .elspais.toml and spec/."""
         repo_dir.mkdir(parents=True, exist_ok=True)
         toml_content = (
+            "version = 3\n"
             "[project]\n"
             'name = "test-associate"\n'
-            'type = "associated"\n'
             "\n"
-            "[associated]\n"
-            'prefix = "TST"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
         )
         (repo_dir / ".elspais.toml").write_text(toml_content, encoding="utf-8")
         (repo_dir / "spec").mkdir(exist_ok=True)

@@ -29,12 +29,7 @@ def _validate_config(config: dict) -> ElspaisConfig:
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
-    # Associated projects may lack [core] when read externally
-    proj = filtered.get("project", {})
-    if isinstance(proj, dict) and proj.get("type") == "associated":
-        if "core" not in filtered or not filtered["core"]:
-            filtered["core"] = {"path": "."}
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -118,22 +113,15 @@ def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
     typed_config = _validate_config(config)
     missing = []
 
-    if not typed_config.id_patterns.types:
-        missing.append("id-patterns.types (requirement type definitions)")
+    if not typed_config.levels:
+        missing.append("levels (requirement level definitions)")
 
-    if not typed_config.spec.directories:
-        missing.append("spec.directories (where to find spec files)")
+    if not typed_config.scanning.spec.directories:
+        missing.append("scanning.spec.directories (where to find spec files)")
 
-    hierarchy_dump = typed_config.rules.hierarchy.model_dump()
-    non_level = {
-        "allow_circular",
-        "allow_orphans",
-        "allow_structural_orphans",
-        "cross_repo_implements",
-    }
-    has_levels = any(k for k in hierarchy_dump if k not in non_level and hierarchy_dump[k])
-    if not has_levels:
-        missing.append("rules.hierarchy (requirement hierarchy rules)")
+    has_levels_with_implements = any(level.implements for level in typed_config.levels.values())
+    if not has_levels_with_implements:
+        missing.append("levels.*.implements (requirement hierarchy rules)")
 
     if missing:
         return HealthCheck(
@@ -158,15 +146,15 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
 
     typed_config = _validate_config(config)
     template = typed_config.id_patterns.canonical
-    valid_tokens = {"{namespace}", "{type}", "{component}"}
-    # Also allow {type.<alias>} tokens
-    type_alias_re = re.compile(r"\{type\.\w+\}")
+    valid_tokens = {"{namespace}", "{level}", "{component}"}
+    # Also allow {level.<field>} tokens (e.g. {level.letter})
+    level_field_re = re.compile(r"\{level\.\w+\}")
 
     found_tokens = set(re.findall(r"\{[^}]+\}", template))
 
     invalid = set()
     for tok in found_tokens:
-        if tok not in valid_tokens and not type_alias_re.match(tok):
+        if tok not in valid_tokens and not level_field_re.match(tok):
             invalid.add(tok)
     if invalid:
         return HealthCheck(
@@ -174,7 +162,7 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=(
                 f"ID pattern has unrecognized placeholders: {', '.join(invalid)}. "
-                f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{type.<alias>}}"
+                f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{level.<field>}}"
             ),
             category="config",
             details={"invalid_tokens": list(invalid), "valid_tokens": list(valid_tokens)},
@@ -202,49 +190,28 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
 def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
     typed_config = _validate_config(config)
-    hierarchy = typed_config.rules.hierarchy.model_dump()
-    types = dict(typed_config.id_patterns.types.items())
+    levels = typed_config.levels
 
-    if not isinstance(hierarchy, dict):
+    if not isinstance(levels, dict):
         return HealthCheck(
             name="config.hierarchy_rules",
             passed=False,
-            message=f"Hierarchy rules should be a table, but found {type(hierarchy).__name__}",
-            category="config",
-        )
-
-    if not isinstance(types, dict):
-        return HealthCheck(
-            name="config.hierarchy_rules",
-            passed=False,
-            message=f"Requirement types should be a table, but found {type(types).__name__}",
+            message=f"Levels should be a table, but found {type(levels).__name__}",
             category="config",
         )
 
     issues = []
-    non_level_keys = {
-        "allowed_implements",
-        "allow_circular",
-        "allow_orphans",
-        "allow_structural_orphans",
-        "cross_repo_implements",
-        "allowed",
-    }
 
-    for level, allowed_parents in hierarchy.items():
-        if level in non_level_keys or allowed_parents is None:
-            continue
-        if level not in types:
-            issues.append(f"Rule references unknown level '{level}'")
-            continue
-        if not isinstance(allowed_parents, list):
+    for level_name, level_config in levels.items():
+        if not isinstance(level_config.implements, list):
             issues.append(
-                f"Rule for '{level}' should be a list, found {type(allowed_parents).__name__}"
+                f"Implements for '{level_name}' should be a list, "
+                f"found {type(level_config.implements).__name__}"
             )
             continue
-        for parent in allowed_parents:
-            if parent not in types:
-                issues.append(f"Level '{level}' references unknown parent level '{parent}'")
+        for parent in level_config.implements:
+            if parent not in levels:
+                issues.append(f"Level '{level_name}' references unknown parent level '{parent}'")
 
     if issues:
         return HealthCheck(
@@ -258,7 +225,7 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     return HealthCheck(
         name="config.hierarchy_rules",
         passed=True,
-        message=f"Hierarchy rules are valid ({len(hierarchy)} levels configured)",
+        message=f"Hierarchy rules are valid ({len(levels)} levels configured)",
         category="config",
     )
 
@@ -266,7 +233,7 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
 def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
     typed_config = _validate_config(config)
-    spec_dirs = typed_config.spec.directories
+    spec_dirs = typed_config.scanning.spec.directories
 
     if not isinstance(spec_dirs, list):
         return HealthCheck(
@@ -305,7 +272,7 @@ def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> Health
 
 
 def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
-    """Check project type configuration is consistent."""
+    """Check project configuration is valid."""
     from pydantic import ValidationError
 
     raw = config
@@ -322,66 +289,43 @@ def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
             details={"errors": errors},
         )
 
-    project_type = typed_config.project.type
-    if project_type:
+    project_name = typed_config.project.name
+    if project_name:
         return HealthCheck(
             name="config.project_type",
             passed=True,
-            message=f"Project type '{project_type}' is properly configured",
+            message=f"Project '{project_name}' is properly configured",
             category="config",
-            details={"type": project_type},
+            details={"name": project_name},
         )
 
     return HealthCheck(
         name="config.project_type",
         passed=True,
-        message="Project type not set (using defaults)",
+        message="Project name not set (using defaults)",
         category="config",
         severity="info",
     )
 
 
 def check_config_associated_section(raw: dict) -> HealthCheck:
-    """Check that associated projects have a valid [associated] section."""
+    """Check that associates configuration is valid."""
     typed_config = _validate_config(raw)
-    project_type = typed_config.project.type
-    if project_type != "associated":
+    associates = typed_config.associates
+    if not associates:
         return HealthCheck(
             name="config.associated_section",
             passed=True,
-            message="Not an associated project (check not applicable)",
+            message="No associated projects configured",
             category="config",
             severity="info",
         )
 
-    associated = typed_config.associated
-    if not associated:
-        return HealthCheck(
-            name="config.associated_section",
-            passed=False,
-            message=(
-                "Project type is 'associated' but [associated] section is missing. "
-                "Add [associated] with a 'prefix' key (e.g., prefix = \"CAL\")."
-            ),
-            category="config",
-        )
-
-    prefix = associated.prefix or ""
-    if not prefix:
-        return HealthCheck(
-            name="config.associated_section",
-            passed=False,
-            message=(
-                "Project type is 'associated' but prefix is empty. "
-                'Set a non-empty prefix (e.g., prefix = "CAL").'
-            ),
-            category="config",
-        )
-
+    names = list(associates.keys())
     return HealthCheck(
         name="config.associated_section",
         passed=True,
-        message=f"Associated project configured with prefix '{prefix}'",
+        message=f"{len(names)} associate(s) configured: {', '.join(names)}",
         category="config",
     )
 
@@ -635,7 +579,7 @@ def run_environment_checks(
 # Implements: REQ-d00210
 # Schema sections to check (alias names for TOML keys).
 # Excludes project-type-conditional sections (associates, core, associated).
-_CONDITIONAL_SECTIONS = {"associates", "core", "associated"}
+_CONDITIONAL_SECTIONS = {"associates"}
 
 _SCHEMA_SECTIONS: set[str] = set()
 

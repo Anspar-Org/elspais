@@ -16,7 +16,7 @@ def _make_core_repo(tmp_path: Path) -> Path:
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        '[project]\nname = "core"\ntype = "core"\n\n' '[directories]\nspec = "spec"\n'
+        'version = 3\n[project]\nname = "core"\n\n' '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir(exist_ok=True)
     return tmp_path
@@ -27,9 +27,8 @@ def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
     repo = base / name
     repo.mkdir(exist_ok=True)
     (repo / ".elspais.toml").write_text(
-        f'[project]\nname = "{name}"\ntype = "associated"\n\n'
-        f'[associated]\nprefix = "{prefix}"\n\n'
-        f'[directories]\nspec = "spec"\n'
+        f'version = 3\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
+        f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir(exist_ok=True)
     return repo
@@ -238,18 +237,18 @@ class TestAssociateErrors:
         output = capsys.readouterr().err
         assert ".elspais.toml" in output
 
-    def test_REQ_p00005_E_link_non_associated_type_errors(self, tmp_path, monkeypatch, capsys):
-        """Repo with wrong project.type produces a clear error."""
+    def test_REQ_p00005_E_link_any_valid_repo_succeeds(self, tmp_path, monkeypatch, capsys):
+        """In v3, any repo with a valid .elspais.toml can be linked as an associate."""
         from elspais.commands.associate_cmd import run
 
         core = _make_core_repo(tmp_path / "core")
-        wrong_type = tmp_path / "wrong-type"
-        wrong_type.mkdir()
-        (wrong_type / ".elspais.toml").write_text('[project]\nname = "wrong"\ntype = "core"\n')
+        other = tmp_path / "other"
+        other.mkdir()
+        (other / ".elspais.toml").write_text('version = 3\n[project]\nname = "other"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            associate_path=str(wrong_type),
+            associate_path=str(other),
             all=False,
             list=False,
             unlink=None,
@@ -259,10 +258,7 @@ class TestAssociateErrors:
             canonical_root=None,
         )
         rc = run(args)
-        assert rc == 1
-
-        output = capsys.readouterr().err
-        assert "associated" in output.lower()
+        assert rc == 0
 
     def test_REQ_p00005_E_unlink_unknown_name_errors(self, tmp_path, monkeypatch, capsys):
         """Unlinking a name that doesn't exist produces a clear error."""
@@ -556,9 +552,8 @@ class TestAssociateUnlink:
         wt = tmp_path / "callisto-worktrees" / "linking-code"
         wt.mkdir(parents=True)
         (wt / ".elspais.toml").write_text(
-            '[project]\nname = "callisto"\ntype = "associated"\n\n'
-            '[associated]\nprefix = "CAL"\n\n'
-            '[directories]\nspec = "spec"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (wt / "spec").mkdir()
 
@@ -624,9 +619,8 @@ class TestAssociateUnlink:
         worktree_dir.mkdir(parents=True)
         # But it has callisto's config
         (worktree_dir / ".elspais.toml").write_text(
-            '[project]\nname = "callisto"\ntype = "associated"\n\n'
-            '[associated]\nprefix = "CAL"\n\n'
-            '[directories]\nspec = "spec"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (worktree_dir / "spec").mkdir()
 

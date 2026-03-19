@@ -30,7 +30,7 @@ class TestCoreConfigValidation:
         data = dict(parsed)
         # Should not raise ValidationError
         config = ElspaisConfig.model_validate(data)
-        assert config.project.type == "core"
+        assert config.project.name is not None
 
     def test_REQ_d00209_A_core_config_project_name(self) -> None:
         """Core config must have a sensible project name."""
@@ -89,25 +89,15 @@ class TestAssociatedConfigValidation:
         data = dict(parsed)
         # Should not raise ValidationError
         config = ElspaisConfig.model_validate(data)
-        assert config.project.type == "associated"
-
-    def test_REQ_d00209_B_associated_config_has_core_section(self) -> None:
-        """Associated config must include a [core] section with path."""
-        content = generate_config("associated", associated_prefix="TST")
-        parsed = tomlkit.parse(content)
-        data = dict(parsed)
-        config = ElspaisConfig.model_validate(data)
-        assert config.core is not None
-        assert config.core.path is not None
+        assert config.project.namespace == "TST"
 
     def test_REQ_d00209_B_associated_config_uses_prefix(self) -> None:
-        """Associated config must incorporate the given prefix."""
+        """Associated config must incorporate the given prefix as namespace."""
         content = generate_config("associated", associated_prefix="ABC")
         parsed = tomlkit.parse(content)
         data = dict(parsed)
         config = ElspaisConfig.model_validate(data)
-        assert config.associated is not None
-        assert config.associated.prefix == "ABC"
+        assert config.project.namespace == "ABC"
 
     def test_REQ_d00209_B_associated_config_includes_version(self) -> None:
         """Associated config must include the schema version field.
@@ -127,54 +117,45 @@ class TestAssociatedConfigValidation:
             content = generate_config("associated", associated_prefix=prefix)
             parsed = tomlkit.parse(content)
             config = ElspaisConfig.model_validate(dict(parsed))
-            assert config.associated is not None
-            assert config.associated.prefix == prefix
+            assert config.project.namespace == prefix
 
 
 class TestGeneratedSections:
     """Validates REQ-d00209-C: Generated TOML includes all expected sections."""
 
     # These are sections that a schema-driven generator MUST emit for core.
-    # The current hardcoded template is missing: version, graph, keywords,
-    # traceability, validation.
     CORE_EXPECTED_SECTIONS = [
         "project",
-        "directories",
         "id-patterns",
+        "levels",
+        "scanning",
         "rules",
-        "spec",
-        "testing",
         "changelog",
-        "ignore",
         "references",
     ]
 
     # Schema-complete: all sections the schema defines that should appear
-    # (excluding optional associate/core/associated which are project-type dependent)
+    # (excluding optional associates which is project-type dependent)
     CORE_SCHEMA_COMPLETE_SECTIONS = [
         "version",
         "project",
-        "directories",
         "id-patterns",
+        "levels",
+        "scanning",
         "rules",
-        "spec",
-        "testing",
         "changelog",
-        "ignore",
         "references",
         "keywords",
         "validation",
-        "graph",
-        "traceability",
+        "output",
     ]
 
     ASSOCIATED_EXPECTED_SECTIONS = [
         "project",
-        "directories",
         "id-patterns",
+        "levels",
+        "scanning",
         "rules",
-        "associated",
-        "core",
     ]
 
     def test_REQ_d00209_C_core_has_all_sections(self) -> None:
@@ -188,8 +169,7 @@ class TestGeneratedSections:
         """Core config must include ALL schema-defined sections.
 
         A schema-driven generator should emit every section the Pydantic model
-        defines, not just a hand-picked subset. The current hardcoded template
-        is missing: version, graph, keywords, traceability, validation.
+        defines, not just a hand-picked subset.
         """
         content = generate_config("core")
         parsed = tomlkit.parse(content)
@@ -212,29 +192,27 @@ class TestGeneratedSections:
         content = generate_config("associated", associated_prefix="TST")
         parsed = tomlkit.parse(content)
         # At minimum, associated should have these beyond the basics
-        expected_extra = ["ignore", "references", "spec", "testing"]
+        expected_extra = ["references", "scanning"]
         missing = [s for s in expected_extra if s not in parsed]
         assert not missing, f"Associated config missing sections: {missing}"
 
-    def test_REQ_d00209_C_core_has_hierarchy_rules(self) -> None:
-        """Core config must define hierarchy rules for dev, ops, prd."""
+    def test_REQ_d00209_C_core_has_levels(self) -> None:
+        """Core config must define levels for dev, ops, prd."""
         content = generate_config("core")
         parsed = tomlkit.parse(content)
         data = dict(parsed)
         config = ElspaisConfig.model_validate(data)
-        assert config.rules.hierarchy.dev is not None
-        assert config.rules.hierarchy.ops is not None
-        assert config.rules.hierarchy.prd is not None
+        assert "prd" in config.levels
+        assert "ops" in config.levels
+        assert "dev" in config.levels
 
-    def test_REQ_d00209_C_core_has_id_pattern_types(self) -> None:
-        """Core config must define prd, ops, dev ID pattern types."""
+    def test_REQ_d00209_C_core_has_id_patterns(self) -> None:
+        """Core config must define id-patterns section."""
         content = generate_config("core")
         parsed = tomlkit.parse(content)
         data = dict(parsed)
         config = ElspaisConfig.model_validate(data)
-        assert "prd" in config.id_patterns.types
-        assert "ops" in config.id_patterns.types
-        assert "dev" in config.id_patterns.types
+        assert config.id_patterns.canonical is not None
 
 
 class TestGeneratedComments:

@@ -32,11 +32,7 @@ def _validate_config(config: dict) -> ElspaisConfig:
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
-    proj = filtered.get("project", {})
-    if isinstance(proj, dict) and proj.get("type") == "associated":
-        if "core" not in filtered or not filtered["core"]:
-            filtered["core"] = {"path": "."}
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -67,15 +63,8 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     typed_config = _validate_config(config)
-    _dirs_spec = typed_config.directories.spec
-    if _dirs_spec is not None:
-        spec_dir = (
-            _dirs_spec[0]
-            if isinstance(_dirs_spec, list) and _dirs_spec
-            else (_dirs_spec if isinstance(_dirs_spec, str) else "spec")
-        )
-    else:
-        spec_dir = typed_config.spec.directories[0] if typed_config.spec.directories else "spec"
+    spec_dirs = typed_config.scanning.spec.directories
+    spec_dir = spec_dirs[0] if spec_dirs else "spec"
 
     base_branch = getattr(args, "base_branch", None) or "main"
     json_output = getattr(args, "format", "text") == "json"

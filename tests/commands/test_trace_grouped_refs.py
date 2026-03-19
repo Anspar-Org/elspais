@@ -80,27 +80,21 @@ def test_REQ_p00001_A_and_C():
         # Config file
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-grouped-refs"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
 """
         )
 
@@ -199,25 +193,19 @@ A. The system SHALL be alone.
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-no-tests"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = false
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = false
 """
         )
 
@@ -316,27 +304,21 @@ def test_REQ_p00001_A_extra_check():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-md-grouped-refs"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
 """
         )
 
@@ -458,27 +440,21 @@ def test_REQ_p00001_A_and_C():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-html-grouped-refs"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
 """
         )
 
@@ -585,27 +561,21 @@ def test_REQ_p00001_general():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-json-grouped-refs"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
 """
         )
 
@@ -725,27 +695,21 @@ def test_REQ_p00001_A_and_C():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-csv-grouped-refs"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 
 [references]
 enabled = true
-
-[references.defaults]
-multi_assertion_separator = "+"
-
-[testing]
-enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
 """
         )
 

@@ -41,11 +41,14 @@ A. The system SHALL do Y.
 """
 
 CONFIG_TOML = """\
+version = 3
+
 [project]
 name = "test"
+namespace = "REQ"
 
-[patterns]
-prefix = "REQ"
+[scanning.spec]
+directories = ["spec"]
 
 [changelog]
 hash_current = true

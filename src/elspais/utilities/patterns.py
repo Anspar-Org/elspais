@@ -89,8 +89,17 @@ class IdPatternConfig:
         canonical = patterns.get("canonical", "{namespace}-{type}{component}")
         aliases = dict(patterns.get("aliases", {}))
 
-        # Parse types
+        # Parse types from v2 id-patterns.types OR v3 top-level levels
         raw_types = patterns.get("types", {})
+        if not raw_types:
+            # v3: read from top-level [levels] section
+            raw_levels = data.get("levels", {})
+            for code, ldef in raw_levels.items():
+                if isinstance(ldef, dict):
+                    raw_types[code] = {
+                        "level": ldef.get("rank", 1),
+                        "aliases": {"letter": ldef.get("letter", code[0])},
+                    }
         types: dict[str, TypeDef] = {}
         for code, tdef in raw_types.items():
             if isinstance(tdef, dict):
@@ -188,8 +197,11 @@ class IdResolver:
 
     @staticmethod
     def _extract_type_alias_name(template: str) -> str | None:
-        """Extract the TypeDef alias name from a template (e.g., 'letter' from '{type.letter}')."""
-        m = re.search(r"\{type\.(\w+)\}", template)
+        """Extract alias name from template.
+
+        E.g., 'letter' from '{type.letter}' or '{level.letter}'.
+        """
+        m = re.search(r"\{(?:type|level)\.(\w+)\}", template)
         return m.group(1) if m else None
 
     def _compile_regex(self, template: str) -> re.Pattern:
@@ -207,8 +219,8 @@ class IdResolver:
             type_alt = "|".join(re.escape(t) for t in type_codes)
             pattern = pattern.replace("{type}", f"(?P<type>{type_alt})")
 
-        # {type.<alias_name>} -> alternation of alias values
-        for match in re.finditer(r"\{type\.(\w+)\}", template):
+        # {type.<alias_name>} or {level.<alias_name>} -> alternation of alias values
+        for match in re.finditer(r"\{(?:type|level)\.(\w+)\}", template):
             alias_name = match.group(1)
             if alias_name in self._reverse_aliases:
                 values = list(self._reverse_aliases[alias_name].keys())
@@ -331,12 +343,12 @@ class IdResolver:
         result = result.replace("{type}", type_code)
         result = result.replace("{component}", component)
 
-        # Handle {type.<alias>} tokens
-        if "{type." in result:
-            tdef = self.config.types.get(type_code)
-            if tdef:
-                for alias_name, alias_value in tdef.aliases.items():
-                    result = result.replace(f"{{type.{alias_name}}}", alias_value)
+        # Handle {type.<alias>} and {level.<alias>} tokens
+        tdef = self.config.types.get(type_code)
+        if tdef:
+            for alias_name, alias_value in tdef.aliases.items():
+                result = result.replace(f"{{type.{alias_name}}}", alias_value)
+                result = result.replace(f"{{level.{alias_name}}}", alias_value)
 
         return result
 

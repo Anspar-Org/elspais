@@ -47,7 +47,7 @@ A. The system SHALL do something.
     )
 
     config_file = tmp_path / ".elspais.toml"
-    config_file.write_text('[directories]\nspec = ["spec"]\n')
+    config_file.write_text('version = 3\n[scanning.spec]\ndirectories = ["spec"]\n')
     return spec_dir
 
 

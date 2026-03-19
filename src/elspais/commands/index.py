@@ -172,16 +172,15 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
                 spec_subpath = resolved.name
             label = f"{project_name}/{spec_subpath}"
 
-            # Build level ordering from [id-patterns.types]
-            # Keys match node.level values (e.g. "prd", "ops", "dev")
-            types = cfg.get("id-patterns", {}).get("types", {})
+            # Build level ordering from [levels]
+            levels = cfg.get("levels", {})
             level_order: dict[str, int] = {}
             level_names: dict[str, str] = {}
-            for type_key, type_def in types.items():
-                level_num = type_def.get("level", 99)
-                display = type_key.upper()
-                level_order[type_key] = level_num
-                level_names[type_key] = display
+            for level_key, level_def in levels.items():
+                rank = level_def.get("rank", 99)
+                display = (level_def.get("display_name") or level_key).upper()
+                level_order[level_key] = rank
+                level_names[level_key] = display
 
             return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
         current = current.parent

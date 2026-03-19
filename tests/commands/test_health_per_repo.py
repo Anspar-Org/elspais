@@ -33,13 +33,26 @@ def _make_config(hierarchy_rules: dict | None = None, **overrides) -> dict:
 
     Args:
         hierarchy_rules: Dict mapping child level -> list of allowed parent levels.
+            In v3, these are stored as levels.<name>.implements.
         **overrides: Additional top-level config keys to merge.
     """
     data: dict = {}
     if hierarchy_rules is not None:
-        data["rules"] = {"hierarchy": hierarchy_rules}
+        # v3: implements rules live in levels.<name>.implements
+        defaults = config_defaults()
+        levels = dict(defaults.get("levels", {}))
+        for level_name, allowed_parents in hierarchy_rules.items():
+            if level_name in levels:
+                levels[level_name] = {**levels[level_name], "implements": allowed_parents}
+            else:
+                # Create a minimal level entry
+                levels[level_name] = {
+                    "rank": len(levels) + 1,
+                    "letter": level_name[0],
+                    "implements": allowed_parents,
+                }
+        data["levels"] = levels
     for key, value in overrides.items():
-        # Support dotted keys like "rules.format"
         parts = key.split(".")
         d = data
         for part in parts[:-1]:

@@ -108,9 +108,8 @@ class TestConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "id-patterns": {"types": {"prd": {"level": 1}}},
-                "spec": {"directories": ["spec"]},
-                "rules": {"hierarchy": {"prd": []}},
+                "levels": {"prd": {"rank": 1, "letter": "p", "implements": []}},
+                "scanning": {"spec": {"directories": ["spec"]}},
             },
         )
 
@@ -118,10 +117,13 @@ class TestConfigChecks:
         assert check.passed is True
 
     def test_required_fields_present_with_defaults(self):
-        """Test that default config has all required fields present."""
-        config = config_defaults()  # Will get defaults
+        """Test that default config with spec dirs has all required fields present."""
+        config = _merge_configs(
+            config_defaults(),
+            {"scanning": {"spec": {"directories": ["spec"]}}},
+        )
 
-        # With defaults, all required fields should be present
+        # With spec dirs set, all required fields should be present
         check = check_config_required_fields(config)
         assert check.passed is True
 
@@ -130,7 +132,7 @@ class TestConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "id-patterns": {"canonical": "{namespace}-{type}{component}"},
+                "id-patterns": {"canonical": "{namespace}-{level}{component}"},
             },
         )
 
@@ -155,19 +157,10 @@ class TestConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "id-patterns": {
-                    "types": {
-                        "prd": {"level": 1},
-                        "ops": {"level": 2},
-                        "dev": {"level": 3},
-                    },
-                },
-                "rules": {
-                    "hierarchy": {
-                        "dev": ["ops", "prd"],
-                        "ops": ["prd"],
-                        "prd": [],
-                    },
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": []},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["ops", "prd"]},
                 },
             },
         )
@@ -183,7 +176,7 @@ class TestConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "spec": {"directories": ["spec"]},
+                "scanning": {"spec": {"directories": ["spec"]}},
             },
         )
 
@@ -195,7 +188,7 @@ class TestConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "spec": {"directories": ["nonexistent"]},
+                "scanning": {"spec": {"directories": ["nonexistent"]}},
             },
         )
 
@@ -260,16 +253,14 @@ class TestHealthIntegration:
         # Create a valid requirement file
         req_file = spec_dir / "requirements.md"
         req_file.write_text(
-            """# Requirements
+            """# REQ-p00001: Test Requirement
 
-## REQ-p00001: Test Requirement
-
-**Status:** Active
+**Level**: PRD | **Status**: Active
 
 The system SHALL do something.
 
+*End* *Test Requirement* | **Hash**: 12345678
 ---
-<!-- Hash: 12345678 -->
 """
         )
 
@@ -277,25 +268,26 @@ The system SHALL do something.
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
+version = 3
+
 [project]
 namespace = "REQ"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.prd]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[spec]
+[scanning.spec]
 directories = ["spec"]
-
-[rules.hierarchy]
-prd = []
 """
         )
 

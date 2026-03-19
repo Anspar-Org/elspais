@@ -17,9 +17,9 @@ def _make_project(tmp_path: Path) -> tuple[Path, Path]:
     """Create a minimal project with an Active requirement."""
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        '[project]\nname = "test"\n'
-        "[patterns]\n"
-        'prefix = "REQ"\n'
+        'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+        "[scanning.spec]\n"
+        'directories = ["spec"]\n'
         "[changelog]\n"
         "hash_current = true\n"
     )

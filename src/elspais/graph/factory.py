@@ -58,7 +58,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     # Strip legacy-format associates (contains 'paths' list instead of named entries)
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -313,7 +313,13 @@ def _resolve_spec_dir_config(
 
     resolver = build_resolver(repo_config)
     reference_resolver = ReferenceResolver.from_config(
-        typed_repo_config.references.model_dump(by_alias=True)
+        {
+            "defaults": {
+                "separators": typed_repo_config.id_patterns.separators,
+                "case_sensitive": typed_repo_config.references.case_sensitive,
+                "prefix_optional": typed_repo_config.id_patterns.prefix_optional,
+            },
+        }
     )
 
     registry = ParserRegistry()
@@ -324,14 +330,15 @@ def _resolve_spec_dir_config(
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
-    patterns = typed_repo_config.spec.patterns
+    patterns = typed_repo_config.scanning.spec.file_patterns
     # patterns can be list[str] or dict — extract list if needed
-    file_patterns = patterns if isinstance(patterns, list) else ["*.md"]
+    # Fall back to ["*.md"] if patterns is empty or not a list
+    file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
     return SpecDirConfig(
         registry=registry,
         file_patterns=file_patterns,
-        skip_dirs=list(typed_repo_config.spec.skip_dirs),
-        skip_files=list(typed_repo_config.spec.skip_files),
+        skip_dirs=list(typed_repo_config.scanning.spec.skip_dirs),
+        skip_files=list(typed_repo_config.scanning.spec.skip_files),
         ignore_config=get_ignore_config(repo_config),
     )
 
@@ -397,7 +404,13 @@ def build_graph(
     # 3. Create default resolver and reference resolver
     default_resolver = build_resolver(config)
     default_reference_resolver = ReferenceResolver.from_config(
-        typed_config.references.model_dump(by_alias=True)
+        {
+            "defaults": {
+                "separators": typed_config.id_patterns.separators,
+                "case_sensitive": typed_config.references.case_sensitive,
+                "prefix_optional": typed_config.id_patterns.prefix_optional,
+            },
+        }
     )
 
     # Implements: REQ-d00128-G
@@ -414,7 +427,7 @@ def build_graph(
 
     # 4. Build graph from all spec directories
     hash_mode = typed_config.validation.hash_mode
-    satellite_kinds = list(typed_config.graph.satellite_kinds)
+    satellite_kinds = ["assertion", "result"]
     mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
@@ -480,7 +493,7 @@ def build_graph(
         scanned_code_files: set[str] = set()
 
         # 5a. Explicit scan_patterns (existing behavior)
-        scan_patterns = list(typed_config.traceability.scan_patterns)
+        scan_patterns = list(typed_config.scanning.code.file_patterns)
 
         for pattern in scan_patterns:
             # Resolve glob pattern relative to repo_root
@@ -498,7 +511,7 @@ def build_graph(
 
         # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
-        ignore_dirs = list(typed_config.directories.ignore)
+        ignore_dirs = list(typed_config.scanning.skip)
 
         for code_dir in code_dirs:
             domain_file = DomainFile(
@@ -532,10 +545,10 @@ def build_graph(
 
     # 6. Scan test directories from testing config
     if scan_tests:
-        testing_cfg = typed_config.testing
+        testing_cfg = typed_config.scanning.test
         if testing_cfg.enabled:
-            test_dirs = list(testing_cfg.test_dirs)
-            test_patterns = list(testing_cfg.patterns)
+            test_dirs = list(testing_cfg.directories)
+            test_patterns = list(testing_cfg.file_patterns)
             test_skip_dirs = list(testing_cfg.skip_dirs)
 
             # Run external prescan command if configured
@@ -577,7 +590,7 @@ def build_graph(
             # 6b. Scan test result files (JUnit XML, pytest JSON)
             # Implements: REQ-d00128-H
             # RemainderParser is NOT registered for RESULT file types
-            result_files = list(testing_cfg.result_files)
+            result_files = list(typed_config.scanning.result.file_patterns)
             if result_files:
                 xml_registry = ParserRegistry()
                 xml_registry.register(
@@ -624,7 +637,7 @@ def build_graph(
         from elspais.graph.test_code_linker import link_tests_to_code
 
         # Get source roots from config (default: ["src", ""])
-        source_roots = typed_config.traceability.source_roots
+        source_roots = typed_config.scanning.code.source_roots
         link_tests_to_code(graph, repo_root, source_roots)
 
     # Annotate keywords on all nodes so keyword search tools work

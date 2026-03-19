@@ -135,10 +135,9 @@ class TestResolveSpecDirInfo:
     def test_with_config(self, tmp_path):
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
-            '[project]\nname = "my-project"\n\n'
-            "[id-patterns.types]\n"
-            'prd = { level = 1, aliases = { letter = "p" } }\n'
-            'dev = { level = 3, aliases = { letter = "d" } }\n'
+            'version = 3\n[project]\nname = "my-project"\n\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
+            '[levels.dev]\nrank = 3\nletter = "d"\nimplements = ["dev", "prd"]\n'
         )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -148,7 +147,7 @@ class TestResolveSpecDirInfo:
         assert info.label == "my-project/spec"
         assert info.level_order["prd"] == 1
         assert info.level_order["dev"] == 3
-        assert info.level_names["prd"] == "PRD"
+        assert info.level_names["prd"] == "PRODUCT"
 
     def test_no_config_falls_back(self, tmp_path):
         """Without .elspais.toml, falls back to empty level info."""
@@ -331,10 +330,9 @@ class TestRegenerateIndexAlignment:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            '[project]\nname = "test"\n\n'
-            "[id-patterns.types]\n"
-            'PRD = { level = 1, aliases = { letter = "p" } }\n'
-            'DEV = { level = 3, aliases = { letter = "d" } }\n'
+            'version = 3\n[project]\nname = "test"\n\n'
+            '[levels.PRD]\nrank = 1\nletter = "p"\nimplements = ["PRD"]\n\n'
+            '[levels.DEV]\nrank = 3\nletter = "d"\nimplements = ["DEV", "PRD"]\n'
         )
         graph = build_graph(
             make_requirement(

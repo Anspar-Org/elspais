@@ -1,24 +1,29 @@
 # Configuration for circular dependency test
+
+version = 3
+
 [project]
 name = "circular-deps-test"
-type = "core"
 namespace = "REQ"
 
-[directories]
-spec = "spec"
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev"]
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+canonical = "{namespace}-{level.letter}{component}"
 
-[id-patterns.types]
-dev = { level = 3, aliases = { letter = "d" } }
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
+[scanning.spec]
+directories = ["spec"]
+
 [rules.hierarchy]
-allowed_implements = ["dev -> dev"]  # Allow DEV -> DEV for this test
-allow_circular = false  # But forbid circular
+allow_circular = false
