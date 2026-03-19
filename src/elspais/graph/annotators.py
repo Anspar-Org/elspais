@@ -245,8 +245,7 @@ def count_by_level(
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"] and status roles from
-                config["rules"]["format"]["status_roles"].
+                typed config levels and status roles.
 
     Returns:
         Dict with 'active' (excludes analysis-excluded statuses) and 'all'
@@ -292,7 +291,7 @@ def group_by_level(
     Args:
         graph: The TraceGraph to query.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
+                typed config levels. Otherwise uses hardcoded defaults.
 
     Returns:
         Dict mapping level to list of requirement nodes, plus "other" for unrecognized.
@@ -327,7 +326,7 @@ def count_by_repo(
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives status roles from
-                config["rules"]["format"]["status_roles"].
+                typed config status roles.
 
     Returns:
         Dict mapping repo prefix to {'active': count, 'all': count}.
