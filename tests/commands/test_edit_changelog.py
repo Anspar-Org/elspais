@@ -48,7 +48,7 @@ name = "test"
 prefix = "REQ"
 
 [changelog]
-enforce = true
+hash_current = true
 """
 
 MOCK_AUTHOR = {"name": "Test User", "id": "test@test.org"}

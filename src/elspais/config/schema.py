@@ -160,17 +160,82 @@ class GraphConfig(_StrictModel):
     satellite_kinds: list[str] = Field(default_factory=lambda: ["assertion", "result"])
 
 
+# Implements: REQ-d00212-A
+class LevelConfig(_StrictModel):
+    rank: int
+    letter: str
+    display_name: str | None = None
+    implements: list[str]
+
+
+# Implements: REQ-d00212-B
+class ScanningKindConfig(_StrictModel):
+    directories: list[str] = Field(default_factory=list)
+    file_patterns: list[str] = Field(default_factory=list)
+    skip_files: list[str] = Field(default_factory=list)
+    skip_dirs: list[str] = Field(default_factory=list)
+
+
+class SpecScanningConfig(ScanningKindConfig):
+    index_file: str | None = None
+
+
+class CodeScanningConfig(ScanningKindConfig):
+    source_roots: list[str] | None = None
+
+
+class TestScanningConfig(ScanningKindConfig):
+    enabled: bool = False
+    prescan_command: str = ""
+    reference_keyword: str = "Verifies"
+    reference_patterns: list[str] = Field(default_factory=list)
+
+
+class ResultScanningConfig(ScanningKindConfig):
+    run_meta_file: str = ""
+
+
+class JourneyScanningConfig(ScanningKindConfig):
+    pass
+
+
+class DocsScanningConfig(ScanningKindConfig):
+    pass
+
+
+# Implements: REQ-d00212-C
+class ScanningConfig(_StrictModel):
+    skip: list[str] = Field(default_factory=list)
+    spec: SpecScanningConfig = Field(default_factory=SpecScanningConfig)
+    code: CodeScanningConfig = Field(default_factory=CodeScanningConfig)
+    test: TestScanningConfig = Field(default_factory=TestScanningConfig)
+    result: ResultScanningConfig = Field(default_factory=ResultScanningConfig)
+    journey: JourneyScanningConfig = Field(default_factory=JourneyScanningConfig)
+    docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
+
+
+# Implements: REQ-d00212-D
+class OutputConfig(_StrictModel):
+    formats: list[str] = Field(default_factory=list)
+    dir: str = ""
+
+
+# Implements: REQ-d00212-E
+class ChangelogRequireConfig(_StrictModel):
+    reason: bool = True
+    author_name: bool = True
+    author_id: bool = True
+    change_order: bool = False
+
+
 class ChangelogConfig(_StrictModel):
-    enforce: bool = True
-    require_present: bool = False
+    hash_current: bool = True
+    present: bool = False
     id_source: str = "gh"
     date_format: str = "iso"
-    require_change_order: bool = False
-    require_reason: bool = True
-    require_author_name: bool = True
-    require_author_id: bool = True
     author_id_format: str = "email"
     allowed_author_ids: str | list[str] = "all"
+    require: ChangelogRequireConfig = Field(default_factory=ChangelogRequireConfig)
 
 
 class DirectoriesConfig(_StrictModel):

@@ -921,3 +921,24 @@ C. The Flask template context SHALL include a `config_statuses` variable contain
 
 *End* *Config-Driven Viewer UI Values* | **Hash**: 00000000
 ---
+
+## REQ-d00212: Config Schema v3 Models
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
+
+## Assertions
+
+A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), and `implements` (list[str]). Unknown fields SHALL be rejected.
+
+B. A `ScanningKindConfig` base model SHALL define common scanning fields: `directories` (list[str]), `file_patterns` (list[str]), `skip_files` (list[str]), `skip_dirs` (list[str]). Per-kind subclasses SHALL add kind-specific extras (e.g., `SpecScanningConfig` adds `index_file`, `TestScanningConfig` adds `enabled`, `prescan_command`, `reference_keyword`, `reference_patterns`).
+
+C. A `ScanningConfig` composite model SHALL contain all scanning kinds (`spec`, `code`, `test`, `result`, `journey`, `docs`) plus a global `skip` list that applies to all kinds.
+
+D. An `OutputConfig` model SHALL define output configuration: `formats` (list[str], default empty) and `dir` (str, default empty).
+
+E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement booleans: `reason`, `author_name`, `author_id`, `change_order`. `ChangelogConfig` SHALL use renamed fields (`hash_current` for `enforce`, `present` for `require_present`) and a `require` sub-model of type `ChangelogRequireConfig`.
+
+*End* *Config Schema v3 Models* | **Hash**: 00000000
+---

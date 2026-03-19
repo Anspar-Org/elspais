@@ -829,7 +829,7 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
-    require_present = typed_config.changelog.require_present
+    require_present = typed_config.changelog.present
     if not require_present:
         return HealthCheck(
             name="spec.changelog_present",
@@ -881,7 +881,7 @@ def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) 
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
-    changelog_enforce = typed_config.changelog.enforce
+    changelog_enforce = typed_config.changelog.hash_current
     if not changelog_enforce:
         return HealthCheck(
             name="spec.changelog_current",
@@ -938,7 +938,7 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
-    changelog_enforce = typed_config.changelog.enforce
+    changelog_enforce = typed_config.changelog.hash_current
     if not changelog_enforce:
         return HealthCheck(
             name="spec.changelog_format",
@@ -948,10 +948,10 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
             severity="info",
         )
 
-    require_reason = typed_config.changelog.require_reason
-    require_author_name = typed_config.changelog.require_author_name
-    require_author_id = typed_config.changelog.require_author_id
-    require_change_order = typed_config.changelog.require_change_order
+    require_reason = typed_config.changelog.require.reason
+    require_author_name = typed_config.changelog.require.author_name
+    require_author_id = typed_config.changelog.require.author_id
+    require_change_order = typed_config.changelog.require.change_order
 
     violations = []
 

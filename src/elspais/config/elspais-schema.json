@@ -176,14 +176,14 @@
     "ChangelogConfig": {
       "additionalProperties": false,
       "properties": {
-        "enforce": {
+        "hash_current": {
           "default": true,
-          "title": "Enforce",
+          "title": "Hash Current",
           "type": "boolean"
         },
-        "require_present": {
+        "present": {
           "default": false,
-          "title": "Require Present",
+          "title": "Present",
           "type": "boolean"
         },
         "id_source": {
@@ -195,26 +195,6 @@
           "default": "iso",
           "title": "Date Format",
           "type": "string"
-        },
-        "require_change_order": {
-          "default": false,
-          "title": "Require Change Order",
-          "type": "boolean"
-        },
-        "require_reason": {
-          "default": true,
-          "title": "Require Reason",
-          "type": "boolean"
-        },
-        "require_author_name": {
-          "default": true,
-          "title": "Require Author Name",
-          "type": "boolean"
-        },
-        "require_author_id": {
-          "default": true,
-          "title": "Require Author Id",
-          "type": "boolean"
         },
         "author_id_format": {
           "default": "email",
@@ -235,9 +215,39 @@
           ],
           "default": "all",
           "title": "Allowed Author Ids"
+        },
+        "require": {
+          "$ref": "#/$defs/ChangelogRequireConfig"
         }
       },
       "title": "ChangelogConfig",
+      "type": "object"
+    },
+    "ChangelogRequireConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "default": true,
+          "title": "Reason",
+          "type": "boolean"
+        },
+        "author_name": {
+          "default": true,
+          "title": "Author Name",
+          "type": "boolean"
+        },
+        "author_id": {
+          "default": true,
+          "title": "Author Id",
+          "type": "boolean"
+        },
+        "change_order": {
+          "default": false,
+          "title": "Change Order",
+          "type": "boolean"
+        }
+      },
+      "title": "ChangelogRequireConfig",
       "type": "object"
     },
     "ComponentConfig": {

@@ -231,29 +231,30 @@ class TestChangelogConfig:
         assert changelog is not None
         assert isinstance(changelog, dict)
         for key in (
-            "enforce",
+            "hash_current",
             "id_source",
             "date_format",
-            "require_change_order",
-            "require_reason",
         ):
             assert key in changelog, f"Missing key: {key}"
+        assert "require" in changelog
+        for rkey in ("change_order", "reason"):
+            assert rkey in changelog["require"], f"Missing require key: {rkey}"
 
     def test_REQ_p00002_A_changelog_defaults_values(self):
         """Verify default values for changelog configuration."""
         config = config_defaults()
-        assert config["changelog"]["enforce"] is True
+        assert config["changelog"]["hash_current"] is True
         assert config["changelog"]["id_source"] == "gh"
         assert config["changelog"]["date_format"] == "iso"
-        assert config["changelog"]["require_change_order"] is False
-        assert config["changelog"]["require_reason"] is True
+        assert config["changelog"]["require"]["change_order"] is False
+        assert config["changelog"]["require"]["reason"] is True
 
     def test_REQ_p00002_A_changelog_user_override(self):
         """User config overrides changelog defaults."""
         from elspais.config import _merge_configs
 
-        config = _merge_configs(config_defaults(), {"changelog": {"enforce": False}})
-        assert config["changelog"]["enforce"] is False
+        config = _merge_configs(config_defaults(), {"changelog": {"hash_current": False}})
+        assert config["changelog"]["hash_current"] is False
         # Non-overridden defaults should still be present
         assert config["changelog"]["id_source"] == "gh"
-        assert config["changelog"]["require_reason"] is True
+        assert config["changelog"]["require"]["reason"] is True

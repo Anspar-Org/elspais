@@ -21,7 +21,7 @@ def _make_project(tmp_path: Path) -> tuple[Path, Path]:
         "[patterns]\n"
         'prefix = "REQ"\n'
         "[changelog]\n"
-        "enforce = true\n"
+        "hash_current = true\n"
     )
     spec_dir = tmp_path / "spec"
     spec_dir.mkdir()

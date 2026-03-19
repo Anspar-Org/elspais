@@ -49,7 +49,7 @@ def _ok(result):
 def _build_scenario_project(tmp_path):
     """Build a 6-requirement project across PRD/OPS/DEV with assertions."""
     config = base_config()
-    config["changelog"] = {"enforce": False}
+    config["changelog"] = {"hash_current": False}
 
     reqs = {
         "spec/prd.md": [

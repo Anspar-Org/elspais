@@ -42,7 +42,7 @@ separator = "-"
 pattern = "REQ-[a-z]\\\\d{5}"
 
 [changelog]
-enforce = false
+hash_current = false
 """
 
 
