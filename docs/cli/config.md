@@ -154,30 +154,6 @@ reference_patterns = []                 # Additional reference patterns
 reference_keyword = "Validates"         # Default reference keyword
 ```
 
-### [references] Section
-
-Configure how code/test references are parsed.
-
-```toml
-[references.defaults]
-separators = ["-", "_"]              # ID separators
-case_sensitive = false               # Case-sensitive matching
-prefix_optional = false              # Allow omitting prefix
-comment_styles = ["#", "//", "--"]   # Comment styles to scan
-multi_assertion_separator = "+"      # Separator for REQ-xxx-A+B+C syntax
-
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-verifies = ["Verifies", "VERIFIES"]
-refines = ["Refines", "REFINES"]
-
-# Override settings for specific file patterns
-[[references.overrides]]
-match = "*.java"
-comment_styles = ["//"]
-keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
-```
-
 ### [validation] Section
 
 ```toml
