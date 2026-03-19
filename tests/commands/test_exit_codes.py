@@ -6,13 +6,19 @@ import argparse
 class TestDoctorExitCodes:
     """REQ-d00080-A: doctor SHALL exit non-zero on [!!] findings."""
 
-    def test_REQ_d00080_A_invalid_config_field_exits_nonzero(self, tmp_path, monkeypatch):
-        """doctor exits 1 when config has invalid fields."""
+    def test_REQ_d00080_A_invalid_project_type_exits_nonzero(self, tmp_path, monkeypatch):
+        """doctor exits 1 when project.type is invalid."""
         from elspais.commands.doctor import run
 
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
-        config.write_text('version = 3\n[project]\nbogus_field = "invalid"\n')
+        config.write_text(
+            '[project]\ntype = "bogus"\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
+        )
         (tmp_path / "spec").mkdir()
 
         args = argparse.Namespace(
@@ -32,7 +38,11 @@ class TestDoctorExitCodes:
         config = tmp_path / ".elspais.toml"
         # Explicitly empty required sections to override defaults
         config.write_text(
-            'version = 3\n[project]\nname = "test"\n' "[scanning.spec]\ndirectories = []\n"
+            '[project]\nname = "test"\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types]\n"
+            "[spec]\ndirectories = []\n"
+            "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()
 
@@ -52,9 +62,10 @@ class TestDoctorExitCodes:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         local_config = tmp_path / ".elspais.local.toml"
         local_config.write_text('[associates]\npaths = ["/nonexistent/sponsor"]\n')
@@ -76,11 +87,10 @@ class TestDoctorExitCodes:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            "[id-patterns]\n"
-            'canonical = "{namespace}-{level.letter}{component}"\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()
 
@@ -104,9 +114,10 @@ class TestValidateExitCodes:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -137,9 +148,10 @@ class TestValidateExitCodes:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -175,8 +187,11 @@ class TestDoctorAssociatedSection:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\nbogus_extra = true\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[project]\ntype = "associated"\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()
 
@@ -189,15 +204,19 @@ class TestDoctorAssociatedSection:
         result = run(args)
         assert result == 1
 
-    def test_REQ_d00080_D_invalid_config_exits_nonzero(self, tmp_path, monkeypatch):
-        """doctor exits 1 when config has schema validation errors."""
+    def test_REQ_d00080_D_empty_prefix_exits_nonzero(self, tmp_path, monkeypatch):
+        """doctor exits 1 when [associated] section has empty prefix."""
         from elspais.commands.doctor import run
 
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nbogus_field = "invalid"\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[project]\ntype = "associated"\n'
+            '[associated]\nprefix = ""\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         (tmp_path / "spec").mkdir()
 
@@ -215,25 +234,37 @@ class TestDoctorAssociatedSection:
         from elspais.commands.doctor import check_config_associated_section
 
         raw = {
-            "version": 3,
-            "associates": {"callisto": {"path": "../callisto", "namespace": "CAL"}},
+            "project": {"type": "associated"},
+            "associated": {"prefix": "CAL"},
         }
         check = check_config_associated_section(raw)
         assert check.passed is True
 
-    def test_REQ_d00080_D_check_function_no_associates(self):
-        """check_config_associated_section passes with no associates."""
+    def test_REQ_d00080_D_check_function_missing_section(self):
+        """check_config_associated_section fails with missing section."""
         from elspais.commands.doctor import check_config_associated_section
 
-        raw = {"version": 3}
+        raw = {"project": {"type": "associated"}}
         check = check_config_associated_section(raw)
-        assert check.passed is True
+        assert check.passed is False
+        assert check.severity == "error"
+
+    def test_REQ_d00080_D_check_function_empty_prefix(self):
+        """check_config_associated_section fails with empty prefix."""
+        from elspais.commands.doctor import check_config_associated_section
+
+        raw = {
+            "project": {"type": "associated"},
+            "associated": {"prefix": ""},
+        }
+        check = check_config_associated_section(raw)
+        assert check.passed is False
 
     def test_REQ_d00080_D_check_function_non_associated_skips(self):
-        """check_config_associated_section passes for projects without associates."""
+        """check_config_associated_section passes for non-associated projects."""
         from elspais.commands.doctor import check_config_associated_section
 
-        raw = {"version": 3, "project": {"namespace": "REQ"}}
+        raw = {"project": {"type": "core"}}
         check = check_config_associated_section(raw)
         assert check.passed is True
 
@@ -248,9 +279,10 @@ class TestValidateAssociateCount:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         local_config = tmp_path / ".elspais.local.toml"
         local_config.write_text('[associates]\npaths = ["/nonexistent/sponsor"]\n')
@@ -287,9 +319,10 @@ class TestValidateAssociateCount:
         # Set up core project config
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -305,9 +338,13 @@ class TestValidateAssociateCount:
         assoc_dir.mkdir()
         assoc_config = assoc_dir / ".elspais.toml"
         assoc_config.write_text(
-            'version = 3\n[project]\nname = "test-assoc"\nnamespace = "REQ"\n'
-            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
-            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[project]\nname = "test-assoc"\ntype = "associated"\n'
+            '[associated]\nprefix = "ASC"\n'
+            f'[core]\npath = "{tmp_path}"\n'
+            '[patterns]\nid_template = "{prefix}-{type}{id}"\n'
+            "[patterns.types.prd]\nlevel = 1\n"
+            '[spec]\ndirectories = ["spec"]\n'
+            "[rules]\nhierarchy = {}\n"
         )
         assoc_spec = assoc_dir / "spec"
         assoc_spec.mkdir()

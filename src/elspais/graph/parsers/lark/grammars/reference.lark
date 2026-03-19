@@ -1,0 +1,92 @@
+// Reference grammar for code and test files.
+//
+// Parses comment-based requirement references:
+//   # Implements: REQ-p00001, REQ-p00002
+//   // Verifies: REQ-p00001-A
+//   # IMPLEMENTS REQUIREMENTS:
+//   #   REQ-p00001: Description
+//
+// Also recognizes test name patterns (def test_foo_REQ_p00001)
+// and elspais control markers (# elspais: expected-broken-links 3).
+//
+// Pre-scan (function/class context tracking) is handled in Python,
+// not in the grammar.
+//
+// Uses Earley parser with dynamic lexer.  Rule priorities guide
+// disambiguation.
+//
+// Parameterized tokens (substituted by GrammarFactory):
+//   __NAMESPACE__       e.g. "REQ"
+//   __TYPE_PATTERN__    e.g. "p|o|d"
+//   __DIGITS_PATTERN__  e.g. "\\d{1,5}"
+//   __COMMENT_STYLES__  e.g. "\\#|//|\\-\\-"
+//   __IMPL_KEYWORDS__   e.g. "Implements|IMPLEMENTS"
+//   __VER_KEYWORDS__    e.g. "Verifies|VERIFIES"
+//   __KEYWORDS__        e.g. "Implements|IMPLEMENTS|Verifies|VERIFIES|..."
+
+start: (_entry)*
+
+// Each entry is a content line + newline, or a bare newline (blank line).
+_entry: ref_line _NL
+      | _NL
+
+// Each line is either a reference or an ordinary line.
+?ref_line: single_ref
+         | block_header
+         | block_ref
+         | test_name_ref
+         | control_marker
+         | other_line
+
+// --- Single-line reference comment ---
+// # Implements: REQ-p00001, REQ-p00002
+
+single_ref.3: SINGLE_REF_LINE
+
+// --- Multi-line block header ---
+// # IMPLEMENTS REQUIREMENTS:
+
+block_header.3: BLOCK_HEADER_LINE
+
+// --- Block reference line (follows a block header) ---
+// #   REQ-p00001: Description
+
+block_ref.3: BLOCK_REF_LINE
+
+// --- Test function name with REQ reference ---
+// def test_foo_REQ_p00001_A(...)
+
+test_name_ref.3: TEST_NAME_LINE
+
+// --- elspais control marker ---
+// # elspais: expected-broken-links 3
+
+control_marker.3: CONTROL_MARKER_LINE
+
+// --- Ordinary line (no reference) ---
+
+other_line.1: TEXT
+
+// ===================================================================
+// Terminals
+// ===================================================================
+
+// Single-line reference: comment + keyword + refs
+SINGLE_REF_LINE.5: /(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+__NAMESPACE__[-_][^\n]+/
+
+// Block header: comment + keyword + REQUIREMENTS:
+BLOCK_HEADER_LINE.5: /(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
+
+// Block reference line: comment + indented REQ-ID
+BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+__NAMESPACE__[-_][^\n]+/
+
+// Test function name containing REQ pattern
+TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]+/
+
+// elspais control marker
+CONTROL_MARKER_LINE.4: /(?:__COMMENT_STYLES__|\/\*|<!--)[ \t]*[Ee][Ll][Ss][Pp][Aa][Ii][Ss]:[ \t]*[^\n]+/
+
+// Generic text (lowest priority)
+TEXT.1: /[^\n]+/
+
+_NL: /\n/
