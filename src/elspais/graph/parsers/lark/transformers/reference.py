@@ -173,8 +173,13 @@ class ReferenceTransformer:
                         )
                     )
 
-        # Emit remainder blocks for unclaimed lines (groups contiguous other_lines)
-        self._flush_remainder(other_lines, results)
+        # Emit remainder blocks for unclaimed lines.
+        # For code/test files, merge all unclaimed lines into a single remainder
+        # (coarse grouping). Spec files need line-precise grouping for round-trip
+        # rendering, but code/test files only need remainders preserved for
+        # potential future reference rewriting.
+        coarse = self.content_type in ("code_ref", "test_ref")
+        self._flush_remainder(other_lines, results, coarse=coarse)
 
         return results
 
@@ -182,11 +187,35 @@ class ReferenceTransformer:
         self,
         lines: list[tuple[int, str]],
         results: list[ParsedContent],
+        *,
+        coarse: bool = False,
     ) -> None:
-        """Group contiguous other_lines into remainder ParsedContent blocks."""
+        """Group other_lines into remainder ParsedContent blocks.
+
+        Args:
+            lines: (line_number, text) pairs for unclaimed lines.
+            results: List to append remainder ParsedContent to.
+            coarse: If True, emit one remainder per file (all unclaimed lines
+                merged). Used for code/test files where line-precise grouping
+                isn't needed.
+        """
         if not lines:
             return
 
+        if coarse:
+            # Single remainder covering all unclaimed lines
+            results.append(
+                ParsedContent(
+                    content_type="remainder",
+                    start_line=lines[0][0],
+                    end_line=lines[-1][0],
+                    raw_text="\n".join(text for _, text in lines),
+                    parsed_data={},
+                )
+            )
+            return
+
+        # Fine-grained: group strictly contiguous lines (for spec files)
         groups: list[list[tuple[int, str]]] = []
         current: list[tuple[int, str]] = []
 

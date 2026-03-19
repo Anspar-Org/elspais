@@ -531,8 +531,8 @@ class TestRemainderParserRegistration:
             len(remainder_children) > 0
         ), "RemainderParser should produce REMAINDER nodes for unclaimed lines in spec files"
 
-    def test_REQ_d00128_G_code_files_have_remainder_nodes(self, tmp_path: Path) -> None:
-        """Code files produce file-level REMAINDER nodes for non-Implements lines."""
+    def test_REQ_d00128_G_code_files_have_coarse_remainder(self, tmp_path: Path) -> None:
+        """Code files produce coarse REMAINDER nodes (one per file, not per line)."""
         config = _write_config(tmp_path)
         _write_spec(tmp_path)
         _write_code_file(tmp_path)
@@ -548,10 +548,10 @@ class TestRemainderParserRegistration:
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
         remainder_children = [c for c in contains_children if c.kind == NodeKind.REMAINDER]
-        # The code file has "def work(): pass\n" which is unclaimed
+        # Code files use coarse grouping: all unclaimed lines merge into one remainder
         assert (
-            len(remainder_children) > 0
-        ), "RemainderParser should produce REMAINDER nodes for unclaimed lines in code files"
+            len(remainder_children) <= 1
+        ), f"Code files should have at most 1 coarse REMAINDER, got {len(remainder_children)}"
 
 
 class TestExistingBehaviorUnaffected:

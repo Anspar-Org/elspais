@@ -36,7 +36,7 @@ class TestDetectLanguage:
     def test_REQ_d00082_I_rust_extension(self):
         assert detect_language("lib.rs") == "rust"
 
-    def test_REQ_d00082_I_c_extension(self):
+    def test_REQ_d00082_I_clang_extension(self):
         assert detect_language("main.c") == "c"
 
     def test_REQ_d00082_I_java_extension(self):
