@@ -6,7 +6,7 @@ This document specifies the `Satisfies:` edge type and the NOT APPLICABLE status
 
 ## REQ-p00014: Satisfies Relationship
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -27,7 +27,7 @@ D. The system SHALL attribute `Implements:` references to template assertions to
 
 ## REQ-p00016: NOT APPLICABLE Status
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00001
 
 ## Rationale
 

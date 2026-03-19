@@ -2,7 +2,7 @@
 
 ## REQ-d00124: Graph Analysis Engine
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00003
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
 The `analysis` module SHALL provide read-only analytical functions that operate on a `TraceGraph` to rank requirements by foundational importance. The module SHALL NOT modify the graph or create parallel data structures.
 
@@ -32,7 +32,7 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 ## REQ-d00125: Analysis CLI Command
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-p00003
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
 The `elspais analysis` command SHALL invoke the graph analysis engine and render ranked results in table or JSON format.
 

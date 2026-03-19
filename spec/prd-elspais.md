@@ -6,7 +6,7 @@ This document defines the high-level product requirements for elspais, a require
 
 # REQ-p00001: Requirements Management Tool
 
-**Level**: PRD | **Status**: Draft | **Implements**: -
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Rationale
 
@@ -37,7 +37,7 @@ D. This edit SHALL be reverted, eventually.
 
 # REQ-p00002: Requirements Validation
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -65,7 +65,7 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 # REQ-p00003: Traceability Matrix Generation
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -90,7 +90,7 @@ B. The tool SHALL derive traceability from `Implements:` metadata without manual
 
 # REQ-p00004: Change Detection and Auditability
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -134,7 +134,7 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 
 # REQ-p00005: Multi-Repository Requirements
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -174,7 +174,7 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 # REQ-p00006: Interactive Traceability Viewer
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00003
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00003
 
 ## Rationale
 
@@ -208,7 +208,7 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 # REQ-p00007: Collaborative Review System
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00001
 
 ## Rationale
 
@@ -246,7 +246,7 @@ E. The tool SHALL preserve review history through archival rather than deletion.
 
 # REQ-p00008: Review User Interface
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Rationale
 
@@ -279,7 +279,7 @@ F. The UI SHALL provide contextual help explaining review workflows and features
 
 # REQ-p00009: Review Data Model
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Rationale
 
@@ -307,7 +307,7 @@ D. The system SHALL support position anchoring that identifies specific location
 
 # REQ-p00010: Review Git Integration
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Rationale
 
@@ -331,7 +331,7 @@ C. The system SHALL merge review data from multiple contributor branches.
 
 # REQ-p00011: Review Package Lifecycle
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Rationale
 
@@ -356,7 +356,7 @@ C. The system SHALL provide access to view archived packages and their contents.
 
 # REQ-p00012: Review Backend Services
 
-**Level**: PRD | **Status**: Draft | **Implements**: REQ-p00007
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00007
 
 ## Rationale
 
@@ -381,7 +381,7 @@ C. The system SHALL support modifying requirement status in spec files based on 
 
 # REQ-p00013: Automated Testing
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00001
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
 ## Rationale
 

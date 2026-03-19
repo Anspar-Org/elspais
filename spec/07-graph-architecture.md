@@ -347,7 +347,7 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 ## REQ-d00073: Link Suggestion CLI Command
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-o00065
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00065
 
 The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
 
@@ -372,7 +372,7 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 ## REQ-d00126: FILE Node Data Model
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the traceability graph.
 
@@ -496,7 +496,7 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 GraphNode SHALL use edge-only relationships (via `link()`) and support filtered traversal by edge kind, eliminating the edge-less `add_child()` mechanism.
 
@@ -521,7 +521,7 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 ## REQ-d00128: FILE Node Creation in Build Pipeline
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 The build pipeline SHALL create FILE nodes for every scanned file and wire CONTAINS edges from FILE to top-level content nodes, with RemainderParser mandatory for text-based file types.
 
@@ -560,7 +560,7 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 The `SourceLocation` class and `GraphNode.source` field SHALL be removed. All consumers SHALL migrate to use `file_node()` for file paths and `get_field("parse_line")` / `get_field("parse_end_line")` for line numbers.
 
@@ -589,7 +589,7 @@ SourceLocation duplicates information now available through the graph structure 
 
 ## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 `TraceGraph.iter_roots()` SHALL accept an optional `NodeKind` filter, and `TraceGraph` SHALL provide `iter_by_kind()` for general kind-based index queries.
 
@@ -616,7 +616,7 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 ## REQ-d00131: Render Protocol for Graph Nodes
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 Each domain NodeKind SHALL have a render function that produces its text representation. Walking a FILE node's CONTAINS children in render_order and concatenating their rendered output SHALL produce the file's content.
 
@@ -651,7 +651,7 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 
 ## REQ-d00132: Render-Based Save Operation
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
 `save_mutations()` SHALL write dirty FILE nodes to disk by rendering their CONTAINS children. `persistence.py` is replaced entirely by render-based serialization.
 
@@ -678,7 +678,7 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-d00132
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00132
 
 The system SHALL pass a comprehensive end-to-end scenario test that exercises all mutation types through the Flask API layer, saves to disk, reloads, and verifies round-trip fidelity.
 
@@ -705,7 +705,7 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 ## REQ-d00200: FederatedGraph Read-Only Delegation
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005, REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005, REQ-p00050
 
 FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its own configuration and repo root, delegating all read-only TraceGraph methods with documented federation strategies.
 
@@ -736,7 +736,7 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00050
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00050
 
 FederatedGraph SHALL delegate all mutation operations to the appropriate sub-graph, maintain a unified mutation log across repos, and update internal ownership when IDs change.
 
@@ -765,7 +765,7 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 ## REQ-d00202: Associates Config Loading
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
 
 The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml` to declare federated repository associations.
 
@@ -788,7 +788,7 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 ## REQ-d00203: Multi-Repo Build Pipeline
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00005
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00005
 
 The `build_graph()` factory SHALL build separate TraceGraph instances per repository when associates are configured, constructing a multi-repo FederatedGraph.
 
@@ -812,7 +812,7 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 ## REQ-d00204: Per-Repo Health Check Delegation
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-d00200, REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00002
 
 Health checks that depend on per-repo configuration SHALL run once per federated repo using that repo's own config, ensuring config isolation in multi-repo federations.
 
@@ -838,7 +838,7 @@ Without per-repo delegation, all nodes are validated against the root repo's con
 
 ## REQ-d00207: Declarative Config Schema Cleanup
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 All configuration defaults and validation SHALL be provided by the Pydantic `ElspaisConfig` schema. Legacy `DEFAULT_CONFIG` dict and `ConfigLoader` wrapper class SHALL be removed; all consumer code SHALL access configuration via plain dicts produced by `ElspaisConfig.model_dump()`.
 
@@ -854,7 +854,7 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 ## REQ-d00208: JSON Schema Export for IDE Autocomplete
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 The `ElspaisConfig` Pydantic model SHALL be exportable as a JSON Schema file for IDE autocomplete (e.g., Taplo). A CLI subcommand SHALL generate the schema on demand, and a committed schema file SHALL stay in sync with the model.
 
@@ -871,7 +871,7 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 ## REQ-d00209: Schema-Driven Init Template Generation
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults.
 
@@ -890,7 +890,7 @@ D. The generated TOML SHALL include human-readable comments derived from Pydanti
 
 ## REQ-d00210: Documentation Drift Detection
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 The `elspais doctor` command SHALL detect drift between `ElspaisConfig` Pydantic schema fields and `docs/configuration.md`. Undocumented schema fields and stale documentation sections SHALL be reported as health check findings.
 
@@ -907,7 +907,7 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 ## REQ-d00211: Config-Driven Viewer UI Values
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 The viewer UI SHALL derive dropdown values and filter labels from `ElspaisConfig` rather than hardcoding them. The Flask template context SHALL include config-derived requirement types, allowed statuses, and user-selectable relationship kinds.
 
@@ -924,7 +924,7 @@ C. The Flask template context SHALL include a `config_statuses` variable contain
 
 ## REQ-d00212: Config Schema v3 Models
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
 

@@ -211,7 +211,7 @@ Composition is inferred, never declared.
 
 ## REQ-p00061: Requirement Decomposition Rules
 
-**Level**: PRD | **Status**: Draft | **Implements**: -
+**Level**: prd | **Status**: Active | **Implements**: -
 
 A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
 

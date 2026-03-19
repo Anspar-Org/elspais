@@ -6,7 +6,7 @@ This document specifies the Model Context Protocol (MCP) server that exposes els
 
 ## REQ-p00060: MCP Server for AI-Driven Requirements Management
 
-**Level**: PRD | **Status**: Active | **Implements**: REQ-p00050
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00050
 
 The elspais system SHALL provide an MCP server that enables AI agents to query, navigate, and mutate requirements through the unified TraceGraph.
 
@@ -32,7 +32,7 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 ## REQ-o00060: MCP Core Query Tools
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide core query tools for graph inspection and requirement lookup.
 
@@ -60,7 +60,7 @@ Core query tools enable AI agents to discover and explore requirements without m
 
 ## REQ-o00061: MCP Workspace Context Tools
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide workspace context tools that describe the current repository and project.
 
@@ -84,7 +84,7 @@ AI agents need context about the workspace they're operating in to provide relev
 
 ## REQ-o00062: MCP Graph Mutation Tools
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide mutation tools for in-memory graph modifications with full undo support.
 
@@ -114,7 +114,7 @@ In-memory mutations enable AI agents to draft requirement changes that can be re
 
 ## REQ-o00063: MCP File Mutation Tools
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide file mutation tools that persist changes to spec files on disk.
 
@@ -148,7 +148,7 @@ File mutations persist changes to the authoritative spec files. Git safety branc
 
 ## REQ-d00060: Graph Status Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00060-A
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00060-A
 
 The `get_graph_status()` tool SHALL report graph state using direct graph inspection.
 
@@ -174,7 +174,7 @@ Graph status provides a quick health check without expensive traversal operation
 
 ## REQ-d00061: Requirement Search Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00060-C
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00060-C
 
 The `search()` tool SHALL find requirements using graph iteration with filtering.
 
@@ -216,7 +216,7 @@ Search enables AI agents to discover requirements by content without knowing exa
 
 ## REQ-d00062: Requirement Detail Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00060-D
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00060-D
 
 The `get_requirement()` tool SHALL return full requirement details from a single graph lookup.
 
@@ -244,7 +244,7 @@ Single-requirement lookup is the most common operation. O(1) access via graph in
 
 ## REQ-d00063: Hierarchy Navigation Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00060-E
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00060-E
 
 The `get_hierarchy()` tool SHALL return ancestors and children for tree navigation.
 
@@ -270,7 +270,7 @@ Hierarchy navigation enables AI agents to understand requirement context and rel
 
 ## REQ-d00064: Serializer Functions
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00060-B
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00060-B
 
 Serializer functions SHALL convert GraphNode data to JSON-safe dictionaries.
 
@@ -296,7 +296,7 @@ Serializers provide the boundary between graph internals and MCP responses. They
 
 ## REQ-d00065: Mutation Tool Delegation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00062-D
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00062-D
 
 MCP mutation tools SHALL delegate to TraceGraph mutation methods.
 
@@ -322,7 +322,7 @@ Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is pur
 
 ## REQ-o00064: MCP Test Coverage Analysis Tools
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide test coverage analysis tools for identifying test-requirement relationships and coverage gaps.
 
@@ -348,7 +348,7 @@ AI agents performing requirement analysis need to understand test coverage and i
 
 ## REQ-d00066: Test Coverage Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00064-A
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00064-A
 
 The `get_test_coverage()` tool SHALL return test coverage information for a requirement.
 
@@ -378,7 +378,7 @@ Test coverage per requirement enables targeted test writing and gap analysis.
 
 ## REQ-d00067: Uncovered Assertions Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00064-B
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00064-B
 
 The `get_uncovered_assertions()` tool SHALL find assertions lacking test coverage.
 
@@ -406,7 +406,7 @@ Finding uncovered assertions enables systematic test coverage improvement across
 
 ## REQ-d00068: Assertion Keyword Search Tool Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00064-C
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00064-C
 
 The `find_assertions_by_keywords()` tool SHALL search assertion text for keyword matches.
 
@@ -434,7 +434,7 @@ Assertion keyword search enables AI agents to find assertions related to specifi
 
 ## REQ-d00074: MCP Link Suggestion Tools
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00065-D, REQ-o00064
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00064, REQ-o00065-D
 
 The MCP server SHALL provide link suggestion tools that expose the suggestion engine to AI agents.
 
@@ -458,7 +458,7 @@ MCP exposure enables AI agents to discover and apply link suggestions during cod
 
 ## REQ-o00067: MCP Subtree Extraction Tool
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a subtree extraction tool for scoped subgraph retrieval.
 
@@ -486,7 +486,7 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 
 ## REQ-o00068: MCP Cursor Protocol
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a general-purpose cursor protocol for incremental iteration over read query results.
 
@@ -514,7 +514,7 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 ## REQ-d00075: Subtree Extraction Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00067
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00067
 
 The subtree extraction tool SHALL be implemented as MCP-layer helpers that consume the graph iterator API.
 
@@ -544,7 +544,7 @@ BFS with depth tracking and kind filtering provides the flexible subtree extract
 
 ## REQ-d00076: Cursor Protocol Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00068
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00068
 
 The cursor protocol SHALL be implemented as a `CursorState` dataclass with three MCP tool wrappers.
 
@@ -574,7 +574,7 @@ A single-cursor model with materialized items provides simple, predictable itera
 
 ## REQ-o00069: MCP Minimize Requirement Set Tool
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
 
@@ -600,7 +600,7 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 ## REQ-d00077: Minimize Requirement Set Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00069
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00069
 
 The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
 
@@ -628,7 +628,7 @@ Separating the helper from the tool wrapper enables reuse by `discover_requireme
 
 ## REQ-o00070: MCP Scoped Search Tool
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
 
@@ -654,7 +654,7 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 
 ## REQ-d00078: Scoped Search Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00070
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00070
 
 The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
 
@@ -682,7 +682,7 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 ## REQ-o00071: MCP Discover Requirements Tool
 
-**Level**: OPS | **Status**: Active | **Implements**: REQ-p00060
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
 The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
 
@@ -706,7 +706,7 @@ Agents won't compose scoped_search + minimize_requirement_set unprompted. A sing
 
 ## REQ-d00079: Discover Requirements Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00071
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00071
 
 The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
 
@@ -730,7 +730,7 @@ Chaining existing helpers avoids duplicating search or pruning logic and maintai
 
 ## REQ-d00133: MCP FILE Node Integration
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-o00067, REQ-d00060, REQ-d00061
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00060, REQ-d00061, REQ-o00067
 
 MCP tools SHALL be aware of FILE nodes without exposing them where they do not belong.
 
@@ -758,7 +758,7 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 ## REQ-d00205: MCP Federation Support
 
-**Level**: DEV | **Status**: Draft | **Implements**: REQ-o00061, REQ-d00200
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-o00061
 
 The MCP server SHALL leverage FederatedGraph's per-repo config access for federation-aware operation.
 
