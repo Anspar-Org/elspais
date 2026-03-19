@@ -478,13 +478,47 @@ class IdResolver:
         return self._forms[0][1]
 
     def search_regex(self) -> re.Pattern:
-        """Unanchored regex for finding canonical IDs within longer text."""
+        """Unanchored regex for finding canonical IDs within longer text.
+
+        Replaces literal hyphens with ``[-_]`` so the pattern matches IDs
+        written with either hyphen or underscore separators (e.g. both
+        ``REQ-p00001`` and ``REQ_p00001``).  A negative lookahead after
+        optional assertion labels prevents a trailing lowercase letter
+        from being captured as an assertion (e.g. the ``l`` in
+        ``REQ_p00001_login``).
+        """
         pat = self._forms[0][1].pattern
         # Strip ^ and $ anchors
         if pat.startswith("^"):
             pat = pat[1:]
         if pat.endswith("$"):
             pat = pat[:-1]
+        # Replace literal hyphens with [-_] to match both separators.
+        # The canonical regex uses literal '-' between groups (namespace-type,
+        # id-assertion).  We need to replace those, but NOT hyphens inside
+        # character classes (e.g. [A-Z]).
+        out: list[str] = []
+        in_class = False
+        i = 0
+        while i < len(pat):
+            ch = pat[i]
+            if ch == "\\" and i + 1 < len(pat):
+                out.append(pat[i : i + 2])
+                i += 2
+                continue
+            if ch == "[":
+                in_class = True
+            elif ch == "]":
+                in_class = False
+            if ch == "-" and not in_class:
+                out.append("[-_]")
+            else:
+                out.append(ch)
+            i += 1
+        pat = "".join(out)
+        # Append negative lookahead to prevent lowercase letters immediately
+        # following the match from being captured as assertion labels.
+        pat += r"(?![a-z])"
         return re.compile(pat)
 
     def all_type_codes(self) -> list[str]:

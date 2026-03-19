@@ -4,6 +4,13 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.3]
+
+### Changed
+
+- Remove `ReferenceConfig`/`ReferenceResolver` from result parsers (`JUnitXMLParser`, `PytestJSONParser`). ID extraction now uses `IdResolver.search_regex()` and `normalize_ref()` directly.
+- `IdResolver.search_regex()` now matches both hyphen and underscore separators (e.g. `REQ-p00001` and `REQ_p00001`) with a negative lookahead to prevent false assertion captures.
+
 ## [0.108.2]
 
 ### Changed

@@ -603,7 +603,6 @@ def build_graph(
                 xml_registry.register(
                     JUnitXMLParser(
                         resolver=default_resolver,
-                        reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
                 )
@@ -611,7 +610,6 @@ def build_graph(
                 json_registry.register(
                     PytestJSONParser(
                         resolver=default_resolver,
-                        reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
                 )
