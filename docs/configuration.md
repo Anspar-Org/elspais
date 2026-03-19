@@ -25,6 +25,9 @@ main repo, not the worktree location.
 # Config schema version (defaults to 3)
 version = 3
 
+# MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
+stats = ""
+
 #──────────────────────────────────────────────────────────────────────────────
 # PROJECT
 #──────────────────────────────────────────────────────────────────────────────

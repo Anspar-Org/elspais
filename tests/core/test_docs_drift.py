@@ -32,6 +32,7 @@ EXPECTED_SCHEMA_SECTIONS = {
     "validation",
     "changelog",
     "output",
+    "stats",
 }
 
 
