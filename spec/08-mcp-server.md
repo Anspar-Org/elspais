@@ -276,9 +276,9 @@ Serializer functions SHALL convert GraphNode data to JSON-safe dictionaries.
 
 ## Assertions
 
-A. `serialize_requirement_summary(node)` SHALL return id, title, level, status only.
+A. Summary serialization SHALL return id, title, level, status only.
 
-B. `serialize_requirement_full(node)` SHALL return all fields including body, assertions, edges.
+B. Full serialization SHALL return all fields including body, assertions, edges.
 
 C. Serializers SHALL read from `node.get_field()` and `node.metrics`, not access internal attributes.
 
@@ -290,7 +290,7 @@ E. Serializers SHALL NOT trigger graph traversal beyond the single node being se
 
 Serializers provide the boundary between graph internals and MCP responses. They ensure consistent, safe data extraction.
 
-*End* *Serializer Functions* | **Hash**: 6d8ffacb
+*End* *Serializer Functions* | **Hash**: 8d56d937
 
 ---
 
@@ -302,9 +302,9 @@ MCP mutation tools SHALL delegate to TraceGraph mutation methods.
 
 ## Assertions
 
-A. `mutate_rename_node(old_id, new_id)` SHALL call `graph.rename_node(old_id, new_id)`.
+A. Node rename mutations SHALL delegate to the graph's rename method.
 
-B. `mutate_add_requirement(...)` SHALL call `graph.add_requirement(...)`.
+B. Requirement creation mutations SHALL delegate to the graph's add method.
 
 C. `mutate_delete_requirement(id, confirm)` SHALL call `graph.delete_requirement(id)` only if `confirm=True`.
 
@@ -316,7 +316,7 @@ E. Mutation tools SHALL return the MutationEntry from the graph method for audit
 
 Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is purely an interface layer.
 
-*End* *Mutation Tool Delegation* | **Hash**: 8b1002b9
+*End* *Mutation Tool Delegation* | **Hash**: 5d1f7627
 
 ---
 
@@ -520,15 +520,15 @@ The subtree extraction tool SHALL be implemented as MCP-layer helpers that consu
 
 ## Assertions
 
-A. `_collect_subtree(graph, root_id, depth, include_kinds)` SHALL perform BFS using `node.iter_children()` with depth tracking and a visited set for DAG deduplication.
+A. Subtree collection SHALL perform BFS traversal with depth tracking and a visited set for DAG deduplication.
 
-B. `_compute_coverage_summary(req_node)` SHALL reuse `_iter_assertion_coverage()` to return `{total, covered, pct}`.
+B. Coverage summaries SHALL include total, covered, and percentage values, reusing existing coverage computation.
 
-C. `_subtree_to_markdown(collected, graph)` SHALL render indented headings with assertion bullets and coverage stats.
+C. Markdown format SHALL render indented headings with assertion bullets and coverage stats.
 
-D. `_subtree_to_flat(collected, graph, root_id)` SHALL return `{root_id, nodes, edges, stats}` as a flat structure.
+D. Flat format SHALL return root_id, nodes, edges, and stats as a JSON-safe structure.
 
-E. `_subtree_to_nested(root_node, depth_limit, kind_filter, graph)` SHALL return recursive JSON with `children` arrays.
+E. Nested format SHALL return recursive JSON with `children` arrays.
 
 F. Conservative kind defaults SHALL include `REQUIREMENT` + `ASSERTION` for requirement roots, and `USER_JOURNEY` for journey roots.
 
@@ -538,7 +538,7 @@ G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder struct
 
 BFS with depth tracking and kind filtering provides the flexible subtree extraction that `GraphNode.walk()` alone cannot deliver, while staying in the MCP layer.
 
-*End* *Subtree Extraction Implementation* | **Hash**: a53f60cc
+*End* *Subtree Extraction Implementation* | **Hash**: 769a6d75
 
 ---
 
@@ -550,11 +550,11 @@ The cursor protocol SHALL be implemented as a `CursorState` dataclass with three
 
 ## Assertions
 
-A. `CursorState` SHALL store query, params, batch_size, materialized items list, and position counter.
+A. The cursor SHALL track query, params, batch_size, materialized items, and position.
 
-B. `_materialize_cursor_items(query, params, batch_size, graph)` SHALL dispatch to existing query helpers and reshape results based on batch_size.
+B. Cursor materialization SHALL dispatch to existing query helpers and reshape results based on batch_size.
 
-C. The cursor SHALL be stored in `_state["cursor"]` as a single instance; opening a new cursor SHALL discard the previous.
+C. Only one cursor SHALL be active at a time; opening a new cursor SHALL discard the previous.
 
 D. `open_cursor` SHALL return the first item, total count, and query metadata.
 
@@ -568,7 +568,7 @@ G. The implementation SHALL reuse existing serializers: `_serialize_requirement_
 
 A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
 
-*End* *Cursor Protocol Implementation* | **Hash**: 753def07
+*End* *Cursor Protocol Implementation* | **Hash**: 997facb6
 
 ---
 
@@ -606,9 +606,9 @@ The `minimize_requirement_set` tool SHALL be implemented as a helper function wi
 
 ## Assertions
 
-A. `_minimize_requirement_set(graph, req_ids, edge_kinds)` SHALL resolve each ID via the graph index, separating found and not_found IDs.
+A. The minimizer SHALL resolve each ID via the graph index, separating found and not_found IDs.
 
-B. For each found requirement, the helper SHALL walk UP via `iter_outgoing_edges()` filtered by the parsed edge_kinds set, collecting transitive ancestor IDs.
+B. For each found requirement, the minimizer SHALL walk up the hierarchy via the specified edge kinds, collecting transitive ancestor IDs.
 
 C. A requirement R SHALL be pruned if another requirement C in the input set has R in its ancestor set.
 
@@ -622,7 +622,7 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 
 Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
 
-*End* *Minimize Requirement Set Implementation* | **Hash**: a4977d0f
+*End* *Minimize Requirement Set Implementation* | **Hash**: 15572ed9
 
 ---
 
@@ -660,11 +660,11 @@ The `scoped_search` tool SHALL be implemented using scope collection and reusabl
 
 ## Assertions
 
-A. `_collect_scope_ids(graph, scope_id, direction)` SHALL return a set of node IDs reachable from scope_id: BFS via `iter_children()` for "descendants", recursive walk via `iter_parents()` for "ancestors".
+A. Scope collection SHALL return a set of node IDs reachable from scope_id: BFS for "descendants", recursive walk for "ancestors".
 
 B. The scope set SHALL include scope_id itself and use a visited set to prevent cycles in DAG structures.
 
-C. `_scoped_search()` SHALL iterate only REQUIREMENT nodes whose IDs are in the scope set, using `_matches_query()` for matching.
+C. Scoped search SHALL iterate only REQUIREMENT nodes within the scope set, reusing the standard matching logic.
 
 D. When `include_assertions=True`, the helper SHALL check assertion text of each in-scope requirement and attach `matched_assertions` metadata when assertions match.
 
@@ -676,7 +676,7 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 
 Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
 
-*End* *Scoped Search Implementation* | **Hash**: 51b2219c
+*End* *Scoped Search Implementation* | **Hash**: b41ea5f2
 
 ---
 
@@ -712,7 +712,7 @@ The `discover_requirements` tool SHALL be implemented by chaining existing `_sco
 
 ## Assertions
 
-A. `_discover_requirements()` SHALL call `_scoped_search()` to get candidate results, then extract requirement IDs and pass them to `_minimize_requirement_set()`.
+A. Discovery SHALL chain scoped search to get candidate results, then pass them through the minimizer.
 
 B. The helper SHALL return `{results, pruned, stats}` where results contains only minimal-set items in scoped_search summary format.
 
@@ -724,7 +724,7 @@ D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds
 
 Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
 
-*End* *Discover Requirements Implementation* | **Hash**: 8498aa7c
+*End* *Discover Requirements Implementation* | **Hash**: b5683277
 
 ---
 
@@ -736,9 +736,9 @@ MCP tools SHALL be aware of FILE nodes without exposing them where they do not b
 
 ## Assertions
 
-A. `_get_subtree()` starting from a FILE node SHALL walk CONTAINS edges (producing the file's physical contents view), using `iter_children(edge_kinds={EdgeKind.CONTAINS})` at each BFS level.
+A. Subtree extraction starting from a FILE node SHALL walk CONTAINS edges, producing the file's physical contents view.
 
-B. `_get_subtree()` starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), using `iter_children(edge_kinds={EdgeKind.IMPLEMENTS, EdgeKind.REFINES, EdgeKind.STRUCTURES})` at each BFS level.
+B. Subtree extraction starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), producing the requirement's traceability view.
 
 C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
 
@@ -752,7 +752,7 @@ F. MCP serialization of requirement and assertion nodes SHALL produce identical 
 
 FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
 
-*End* *MCP FILE Node Integration* | **Hash**: 4a81d28c
+*End* *MCP FILE Node Integration* | **Hash**: 73606d1d
 
 ---
 

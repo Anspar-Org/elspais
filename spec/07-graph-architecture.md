@@ -97,11 +97,11 @@ The `core/annotators.py` module SHALL provide standalone annotator functions for
 
 ## Assertions
 
-A. `annotate_git_state(node, git_info)` SHALL add git metrics (is_uncommitted, is_moved, is_new, etc.) to node.metrics.
+A. Graph nodes SHALL carry git state annotations (is_uncommitted, is_moved, is_new) in node.metrics.
 
-B. `annotate_display_info(node)` SHALL add display metrics (is_roadmap, display_filename, repo_prefix, etc.) to node.metrics.
+B. Graph nodes SHALL carry display metadata (is_roadmap, display_filename, repo_prefix) in node.metrics.
 
-C. `annotate_implementation_files(node, files)` SHALL add implementation file references to node.metrics.
+C. Graph nodes SHALL carry implementation file references in node.metrics.
 
 D. Annotator functions SHALL only operate on REQUIREMENT nodes (skip other node kinds).
 
@@ -111,7 +111,7 @@ E. Annotator functions SHALL be idempotent - calling twice produces same result.
 
 Per-node annotators enable fine-grained control over which annotations are applied and when.
 
-*End* *Node Annotator Functions* | **Hash**: 35713bbd
+*End* *Node Annotator Functions* | **Hash**: 8ca0389e
 ---
 
 ## REQ-d00051: Graph Aggregate Functions
@@ -122,15 +122,15 @@ The `core/annotators.py` module SHALL provide aggregate functions that compute s
 
 ## Assertions
 
-A. `count_by_level(graph)` SHALL return requirement counts by level (PRD/OPS/DEV) with active/all breakdown.
+A. The system SHALL provide aggregate requirement counts by level (PRD/OPS/DEV) with active/all breakdown.
 
-B. `count_by_repo(graph)` SHALL return requirement counts by repository prefix.
+B. The system SHALL provide aggregate requirement counts by repository prefix.
 
-C. `count_implementation_files(graph)` SHALL return total implementation file count.
+C. The system SHALL provide total implementation file count.
 
-D. `collect_topics(graph)` SHALL return sorted list of unique topics from file names.
+D. The system SHALL provide a sorted list of unique topics derived from file names.
 
-E. `get_implementation_status(node)` SHALL return coverage status (Full/Partial/Unimplemented) from node.metrics.
+E. The system SHALL provide per-requirement coverage status (Full/Partial/Unimplemented) from node.metrics.
 
 F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_nodes().
 
@@ -138,7 +138,7 @@ F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_
 
 Aggregate functions provide reusable statistics computation that any output format can use.
 
-*End* *Graph Aggregate Functions* | **Hash**: bdf07870
+*End* *Graph Aggregate Functions* | **Hash**: 97c0f6fc
 ---
 
 ## REQ-d00052: Output Generators Consume Graph Directly
@@ -332,17 +332,17 @@ The `graph/link_suggest.py` module SHALL implement the link suggestion scoring p
 
 ## Assertions
 
-A. `suggest_links(graph, repo_root, file_path?, limit?)` SHALL orchestrate all heuristics and return deduplicated `LinkSuggestion` instances sorted by confidence descending.
+A. The suggestion engine SHALL orchestrate all heuristics and return deduplicated suggestions sorted by confidence descending, supporting optional file path and limit filters.
 
-B. `_extract_search_terms(test_node)` SHALL extract meaningful keywords from test node metadata (function name, class name, file path, docstring), filter stopwords and short tokens, and return an OR-joined query string for `discover_assertions` matching.
+B. The suggestion engine SHALL extract meaningful keywords from test node metadata (function name, class name, file path, docstring), filter stopwords and short tokens, and produce a query string for assertion matching.
 
-C. `_deduplicate_suggestions()` SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
+C. Deduplication SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
 
 ## Rationale
 
 The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
 
-*End* *Link Suggestion Core Engine* | **Hash**: b26954bd
+*End* *Link Suggestion Core Engine* | **Hash**: c927fae8
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
