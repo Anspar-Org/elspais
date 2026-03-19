@@ -252,11 +252,11 @@ class FileDispatcher:
 
         # Build line context if not provided
         if line_context is None:
-            from elspais.graph.parsers.code import CodeParser
+            from elspais.graph.parsers.prescan import build_line_context, detect_language
 
-            language = CodeParser._detect_language(file_path)
+            language = detect_language(file_path)
             lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
-            line_context = CodeParser._build_line_context(lines, language)
+            line_context = build_line_context(lines, language)
 
         parser = self._get_ref_parser()
         tree = parser.parse(content)
@@ -271,7 +271,7 @@ class FileDispatcher:
     ) -> list:
         """Parse a test file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
-        from elspais.graph.parsers.test import TestParser
+        from elspais.graph.parsers.prescan import ast_prescan, external_prescan, text_prescan
 
         ref_config = self._ref_config or self._default_ref_config()
         if not content.endswith("\n"):
@@ -281,22 +281,19 @@ class FileDispatcher:
 
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
-        test_parser = TestParser(self._resolver)
 
         if prescan_data and file_path in prescan_data:
-            line_context, all_test_funcs, first_def_line = test_parser._external_prescan(
+            line_context, all_test_funcs, first_def_line = external_prescan(
                 prescan_data[file_path], lines
             )
         elif is_python:
             source = "\n".join(text for _, text in lines)
             try:
-                line_context, all_test_funcs, first_def_line = test_parser._ast_prescan(
-                    source, lines
-                )
+                line_context, all_test_funcs, first_def_line = ast_prescan(source, lines)
             except SyntaxError:
-                line_context, all_test_funcs, first_def_line = test_parser._text_prescan(lines)
+                line_context, all_test_funcs, first_def_line = text_prescan(lines)
         else:
-            line_context, all_test_funcs, first_def_line = test_parser._text_prescan(lines)
+            line_context, all_test_funcs, first_def_line = text_prescan(lines)
 
         # Extract file-level default verifies and expected-broken-links
         # from control markers in the parse tree

@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.1]
+
+### Changed
+
+- Extract prescan/language detection utilities from legacy `CodeParser` and `TestParser` into standalone `prescan.py` module. Lark `FileDispatcher` now imports from `prescan` instead of legacy parsers.
+
 ## [0.108.0]
 
 ### Changed
