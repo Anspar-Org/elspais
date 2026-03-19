@@ -325,8 +325,7 @@ def _resolve_spec_dir_config(
     )
 
     # Build Lark-based FileDispatcher for spec files
-    ref_config = reference_resolver.defaults
-    dispatcher = FileDispatcher(resolver, ref_config)
+    dispatcher = FileDispatcher(resolver)
 
     # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
@@ -423,8 +422,7 @@ def build_graph(
 
     # Implements: REQ-d00128-G
     # Lark FileDispatcher for code and test files
-    default_ref_config = default_reference_resolver.defaults
-    default_dispatcher = FileDispatcher(default_resolver, default_ref_config)
+    default_dispatcher = FileDispatcher(default_resolver)
 
     # Legacy registries kept for result file parsing
     code_registry = ParserRegistry()

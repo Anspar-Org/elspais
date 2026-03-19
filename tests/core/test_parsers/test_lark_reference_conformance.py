@@ -13,7 +13,6 @@ import pytest
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
-from elspais.utilities.reference_config import ReferenceConfig
 
 
 @pytest.fixture
@@ -39,7 +38,7 @@ def resolver():
 
 @pytest.fixture
 def code_parser(resolver):
-    factory = GrammarFactory(resolver, ReferenceConfig())
+    factory = GrammarFactory(resolver)
     return factory.get_reference_parser()
 
 

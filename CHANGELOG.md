@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.2]
+
+### Changed
+
+- Remove `ReferenceConfig` parameter from `GrammarFactory` and `FileDispatcher`. Comment styles and reference keywords are now hardcoded (Implements/IMPLEMENTS, Verifies/VERIFIES, Refines/REFINES).
+
 ## [0.108.1]
 
 ### Changed

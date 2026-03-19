@@ -26,7 +26,6 @@ from lark import Lark
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
-    from elspais.utilities.reference_config import ReferenceConfig
 
 # Directory containing .lark grammar files
 _GRAMMARS_DIR = Path(__file__).parent / "grammars"
@@ -44,16 +43,15 @@ class GrammarFactory:
     # Class-level cache: grammar_hash -> compiled Lark instance
     _cache: dict[str, Lark] = {}
 
-    def __init__(self, resolver: IdResolver, ref_config: ReferenceConfig | None = None) -> None:
+    def __init__(self, resolver: IdResolver) -> None:
         self._resolver = resolver
-        self._ref_config = ref_config
 
     # ------------------------------------------------------------------
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
     def _build_tokens(self) -> dict[str, str]:
-        """Build substitution tokens from the resolver and ref_config."""
+        """Build substitution tokens from the resolver."""
         r = self._resolver
         cfg = r.config
 
@@ -97,32 +95,14 @@ class GrammarFactory:
             "__MULTI_SEP__": multi_sep,
         }
 
-        # Reference-config tokens (only needed for reference.lark)
-        if self._ref_config is not None:
-            rc = self._ref_config
-
-            # Comment styles as alternation: e.g. "\#|\/\/|\-\-"
-            # Forward slashes must be escaped as \/ to avoid conflicting
-            # with Lark's /pattern/ terminal delimiter syntax.
-            def _escape_for_lark(s: str) -> str:
-                escaped = re.escape(s)
-                return escaped.replace("/", r"\/")
-
-            comment_styles = (
-                "|".join(_escape_for_lark(s) for s in rc.comment_styles)
-                if rc.comment_styles
-                else r"\#|\/\/|\-\-"
-            )
-            tokens["__COMMENT_STYLES__"] = comment_styles
-
-            # Keywords for implements/verifies
-            impl_kw = rc.keywords.get("implements", ["Implements", "IMPLEMENTS"])
-            ver_kw = rc.keywords.get("verifies", ["Verifies", "VERIFIES"])
-            ref_kw = rc.keywords.get("refines", ["Refines", "REFINES"])
-            all_kw = impl_kw + ver_kw + ref_kw
-            tokens["__KEYWORDS__"] = "|".join(re.escape(k) for k in all_kw)
-            tokens["__IMPL_KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw)
-            tokens["__VER_KEYWORDS__"] = "|".join(re.escape(k) for k in ver_kw)
+        # Reference grammar tokens (comment styles + keywords)
+        tokens["__COMMENT_STYLES__"] = r"\#|\/\/|\-\-"
+        impl_kw = ["Implements", "IMPLEMENTS"]
+        ver_kw = ["Verifies", "VERIFIES"]
+        ref_kw = ["Refines", "REFINES"]
+        tokens["__KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw + ver_kw + ref_kw)
+        tokens["__IMPL_KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw)
+        tokens["__VER_KEYWORDS__"] = "|".join(re.escape(k) for k in ver_kw)
 
         return tokens
 
@@ -198,17 +178,14 @@ class FileDispatcher:
 
     Args:
         resolver: IdResolver for ID parsing and normalization.
-        ref_config: ReferenceConfig for comment styles and keywords.
     """
 
     def __init__(
         self,
         resolver: IdResolver,
-        ref_config: ReferenceConfig | None = None,
     ) -> None:
         self._resolver = resolver
-        self._ref_config = ref_config
-        self._factory = GrammarFactory(resolver, ref_config)
+        self._factory = GrammarFactory(resolver)
         self._req_parser: Lark | None = None
         self._ref_parser: Lark | None = None
 
