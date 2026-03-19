@@ -19,12 +19,11 @@ def default_config():
 
 @pytest.fixture()
 def custom_types_config(default_config):
-    """Return config with custom types defined."""
+    """Return config with custom levels defined."""
     cfg = dict(default_config)
-    cfg["id-patterns"] = dict(cfg.get("id-patterns", {}))
-    cfg["id-patterns"]["types"] = {
-        "system": {"level": 1, "aliases": {"letter": "s"}},
-        "module": {"level": 2, "aliases": {"letter": "m"}},
+    cfg["levels"] = {
+        "system": {"rank": 1, "letter": "s", "implements": ["system"]},
+        "module": {"rank": 2, "letter": "m", "implements": ["module", "system"]},
     }
     return cfg
 

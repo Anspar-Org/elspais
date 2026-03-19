@@ -483,9 +483,9 @@ class TestGetWorkspaceInfo:
 
         # Create a config file
         config_content = """
+version = 3
 [project]
 name = "TestProject"
-type = "core"
 namespace = "TST"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -496,7 +496,6 @@ namespace = "TST"
         assert result["project_name"] == "TestProject"
         assert result["config_file"] == str(config_file)
         assert result["config_summary"]["prefix"] == "TST"
-        assert result["config_summary"]["project_type"] == "core"
 
     # ── Detail profile tests ────────────────────────────────────────────────
 
@@ -554,16 +553,24 @@ namespace = "TST"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -574,13 +581,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -613,16 +620,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -633,13 +648,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -659,16 +674,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -679,13 +702,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -696,9 +719,9 @@ reference_keyword = "Validates"
 
         id_patterns = result["id_patterns"]
         assert id_patterns["prefix"] == "TST"
-        assert id_patterns["template"] == "{namespace}-{type.letter}{component}"
-        assert "product" in id_patterns["types"]
-        assert "development" in id_patterns["types"]
+        assert id_patterns["template"] == "{namespace}-{level.letter}{component}"
+        assert "product" in id_patterns["levels"]
+        assert "development" in id_patterns["levels"]
         assert "product" in id_patterns["examples"]
         assert id_patterns["examples"]["product"] == "TST-p00001"
 
@@ -709,16 +732,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -729,13 +760,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -755,16 +786,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -775,13 +814,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -792,9 +831,6 @@ reference_keyword = "Validates"
 
         code_refs = result["code_references"]
         assert "code_directories" in code_refs
-        assert "comment_styles" in code_refs
-        assert "implements_keywords" in code_refs
-        assert "refines_keywords" in code_refs
         assert "separators" in code_refs
         assert code_refs["code_directories"] == ["src"]
 
@@ -840,16 +876,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -860,13 +904,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -890,16 +934,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -910,13 +962,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"
@@ -937,16 +989,24 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
+version = 3
+
 [project]
 name = "TestProject"
 namespace = "TST"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
+[levels.product]
+rank = 1
+letter = "p"
+implements = []
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-development = { level = 3, aliases = { letter = "d" } }
+[levels.development]
+rank = 3
+letter = "d"
+implements = ["development", "product"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -957,13 +1017,13 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-patterns = ["test_*.py"]
+directories = ["tests"]
+file_patterns = ["test_*.py"]
 reference_keyword = "Validates"
 """
         config_file = tmp_path / ".elspais.toml"

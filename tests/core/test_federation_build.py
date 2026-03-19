@@ -24,19 +24,19 @@ from elspais.graph.federated import FederationError
 
 _BASE_CONFIG = {
     "project": {"namespace": "REQ"},
-    "spec": {"directories": ["spec"]},
+    "scanning": {"spec": {"directories": ["spec"]}},
     "id-patterns": {
-        "canonical": "{namespace}-{type.letter}{component}",
-        "types": {
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "ops": {"level": 2, "aliases": {"letter": "o"}},
-            "dev": {"level": 3, "aliases": {"letter": "d"}},
-        },
+        "canonical": "{namespace}-{level.letter}{component}",
         "component": {
             "style": "numeric",
             "digits": 5,
             "leading_zeros": True,
         },
+    },
+    "levels": {
+        "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+        "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+        "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
     },
 }
 
@@ -117,7 +117,7 @@ def two_repos(tmp_path: Path) -> dict[str, Path]:
     # --- root repo (declares associate) ---
     _write_config(
         root_dir,
-        extra={"associates": {"assoc": {"path": "../assoc"}}},
+        extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
     )
     _write_spec_file(
         root_dir / "spec",
@@ -146,7 +146,7 @@ def missing_assoc_repo(tmp_path: Path) -> Path:
     root_dir = tmp_path / "root"
     _write_config(
         root_dir,
-        extra={"associates": {"ghost": {"path": "../ghost"}}},
+        extra={"associates": {"ghost": {"path": "../ghost", "namespace": "REQ"}}},
     )
     _write_spec_file(
         root_dir / "spec",
@@ -192,7 +192,7 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
     # middle (illegally declares its own associate)
     _write_config(
         middle_dir,
-        extra={"associates": {"leaf": {"path": "../leaf"}}},
+        extra={"associates": {"leaf": {"path": "../leaf", "namespace": "REQ"}}},
     )
     _write_spec_file(
         middle_dir / "spec",
@@ -205,7 +205,7 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
     # root
     _write_config(
         root_dir,
-        extra={"associates": {"middle": {"path": "../middle"}}},
+        extra={"associates": {"middle": {"path": "../middle", "namespace": "REQ"}}},
     )
     _write_spec_file(
         root_dir / "spec",
@@ -392,7 +392,7 @@ class TestCrossGraphWiring:
 
         _write_config(
             root_dir,
-            extra={"associates": {"assoc": {"path": "../assoc"}}},
+            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
         )
         _write_spec_file(
             root_dir / "spec",
@@ -425,7 +425,7 @@ class TestCrossGraphWiring:
 
         _write_config(
             root_dir,
-            extra={"associates": {"assoc": {"path": "../assoc"}}},
+            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
         )
         # Root's DEV implements REQ-p99999 which doesn't exist anywhere
         _write_spec_file(

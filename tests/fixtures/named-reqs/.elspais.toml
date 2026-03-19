@@ -1,25 +1,26 @@
 # Named requirements configuration
 # Uses REQ-UserAuth, REQ-DataExport format
 
+version = 3
+
 [project]
 name = "named-reqs-fixture"
-type = "core"
 namespace = "REQ"
 
-[directories]
-spec = "spec"
+[levels.req]
+rank = 1
+implements = ["req"]
 
 [id-patterns]
 canonical = "{namespace}-{component}"
-
-[id-patterns.types]
-req = { level = 1 }
 
 [id-patterns.component]
 style = "named"
 pattern = "[A-Z][a-zA-Z0-9]+"
 max_length = 32
 
+[scanning.spec]
+directories = ["spec"]
+
 [rules.hierarchy]
-allowed_implements = ["req -> req"]
 allow_structural_orphans = true

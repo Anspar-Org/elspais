@@ -4,6 +4,28 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.0]
+
+### Changed
+
+- **BREAKING: ElspaisConfig v3 restructuring** -- Major config schema reorganization with 6 structural changes:
+  - **New `levels` top-level field** -- `dict[str, LevelConfig]` replaces `[patterns.types]`. Each level declares `rank`, `letter`, `display_name`, and `implements` rules (hierarchy rules moved here from `[rules.hierarchy.allowed_implements]`).
+  - **New `scanning` top-level field** -- Unified `ScanningConfig` with per-kind subclasses (`spec`, `code`, `test`, `result`, `journey`, `docs`), each with `directories`, `file_patterns`, `skip_files`, `skip_dirs`. Global `skip` list replaces `[ignore]` and `[directories].ignore`.
+  - **New `output` top-level field** -- `OutputConfig` with `formats` and `dir`, replacing `[traceability].output_formats` and `output_dir`.
+  - **Removed `[directories]`** -- Absorbed into `[scanning.<kind>].directories`.
+  - **Removed `[spec]`** -- Replaced by `[scanning.spec]` (with `index_file`, `skip_files`, etc.).
+  - **Removed `[testing]`** -- Split into `[scanning.test]` (test discovery) and `[scanning.result]` (result files).
+  - **Removed `[ignore]`** -- Absorbed into `[scanning].skip` and per-kind `skip_files`/`skip_dirs`.
+  - **Removed `[graph]`** -- `satellite_kinds` hardcoded internally.
+  - **Removed `[traceability]`** -- Output fields moved to `[output]`; scan patterns absorbed into `[scanning.code]`.
+  - **Removed `[core]` and `[associated]`** -- No more core/associated project type distinction.
+  - **`IdPatternsConfig` updated** -- Added `separators`, `prefix_optional`; removed `types` (now `levels`) and `associated`; canonical template uses `{level.letter}` instead of `{type.letter}`.
+  - **`HierarchyConfig` simplified** -- Removed per-level keys; only boolean flags remain (`allow_circular`, `allow_structural_orphans`, `cross_repo_implements`). Implements rules moved to `levels.<name>.implements`.
+  - **`ReferencesConfig` simplified** -- Only `enabled` + `case_sensitive`; removed `defaults` and `overrides` sub-sections.
+  - **`ProjectConfig` simplified** -- Removed `version` (now top-level) and `type` (no core/associated distinction).
+  - **`AssociateEntryConfig` simplified** -- Only `path` + `namespace`; removed `git` and `spec` fields.
+  - **Config version defaults to 3**.
+
 ## [0.107.0]
 
 ### Added

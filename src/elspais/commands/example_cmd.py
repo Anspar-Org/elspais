@@ -20,11 +20,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
-    proj = filtered.get("project", {})
-    if isinstance(proj, dict) and proj.get("type") == "associated":
-        if "core" not in filtered or not filtered["core"]:
-            filtered["core"] = {"path": "."}
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -268,41 +264,25 @@ def show_assertion_rules(args: argparse.Namespace) -> int:
 
 def show_id_patterns(args: argparse.Namespace) -> int:
     """Show ID patterns from current configuration."""
-    from elspais.config import load_config
+    from elspais.config import config_defaults, load_config
 
     try:
         config = load_config(args.config if hasattr(args, "config") else None)
     except Exception:
-        # Use defaults if no config found
-        config = {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
-                },
-            },
-        }
+        config = config_defaults()
 
     raw = config
     typed_config = _validate_config(raw)
     namespace = typed_config.project.namespace
     canonical = typed_config.id_patterns.canonical
-    types = {
-        k: {"level": v.level, "aliases": {"letter": v.aliases.letter}}
-        for k, v in typed_config.id_patterns.types.items()
-    }
+    levels = typed_config.levels
 
     # Format types section
     types_text = ""
-    for type_key, type_info in types.items():
-        if isinstance(type_info, dict):
-            aliases = type_info.get("aliases", {})
-            type_letter = aliases.get("letter", type_key[0])
-            type_level = type_info.get("level", "?")
-            types_text += f"  {type_key.upper()}: {type_letter} = Level {type_level}\n"
+    for level_key, level_config in levels.items():
+        type_letter = level_config.letter
+        type_level = level_config.rank
+        types_text += f"  {level_key.upper()}: {type_letter} = Level {type_level}\n"
 
     output = ID_PATTERNS_TEMPLATE.format(
         prefix=namespace,
@@ -324,12 +304,8 @@ def show_full_spec(args: argparse.Namespace) -> int:
 
     raw = config
     typed_config = _validate_config(raw)
-    _dirs_spec = typed_config.directories.spec
-    spec_dir = (
-        _dirs_spec[0]
-        if isinstance(_dirs_spec, list) and _dirs_spec
-        else (_dirs_spec if isinstance(_dirs_spec, str) and _dirs_spec else "spec")
-    )
+    spec_dirs = typed_config.scanning.spec.directories
+    spec_dir = spec_dirs[0] if spec_dirs else "spec"
     spec_path = Path.cwd() / spec_dir / "requirements-spec.md"
 
     # Also check for requirements-format.md (alternative name)

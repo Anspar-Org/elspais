@@ -9,14 +9,13 @@ from pathlib import Path
 from elspais.associates import get_associate_spec_directories
 
 
-def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
+def _make_associate_repo(base: Path, name: str, namespace: str) -> Path:
     """Helper: create a minimal associated repo directory."""
     repo = base / name
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        f'[project]\nname = "{name}"\ntype = "associated"\n\n'
-        f'[associated]\nprefix = "{prefix}"\n\n'
-        f'[directories]\nspec = "spec"\n'
+        f'[project]\nname = "{name}"\nnamespace = "{namespace}"\n\n'
+        f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir()
     return repo
@@ -86,9 +85,8 @@ def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path):
     repo = tmp_path / "no-spec"
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        '[project]\nname = "no-spec"\ntype = "associated"\n\n'
-        '[associated]\nprefix = "NSP"\n\n'
-        '[directories]\nspec = "spec"\n'
+        '[project]\nname = "no-spec"\nnamespace = "NSP"\n\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     # Note: NOT creating spec/ directory
 

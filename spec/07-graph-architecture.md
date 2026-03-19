@@ -940,5 +940,17 @@ D. An `OutputConfig` model SHALL define output configuration: `formats` (list[st
 
 E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement booleans: `reason`, `author_name`, `author_id`, `change_order`. `ChangelogConfig` SHALL use renamed fields (`hash_current` for `enforce`, `present` for `require_present`) and a `require` sub-model of type `ChangelogRequireConfig`.
 
+F. `ElspaisConfig` SHALL have `levels` (dict[str, LevelConfig]), `scanning` (ScanningConfig), and `output` (OutputConfig) fields. The `directories`, `spec`, `testing`, `ignore`, `graph`, `traceability`, `core`, and `associated` fields SHALL be removed. Version SHALL default to 3.
+
+G. `IdPatternsConfig` SHALL have `separators` and `prefix_optional` fields (moved from `references.defaults`). The `types` and `associated` fields SHALL be removed. The canonical pattern SHALL use `{level.letter}` instead of `{type.letter}`.
+
+H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
+
+I. `ReferencesConfig` SHALL contain only `enabled` (bool) and `case_sensitive` (bool). The `defaults` sub-model and `overrides` list SHALL be removed.
+
+J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
+
+K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
+
 *End* *Config Schema v3 Models* | **Hash**: 00000000
 ---

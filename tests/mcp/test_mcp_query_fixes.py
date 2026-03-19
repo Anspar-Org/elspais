@@ -189,12 +189,10 @@ class TestLevelNormalization:
         from elspais.graph.annotators import count_by_level
 
         config: dict[str, Any] = {
-            "id-patterns": {
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
-                },
+            "levels": {
+                "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
             },
         }
         counts = count_by_level(graph_with_body, config=config)
@@ -225,12 +223,10 @@ class TestLevelNormalization:
         from elspais.graph.annotators import group_by_level
 
         config: dict[str, Any] = {
-            "id-patterns": {
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
-                },
+            "levels": {
+                "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
             },
         }
         groups = group_by_level(graph_with_body, config=config)

@@ -43,8 +43,8 @@ def test_unknown_nested_key_rejected():
 
     from elspais.config.schema import ElspaisConfig
 
-    with pytest.raises(ValidationError, match="spec"):
-        ElspaisConfig.model_validate({"spec": {"bogus_nested": True}})
+    with pytest.raises(ValidationError, match="scanning"):
+        ElspaisConfig.model_validate({"scanning": {"bogus_nested": True}})
 
 
 def test_hyphenated_keys_accepted():
@@ -67,32 +67,30 @@ def test_type_mismatch_rejected():
         ElspaisConfig.model_validate({"version": "not-an-int"})
 
 
-def test_associated_requires_core():
-    """project.type='associated' without [core] must fail."""
+def test_unknown_top_level_key_rejected():
+    """Unknown top-level keys like 'core' must fail."""
     from pydantic import ValidationError
 
     from elspais.config.schema import ElspaisConfig
 
-    with pytest.raises(ValidationError, match="core"):
+    with pytest.raises(ValidationError, match="extra_forbidden"):
         ElspaisConfig.model_validate(
             {
-                "project": {"type": "associated"},
+                "core": {"path": "../core"},
             }
         )
 
 
-def test_associated_with_core_passes():
-    """project.type='associated' with [core] must pass."""
+def test_project_namespace_accepted():
+    """project.namespace is a valid field."""
     from elspais.config.schema import ElspaisConfig
 
     config = ElspaisConfig.model_validate(
         {
-            "project": {"type": "associated"},
-            "core": {"path": "../core"},
+            "project": {"namespace": "MYNS"},
         }
     )
-    assert config.core is not None
-    assert config.core.path == "../core"
+    assert config.project.namespace == "MYNS"
 
 
 def test_status_roles_reference_allowed_statuses():

@@ -19,23 +19,20 @@ from elspais.commands.health import HealthCheck
 # ---------------------------------------------------------------------------
 
 # The schema sections we expect check_docs_drift to use (alias names,
-# excluding conditional sections: associates, core, associated).
+# excluding conditional sections: associates).
 # "version" is a top-level scalar, not a table, but should be included.
 EXPECTED_SCHEMA_SECTIONS = {
     "version",
     "project",
     "id-patterns",
-    "spec",
+    "levels",
+    "scanning",
     "rules",
-    "testing",
-    "ignore",
     "references",
     "keywords",
     "validation",
-    "graph",
     "changelog",
-    "directories",
-    "traceability",
+    "output",
 }
 
 
@@ -99,7 +96,7 @@ class TestDocsDriftPassFail:
         from elspais.commands.doctor import check_docs_drift
 
         # Remove a few sections from the docs
-        incomplete = EXPECTED_SCHEMA_SECTIONS - {"graph", "changelog", "validation"}
+        incomplete = EXPECTED_SCHEMA_SECTIONS - {"output", "changelog", "validation"}
         docs_path = _make_docs_with_sections(tmp_path, incomplete)
         result = check_docs_drift(docs_path)
 
@@ -135,7 +132,7 @@ class TestDocsDriftDetails:
         """Details include 'undocumented' key listing sections in schema but not docs."""
         from elspais.commands.doctor import check_docs_drift
 
-        missing = {"graph", "changelog", "validation"}
+        missing = {"output", "changelog", "validation"}
         incomplete = EXPECTED_SCHEMA_SECTIONS - missing
         docs_path = _make_docs_with_sections(tmp_path, incomplete)
         result = check_docs_drift(docs_path)
@@ -163,15 +160,15 @@ class TestDocsDriftDetails:
         """When both undocumented and stale exist, both are reported."""
         from elspais.commands.doctor import check_docs_drift
 
-        # Remove 'graph', add 'hooks'
-        sections = (EXPECTED_SCHEMA_SECTIONS - {"graph"}) | {"hooks"}
+        # Remove 'output', add 'hooks'
+        sections = (EXPECTED_SCHEMA_SECTIONS - {"output"}) | {"hooks"}
         docs_path = _make_docs_with_sections(tmp_path, sections)
         result = check_docs_drift(docs_path)
 
         assert result.passed is False
         assert "undocumented" in result.details
         assert "stale" in result.details
-        assert "graph" in result.details["undocumented"]
+        assert "output" in result.details["undocumented"]
         assert "hooks" in result.details["stale"]
 
     def test_REQ_d00210_B_no_drift_has_empty_or_absent_details(self, tmp_path: Path) -> None:
@@ -215,14 +212,14 @@ class TestDocsDriftExcludesConditional:
         """'associates' section should not be required in docs."""
         from elspais.commands.doctor import check_docs_drift
 
-        # Docs have all required sections but NOT associates/core/associated
+        # Docs have all required sections but NOT associates
         docs_path = _make_docs_with_sections(tmp_path, EXPECTED_SCHEMA_SECTIONS)
         result = check_docs_drift(docs_path)
 
         assert result.passed is True
         # If undocumented is present, it should not contain excluded sections
         if "undocumented" in result.details:
-            for excluded in ("associates", "core", "associated"):
+            for excluded in ("associates",):
                 assert excluded not in result.details["undocumented"]
 
     def test_REQ_d00210_B_sub_sections_not_counted_as_top_level(self, tmp_path: Path) -> None:

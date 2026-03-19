@@ -37,12 +37,10 @@ class TestReloadRefreshesConfig:
         """
         # Write initial config
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text(
-            '[spec]\ndirectories = ["spec"]\n' '[spec.patterns]\nid = "REQ-{level}{number}"\n'
-        )
+        config_path.write_text('version = 3\n[scanning.spec]\ndirectories = ["spec"]\n')
 
         # Create the app with initial config and the tmp_path as working_dir
-        initial_config = {"spec": {"directories": ["spec"]}}
+        initial_config = {"scanning": {"spec": {"directories": ["spec"]}}}
         app = create_app(
             repo_root=tmp_path,
             graph=_minimal_graph,
@@ -51,10 +49,9 @@ class TestReloadRefreshesConfig:
         app.config["TESTING"] = True
         client = app.test_client()
 
-        # Modify config on disk — add a custom_marker field
+        # Modify config on disk — add extra-specs directory
         config_path.write_text(
-            '[spec]\ndirectories = ["spec", "extra-specs"]\n'
-            '[spec.patterns]\nid = "REQ-{level}{number}"\n'
+            'version = 3\n[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n'
         )
 
         # Mock build_graph so we don't need real spec files.
@@ -76,4 +73,4 @@ class TestReloadRefreshesConfig:
         # Verify build_graph was called with the REFRESHED config (from disk)
         assert len(captured_configs) == 1
         refreshed = captured_configs[0]
-        assert "extra-specs" in refreshed.get("spec", {}).get("directories", [])
+        assert "extra-specs" in refreshed.get("scanning", {}).get("spec", {}).get("directories", [])

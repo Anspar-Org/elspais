@@ -16,7 +16,7 @@ class TestDoctorConfigChecks:
         from elspais.commands.doctor import check_config_exists
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[patterns]\nid_template = "{prefix}-{type}{id}"')
+        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
         result = check_config_exists(config_path, tmp_path)
         assert result.passed is True
         assert result.category == "config"
@@ -32,7 +32,7 @@ class TestDoctorConfigChecks:
         from elspais.commands.doctor import check_config_syntax
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[patterns]\nid_template = "REQ-{type}{id}"')
+        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
         result = check_config_syntax(config_path, tmp_path)
         assert result.passed is True
 
@@ -52,9 +52,9 @@ class TestDoctorConfigChecks:
         config = _merge_configs(
             config_defaults(),
             {
-                "patterns": {"id_template": "{prefix}-{type}{id}", "types": {"prd": {"level": 1}}},
-                "spec": {"directories": ["spec"]},
-                "rules": {"hierarchy": {}},
+                "version": 3,
+                "levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}},
+                "scanning": {"spec": {"directories": ["spec"]}},
             },
         )
         results = run_config_checks(None, config, tmp_path)
@@ -114,9 +114,7 @@ class TestDoctorAssociateChecks:
 
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
-        (assoc_dir / ".elspais.toml").write_text(
-            '[project]\ntype = "associated"\n[associated]\nprefix = "CAL"'
-        )
+        (assoc_dir / ".elspais.toml").write_text('version = 3\n[project]\nname = "callisto"\n')
         config = {"associates": {"paths": [str(assoc_dir)]}}
         result = check_associate_paths(config, None)
         assert result.passed is True
@@ -190,14 +188,13 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            '[project]\nnamespace = "REQ"\n\n'
+            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             "[id-patterns]\n"
-            'canonical = "{namespace}-{type}{component}"\n\n'
-            "[id-patterns.types.prd]\nlevel = 1\n\n"
+            'canonical = "{namespace}-{level.letter}{component}"\n\n'
             "[id-patterns.component]\n"
             'style = "numeric"\ndigits = 5\n\n'
-            '[spec]\ndirectories = ["spec"]\n\n'
-            "[rules]\nhierarchy = {}\n"
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (tmp_path / "spec").mkdir()
 

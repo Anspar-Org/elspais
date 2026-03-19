@@ -34,11 +34,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
-    proj = filtered.get("project", {})
-    if isinstance(proj, dict) and proj.get("type") == "associated":
-        if "core" not in filtered or not filtered["core"]:
-            filtered["core"] = {"path": "."}
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -427,16 +423,13 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
-    hierarchy = typed_config.rules.hierarchy.model_dump()
-    types = dict(typed_config.id_patterns.types.items())
+    levels = typed_config.levels
     strict_hierarchy = typed_config.validation.strict_hierarchy or False
 
-    # Parse hierarchy rules
-    allowed_parents_map = _parse_hierarchy_rules(hierarchy)
-
-    # Build level lookup from id-patterns types
-    # Note: level_lookup reserved for future strict hierarchy validation
-    _ = {k: k for k in types}
+    # Parse hierarchy rules from levels config
+    allowed_parents_map = {
+        name.lower(): [p.lower() for p in level.implements] for name, level in levels.items()
+    }
 
     violations = []
 
@@ -1383,7 +1376,7 @@ def _read_run_meta(config: dict | None) -> dict:
     defaults = {"deselected_count": 0, "runner": ""}
     if config:
         _tc = _validate_config(config)
-        meta_file = _tc.testing.run_meta_file
+        meta_file = _tc.scanning.result.run_meta_file
     else:
         meta_file = ""
     if not meta_file:
@@ -1413,7 +1406,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
         # Check if result scanning is actually configured
         if config:
             _tc = _validate_config(config)
-            result_files = _tc.testing.result_files
+            result_files = _tc.scanning.result.file_patterns
         else:
             result_files = []
         if not result_files:

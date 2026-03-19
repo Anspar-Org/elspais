@@ -121,17 +121,28 @@ class TestExampleCommand:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
+version = 3
+
 [project]
 namespace = "SPEC"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-ops = { level = 2, aliases = { letter = "o" } }
-dev = { level = 3, aliases = { letter = "d" } }
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"

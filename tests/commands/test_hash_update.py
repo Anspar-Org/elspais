@@ -62,11 +62,14 @@ def git_repo_with_stale_hash(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """
+version = 3
+
 [project]
 name = "test-project"
+namespace = "REQ"
 
-[patterns]
-prefix = "REQ"
+[scanning.spec]
+directories = ["spec"]
 """
     )
 
@@ -483,11 +486,14 @@ class TestHashComputedFromRawBody:
         config = tmp_path / ".elspais.toml"
         config.write_text(
             """
+version = 3
+
 [project]
 name = "test"
+namespace = "REQ"
 
-[patterns]
-prefix = "REQ"
+[scanning.spec]
+directories = ["spec"]
 
 [validation]
 hash_mode = "full-text"
@@ -588,11 +594,14 @@ A. The system SHALL do something.
         config = tmp_path / ".elspais.toml"
         config.write_text(
             """
+version = 3
+
 [project]
 name = "test"
+namespace = "REQ"
 
-[patterns]
-prefix = "REQ"
+[scanning.spec]
+directories = ["spec"]
 
 [validation]
 hash_mode = "full-text"

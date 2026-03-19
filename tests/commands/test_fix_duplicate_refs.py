@@ -30,16 +30,14 @@ A. The system SHALL allow it.
 """
 
 CONFIG_TOML = """\
+version = 3
+
 [project]
 name = "test-fix-duplicate-refs"
+namespace = "REQ"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [changelog]
 hash_current = false

@@ -15,13 +15,13 @@ class TestConfigDefaults:
         from elspais.config import _merge_configs
 
         data = {
-            "patterns": {"prefix": "REQ"},
-            "spec": {"directories": ["spec"]},
+            "project": {"namespace": "REQ"},
+            "scanning": {"spec": {"directories": ["spec"]}},
         }
         merged = _merge_configs(config_defaults(), data)
 
-        assert merged["patterns"]["prefix"] == "REQ"
-        assert merged["spec"]["directories"] == ["spec"]
+        assert merged["project"]["namespace"] == "REQ"
+        assert merged["scanning"]["spec"]["directories"] == ["spec"]
 
     def test_get_with_default(self):
         defaults = config_defaults()
@@ -33,11 +33,11 @@ class TestConfigDefaults:
     def test_get_nested_key(self):
         from elspais.config import _merge_configs
 
-        data = {"patterns": {"types": {"prd": {"id": "p", "level": 1}}}}
+        data = {"levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}}}
         merged = _merge_configs(config_defaults(), data)
 
-        assert merged["patterns"]["types"]["prd"]["id"] == "p"
-        assert merged["patterns"]["types"]["prd"]["level"] == 1
+        assert merged["levels"]["prd"]["letter"] == "p"
+        assert merged["levels"]["prd"]["rank"] == 1
 
 
 class TestLoadConfig:
@@ -47,10 +47,10 @@ class TestLoadConfig:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             f.write(
                 """\
-[patterns]
-prefix = "MYREQ"
+[project]
+namespace = "MYREQ"
 
-[spec]
+[scanning.spec]
 directories = ["specs"]
 """
             )
@@ -58,21 +58,21 @@ directories = ["specs"]
 
             config = load_config(Path(f.name))
 
-            assert config["patterns"]["prefix"] == "MYREQ"
-            assert config["spec"]["directories"] == ["specs"]
+            assert config["project"]["namespace"] == "MYREQ"
+            assert config["scanning"]["spec"]["directories"] == ["specs"]
 
     def test_load_applies_defaults(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write('[patterns]\nprefix = "REQ"\n')
+            f.write('[project]\nnamespace = "REQ"\n')
             f.flush()
 
             config = load_config(Path(f.name))
 
             # Should have the explicitly-set value
-            assert config["patterns"]["prefix"] == "REQ"
+            assert config["project"]["namespace"] == "REQ"
             # Should also have default values NOT in the toml file
-            assert config.get("testing", {}).get("enabled") is False
-            assert config["spec"]["directories"] == ["spec"]
+            assert config["scanning"]["test"]["enabled"] is False
+            assert config["scanning"]["spec"]["directories"] == ["spec"]
 
 
 class TestLocalConfigOverride:
@@ -81,50 +81,50 @@ class TestLocalConfigOverride:
     def test_local_toml_merges_over_base(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
-            base.write_text('[patterns]\nprefix = "REQ"\n')
+            base.write_text('[project]\nnamespace = "REQ"\n')
 
             local = Path(tmpdir) / ".elspais.local.toml"
-            local.write_text('[associates]\npaths = ["/home/dev/other-repo"]\n')
+            local.write_text('[project]\nname = "local-override"\n')
 
             config = load_config(base)
 
-            assert config["patterns"]["prefix"] == "REQ"
-            assert config["associates"]["paths"] == ["/home/dev/other-repo"]
+            assert config["project"]["namespace"] == "REQ"
+            assert config["project"]["name"] == "local-override"
 
     def test_local_toml_overrides_base_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
-            base.write_text('[patterns]\nprefix = "REQ"\n')
+            base.write_text('[project]\nnamespace = "REQ"\n')
 
             local = Path(tmpdir) / ".elspais.local.toml"
-            local.write_text('[patterns]\nprefix = "LOCAL"\n')
+            local.write_text('[project]\nnamespace = "LOCAL"\n')
 
             config = load_config(base)
 
-            assert config["patterns"]["prefix"] == "LOCAL"
+            assert config["project"]["namespace"] == "LOCAL"
 
     def test_missing_local_toml_is_silently_ignored(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write('[patterns]\nprefix = "REQ"\n')
+            f.write('[project]\nnamespace = "REQ"\n')
             f.flush()
 
             config = load_config(Path(f.name))
 
-            assert config["patterns"]["prefix"] == "REQ"
+            assert config["project"]["namespace"] == "REQ"
 
     def test_local_toml_deep_merges_nested_sections(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
-            base.write_text('[spec]\ndirectories = ["spec"]\npatterns = ["*.md"]\n')
+            base.write_text('[scanning.spec]\ndirectories = ["spec"]\nfile_patterns = ["*.md"]\n')
 
             local = Path(tmpdir) / ".elspais.local.toml"
-            local.write_text('[spec]\ndirectories = ["spec", "extra-specs"]\n')
+            local.write_text('[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n')
 
             config = load_config(base)
 
-            assert config["spec"]["directories"] == ["spec", "extra-specs"]
-            # patterns should remain from base (deep-merge preserves siblings)
-            assert config["spec"]["patterns"] == ["*.md"]
+            assert config["scanning"]["spec"]["directories"] == ["spec", "extra-specs"]
+            # file_patterns should remain from base (deep-merge preserves siblings)
+            assert config["scanning"]["spec"]["file_patterns"] == ["*.md"]
 
 
 class TestFindConfigFile:
@@ -133,7 +133,7 @@ class TestFindConfigFile:
     def test_finds_config_in_current_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / ".elspais.toml"
-            config_path.write_text('[patterns]\nprefix = "REQ"\n')
+            config_path.write_text('[project]\nnamespace = "REQ"\n')
 
             found = find_config_file(Path(tmpdir))
 
@@ -207,7 +207,7 @@ class TestPydanticShim:
     def test_load_config_validates_schema(self, tmp_path):
         """load_config() should validate against Pydantic schema."""
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 2\n[project]\nnamespace = "TEST"\n')
+        config_path.write_text('version = 3\n[project]\nnamespace = "TEST"\n')
 
         config = load_config(config_path)
         assert config["project"]["namespace"] == "TEST"
@@ -215,7 +215,7 @@ class TestPydanticShim:
     def test_load_config_rejects_unknown_key(self, tmp_path):
         """load_config() should reject unknown TOML keys."""
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 2\nbogus_key = "oops"\n')
+        config_path.write_text('version = 3\nbogus_key = "oops"\n')
 
         with pytest.raises(ValueError):
             load_config(config_path)

@@ -1,7 +1,7 @@
 """Tests for associates config functions.
 
 Validates REQ-d00202-A: Read associate definitions from config.
-Validates REQ-d00202-B: Path is required, git is optional.
+Validates REQ-d00202-B: Path is required, namespace is required.
 Validates REQ-d00202-C: Missing or empty associates section returns empty dict.
 Validates REQ-d00202-D: Transitive associates raise FederationError.
 """
@@ -16,11 +16,11 @@ class TestGetAssociatesConfig:
     """Validates REQ-d00202-A, REQ-d00202-B, REQ-d00202-C."""
 
     def test_REQ_d00202_A_reads_associates_config(self):
-        """Config with two associates returns both with paths and git fields."""
+        """Config with two associates returns both with paths and namespace fields."""
         config = {
             "associates": {
-                "core": {"path": "../core", "git": "git@github.com:org/core.git"},
-                "module-a": {"path": "../module-a", "git": "https://github.com/org/module-a.git"},
+                "core": {"path": "../core", "namespace": "CORE"},
+                "module-a": {"path": "../module-a", "namespace": "MODA"},
             }
         }
 
@@ -28,26 +28,26 @@ class TestGetAssociatesConfig:
 
         assert len(result) == 2
         assert result["core"]["path"] == "../core"
-        assert result["core"]["git"] == "git@github.com:org/core.git"
+        assert result["core"]["namespace"] == "CORE"
         assert result["module-a"]["path"] == "../module-a"
-        assert result["module-a"]["git"] == "https://github.com/org/module-a.git"
+        assert result["module-a"]["namespace"] == "MODA"
 
-    def test_REQ_d00202_B_path_required_git_optional(self):
-        """When git is not provided, it defaults to None."""
+    def test_REQ_d00202_B_path_and_namespace_required(self):
+        """Path and namespace are required fields."""
         config = {
             "associates": {
-                "module-a": {"path": "../module-a"},
+                "module-a": {"path": "../module-a", "namespace": "MODA"},
             }
         }
 
         result = get_associates_config(config)
 
         assert result["module-a"]["path"] == "../module-a"
-        assert result["module-a"]["git"] is None
+        assert result["module-a"]["namespace"] == "MODA"
 
     def test_REQ_d00202_C_no_associates_returns_empty(self):
         """Config with no associates section returns empty dict."""
-        config = {"patterns": {"prefix": "REQ"}}
+        config = {"project": {"namespace": "REQ"}}
 
         result = get_associates_config(config)
 
@@ -79,7 +79,7 @@ class TestTransitiveAssociateDetection:
     def test_REQ_d00202_D_associate_without_associates_ok(self):
         """Associate without [associates] section passes validation."""
         associate_config = {
-            "spec": {"directories": ["spec"]},
+            "scanning": {"spec": {"directories": ["spec"]}},
         }
 
         # Should not raise

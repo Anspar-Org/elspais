@@ -272,7 +272,7 @@ def base_config(
     code_dir: str | list[str] = "src",
     *,
     # ID pattern options
-    canonical: str = "{namespace}-{type.letter}{component}",
+    canonical: str = "{namespace}-{level.letter}{component}",
     types: dict | None = None,
     component_style: str = "numeric",
     component_digits: int = 5,
@@ -310,31 +310,45 @@ def base_config(
     # Changelog
     changelog_hash_current: bool = False,
 ) -> dict[str, Any]:
-    """Build a base config dict with sensible defaults."""
+    """Build a base config dict with sensible defaults (v3 schema)."""
+    # Convert old types dict to v3 levels dict
     if types is None:
-        types = {
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "ops": {"level": 2, "aliases": {"letter": "o"}},
-            "dev": {"level": 3, "aliases": {"letter": "d"}},
+        levels = {
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+            "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
         }
+    else:
+        levels = {}
+        for code, tdef in types.items():
+            if isinstance(tdef, dict):
+                levels[code] = {
+                    "rank": tdef.get("level", tdef.get("rank", 1)),
+                    "letter": tdef.get("aliases", {}).get("letter", code[0]),
+                    "implements": tdef.get("implements", [code]),
+                }
+            else:
+                levels[code] = {"rank": 1, "letter": code[0], "implements": [code]}
+
     if allowed_statuses is None:
         allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
-    if allowed_implements is None:
-        allowed_implements = ["dev -> ops, prd", "ops -> prd", "prd -> prd"]
+
+    spec_dirs = [spec_dir] if isinstance(spec_dir, str) else spec_dir
+    code_dirs = [code_dir] if isinstance(code_dir, str) else code_dir
 
     cfg: dict[str, Any] = {
+        "version": 3,
         "project": {
             "name": name,
-            "type": project_type,
             "namespace": namespace,
         },
-        "directories": {
-            "spec": spec_dir,
-            "code": code_dir,
+        "levels": levels,
+        "scanning": {
+            "spec": {"directories": spec_dirs},
+            "code": {"directories": code_dirs},
         },
         "id-patterns": {
             "canonical": canonical,
-            "types": types,
             "component": {
                 "style": component_style,
                 "digits": component_digits,
@@ -347,17 +361,13 @@ def base_config(
         },
         "rules": {
             "hierarchy": {
-                "allowed_implements": allowed_implements,
                 "allow_structural_orphans": allow_structural_orphans,
             },
             "format": {
                 "require_hash": require_hash,
                 "require_assertions": require_assertions,
-                "require_shall": require_shall,
                 "require_status": require_status,
                 "allowed_statuses": allowed_statuses,
-                "acceptance_criteria": acceptance_criteria,
-                "labels_sequential": labels_sequential,
             },
         },
         "changelog": {
@@ -369,27 +379,23 @@ def base_config(
         cfg["id-patterns"]["assertions"]["zero_pad"] = True
 
     if multi_assertion_separator != "+":
-        cfg.setdefault("references", {}).setdefault("defaults", {})[
-            "multi_assertion_separator"
-        ] = multi_assertion_separator
+        cfg["id-patterns"]["assertions"]["multi_separator"] = multi_assertion_separator
 
     if skip_files:
-        cfg.setdefault("spec", {})["skip_files"] = skip_files
+        cfg["scanning"]["spec"]["skip_files"] = skip_files
 
     if skip_dirs:
-        cfg.setdefault("spec", {})["skip_dirs"] = skip_dirs
+        cfg["scanning"]["spec"]["skip_dirs"] = skip_dirs
 
     if testing_enabled:
-        cfg["testing"] = {
+        cfg["scanning"]["test"] = {
             "enabled": True,
-            "test_dirs": test_dirs or ["tests"],
-            "patterns": test_patterns or ["test_*.py", "*_test.py"],
+            "directories": test_dirs or ["tests"],
+            "file_patterns": test_patterns or ["test_*.py", "*_test.py"],
         }
 
     if comment_styles:
-        cfg.setdefault("references", {}).setdefault("defaults", {})[
-            "comment_styles"
-        ] = comment_styles
+        cfg.setdefault("references", {})["comment_styles"] = comment_styles
 
     if associated_enabled:
         cfg["id-patterns"]["associated"] = {
@@ -411,40 +417,42 @@ def associate_config(
     spec_dir: str = "spec",
     *,
     types: dict | None = None,
-    canonical: str = "{namespace}-{type.letter}{component}",
+    canonical: str = "{namespace}-{level.letter}{component}",
     component_digits: int = 5,
     label_style: str = "uppercase",
     allowed_implements: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Build config dict for an associated repo."""
+    """Build config dict for an associated repo (v3 schema)."""
     if types is None:
-        types = {
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "ops": {"level": 2, "aliases": {"letter": "o"}},
-            "dev": {"level": 3, "aliases": {"letter": "d"}},
+        levels = {
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+            "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
         }
-    if allowed_implements is None:
-        allowed_implements = ["dev -> ops, prd", "ops -> prd", "prd -> prd"]
+    else:
+        levels = {}
+        for code, tdef in types.items():
+            if isinstance(tdef, dict):
+                levels[code] = {
+                    "rank": tdef.get("level", tdef.get("rank", 1)),
+                    "letter": tdef.get("aliases", {}).get("letter", code[0]),
+                    "implements": tdef.get("implements", [code]),
+                }
+            else:
+                levels[code] = {"rank": 1, "letter": code[0], "implements": [code]}
 
     return {
+        "version": 3,
         "project": {
             "name": name,
-            "type": "associated",
             "namespace": namespace,
         },
-        "associated": {
-            "prefix": prefix,
-            "id_range": [1, 99999],
-        },
-        "core": {
-            "path": core_path,
-        },
-        "directories": {
-            "spec": spec_dir,
+        "levels": levels,
+        "scanning": {
+            "spec": {"directories": [spec_dir]},
         },
         "id-patterns": {
             "canonical": canonical,
-            "types": types,
             "component": {
                 "style": "numeric",
                 "digits": component_digits,
@@ -453,17 +461,9 @@ def associate_config(
             "assertions": {
                 "label_style": label_style,
             },
-            "associated": {
-                "enabled": True,
-                "position": "after_prefix",
-                "format": "uppercase",
-                "length": 3,
-                "separator": "-",
-            },
         },
         "rules": {
             "hierarchy": {
-                "allowed_implements": allowed_implements,
                 "cross_repo_implements": True,
             },
         },

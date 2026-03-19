@@ -84,7 +84,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     # Strip legacy-format associates (contains 'paths' list instead of named entries)
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -1338,9 +1338,8 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
     config_summary = {
         "prefix": typed_config.project.namespace,
-        "spec_directories": typed_config.spec.directories,
-        "testing_enabled": typed_config.testing.enabled,
-        "project_type": typed_config.project.type,
+        "spec_directories": typed_config.scanning.spec.directories,
+        "testing_enabled": typed_config.scanning.test.enabled,
         "local_config": local_config_exists,
     }
 
@@ -1371,15 +1370,15 @@ def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     leading_zeros = component.leading_zeros
     example_num = "0" * (digits - 1) + "1" if leading_zeros else "1"
     examples = {}
-    for type_key, type_def in id_patterns.types.items():
-        type_letter = type_def.aliases.letter
-        examples[type_key] = f"{namespace}-{type_letter}{example_num}"
+    for level_key, level_config in typed_config.levels.items():
+        type_letter = level_config.letter
+        examples[level_key] = f"{namespace}-{type_letter}{example_num}"
 
     return {
         "prefix": namespace,
         "template": canonical,
         "id_format": component.model_dump(),
-        "types": {k: v.model_dump() for k, v in id_patterns.types.items()},
+        "levels": {k: v.model_dump() for k, v in typed_config.levels.items()},
         "examples": examples,
     }
 
@@ -1393,8 +1392,8 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
 
     # Pick first type for the example
     first_type_letter = "p"
-    for _key, type_def in id_patterns.types.items():
-        first_type_letter = type_def.aliases.letter
+    for _key, level_config in typed_config.levels.items():
+        first_type_letter = level_config.letter
         break
 
     digits = id_patterns.component.digits
@@ -1419,16 +1418,13 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
 def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
     """Build hierarchy rules info from config."""
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    hierarchy = typed_config.rules.hierarchy
+    levels = typed_config.levels
 
-    # Build from individual type keys (dev, ops, prd)
+    # Build from levels config
     rules = {}
-    if hierarchy.dev:
-        rules["dev"] = list(hierarchy.dev)
-    if hierarchy.ops:
-        rules["ops"] = list(hierarchy.ops)
-    if hierarchy.prd:
-        rules["prd"] = list(hierarchy.prd)
+    for name, level in levels.items():
+        if level.implements:
+            rules[name] = list(level.implements)
     return {"rules": rules}
 
 
@@ -1504,10 +1500,10 @@ def _workspace_profile_testing(
     result["id_patterns"] = _build_id_patterns(config)
     result["assertion_format"] = _build_assertion_format(config)
     result["testing"] = {
-        "reference_keyword": typed_config.testing.reference_keyword,
-        "test_dirs": typed_config.testing.test_dirs,
-        "file_patterns": typed_config.testing.patterns,
-        "result_files": typed_config.testing.result_files,
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     return result
@@ -1524,19 +1520,11 @@ def _workspace_profile_code_refs(
     result = dict(base)
     result["detail"] = "code-refs"
 
-    refs_defaults = typed_config.references.defaults
-    keywords = refs_defaults.keywords
     result["id_patterns"] = _build_id_patterns(config)
     result["code_references"] = {
-        "code_directories": (
-            typed_config.directories.code
-            if isinstance(typed_config.directories.code, list)
-            else [typed_config.directories.code]
-        ),
-        "comment_styles": refs_defaults.comment_styles,
-        "implements_keywords": keywords.implements,
-        "refines_keywords": keywords.refines,
-        "separators": refs_defaults.separators,
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": typed_config.references.case_sensitive,
     }
     result["assertion_format"] = _build_assertion_format(config)
 
@@ -1574,25 +1562,17 @@ def _workspace_profile_retrofit(
     result["assertion_format"] = _build_assertion_format(config)
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
 
-    refs_defaults = typed_config.references.defaults
-    keywords = refs_defaults.keywords
     result["code_references"] = {
-        "code_directories": (
-            typed_config.directories.code
-            if isinstance(typed_config.directories.code, list)
-            else [typed_config.directories.code]
-        ),
-        "comment_styles": refs_defaults.comment_styles,
-        "implements_keywords": keywords.implements,
-        "refines_keywords": keywords.refines,
-        "separators": refs_defaults.separators,
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": typed_config.references.case_sensitive,
     }
 
     result["testing"] = {
-        "reference_keyword": typed_config.testing.reference_keyword,
-        "test_dirs": typed_config.testing.test_dirs,
-        "file_patterns": typed_config.testing.patterns,
-        "result_files": typed_config.testing.result_files,
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
@@ -1636,7 +1616,7 @@ def _workspace_profile_worktree(
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
     typed_config = _validate_config(config) if isinstance(config, dict) else config
     result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
-    result["config_summary"]["spec_directories"] = typed_config.spec.directories
+    result["config_summary"]["spec_directories"] = typed_config.scanning.spec.directories
 
     return result
 
@@ -1658,26 +1638,18 @@ def _workspace_profile_all(
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
 
     # Code references
-    refs_defaults = typed_config.references.defaults
-    keywords = refs_defaults.keywords
     result["code_references"] = {
-        "code_directories": (
-            typed_config.directories.code
-            if isinstance(typed_config.directories.code, list)
-            else [typed_config.directories.code]
-        ),
-        "comment_styles": refs_defaults.comment_styles,
-        "implements_keywords": keywords.implements,
-        "refines_keywords": keywords.refines,
-        "separators": refs_defaults.separators,
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": typed_config.references.case_sensitive,
     }
 
     # Testing
     result["testing"] = {
-        "reference_keyword": typed_config.testing.reference_keyword,
-        "test_dirs": typed_config.testing.test_dirs,
-        "file_patterns": typed_config.testing.patterns,
-        "result_files": typed_config.testing.result_files,
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     # Coverage and health (graph-dependent)

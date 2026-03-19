@@ -20,97 +20,70 @@ main repo, not the worktree location.
 ## Complete Configuration Reference
 
 ```toml
-# .elspais.toml - Full configuration reference
+# .elspais.toml - Full configuration reference (v3)
+
+# Config schema version (defaults to 3)
+version = 3
 
 #──────────────────────────────────────────────────────────────────────────────
 # PROJECT
 #──────────────────────────────────────────────────────────────────────────────
 
 [project]
+# Project namespace (used as the ID prefix, e.g. "REQ" -> REQ-p00001)
+namespace = "REQ"
+
 # Project name (used in reports)
 name = "my-project"
 
-# Repository type: "core" for primary repository, "associated" for extensions
-type = "core"  # "core" | "associated"
-
 #──────────────────────────────────────────────────────────────────────────────
-# DIRECTORIES
-#──────────────────────────────────────────────────────────────────────────────
-
-[directories]
-# Directory containing requirement specifications
-spec = "spec"
-
-# Documentation output directory
-docs = "docs"
-
-# Database directory (for traceability scanning)
-database = "database"
-
-# Code directories to scan for REQ references
-code = [
-    "apps",
-    "packages",
-    "server",
-    "tools",
-    "src",
-]
-
-# Directories to ignore entirely
-ignore = [
-    "node_modules",
-    ".git",
-    "build",
-    "dist",
-    ".dart_tool",
-    "__pycache__",
-    ".venv",
-    "venv",
-]
-
-#──────────────────────────────────────────────────────────────────────────────
-# SPEC FILES
+# LEVELS - Requirement Hierarchy
+# Defines requirement levels with rank, letter, display name, and implements rules.
+# Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
+# The `implements` list declares which levels this level may implement.
 #──────────────────────────────────────────────────────────────────────────────
 
-[spec]
-# Index file name
-index_file = "INDEX.md"
+[levels.prd]
+rank = 1
+letter = "p"
+display_name = "Product"
+implements = ["prd"]            # PRD can implement other PRD (sub-requirements)
 
-# README file name
-readme_file = "README.md"
+[levels.ops]
+rank = 2
+letter = "o"
+display_name = "Operations"
+implements = ["ops", "prd"]     # OPS can implement OPS or PRD
 
-# Format guide file name
-format_guide = "requirements-format.md"
-
-# Files to skip during validation
-skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
+[levels.dev]
+rank = 3
+letter = "d"
+display_name = "Development"
+implements = ["dev", "ops", "prd"]  # DEV can implement DEV, OPS, or PRD
 
 #──────────────────────────────────────────────────────────────────────────────
-# PATTERNS - Requirement ID Format
+# ID PATTERNS - Requirement ID Format
 #──────────────────────────────────────────────────────────────────────────────
 
-[patterns]
-# ID template using tokens: {prefix}, {associated}, {type}, {id}
-# The {associated} token is optional - renders empty for core repos
+[id-patterns]
+# Canonical ID template using tokens: {namespace}, {level.letter}, {component}
 # Examples:
-#   "{prefix}-{associated}{type}{id}"  -> REQ-p00001 (core) or REQ-CAL-d00001 (associated)
-#   "{prefix}-{type}{id}"              -> REQ-p00001 (no associated support)
-#   "{type}-{id}"                      -> PRD-00001
-#   "{prefix}-{id}"                    -> PROJ-123
-id_template = "{prefix}-{associated}{type}{id}"
+#   "{namespace}-{level.letter}{component}"  -> REQ-p00001
+#   "{level.letter}-{component}"             -> p-00001
+canonical = "{namespace}-{level.letter}{component}"
 
-# Base prefix (used when {prefix} token is in template)
-prefix = "REQ"
+# Separator characters accepted between ID components (e.g., REQ-p00001 or REQ_p00001)
+separators = ["-", "_"]
 
-# Requirement types with their identifiers and hierarchy levels
-# Lower level = higher in hierarchy (PRD=1 is parent of DEV=3)
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
+# Whether the namespace prefix (e.g., "REQ") is required for matching
+prefix_optional = false
+
+# Named alias patterns for short-form parsing
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 # ID number/name format
-[patterns.id_format]
+[id-patterns.component]
 # Style: "numeric" | "alphanumeric" | "named"
 style = "numeric"
 
@@ -124,102 +97,117 @@ leading_zeros = true
 # pattern = "[A-Z]{2}[0-9]{3}"
 
 # For named: allowed characters and max length
-# allowed_chars = "A-Za-z0-9-"
 # max_length = 32
 
 # Assertion label configuration
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
 max_count = 26             # Maximum assertions per requirement
-zero_pad = false           # For numeric styles: true = "01", false = "1"
-
-# Associated repository namespace configuration
-[patterns.associated]
-# Enable associated prefixes in IDs
-enabled = false
-
-# Position in ID: "after_prefix" | "before_type" | "none"
-position = "after_prefix"
-
-# Format: "uppercase" | "lowercase" | "mixed"
-format = "uppercase"
-
-# Fixed length (null for variable)
-length = 3
-
-# Separator between associated and rest
-separator = "-"
 
 #──────────────────────────────────────────────────────────────────────────────
-# ASSOCIATES - Cross-Repository Links (for core repos)
+# SCANNING - Unified file scanning configuration
+# Each kind (spec, code, test, result, journey, docs) has its own sub-section
+# with directories, file_patterns, skip_files, and skip_dirs.
+# The global `skip` list applies to all kinds.
 #──────────────────────────────────────────────────────────────────────────────
 
-[associates]
-# Paths to associated repositories (relative or absolute).
+[scanning]
+# Global skip patterns (applied to all scanning kinds)
+skip = [
+    "node_modules",
+    ".git",
+    "build",
+    "dist",
+    "__pycache__",
+    ".venv",
+    "venv",
+]
+
+# Spec file scanning
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
+skip_dirs = []
+index_file = "INDEX.md"
+
+# Code scanning (for REQ references in source code)
+[scanning.code]
+directories = ["src", "apps", "packages"]
+source_roots = []          # Optional: root directories for import resolution
+
+# Test file scanning
+[scanning.test]
+enabled = false            # Enable test mapping and coverage features
+directories = ["tests"]
+file_patterns = ["test_*.py", "*_test.py"]
+skip_dirs = []
+reference_keyword = "Verifies"
+# External command for test structure discovery (optional).
+# Receives test file paths on stdin (one per line) and outputs JSON on stdout:
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+# prescan_command = "dart run tool/list_tests.dart"
+
+# Test result file scanning (JUnit XML, pytest JSON)
+[scanning.result]
+file_patterns = ["TEST-*.xml", "pytest-results.json"]
+run_meta_file = ""
+
+# User journey file scanning
+[scanning.journey]
+directories = ["spec"]
+file_patterns = ["*.md"]
+
+# Documentation file scanning
+[scanning.docs]
+directories = ["docs"]
+file_patterns = ["*.md"]
+
+#──────────────────────────────────────────────────────────────────────────────
+# OUTPUT - Output formats and directory
+#──────────────────────────────────────────────────────────────────────────────
+
+[output]
+# Output formats to generate (e.g. ["markdown", "html"])
+formats = []
+
+# Output directory
+dir = ""
+
+#──────────────────────────────────────────────────────────────────────────────
+# ASSOCIATES - Cross-Repository Federation
+# Each associate is a named entry with `path` and `namespace`.
 # Relative paths resolve from the canonical repo root (worktree-safe).
-# Each path must contain .elspais.toml with project.type = "associated".
-paths = ["../callisto", "../phoenix"]
-
-#──────────────────────────────────────────────────────────────────────────────
-# CORE REPOSITORY (for associated repos)
 #──────────────────────────────────────────────────────────────────────────────
 
-[core]
-# Path to core repository (relative or absolute)
-path = "../core-repo"
+[associates.callisto]
+path = "../callisto"
+namespace = "CAL"
 
-# Or specify remote URL for fetching
-# remote = "git@github.com:org/core-repo.git"
-
-#──────────────────────────────────────────────────────────────────────────────
-# ASSOCIATED CONFIGURATION (when type = "associated")
-#──────────────────────────────────────────────────────────────────────────────
-
-[associated]
-# Associated repo prefix (e.g., CAL for Callisto)
-prefix = "CAL"
-
-# Allowed ID range for this associated repo
-id_range = [1, 99999]
+[associates.phoenix]
+path = "../phoenix"
+namespace = "PHX"
 
 #──────────────────────────────────────────────────────────────────────────────
 # VALIDATION RULES
 #──────────────────────────────────────────────────────────────────────────────
 
 [validation]
-# Enforce strict hierarchy (PRD -> OPS -> DEV)
-strict_hierarchy = true
+# Hash mode for change detection: "full-text" | "normalized-text"
+hash_mode = "normalized-text"
 
-# Hash algorithm for change detection
-hash_algorithm = "sha256"
-
-# Hash length (number of characters)
-hash_length = 8
+# Allow unresolved cross-repo references
+allow_unresolved_cross_repo = false
 
 #──────────────────────────────────────────────────────────────────────────────
 # HIERARCHY RULES
 #──────────────────────────────────────────────────────────────────────────────
 
-[rules]
-# Enable/disable rule categories
-hierarchy = true
-format = true
-traceability = true
-
 [rules.hierarchy]
-# Define allowed "Implements" relationships
-# Format: "source_type -> allowed_target_types"
-allowed_implements = [
-    "dev -> ops, prd",   # DEV can implement OPS or PRD
-    "ops -> prd",        # OPS can implement PRD
-    "prd -> prd",        # PRD can implement other PRD (sub-requirements)
-]
-
 # Forbid circular dependency chains (A -> B -> A)
 allow_circular = false
 
 # Allow nodes without a FILE ancestor (structural orphans)
-# Replaces deprecated `allow_orphans` (still accepted for backward compatibility)
 allow_structural_orphans = false
 
 # Allow cross-repository implementations (associated -> core)
@@ -239,10 +227,13 @@ require_rationale = false
 # Require Status field
 require_status = true
 
+# Require ## Assertions section in requirements
+require_assertions = true
+
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
-# Status role classification — determines behavior in metrics and viewer
+# Status role classification -- determines behavior in metrics and viewer
 # Each role controls how requirements with that status are treated:
 #   active:       Counted in coverage and analysis, shown in viewer
 #   provisional:  Excluded from coverage, included in analysis, shown in viewer
@@ -253,147 +244,6 @@ active = ["Active"]
 provisional = ["Draft", "Proposed"]
 aspirational = ["Roadmap", "Future"]
 retired = ["Deprecated", "Superseded"]
-
-# Assertion format rules (new in v0.9.0)
-# Require ## Assertions section in requirements
-require_assertions = true
-
-# How to handle legacy Acceptance Criteria format
-# "allow" = silently accept, "warn" = log warning, "error" = fail validation
-acceptance_criteria = "warn"
-
-# Require SHALL keyword in assertion text
-require_shall = true
-
-# Labels must be sequential (A, B, C... not A, C, D)
-labels_sequential = true
-
-# No duplicate labels allowed
-labels_unique = true
-
-# Values that indicate removed/deprecated assertions (preserve label sequence)
-placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"]
-
-#──────────────────────────────────────────────────────────────────────────────
-# TRACEABILITY RULES
-#──────────────────────────────────────────────────────────────────────────────
-
-[rules.traceability]
-# Require at least one code reference for DEV requirements
-require_code_link = false
-
-# Warn about REQ IDs in code that have no matching spec
-scan_for_orphans = true
-
-#──────────────────────────────────────────────────────────────────────────────
-# NAMING RULES
-#──────────────────────────────────────────────────────────────────────────────
-
-[rules.naming]
-# Minimum title length
-title_min_length = 10
-
-# Maximum title length
-title_max_length = 100
-
-# Title must match pattern (regex)
-title_pattern = "^[A-Z].*"  # Must start with capital letter
-
-#──────────────────────────────────────────────────────────────────────────────
-# TRACEABILITY MATRIX
-#──────────────────────────────────────────────────────────────────────────────
-
-[traceability]
-# Output formats to generate
-output_formats = ["markdown", "html"]
-
-# Output directory
-output_dir = "."
-
-# File patterns to scan for implementation references
-scan_patterns = [
-    "database/**/*.sql",
-    "apps/**/*.dart",
-    "packages/**/*.dart",
-    "server/**/*.dart",
-    "tools/**/*.py",
-    "src/**/*.py",
-    ".github/workflows/**/*.yml",
-]
-
-# Patterns to detect implementation references in code
-impl_patterns = [
-    "IMPLEMENTS.*REQ-",
-    "Implements:\\s*REQ-",
-    "Fixes:\\s*REQ-",
-]
-
-#──────────────────────────────────────────────────────────────────────────────
-# INDEX FILE
-#──────────────────────────────────────────────────────────────────────────────
-
-[index]
-# Automatically regenerate INDEX.md on validation
-auto_regenerate = false
-
-#──────────────────────────────────────────────────────────────────────────────
-# TESTING (v0.9.0+)
-#──────────────────────────────────────────────────────────────────────────────
-
-[testing]
-# Enable test mapping and coverage features
-enabled = false
-
-# Glob patterns for test directories to scan
-test_dirs = [
-    "apps/**/test",
-    "apps/**/tests",
-    "packages/**/test",
-    "packages/**/tests",
-    "tools/**/tests",
-    "tests",
-]
-
-# File patterns to match test files
-patterns = [
-    "*_test.dart",
-    "test_*.dart",
-    "test_*.py",
-    "*_test.py",
-    "*_test.sql",
-]
-
-# Glob patterns for test result files (JUnit XML, pytest JSON)
-result_files = [
-    "build-reports/**/TEST-*.xml",
-    "build-reports/pytest-results.json",
-]
-
-# Regex patterns to extract requirement IDs from test names/comments
-reference_patterns = [
-    'test_.*(?:REQ[-_])?([pod]\\d{5})(?:_[A-Z])?',
-    '(?:IMPLEMENTS|Implements|implements)[:\\s]+(?:REQ[-_])?([pod]\\d{5})(?:-[A-Z])?',
-    '\\bREQ[-_]([pod]\\d{5})(?:-[A-Z])?\\b',
-]
-
-# External command for test structure discovery (optional).
-# If not set, uses built-in Python AST scanner for .py files and
-# text-based scanning for other extensions.
-# The command receives test file paths on stdin (one per line) and
-# outputs a JSON array on stdout:
-#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
-# prescan_command = "dart run tool/list_tests.dart"
-
-#──────────────────────────────────────────────────────────────────────────────
-# GIT HOOKS
-#──────────────────────────────────────────────────────────────────────────────
-
-[hooks]
-# Run validation in pre-commit hook
-pre_commit = true
-
-# Validate REQ references in commit-msg hook
-commit_msg = true
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
@@ -426,49 +276,23 @@ author_id = true
 change_order = false
 
 #──────────────────────────────────────────────────────────────────────────────
-# UNIFIED REFERENCE CONFIGURATION (v0.10.0+)
-# Used by: CodeParser, TestParser, JUnitXMLParser, PytestJSONParser
+# REFERENCE PARSING
 #──────────────────────────────────────────────────────────────────────────────
 
-[references.defaults]
-# Separator characters accepted between ID components (e.g., REQ-p00001 or REQ_p00001)
-separators = ["-", "_"]
+[references]
+# Enable reference parsing in code/test files
+enabled = true
 
 # Case-sensitive matching (false = REQ, req, Req all match)
 case_sensitive = false
 
-# Whether the prefix (e.g., "REQ") is required (false = p00001 alone won't match)
-prefix_optional = false
+#──────────────────────────────────────────────────────────────────────────────
+# KEYWORD SEARCH
+#──────────────────────────────────────────────────────────────────────────────
 
-# Character for joining multiple assertion labels in compact syntax
-# REQ-p00001-A+B+C expands to REQ-p00001-A, REQ-p00001-B, REQ-p00001-C
-# Must NOT appear in the separators list. Set to "" to disable.
-multi_assertion_separator = "+"
-
-# Comment styles to recognize for reference extraction
-comment_styles = ["#", "//", "--"]
-
-# Keywords for different reference types
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-verifies = ["Verifies", "VERIFIES"]
-refines = ["Refines", "REFINES"]
-
-# Override: Python files (underscore only, hash comments)
-[[references.overrides]]
-match = "*.py"
-separators = ["_"]
-comment_styles = ["#"]
-
-# Override: TypeScript/JavaScript files
-[[references.overrides]]
-match = "*.{ts,tsx,js,jsx}"
-comment_styles = ["//"]
-
-# Override: Legacy test directory (prefix not required for backward compat)
-[[references.overrides]]
-match = "tests/legacy/**"
-prefix_optional = true
+[keywords]
+# Minimum keyword length for extraction
+min_length = 3
 ```
 
 ## Environment Variable Overrides
@@ -479,54 +303,87 @@ Configuration values can be overridden with environment variables:
 # Pattern: ELSPAIS_<SECTION>_<KEY>
 # Single underscore (_) separates sections: SECTION_KEY -> section.key
 # Double underscore (__) is a literal underscore: KEY__NAME -> key_name
-ELSPAIS_DIRECTORIES_SPEC=requirements
-ELSPAIS_PATTERNS_PREFIX=PRD
-ELSPAIS_ASSOCIATED_PREFIX=CAL
+ELSPAIS_PROJECT_NAMESPACE=PRD
+ELSPAIS_PROJECT_NAME=my-project
 
 # Booleans are parsed automatically
-ELSPAIS_VALIDATION_STRICT__HIERARCHY=false
+ELSPAIS_VALIDATION_ALLOW__UNRESOLVED__CROSS__REPO=false
 
 # JSON list values
-ELSPAIS_ASSOCIATES_PATHS='["../callisto", "../phoenix"]'
-ELSPAIS_DIRECTORIES_CODE='["src", "lib"]'
+ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 ```
 
 ## Minimal Configuration Examples
 
-### Core Repository
+### Simple Repository
 
 ```toml
 [project]
-name = "my-core-project"
-type = "core"
+name = "my-project"
 ```
 
-### Associated Repository
+### Custom Levels
 
 ```toml
 [project]
-name = "associated-cal"
-type = "associated"
+namespace = "PROJ"
 
-[associated]
-prefix = "CAL"
+[levels.epic]
+rank = 1
+letter = "e"
+display_name = "Epic"
+implements = ["epic"]
 
-[core]
-path = "../core-repo"
+[levels.story]
+rank = 2
+letter = "s"
+display_name = "Story"
+implements = ["story", "epic"]
+
+[levels.task]
+rank = 3
+letter = "t"
+display_name = "Task"
+implements = ["task", "story", "epic"]
+```
+
+### With Associates (Federation)
+
+```toml
+[project]
+name = "core-platform"
+
+[associates.callisto]
+path = "../callisto"
+namespace = "CAL"
+
+[associates.phoenix]
+path = "../phoenix"
+namespace = "PHX"
 ```
 
 ### Type-Prefix Style Requirements
 
 ```toml
-[patterns]
-id_template = "{type}-{id}"
+[id-patterns]
+canonical = "{level.letter}-{component}"
 
-[patterns.types]
-PRD = { id = "PRD", level = 1 }
-OPS = { id = "OPS", level = 2 }
-DEV = { id = "DEV", level = 3 }
+[levels.prd]
+rank = 1
+letter = "PRD"
+implements = ["prd"]
 
-[patterns.id_format]
+[levels.ops]
+rank = 2
+letter = "OPS"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "DEV"
+implements = ["dev", "ops", "prd"]
+
+[id-patterns.component]
 style = "numeric"
 digits = 5
 ```
@@ -534,14 +391,18 @@ digits = 5
 ### Jira-Style Requirements
 
 ```toml
-[patterns]
-id_template = "{prefix}-{id}"
-prefix = "PROJ"
+[project]
+namespace = "PROJ"
 
-[patterns.types]
-req = { id = "", level = 1 }
+[id-patterns]
+canonical = "{namespace}-{component}"
 
-[patterns.id_format]
+[levels.req]
+rank = 1
+letter = ""
+implements = ["req"]
+
+[id-patterns.component]
 style = "numeric"
 digits = 0
 leading_zeros = false

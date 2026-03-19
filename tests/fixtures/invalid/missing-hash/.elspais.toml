@@ -1,24 +1,32 @@
 # Configuration for missing hash test
+
+version = 3
+
 [project]
 name = "missing-hash-test"
-type = "core"
 namespace = "REQ"
 
-[directories]
-spec = "spec"
+[levels.prd]
+rank = 1
+letter = "p"
+
+[levels.dev]
+rank = 3
+letter = "d"
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+canonical = "{namespace}-{level.letter}{component}"
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-dev = { level = 3, aliases = { letter = "d" } }
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
 
 [rules.format]
 require_hash = true

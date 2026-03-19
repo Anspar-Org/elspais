@@ -19,20 +19,11 @@ _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.item
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys.
-
-    Handles associated projects that may lack [core] when read from external
-    repos by injecting a placeholder core section.
-    """
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
     assoc = filtered.get("associates")
     if isinstance(assoc, dict) and "paths" in assoc:
-        del filtered["associates"]
-    # Associated projects read externally may lack [core]; inject placeholder
-    proj = filtered.get("project", {})
-    if isinstance(proj, dict) and proj.get("type") == "associated":
-        if "core" not in filtered or not filtered["core"]:
-            filtered["core"] = {"path": "."}
+        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -67,8 +58,8 @@ def get_associate_spec_directories(
     Get all associate spec directories from configuration.
 
     Handles two cases:
-    - Associated projects reading core repo specs (project.type == "associated")
-    - Path-based loading from config["associates"]["paths"]
+    - Named associates from [associates.<name>] config sections
+    - Legacy path-based loading from config["associates"]["paths"]
 
     Args:
         config: Main elspais configuration dictionary
@@ -86,44 +77,12 @@ def get_associate_spec_directories(
     spec_dirs = []
     errors: list[str] = []
 
-    # 0. Core repo spec directories (for associated projects)
-    # Read the core repo's own config to discover all its spec dirs.
+    # 0. Resolve associates from typed config
     typed_config = _validate_config(config)
-    project_type = typed_config.project.type
-    if project_type == "associated":
-        core_path_str = typed_config.core.path if typed_config.core else None
-        if core_path_str:
-            core_path = Path(core_path_str)
-            if not core_path.is_absolute() and canonical_root:
-                core_path = canonical_root / core_path
-            core_config_file = core_path / ".elspais.toml"
-            if core_config_file.exists():
-                from elspais.config import get_config, get_spec_directories
 
-                core_config = get_config(core_config_file, core_path)
-                core_spec_dirs = get_spec_directories(None, core_config, core_path)
-                for csd in core_spec_dirs:
-                    if csd.exists() and csd.is_dir():
-                        spec_dirs.append(csd)
-            else:
-                # Fallback: use configured or default "spec" subdir
-                core_spec_dir_name = (
-                    typed_config.core.spec
-                    if typed_config.core and typed_config.core.spec
-                    else "spec"
-                )
-                core_spec_dir = core_path / core_spec_dir_name
-                if core_spec_dir.exists() and core_spec_dir.is_dir():
-                    spec_dirs.append(core_spec_dir)
-                else:
-                    errors.append(f"Core repo spec directory not found: {core_spec_dir}")
-
-    # 1. Path-based loading (reads from config["associates"]["paths"])
-    # Implements: REQ-p00005-C
-    # Legacy format: associates.paths is a list (not typed by schema)
-    associate_paths = config.get("associates", {}).get("paths", [])
-    for repo_path_str in associate_paths:
-        repo_path = Path(repo_path_str)
+    # 1. Path-based loading from [associates] config (new format: named entries)
+    for _assoc_name, assoc_entry in typed_config.associates.items():
+        repo_path = Path(assoc_entry.path)
         if not repo_path.is_absolute() and canonical_root:
             repo_path = canonical_root / repo_path
         result = discover_associate_from_path(repo_path)
@@ -136,6 +95,23 @@ def get_associate_spec_directories(
         else:
             errors.append(f"Spec directory not found: {spec_dir}")
 
+    # Legacy format: associates.paths is a list (not typed by schema)
+    associate_paths = config.get("associates", {}).get("paths", [])
+    if isinstance(associate_paths, list):
+        for repo_path_str in associate_paths:
+            repo_path = Path(repo_path_str)
+            if not repo_path.is_absolute() and canonical_root:
+                repo_path = canonical_root / repo_path
+            result = discover_associate_from_path(repo_path)
+            if isinstance(result, str):
+                errors.append(result)
+                continue
+            spec_dir = repo_path / result.spec_path
+            if spec_dir.exists() and spec_dir.is_dir():
+                spec_dirs.append(spec_dir)
+            else:
+                errors.append(f"Spec directory not found: {spec_dir}")
+
     return spec_dirs, errors
 
 
@@ -145,8 +121,7 @@ def discover_associate_from_path(
     """Discover associate identity by reading a repo's .elspais.toml.
 
     Reads {repo_path}/.elspais.toml and extracts associate configuration.
-    Returns an error message string if the path is invalid, has no config,
-    or isn't configured as an associated repository.
+    Returns an error message string if the path is invalid or has no config.
 
     Args:
         repo_path: Path to the associate repository root.
@@ -169,28 +144,15 @@ def discover_associate_from_path(
     config = parse_toml_document(config_file.read_text(encoding="utf-8"))
 
     typed_config = _validate_config(config)
-    project_type = typed_config.project.type
-    if project_type != "associated":
-        return (
-            f"Repository at {repo_path} has project.type='{project_type}', "
-            f"expected 'associated'"
-        )
-
-    prefix = typed_config.associated.prefix if typed_config.associated else None
-    if not prefix:
-        return f"Associated repository at {repo_path} is missing [associated] prefix"
 
     name = typed_config.project.name or repo_path.name
-    _dirs_spec = typed_config.directories.spec
-    spec_path = (
-        _dirs_spec[0]
-        if isinstance(_dirs_spec, list) and _dirs_spec
-        else (_dirs_spec if isinstance(_dirs_spec, str) and _dirs_spec else "spec")
-    )
+    namespace = typed_config.project.namespace
+    spec_dirs = typed_config.scanning.spec.directories
+    spec_path = spec_dirs[0] if spec_dirs else "spec"
 
     return Associate(
         name=name,
-        code=prefix,
+        code=namespace,
         enabled=True,
         path=str(repo_path),
         spec_path=spec_path,

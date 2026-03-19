@@ -11,16 +11,14 @@ from elspais.utilities.hasher import compute_normalized_hash
 def _make_config(tmp_path: Path) -> Path:
     config = tmp_path / ".elspais.toml"
     config.write_text(
-        """[project]
+        """version = 3
+
+[project]
 name = "test-hash"
+namespace = "REQ"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 """
     )
     return config

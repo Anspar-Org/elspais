@@ -24,8 +24,8 @@ def _write_config(tmp_path: Path, extra: str = "") -> Path:
 [project]
 name = "test-parameterized-roots"
 
-[directories]
-spec = "spec"
+[scanning.spec]
+directories = ["spec"]
 {extra}
 """,
         encoding="utf-8",
