@@ -874,7 +874,7 @@ def move_requirement(
     # Find the requirement block
     # Pattern: ## REQ-xxx: title ... *End* *title* | **Hash**: xxx\n---
     req_pattern = re.compile(
-        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
+        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"^\*End\*[^\n]*\n" rf"(?:---\n)?)",
         re.MULTILINE | re.DOTALL,
     )
 
@@ -1243,7 +1243,7 @@ def delete_requirement_from_file(
 
     # Reuse the same pattern from move_requirement
     req_pattern = re.compile(
-        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"\*End\*[^\n]*\n" rf"(?:---\n)?)",
+        rf"(^#+\s*{re.escape(req_id)}:[^\n]*\n" rf".*?" rf"^\*End\*[^\n]*\n" rf"(?:---\n)?)",
         re.MULTILINE | re.DOTALL,
     )
 
