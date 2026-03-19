@@ -2994,7 +2994,7 @@ def _change_reference_type(
     target_file = None
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8")
-        if re.search(rf"^#{1,6}\s+{re.escape(req_id)}:", content, re.MULTILINE):
+        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
             target_file = md_file
             break
 
@@ -3054,7 +3054,7 @@ def _move_requirement(
     source_file = None
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8")
-        if re.search(rf"^#{1,6}\s+{re.escape(req_id)}:", content, re.MULTILINE):
+        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
             source_file = md_file
             break
 
