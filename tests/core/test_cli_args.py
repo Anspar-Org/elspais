@@ -15,6 +15,7 @@ from elspais.commands.args import (
     AssociateArgs,
     ChangedArgs,
     Command,
+    CompletionArgs,
     ConfigArgs,
     ConfigGetArgs,
     ConfigShowArgs,
@@ -85,9 +86,10 @@ class TestCliArgsDataclasses:
             UninstallArgs,
             McpArgs,
             LinkArgs,
+            CompletionArgs,
         }
         assert base_types == expected
-        assert len(args) == 22
+        assert len(args) == 23
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
         """HealthArgs defaults are correct."""
@@ -230,6 +232,7 @@ class TestCliArgsDataclasses:
             McpInstallArgs,
             LinkArgs,
             LinkSuggestArgs,
+            CompletionArgs,
             GlobalArgs,
         ]
         for cls in args_classes:

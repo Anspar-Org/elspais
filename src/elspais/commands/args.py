@@ -658,6 +658,41 @@ class LinkArgs:
 
 
 # ---------------------------------------------------------------------------
+# Completion subcommands
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class CompletionInstallArgs:
+    """Generate and install a tab-completion script for your shell."""
+
+    shell: Literal["bash", "zsh", "tcsh"] | None = None
+    """Target shell (auto-detected from $SHELL if omitted)."""
+
+
+@dataclasses.dataclass
+class CompletionUninstallArgs:
+    """Remove a previously installed tab-completion script."""
+
+    shell: Literal["bash", "zsh", "tcsh"] | None = None
+    """Target shell (auto-detected from $SHELL if omitted)."""
+
+
+CompletionAction = (
+    Annotated[CompletionInstallArgs, tyro.conf.subcommand("install")]
+    | Annotated[CompletionUninstallArgs, tyro.conf.subcommand("uninstall")]
+)
+
+
+@dataclasses.dataclass
+class CompletionArgs:
+    """Generate and install shell tab-completion scripts (bash, zsh, tcsh)."""
+
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[CompletionAction]] = (
+        dataclasses.field(default_factory=CompletionInstallArgs)
+    )
+    """Completion subcommand (install, uninstall)."""
+
+
+# ---------------------------------------------------------------------------
 # Top-level command union — each entry becomes a subcommand
 # ---------------------------------------------------------------------------
 Command = (
@@ -683,6 +718,7 @@ Command = (
     | Annotated[UninstallArgs, tyro.conf.subcommand("uninstall")]
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
+    | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
 )
 
 

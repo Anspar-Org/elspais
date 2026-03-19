@@ -17,6 +17,7 @@ from elspais.commands import (
     analysis_cmd,
     associate_cmd,
     changed,
+    completion,
     config_cmd,
     doctor,
     edit,
@@ -36,6 +37,9 @@ from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
     ChangedArgs,
+    CompletionArgs,
+    CompletionInstallArgs,
+    CompletionUninstallArgs,
     ConfigAddArgs,
     ConfigArgs,
     ConfigGetArgs,
@@ -124,6 +128,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UninstallArgs: "uninstall",
         McpArgs: "mcp",
         LinkArgs: "link",
+        CompletionArgs: "completion",
     }
     ns.command = _CMD_MAP.get(type(cmd), "")
 
@@ -178,6 +183,15 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
                 setattr(ns, field.name, getattr(cmd.action, field.name))
     elif isinstance(cmd, UninstallArgs):
         ns.uninstall_action = "local"
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, CompletionArgs):
+        _COMPLETION_MAP = {
+            CompletionInstallArgs: "install",
+            CompletionUninstallArgs: "uninstall",
+        }
+        ns.completion_action = _COMPLETION_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
@@ -370,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
             return install_cmd.run(args)
         elif args.command == "uninstall":
             return install_cmd.run_uninstall(args)
+        elif args.command == "completion":
+            return completion.run(args)
         else:
             _print_help()
             return 1
@@ -420,6 +436,7 @@ Commands:
   uninstall   Revert elspais installation
   mcp         MCP server commands
   link        Link suggestion tools
+  completion  Generate and install shell tab-completion scripts
 
 Global options:
   --verbose, -v       Verbose output
