@@ -28,6 +28,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.config.schema import ElspaisConfig
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
+
+
 # Implements: REQ-p00016
 _NA_PATTERN = re.compile(
     r"([\w-]+-[A-Z0-9]+)\s+SHALL\s+be\s+NOT\s+APPLICABLE",
@@ -229,8 +245,7 @@ def count_by_level(
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"] and status roles from
-                config["rules"]["format"]["status_roles"].
+                typed config levels and status roles.
 
     Returns:
         Dict with 'active' (excludes analysis-excluded statuses) and 'all'
@@ -241,8 +256,9 @@ def count_by_level(
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
-        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        typed_config = _validate_config(config)
+        level_keys = list(typed_config.levels.keys())
+        status_roles_data = typed_config.rules.format.status_roles
         roles = (
             StatusRolesConfig.from_dict(status_roles_data)
             if status_roles_data
@@ -275,7 +291,7 @@ def group_by_level(
     Args:
         graph: The TraceGraph to query.
         config: Optional config dict. If provided, derives level keys from
-                config["patterns"]["types"]. Otherwise uses hardcoded defaults.
+                typed config levels. Otherwise uses hardcoded defaults.
 
     Returns:
         Dict mapping level to list of requirement nodes, plus "other" for unrecognized.
@@ -284,7 +300,8 @@ def group_by_level(
 
     # Derive level keys from config or use hardcoded defaults
     if config is not None:
-        level_keys = list(config.get("id-patterns", {}).get("types", {}).keys())
+        typed_config = _validate_config(config)
+        level_keys = list(typed_config.levels.keys())
     else:
         level_keys = ["PRD", "OPS", "DEV"]
 
@@ -309,7 +326,7 @@ def count_by_repo(
     Args:
         graph: The TraceGraph to aggregate.
         config: Optional config dict. If provided, derives status roles from
-                config["rules"]["format"]["status_roles"].
+                typed config status roles.
 
     Returns:
         Dict mapping repo prefix to {'active': count, 'all': count}.
@@ -319,7 +336,8 @@ def count_by_repo(
     from elspais.graph import NodeKind
 
     if config is not None:
-        status_roles_data = config.get("rules", {}).get("format", {}).get("status_roles", {})
+        typed_config = _validate_config(config)
+        status_roles_data = typed_config.rules.format.status_roles
         roles = (
             StatusRolesConfig.from_dict(status_roles_data)
             if status_roles_data

@@ -47,7 +47,7 @@ A. The system SHALL do something.
     )
 
     config_file = tmp_path / ".elspais.toml"
-    config_file.write_text('[directories]\nspec = ["spec"]\n')
+    config_file.write_text('version = 3\n[scanning.spec]\ndirectories = ["spec"]\n')
     return spec_dir
 
 
@@ -76,7 +76,7 @@ def _patch_graph_build():
     return [
         patch("elspais.graph.factory.build_graph", return_value=MagicMock()),
         patch("elspais.config.get_config", return_value={}),
-        patch("elspais.config.ConfigLoader.from_dict", return_value=MagicMock()),
+        patch("elspais.config.config_defaults", return_value={}),
     ]
 
 

@@ -9,24 +9,23 @@ from pathlib import Path
 from elspais.associates import get_associate_spec_directories
 
 
-def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
+def _make_associate_repo(base: Path, name: str, namespace: str) -> Path:
     """Helper: create a minimal associated repo directory."""
     repo = base / name
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        f'[project]\nname = "{name}"\ntype = "associated"\n\n'
-        f'[associated]\nprefix = "{prefix}"\n\n'
-        f'[directories]\nspec = "spec"\n'
+        f'[project]\nname = "{name}"\nnamespace = "{namespace}"\n\n'
+        f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir()
     return repo
 
 
 def test_REQ_p00005_C_loads_associates_from_paths_config(tmp_path):
-    """Registers associates via config['associates']['paths'] array."""
+    """Registers associates via v3 named [associates.<name>] sections."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
 
-    config = {"associates": {"paths": [str(repo)]}}
+    config = {"associates": {"callisto": {"path": str(repo), "namespace": "CAL"}}}
     dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 1
@@ -35,11 +34,16 @@ def test_REQ_p00005_C_loads_associates_from_paths_config(tmp_path):
 
 
 def test_REQ_p00005_C_loads_multiple_associates(tmp_path):
-    """Registers multiple associates from paths array."""
+    """Registers multiple associates from named sections."""
     repo1 = _make_associate_repo(tmp_path, "callisto", "CAL")
     repo2 = _make_associate_repo(tmp_path, "europa", "EUR")
 
-    config = {"associates": {"paths": [str(repo1), str(repo2)]}}
+    config = {
+        "associates": {
+            "callisto": {"path": str(repo1), "namespace": "CAL"},
+            "europa": {"path": str(repo2), "namespace": "EUR"},
+        }
+    }
     dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 2
@@ -50,7 +54,12 @@ def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path):
     """Skips invalid paths and continues with valid ones."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
 
-    config = {"associates": {"paths": ["/nonexistent", str(repo)]}}
+    config = {
+        "associates": {
+            "broken": {"path": "/nonexistent", "namespace": "BRK"},
+            "callisto": {"path": str(repo), "namespace": "CAL"},
+        }
+    }
     dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 1
@@ -59,13 +68,12 @@ def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path):
 
 
 def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
-    """Path-based associates work alongside existing sponsors config."""
+    """Named associates work alongside existing sponsors config."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
 
-    # Config has both old sponsors section (empty) and new associates.paths
     config = {
         "sponsors": {},
-        "associates": {"paths": [str(repo)]},
+        "associates": {"callisto": {"path": str(repo), "namespace": "CAL"}},
     }
     dirs, errors = get_associate_spec_directories(config, tmp_path)
 
@@ -74,8 +82,8 @@ def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
 
 
 def test_REQ_p00005_C_empty_paths_array(tmp_path):
-    """Empty paths array returns no directories."""
-    config = {"associates": {"paths": []}}
+    """Empty associates returns no directories."""
+    config = {"associates": {}}
     dirs, errors = get_associate_spec_directories(config, tmp_path)
     assert dirs == []
     assert errors == []
@@ -86,13 +94,12 @@ def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path):
     repo = tmp_path / "no-spec"
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        '[project]\nname = "no-spec"\ntype = "associated"\n\n'
-        '[associated]\nprefix = "NSP"\n\n'
-        '[directories]\nspec = "spec"\n'
+        '[project]\nname = "no-spec"\nnamespace = "NSP"\n\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     # Note: NOT creating spec/ directory
 
-    config = {"associates": {"paths": [str(repo)]}}
+    config = {"associates": {"no-spec": {"path": str(repo), "namespace": "NSP"}}}
     dirs, errors = get_associate_spec_directories(config, tmp_path)
 
     assert len(dirs) == 0

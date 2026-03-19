@@ -16,7 +16,7 @@ def _make_core_repo(tmp_path: Path) -> Path:
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        '[project]\nname = "core"\ntype = "core"\n\n' '[directories]\nspec = "spec"\n'
+        'version = 3\n[project]\nname = "core"\n\n' '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir(exist_ok=True)
     return tmp_path
@@ -27,9 +27,8 @@ def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
     repo = base / name
     repo.mkdir(exist_ok=True)
     (repo / ".elspais.toml").write_text(
-        f'[project]\nname = "{name}"\ntype = "associated"\n\n'
-        f'[associated]\nprefix = "{prefix}"\n\n'
-        f'[directories]\nspec = "spec"\n'
+        f'version = 3\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
+        f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir(exist_ok=True)
     return repo
@@ -63,11 +62,12 @@ class TestAssociateLinkByPath:
         assert "callisto" in output
         assert "CAL" in output
 
-        # Verify .elspais.local.toml was created
+        # Verify .elspais.local.toml was created with v3 named format
         local_config = core / ".elspais.local.toml"
         assert local_config.exists()
         doc = tomlkit.parse(local_config.read_text())
-        assert str(assoc) in doc["associates"]["paths"]
+        assert "callisto" in doc["associates"]
+        assert doc["associates"]["callisto"]["path"] == str(assoc)
 
     def test_REQ_p00005_C_link_creates_local_toml_if_missing(self, tmp_path, monkeypatch):
         """Creates .elspais.local.toml if it doesn't exist."""
@@ -94,7 +94,7 @@ class TestAssociateLinkByPath:
         assert local_config.exists()
 
     def test_REQ_p00005_C_link_appends_to_existing_paths(self, tmp_path, monkeypatch):
-        """Appending to existing [associates].paths doesn't replace."""
+        """Adding second associate doesn't replace the first."""
         from elspais.commands.associate_cmd import run
 
         core = _make_core_repo(tmp_path / "core")
@@ -120,12 +120,13 @@ class TestAssociateLinkByPath:
         args.associate_path = str(assoc2)
         run(args)
 
-        # Both should be in the config
+        # Both should be in the config as named entries
         local_config = core / ".elspais.local.toml"
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert str(assoc1) in paths
-        assert str(assoc2) in paths
+        assert "callisto" in doc["associates"]
+        assert "europa" in doc["associates"]
+        assert doc["associates"]["callisto"]["path"] == str(assoc1)
+        assert doc["associates"]["europa"]["path"] == str(assoc2)
 
     def test_REQ_p00005_C_link_duplicate_path_is_noop(self, tmp_path, monkeypatch, capsys):
         """Linking the same path twice doesn't duplicate."""
@@ -150,8 +151,9 @@ class TestAssociateLinkByPath:
 
         local_config = core / ".elspais.local.toml"
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert paths.count(str(assoc)) == 1
+        # Should have exactly one entry, not duplicated
+        assoc_entries = [k for k in doc["associates"] if isinstance(doc["associates"][k], dict)]
+        assert len(assoc_entries) == 1
 
         output = capsys.readouterr().out
         assert "already linked" in output.lower()
@@ -238,18 +240,18 @@ class TestAssociateErrors:
         output = capsys.readouterr().err
         assert ".elspais.toml" in output
 
-    def test_REQ_p00005_E_link_non_associated_type_errors(self, tmp_path, monkeypatch, capsys):
-        """Repo with wrong project.type produces a clear error."""
+    def test_REQ_p00005_E_link_any_valid_repo_succeeds(self, tmp_path, monkeypatch, capsys):
+        """In v3, any repo with a valid .elspais.toml can be linked as an associate."""
         from elspais.commands.associate_cmd import run
 
         core = _make_core_repo(tmp_path / "core")
-        wrong_type = tmp_path / "wrong-type"
-        wrong_type.mkdir()
-        (wrong_type / ".elspais.toml").write_text('[project]\nname = "wrong"\ntype = "core"\n')
+        other = tmp_path / "other"
+        other.mkdir()
+        (other / ".elspais.toml").write_text('version = 3\n[project]\nname = "other"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
-            associate_path=str(wrong_type),
+            associate_path=str(other),
             all=False,
             list=False,
             unlink=None,
@@ -259,10 +261,7 @@ class TestAssociateErrors:
             canonical_root=None,
         )
         rc = run(args)
-        assert rc == 1
-
-        output = capsys.readouterr().err
-        assert "associated" in output.lower()
+        assert rc == 0
 
     def test_REQ_p00005_E_unlink_unknown_name_errors(self, tmp_path, monkeypatch, capsys):
         """Unlinking a name that doesn't exist produces a clear error."""
@@ -319,12 +318,14 @@ class TestAssociateAll:
         assert "callisto" in output or "CAL" in output
         assert "europa" in output or "EUR" in output
 
-        # Verify both are in .elspais.local.toml
+        # Verify both are in .elspais.local.toml as named entries
         local_config = core / ".elspais.local.toml"
         assert local_config.exists()
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert len(paths) == 2
+        assoc_entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
+        assert len(assoc_entries) == 2
+        assert "callisto" in assoc_entries
+        assert "europa" in assoc_entries
 
     def test_REQ_p00005_C_all_no_associates_found(self, tmp_path, monkeypatch, capsys):
         """--all with no associates reports none found."""
@@ -367,9 +368,9 @@ class TestAssociateAll:
         worktree_cwd = tmp_path / "worktrees" / "my-branch"
         worktree_cwd.mkdir(parents=True)
 
-        # Pre-create local config with relative path (relative to canonical_root)
+        # Pre-create local config with v3 named entry using relative path
         local_config = core / ".elspais.local.toml"
-        local_config.write_text('[associates]\npaths = ["../callisto"]\n')
+        local_config.write_text('[associates.callisto]\npath = "../callisto"\nnamespace = "CAL"\n')
 
         # cwd is the worktree, NOT the canonical root
         monkeypatch.chdir(worktree_cwd)
@@ -388,8 +389,8 @@ class TestAssociateAll:
 
         # Should not have duplicated — ../callisto resolves from canonical_root
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert len(paths) == 1
+        assoc_entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
+        assert len(assoc_entries) == 1
 
         output = capsys.readouterr().out
         assert "already linked" in output.lower()
@@ -407,7 +408,7 @@ class TestAssociateList:
 
         # Pre-create local config with associate path
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{assoc}"]\n')
+        local_config.write_text(f'[associates.callisto]\npath = "{assoc}"\nnamespace = "CAL"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -456,7 +457,9 @@ class TestAssociateList:
 
         core = _make_core_repo(tmp_path / "core")
         local_config = core / ".elspais.local.toml"
-        local_config.write_text('[associates]\npaths = ["/nonexistent/callisto"]\n')
+        local_config.write_text(
+            '[associates.callisto]\npath = "/nonexistent/callisto"\nnamespace = "CAL"\n'
+        )
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -493,7 +496,7 @@ class TestAssociateUnlink:
 
         # Pre-create local config with associate path
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{assoc}"]\n')
+        local_config.write_text(f'[associates.callisto]\npath = "{assoc}"\nnamespace = "CAL"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -514,8 +517,7 @@ class TestAssociateUnlink:
 
         # Verify removed from local config
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert str(assoc) not in paths
+        assert "callisto" not in doc.get("associates", {})
 
     def test_REQ_p00005_C_unlink_preserves_other_paths(self, tmp_path, monkeypatch):
         """Unlinking one associate preserves others."""
@@ -526,7 +528,10 @@ class TestAssociateUnlink:
         assoc2 = _make_associate_repo(tmp_path, "europa", "EUR")
 
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{assoc1}", "{assoc2}"]\n')
+        local_config.write_text(
+            f'[associates.callisto]\npath = "{assoc1}"\nnamespace = "CAL"\n\n'
+            f'[associates.europa]\npath = "{assoc2}"\nnamespace = "EUR"\n'
+        )
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -542,9 +547,9 @@ class TestAssociateUnlink:
         run(args)
 
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert str(assoc1) not in paths
-        assert str(assoc2) in paths
+        assert "callisto" not in doc.get("associates", {})
+        assert "europa" in doc["associates"]
+        assert doc["associates"]["europa"]["path"] == str(assoc2)
 
     def test_REQ_p00005_F_unlink_by_path_component_substring(self, tmp_path, monkeypatch, capsys):
         """Unlink matches when name is a substring of a path component."""
@@ -556,14 +561,13 @@ class TestAssociateUnlink:
         wt = tmp_path / "callisto-worktrees" / "linking-code"
         wt.mkdir(parents=True)
         (wt / ".elspais.toml").write_text(
-            '[project]\nname = "callisto"\ntype = "associated"\n\n'
-            '[associated]\nprefix = "CAL"\n\n'
-            '[directories]\nspec = "spec"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (wt / "spec").mkdir()
 
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{wt}"]\n')
+        local_config.write_text(f'[associates.callisto]\npath = "{wt}"\nnamespace = "CAL"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -580,8 +584,7 @@ class TestAssociateUnlink:
         assert rc == 0
 
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert len(paths) == 0
+        assert "callisto" not in doc.get("associates", {})
 
     def test_REQ_p00005_C_unlink_by_prefix_code(self, tmp_path, monkeypatch, capsys):
         """Unlink an associate by its prefix code (e.g., CAL)."""
@@ -591,7 +594,7 @@ class TestAssociateUnlink:
         assoc = _make_associate_repo(tmp_path, "callisto", "CAL")
 
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{assoc}"]\n')
+        local_config.write_text(f'[associates.callisto]\npath = "{assoc}"\nnamespace = "CAL"\n')
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -608,8 +611,7 @@ class TestAssociateUnlink:
         assert rc == 0
 
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert len(paths) == 0
+        assert "callisto" not in doc.get("associates", {})
 
     def test_REQ_p00005_F_unlink_by_project_name_worktree_path(self, tmp_path, monkeypatch, capsys):
         """Unlink works when stored path is a worktree (basename != project name)."""
@@ -624,14 +626,15 @@ class TestAssociateUnlink:
         worktree_dir.mkdir(parents=True)
         # But it has callisto's config
         (worktree_dir / ".elspais.toml").write_text(
-            '[project]\nname = "callisto"\ntype = "associated"\n\n'
-            '[associated]\nprefix = "CAL"\n\n'
-            '[directories]\nspec = "spec"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (worktree_dir / "spec").mkdir()
 
         local_config = core / ".elspais.local.toml"
-        local_config.write_text(f'[associates]\npaths = ["{worktree_dir}"]\n')
+        local_config.write_text(
+            f'[associates.callisto]\npath = "{worktree_dir}"\nnamespace = "CAL"\n'
+        )
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(
@@ -648,5 +651,4 @@ class TestAssociateUnlink:
         assert rc == 0
 
         doc = tomlkit.parse(local_config.read_text())
-        paths = list(doc["associates"]["paths"])
-        assert len(paths) == 0
+        assert "callisto" not in doc.get("associates", {})

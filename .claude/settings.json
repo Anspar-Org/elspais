@@ -1,9 +1,4 @@
 {
-  "enabledPlugins": {
-    "requirement-traceability@anspar-cc-plugins": false,
-    "simple-requirements@anspar-cc-plugins": false,
-    "traceability-matrix@anspar-cc-plugins": false
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -16,5 +11,6 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {}
 }

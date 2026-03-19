@@ -19,7 +19,7 @@ from typing import Any
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
-from elspais.config import get_project_name, get_status_roles
+from elspais.config import get_status_roles
 from elspais.graph import NodeKind
 from elspais.graph.federated import FederatedGraph
 from elspais.html.theme import get_catalog
@@ -47,6 +47,44 @@ from elspais.mcp.server import (
     _search,
     _undo_last_mutation,
 )
+
+# Implements: REQ-d00211
+# User-selectable relationship kinds for the edit UI.
+_USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
+
+
+def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Extract viewer-relevant values from the config dict.
+
+    Returns a dict with keys suitable for unpacking into the Jinja2
+    template context: config_types, config_relationship_kinds,
+    config_statuses.
+    """
+    from elspais.config.schema import ElspaisConfig
+
+    try:
+        typed = ElspaisConfig.model_validate(config)
+    except Exception:
+        typed = ElspaisConfig.model_validate({})
+
+    # Types: extract name, letter, rank from levels
+    config_types = []
+    for name, level_cfg in typed.levels.items():
+        entry: dict[str, Any] = {"name": name, "level": level_cfg.rank}
+        entry["letter"] = level_cfg.letter or name[0]
+        config_types.append(entry)
+    config_types.sort(key=lambda t: t["level"])
+
+    # Statuses: from allowed_statuses if configured
+    config_statuses: list[str] = []
+    if typed.rules.format.allowed_statuses:
+        config_statuses = list(typed.rules.format.allowed_statuses)
+
+    return {
+        "config_types": config_types,
+        "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
+        "config_statuses": config_statuses,
+    }
 
 
 def create_app(
@@ -145,6 +183,8 @@ def create_app(
             roles = get_status_roles(_state["config"])
             default_hidden = roles.default_hidden_statuses()
 
+            viewer_cfg = _extract_viewer_config(_state["config"])
+
             return render_template(
                 "trace_unified.html.j2",
                 mode="edit",
@@ -155,7 +195,7 @@ def create_app(
                 default_hidden_statuses=sorted(default_hidden),
                 version=gen.version,
                 base_path=str(_state["working_dir"]),
-                repo_name=get_project_name(_state["config"]),
+                repo_name=_state["config"].get("project", {}).get("name") or "unknown",
                 pygments_css=get_pygments_css(),
                 pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
                 # Empty dicts — edit mode uses live API, not embedded data
@@ -163,6 +203,7 @@ def create_app(
                 coverage_index={},
                 status_data={},
                 catalog=get_catalog(),
+                **viewer_cfg,
             )
         except Exception:
             return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
@@ -562,7 +603,9 @@ def create_app(
         import os
 
         build_time = _state.get("build_time", 0)
-        spec_dirs = _state["config"].get("spec", {}).get("directories", ["spec"])
+        spec_dirs = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])
+        )
         working_dir = _state["working_dir"]
 
         stale_files: list[str] = []
@@ -842,8 +885,7 @@ def create_app(
             # Re-read config from disk so branch switches pick up changes
             config_path = Path(_state["working_dir"]) / ".elspais.toml"
             if config_path.exists():
-                loader = load_config(config_path)
-                _state["config"] = loader.get_raw()
+                _state["config"] = load_config(config_path)
 
             new_graph = build_graph(
                 config=_state["config"],
@@ -866,7 +908,9 @@ def create_app(
         """GET /api/git/status - Git status summary for the viewer UI."""
         from elspais.utilities.git import git_status_summary
 
-        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        spec_dir = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
+        )
         result = git_status_summary(_state["working_dir"], spec_dir=spec_dir)
         return jsonify(result)
 
@@ -894,7 +938,9 @@ def create_app(
         message = data.get("message", "").strip()
         if not message:
             return jsonify({"success": False, "error": "commit message required"}), 400
-        spec_dir = _state["config"].get("spec", {}).get("directories", ["spec"])[0]
+        spec_dir = (
+            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
+        )
         result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
         # Always return 200 so the modal JS can display the error inline.
         # The result contains success=false with an error message on failure.

@@ -12,6 +12,22 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
+
+from elspais.config.schema import ElspaisConfig
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -127,8 +143,9 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
-    changelog_enforce = config.get("changelog", {}).get("enforce", True)
+    config = get_config(config_path)
+    typed_config = _validate_config(config)
+    changelog_enforce = typed_config.changelog.hash_current
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
@@ -193,7 +210,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         # Resolve author info
         from elspais.utilities.git import get_author_info
 
-        id_source = config.get("changelog", {}).get("id_source", "gh")
+        id_source = typed_config.changelog.id_source
         try:
             author = get_author_info(id_source)
         except ValueError as e:
@@ -279,7 +296,8 @@ def _ensure_changelog_section(
     from elspais.utilities.git import get_author_info
     from elspais.utilities.spec_writer import add_changelog_entry
 
-    id_source = config.get("changelog", {}).get("id_source", "gh")
+    _tc = _validate_config(config)
+    id_source = _tc.changelog.id_source
     try:
         author = get_author_info(id_source)
     except ValueError as e:
@@ -316,7 +334,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
-    config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+    config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
     if not spec_dirs:

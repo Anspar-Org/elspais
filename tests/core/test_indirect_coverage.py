@@ -733,27 +733,19 @@ class TestFactoryIntegration:
         # Create minimal config
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            "[patterns]\n"
-            'prefix = "REQ"\n'
+            "[project]\n"
+            'namespace = "REQ"\n'
             "\n"
-            "[patterns.types.prd]\n"
-            'id = "p"\n'
-            'name = "PRD"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
             "\n"
-            "[patterns.id_format]\n"
-            'style = "numeric"\n'
-            "digits = 5\n"
+            "[scanning.code]\n"
+            'file_patterns = ["src/**/*.py"]\n'
             "\n"
-            "[directories]\n"
-            'spec = "spec"\n'
-            "\n"
-            "[traceability]\n"
-            'scan_patterns = ["src/**/*.py"]\n'
-            "\n"
-            "[testing]\n"
+            "[scanning.test]\n"
             "enabled = true\n"
-            'test_dirs = ["tests"]\n'
-            'patterns = ["test_*.py"]\n'
+            'directories = ["tests"]\n'
+            'file_patterns = ["test_*.py"]\n'
         )
 
         # Create a source file with # Implements: inside a function
@@ -798,22 +790,14 @@ class TestFactoryIntegration:
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            "[patterns]\n"
-            'prefix = "REQ"\n'
+            "[project]\n"
+            'namespace = "REQ"\n'
             "\n"
-            "[patterns.types.prd]\n"
-            'id = "p"\n'
-            'name = "PRD"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
             "\n"
-            "[patterns.id_format]\n"
-            'style = "numeric"\n'
-            "digits = 5\n"
-            "\n"
-            "[directories]\n"
-            'spec = "spec"\n'
-            "\n"
-            "[traceability]\n"
-            'scan_patterns = ["src/**/*.py"]\n'
+            "[scanning.code]\n"
+            'file_patterns = ["src/**/*.py"]\n'
         )
 
         src_dir = tmp_path / "src"
@@ -852,24 +836,16 @@ class TestFactoryIntegration:
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            "[patterns]\n"
-            'prefix = "REQ"\n'
+            "[project]\n"
+            'namespace = "REQ"\n'
             "\n"
-            "[patterns.types.prd]\n"
-            'id = "p"\n'
-            'name = "PRD"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
             "\n"
-            "[patterns.id_format]\n"
-            'style = "numeric"\n'
-            "digits = 5\n"
-            "\n"
-            "[directories]\n"
-            'spec = "spec"\n'
-            "\n"
-            "[testing]\n"
+            "[scanning.test]\n"
             "enabled = true\n"
-            'test_dirs = ["tests"]\n'
-            'patterns = ["test_*.py"]\n'
+            'directories = ["tests"]\n'
+            'file_patterns = ["test_*.py"]\n'
         )
 
         test_dir = tmp_path / "tests"

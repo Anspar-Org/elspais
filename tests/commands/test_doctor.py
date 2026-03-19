@@ -16,7 +16,7 @@ class TestDoctorConfigChecks:
         from elspais.commands.doctor import check_config_exists
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[patterns]\nid_template = "{prefix}-{type}{id}"')
+        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
         result = check_config_exists(config_path, tmp_path)
         assert result.passed is True
         assert result.category == "config"
@@ -32,7 +32,7 @@ class TestDoctorConfigChecks:
         from elspais.commands.doctor import check_config_syntax
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[patterns]\nid_template = "REQ-{type}{id}"')
+        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
         result = check_config_syntax(config_path, tmp_path)
         assert result.passed is True
 
@@ -47,14 +47,15 @@ class TestDoctorConfigChecks:
 
     def test_REQ_p00001_A_run_config_checks_returns_list(self, tmp_path):
         from elspais.commands.doctor import run_config_checks
-        from elspais.config import ConfigLoader
+        from elspais.config import _merge_configs, config_defaults
 
-        config = ConfigLoader.from_dict(
+        config = _merge_configs(
+            config_defaults(),
             {
-                "patterns": {"id_template": "{prefix}-{type}{id}", "types": {"prd": {"level": 1}}},
-                "spec": {"directories": ["spec"]},
-                "rules": {"hierarchy": {}},
-            }
+                "version": 3,
+                "levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}},
+                "scanning": {"spec": {"directories": ["spec"]}},
+            },
         )
         results = run_config_checks(None, config, tmp_path)
         assert isinstance(results, list)
@@ -113,17 +114,17 @@ class TestDoctorAssociateChecks:
 
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
-        (assoc_dir / ".elspais.toml").write_text(
-            '[project]\ntype = "associated"\n[associated]\nprefix = "CAL"'
-        )
-        config = {"associates": {"paths": [str(assoc_dir)]}}
+        (assoc_dir / ".elspais.toml").write_text('version = 3\n[project]\nname = "callisto"\n')
+        config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_paths(config, None)
         assert result.passed is True
 
     def test_REQ_p00005_E_associate_path_missing(self, tmp_path):
         from elspais.commands.doctor import check_associate_paths
 
-        config = {"associates": {"paths": [str(tmp_path / "nonexistent")]}}
+        config = {
+            "associates": {"callisto": {"path": str(tmp_path / "nonexistent"), "namespace": "CAL"}}
+        }
         result = check_associate_paths(config, None)
         assert result.passed is False
         assert "not found" in result.message.lower()
@@ -134,7 +135,7 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         # No .elspais.toml = invalid
-        config = {"associates": {"paths": [str(assoc_dir)]}}
+        config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_configs(config, None)
         assert result.passed is False
         assert "invalid" in result.message.lower() or "configuration" in result.message.lower()
@@ -166,7 +167,7 @@ class TestDoctorCrossRepoCheck:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[spec]\ndirectories = ["spec"]')
+        config_path.write_text('[scanning.spec]\ndirectories = ["spec"]')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is True
 
@@ -174,7 +175,7 @@ class TestDoctorCrossRepoCheck:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[spec]\ndirectories = ["spec", "../../callisto/spec"]')
+        config_path.write_text('[scanning.spec]\ndirectories = ["spec", "../../callisto/spec"]')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
         assert ".elspais.local.toml" in result.message
@@ -189,14 +190,13 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            '[project]\nnamespace = "REQ"\n\n'
+            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             "[id-patterns]\n"
-            'canonical = "{namespace}-{type}{component}"\n\n'
-            "[id-patterns.types.prd]\nlevel = 1\n\n"
+            'canonical = "{namespace}-{level.letter}{component}"\n\n'
             "[id-patterns.component]\n"
             'style = "numeric"\ndigits = 5\n\n'
-            '[spec]\ndirectories = ["spec"]\n\n'
-            "[rules]\nhierarchy = {}\n"
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (tmp_path / "spec").mkdir()
 

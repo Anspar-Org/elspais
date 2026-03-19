@@ -1,0 +1,145 @@
+// Requirement grammar for spec files.
+//
+// LALR parser with contextual lexer.  The contextual lexer activates
+// terminals only when the parser state can accept them, so metadata
+// field terminals (LEVEL_FIELD etc.) are only tried inside a requirement
+// preamble -- the same text outside a requirement is lexed as TEXT.
+//
+// State transitions:
+//   SCANNING --REQ_HEADER--> METADATA --HEADING--> BLOCK --END_MARKER--> SCANNING
+//
+// Parameterized tokens (substituted by GrammarFactory):
+//   __NAMESPACE__        e.g. "REQ"
+//   __TYPE_PATTERN__     e.g. "p|o|d"
+//   __DIGITS_PATTERN__   e.g. "\\d{1,5}"
+//   __ASSERTION_LABEL__  e.g. "[A-Z]" or "[0-9]+" or "[A-Za-z]+"
+
+start: _item*
+
+_item: requirement
+     | journey
+     | stray_marker
+     | remainder_line
+     | _NL
+
+// ===================================================================
+// Requirement
+// ===================================================================
+
+requirement: REQ_HEADER _NL preamble_line* block* end_block?
+
+// --- Preamble (metadata + body text, before first heading) ---
+
+?preamble_line: metadata_line
+              | satisfies_line
+              | body_line
+
+metadata_line: _field (PIPE _field)* _NL
+
+_field: LEVEL_FIELD
+      | STATUS_FIELD
+      | IMPLEMENTS_FIELD
+      | REFINES_FIELD
+
+satisfies_line: SATISFIES_FIELD _NL
+
+body_line: TEXT _NL
+         | _NL
+
+// --- Blocks (each starts with a ## heading) ---
+
+?block: assertion_block
+      | changelog_block
+      | named_block
+
+assertion_block: ASSERTIONS_HDR _NL assertion_item*
+
+?assertion_item: assertion_sub_heading
+               | assertion
+               | _NL
+
+assertion_sub_heading: ASSERT_SUB_HDR _NL
+
+// Assertion continuation uses ASSERT_CONT (distinct from TEXT) to prevent
+// LALR state merging with non-assertion contexts.
+assertion: ASSERTION_ENTRY _NL (ASSERT_CONT _NL | _NL)*
+
+changelog_block: CHANGELOG_HDR _NL content_line*
+
+named_block: SECTION_HDR _NL content_line*
+
+content_line: TEXT _NL
+            | _NL
+
+// --- Footer ---
+
+end_block: END_MARKER _NL?
+
+// ===================================================================
+// Journey
+// ===================================================================
+
+journey: JNY_HEADER _NL jny_line* jny_footer?
+
+jny_line: TEXT _NL
+        | _NL
+
+jny_footer: JNY_END_MARKER _NL?
+
+// ===================================================================
+// Stray markers / remainder
+// ===================================================================
+
+stray_marker: END_MARKER _NL?
+            | JNY_END_MARKER _NL?
+
+remainder_line: TEXT _NL
+
+// ===================================================================
+// Terminals
+//
+// Priority numbers control which terminal wins when multiple patterns
+// match the same text AND both are valid in the current parser state.
+// The contextual lexer ensures terminals are only tried where the
+// parser can accept them.
+// ===================================================================
+
+// --- Structural markers (highest priority) ---
+
+REQ_HEADER.10: /#{1,6}[ \t]+__NAMESPACE__-(?:__TYPE_PATTERN__)__DIGITS_PATTERN__:[ \t]+[^\n]+/
+JNY_HEADER.10: /#{1,6}[ \t]+JNY-[A-Za-z0-9-]+:[ \t]+[^\n]+/
+
+END_MARKER.9: /\*End\*[ \t]+\*(?!JNY-)[^*]+\*[^\n]*/
+JNY_END_MARKER.9: /\*End\*[ \t]+\*JNY-[^*]+\*[^\n]*/
+
+// --- Section headers ---
+
+ASSERTIONS_HDR.8: /##[ \t]+Assertions[ \t]*/
+CHANGELOG_HDR.8: /##[ \t]+Changelog[ \t]*/
+SECTION_HDR.7: /##[ \t]+(?!Assertions\b)(?!Changelog\b)[^\n]+/
+
+// --- Metadata fields (only active inside requirement preamble) ---
+// Optional markdown decoration (**, *, _) around field name.
+// Required separator (: = or whitespace) between name and value.
+
+LEVEL_FIELD.7: /(?:\*\*|\*|_)?[Ll][Ee][Vv][Ee][Ll](?:\*\*|\*|_)?[:= \t]\s*\w+/
+STATUS_FIELD.7: /(?:\*\*|\*|_)?[Ss][Tt][Aa][Tt][Uu][Ss](?:\*\*|\*|_)?[:= \t]\s*\w+/
+IMPLEMENTS_FIELD.7: /(?:\*\*|\*|_)?[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
+REFINES_FIELD.7: /(?:\*\*|\*|_)?[Rr][Ee][Ff][Ii][Nn][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
+SATISFIES_FIELD.7: /(?:\*\*|\*|_)?[Ss][Aa][Tt][Ii][Ss][Ff][Ii][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^\n]+/
+PIPE.7: /[ \t]*\|[ \t]*/
+
+// --- Assertion content (only active inside assertion_block) ---
+// ASSERT_CONT is intentionally a separate terminal from TEXT so that
+// LALR states inside assertion blocks do not merge with states in other
+// contexts (journey, named_block, etc.), which would cause the
+// contextual lexer to bleed ASSERT_SUB_HDR into non-assertion states.
+
+ASSERT_SUB_HDR.6: /(?:\*\*|\*|_)[^\n*_]+(?:\*\*|\*|_)/
+ASSERTION_ENTRY.5: /__ASSERTION_LABEL__\.[ \t]+[^\n]+/
+ASSERT_CONT.2: /[^\n]+/
+
+// --- Generic text (lowest priority -- catch-all) ---
+
+TEXT.1: /[^\n]+/
+_NL: /\n/

@@ -15,26 +15,49 @@ from pathlib import Path
 from typing import Any
 
 from elspais.config import (
-    ConfigLoader,
     IgnoreConfig,
     get_code_directories,
     get_config,
     get_ignore_config,
     get_spec_directories,
 )
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
+from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
-from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import build_resolver
-from elspais.utilities.reference_config import ReferenceResolver
+
+# Known schema fields (by alias and Python name) for filtering non-schema keys
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys.
+
+    The config dict from get_config() may contain legacy keys (e.g. 'patterns')
+    that were consumed by migration but not removed. We filter those out before
+    validation since ElspaisConfig uses extra='forbid'.
+
+    The 'associates' key may use legacy format (``{paths: [...]}`` instead of
+    ``{name: {path: ...}}``), which is incompatible with the schema. We strip
+    it when it has the legacy shape since factory.py accesses associates via
+    ``get_associates_config(config)`` on the raw dict.
+    """
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    # Strip legacy-format associates (contains 'paths' list instead of named entries)
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
 
 
 # Implements: REQ-d00128-C
@@ -221,11 +244,12 @@ DEFAULT_CODE_PATTERNS = [
 class SpecDirConfig:
     """Per-spec-directory scan configuration.
 
-    Bundles the parser registry with scan settings that may differ between
-    the main project and associated projects.
+    Bundles the parser registry and FileDispatcher with scan settings that
+    may differ between the main project and associated projects.
     """
 
     registry: ParserRegistry
+    dispatcher: FileDispatcher | None = None
     file_patterns: list[str] = field(default_factory=lambda: ["*.md"])
     skip_dirs: list[str] = field(default_factory=list)
     skip_files: list[str] = field(default_factory=list)
@@ -279,23 +303,35 @@ def _resolve_spec_dir_config(
 
     config_path = repo_root / ".elspais.toml"
     repo_config = get_config(config_path, repo_root)
-    resolver = build_resolver(repo_config)
-    reference_resolver = ReferenceResolver.from_config(repo_config.get("references", {}))
 
+    # Typed config conversion at function boundary
+    if isinstance(repo_config, dict):
+        typed_repo_config = _validate_config(repo_config)
+    else:
+        typed_repo_config = repo_config
+
+    resolver = build_resolver(repo_config)
+
+    # Build Lark-based FileDispatcher for spec files
+    dispatcher = FileDispatcher(resolver)
+
+    # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
     registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
-    registry.register(CodeParser(resolver, reference_resolver))
-    registry.register(TestParser(resolver, reference_resolver))
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
-    spec_config = repo_config.get("spec", {})
+    patterns = typed_repo_config.scanning.spec.file_patterns
+    # patterns can be list[str] or dict — extract list if needed
+    # Fall back to ["*.md"] if patterns is empty or not a list
+    file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
     return SpecDirConfig(
         registry=registry,
-        file_patterns=spec_config.get("patterns", ["*.md"]),
-        skip_dirs=spec_config.get("skip_dirs", []),
-        skip_files=spec_config.get("skip_files", []),
+        dispatcher=dispatcher,
+        file_patterns=file_patterns,
+        skip_dirs=list(typed_repo_config.scanning.spec.skip_dirs),
+        skip_files=list(typed_repo_config.scanning.spec.skip_files),
         ignore_config=get_ignore_config(repo_config),
     )
 
@@ -348,30 +384,26 @@ def build_graph(
     if config is None:
         config = get_config(config_path, repo_root)
 
+    # Typed config conversion at function boundary
+    if isinstance(config, dict):
+        typed_config = _validate_config(config)
+    else:
+        typed_config = config
+
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
-    # 3. Create default resolver and reference resolver
+    # 3. Create default resolver
     default_resolver = build_resolver(config)
-    default_reference_resolver = ReferenceResolver.from_config(config.get("references", {}))
 
     # Implements: REQ-d00128-G
-    # Registry for code files (code parser + remainder)
-    code_registry = ParserRegistry()
-    code_registry.register(CodeParser(default_resolver, default_reference_resolver))
-    code_registry.register(RemainderParser())
-
-    # Implements: REQ-d00128-G
-    # Registry for test files (test parser + remainder)
-    test_registry = ParserRegistry()
-    test_registry.register(TestParser(default_resolver, default_reference_resolver))
-    test_registry.register(RemainderParser())
+    # Lark FileDispatcher for code and test files
+    default_dispatcher = FileDispatcher(default_resolver)
 
     # 4. Build graph from all spec directories
-    hash_mode = config.get("validation", {}).get("hash_mode", "normalized-text")
-    graph_config = config.get("graph", {})
-    satellite_kinds = graph_config.get("satellite_kinds", None)
+    hash_mode = typed_config.validation.hash_mode
+    satellite_kinds = ["assertion", "result"]
     mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
@@ -420,7 +452,8 @@ def build_graph(
             skip_files=dir_config.skip_files,
         )
 
-        for parsed_content in domain_file.deserialize(dir_config.registry):
+        # Use Lark FileDispatcher for spec file parsing
+        for parsed_content in domain_file.dispatch(dir_config.dispatcher.dispatch_spec):
             # Check if source should be ignored using [ignore].spec patterns
             source_path = parsed_content.source_context.metadata.get("path")
             if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
@@ -437,8 +470,7 @@ def build_graph(
         scanned_code_files: set[str] = set()
 
         # 5a. Explicit scan_patterns (existing behavior)
-        traceability_config = config.get("traceability", {})
-        scan_patterns = traceability_config.get("scan_patterns", [])
+        scan_patterns = list(typed_config.scanning.code.file_patterns)
 
         for pattern in scan_patterns:
             # Resolve glob pattern relative to repo_root
@@ -451,12 +483,12 @@ def build_graph(
                     # Implements: REQ-d00128-A
                     fn = _get_or_create_file_node(path, FileType.CODE)
                     domain_file = DomainFile(path)
-                    for parsed_content in domain_file.deserialize(code_registry):
+                    for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
                         builder.add_parsed_content(parsed_content, file_node=fn)
 
         # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
-        ignore_dirs = config.get("directories", {}).get("ignore", [])
+        ignore_dirs = list(typed_config.scanning.skip)
 
         for code_dir in code_dirs:
             domain_file = DomainFile(
@@ -468,7 +500,7 @@ def build_graph(
             # Track files already checked for ignore/dedup in this loop
             checked_files: set[str] = set()
             skip_files: set[str] = set()
-            for parsed_content in domain_file.deserialize(code_registry):
+            for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
                 source_path = parsed_content.source_context.metadata.get("path")
                 if source_path:
                     resolved = str(Path(source_path).resolve())
@@ -490,27 +522,25 @@ def build_graph(
 
     # 6. Scan test directories from testing config
     if scan_tests:
-        testing_config = config.get("testing", {})
-        if testing_config.get("enabled", False):
-            test_dirs = testing_config.get("test_dirs", [])
-            test_patterns = testing_config.get("patterns", ["*_test.*", "test_*.*"])
-            test_skip_dirs = testing_config.get("skip_dirs", [])
+        testing_cfg = typed_config.scanning.test
+        if testing_cfg.enabled:
+            test_dirs = list(testing_cfg.directories)
+            test_patterns = list(testing_cfg.file_patterns)
+            test_skip_dirs = list(testing_cfg.skip_dirs)
 
             # Run external prescan command if configured
-            prescan_command = testing_config.get("prescan_command", "")
+            prescan_command = testing_cfg.prescan_command
             prescan_data: dict[str, list[dict]] | None = None
             if prescan_command:
                 prescan_data = _run_prescan_command(
                     prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
                 )
 
-            # Rebuild test registry with prescan data if available
-            if prescan_data:
-                test_registry = ParserRegistry()
-                test_registry.register(
-                    TestParser(default_resolver, default_reference_resolver, prescan_data)
+            # Build dispatch function with prescan data
+            def _dispatch_test(content: str, file_path: str) -> list:
+                return default_dispatcher.dispatch_test(
+                    content, file_path, prescan_data=prescan_data
                 )
-                test_registry.register(RemainderParser())
 
             for dir_pattern in test_dirs:
                 # Resolve glob pattern to get directories
@@ -524,7 +554,7 @@ def build_graph(
                             recursive=True,
                             skip_dirs=test_skip_dirs,
                         )
-                        for parsed_content in domain_file.deserialize(test_registry):
+                        for parsed_content in domain_file.dispatch(_dispatch_test):
                             # Implements: REQ-d00128-A
                             source_path = parsed_content.source_context.metadata.get("path")
                             fn = None
@@ -535,13 +565,12 @@ def build_graph(
             # 6b. Scan test result files (JUnit XML, pytest JSON)
             # Implements: REQ-d00128-H
             # RemainderParser is NOT registered for RESULT file types
-            result_files = testing_config.get("result_files", [])
+            result_files = list(typed_config.scanning.result.file_patterns)
             if result_files:
                 xml_registry = ParserRegistry()
                 xml_registry.register(
                     JUnitXMLParser(
                         resolver=default_resolver,
-                        reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
                 )
@@ -549,7 +578,6 @@ def build_graph(
                 json_registry.register(
                     PytestJSONParser(
                         resolver=default_resolver,
-                        reference_resolver=default_reference_resolver,
                         base_path=repo_root,
                     )
                 )
@@ -582,8 +610,7 @@ def build_graph(
         from elspais.graph.test_code_linker import link_tests_to_code
 
         # Get source roots from config (default: ["src", ""])
-        traceability_config = config.get("traceability", {})
-        source_roots = traceability_config.get("source_roots", None)
+        source_roots = typed_config.scanning.code.source_roots
         link_tests_to_code(graph, repo_root, source_roots)
 
     # Annotate keywords on all nodes so keyword search tools work
@@ -607,7 +634,7 @@ def build_graph(
                 RepoEntry(
                     name="root",
                     graph=graph,
-                    config=ConfigLoader.from_dict(config),
+                    config=config,
                     repo_root=repo_root,
                 )
             )
@@ -654,7 +681,7 @@ def build_graph(
                     RepoEntry(
                         name=assoc_name,
                         graph=assoc_graph,
-                        config=ConfigLoader.from_dict(assoc_config),
+                        config=assoc_config,
                         repo_root=assoc_path,
                         git_origin=git_origin,
                     )
@@ -662,7 +689,7 @@ def build_graph(
 
             return FederatedGraph(entries, root_repo="root")
 
-    return FederatedGraph.from_single(graph, ConfigLoader.from_dict(config), repo_root)
+    return FederatedGraph.from_single(graph, config, repo_root)
 
 
 __all__ = ["build_graph"]

@@ -4,39 +4,46 @@
 from pathlib import Path
 
 from elspais.commands.health import check_spec_changelog_present
-from elspais.config import ConfigLoader, get_config
+from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.factory import build_graph
 from elspais.utilities.hasher import compute_normalized_hash
 
 
 def _make_config(tmp_path: Path, changelog_overrides: dict | None = None) -> Path:
     changelog = {
-        "enforce": True,
-        "require_present": False,
-        "require_reason": True,
-        "require_author_name": True,
-        "require_author_id": True,
-        "require_change_order": False,
+        "hash_current": True,
+        "present": False,
+    }
+    changelog_require = {
+        "reason": True,
+        "author_name": True,
+        "author_id": True,
+        "change_order": False,
     }
     if changelog_overrides:
+        # Extract nested require overrides if present
+        if "require" in changelog_overrides:
+            changelog_require.update(changelog_overrides.pop("require"))
         changelog.update(changelog_overrides)
 
+    def _fmt(v):
+        if isinstance(v, bool):
+            return str(v).lower()
+        elif isinstance(v, str):
+            return f'"{v}"'
+        return str(v)
+
     lines = [
-        '[project]\nname = "test"\n',
-        '[requirements]\nspec_dirs = ["spec"]\n',
-        "[requirements.id_pattern]",
-        'prefix = "REQ"',
-        'separator = "-"',
-        'pattern = "REQ-[a-z]\\\\d{5}"\n',
+        'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n',
+        '[scanning.spec]\ndirectories = ["spec"]\n',
         "[changelog]",
     ]
     for k, v in changelog.items():
-        if isinstance(v, bool):
-            lines.append(f"{k} = {str(v).lower()}")
-        elif isinstance(v, str):
-            lines.append(f'{k} = "{v}"')
-        else:
-            lines.append(f"{k} = {v}")
+        lines.append(f"{k} = {_fmt(v)}")
+    lines.append("")
+    lines.append("[changelog.require]")
+    for k, v in changelog_require.items():
+        lines.append(f"{k} = {_fmt(v)}")
 
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text("\n".join(lines) + "\n")
@@ -53,16 +60,16 @@ def _build(tmp_path: Path, config_path: Path):
     )
 
 
-def _load_config(config_path: Path) -> ConfigLoader:
+def _load_config(config_path: Path) -> dict:
     raw = get_config(config_path)
-    return ConfigLoader.from_dict(raw)
+    return _merge_configs(config_defaults(), raw)
 
 
 class TestChangelogPresent:
     """Tests for check_spec_changelog_present."""
 
     def test_disabled_by_default_returns_passed_info(self, tmp_path: Path):
-        """When require_present is False (default), returns passed with info severity."""
+        """When present is False (default), returns passed with info severity."""
         config_path = _make_config(tmp_path)
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
@@ -94,7 +101,7 @@ class TestChangelogPresent:
 
     def test_enabled_no_active_reqs_passes(self, tmp_path: Path):
         """When enabled but no Active reqs exist, passes."""
-        config_path = _make_config(tmp_path, {"require_present": True})
+        config_path = _make_config(tmp_path, {"present": True})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -123,7 +130,7 @@ class TestChangelogPresent:
 
     def test_enabled_active_reqs_all_have_changelogs_passes(self, tmp_path: Path):
         """When all Active reqs have changelog entries, passes."""
-        config_path = _make_config(tmp_path, {"require_present": True})
+        config_path = _make_config(tmp_path, {"present": True})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -158,7 +165,7 @@ class TestChangelogPresent:
 
     def test_enabled_active_req_missing_changelog_fails(self, tmp_path: Path):
         """When an Active req has no changelog entries, fails with findings."""
-        config_path = _make_config(tmp_path, {"require_present": True})
+        config_path = _make_config(tmp_path, {"present": True})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -191,7 +198,7 @@ class TestChangelogPresent:
 
     def test_enabled_multiple_active_reqs_some_missing(self, tmp_path: Path):
         """When some Active reqs are missing changelogs, findings list each one."""
-        config_path = _make_config(tmp_path, {"require_present": True})
+        config_path = _make_config(tmp_path, {"present": True})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -241,7 +248,7 @@ class TestChangelogPresent:
 
     def test_draft_and_deprecated_reqs_ignored(self, tmp_path: Path):
         """Draft and Deprecated reqs without changelogs don't trigger failure."""
-        config_path = _make_config(tmp_path, {"require_present": True})
+        config_path = _make_config(tmp_path, {"present": True})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 

@@ -39,9 +39,7 @@ class TestIgnorePatterns:
 
     def test_global_ignore_excludes_node_modules(self, tmp_path):
         cfg = base_config(name="ignore-global", allow_structural_orphans=True)
-        cfg["ignore"] = {
-            "global": ["node_modules", ".git", "__pycache__"],
-        }
+        cfg.setdefault("scanning", {})["skip"] = ["node_modules", ".git", "__pycache__"]
         prd = Requirement(
             "REQ-p00001",
             "Ignore Test",
@@ -62,9 +60,7 @@ class TestIgnorePatterns:
 
     def test_spec_ignore_excludes_pattern(self, tmp_path):
         cfg = base_config(name="ignore-spec", allow_structural_orphans=True)
-        cfg["ignore"] = {
-            "spec": ["draft-*.md"],
-        }
+        cfg.setdefault("scanning", {}).setdefault("spec", {})["skip_files"] = ["draft-*.md"]
         prd = Requirement(
             "REQ-p00001",
             "Published",

@@ -64,25 +64,32 @@ def associate_repo(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """\
+version = 3
+
 [project]
 name = "test-associated"
-type = "associated"
+namespace = "REQ"
 
-[core]
-path = "../nonexistent-core"
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[directories]
-spec = "spec"
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
 
-[patterns]
-prefix = "REQ"
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
 
 [rules.hierarchy]
 cross_repo_implements = true
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-]
 """
     )
 

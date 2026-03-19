@@ -5,16 +5,17 @@
 elspais looks for `.elspais.toml` in the current directory
 or parent directories up to the git repository root.
 
-  $ elspais init          # Create default config
-  $ elspais config path   # Show config location
-  $ elspais config show   # View all settings
+  $ elspais init            # Create default config
+  $ elspais config path     # Show config location
+  $ elspais config show     # View all settings
+  $ elspais config schema   # Export JSON Schema
 
 ## Git Worktree Support
 
 elspais automatically detects git worktrees and resolves cross-repo
 paths from the **canonical** (main) repository root. This means
-`[associates].paths` like `"../sibling-repo"` resolve correctly even
-when working from a worktree in a different directory.
+`[associates.<name>].path` like `"../sibling-repo"` resolves correctly
+even when working from a worktree in a different directory.
 
 Use `-v` to see which roots were detected:
 
@@ -33,8 +34,9 @@ as `docker-compose.override.yml` or `.env.local`.
 
 ```toml
 # .elspais.local.toml (gitignored)
-[associates]
-paths = ["../sibling-repo"]
+[associates.sibling]
+path = "../sibling-repo"
+namespace = "SIB"
 ```
 
 **Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml` -> env vars
@@ -44,144 +46,167 @@ specify the keys you want to override. Environment variables always win.
 
 ## Complete Configuration Reference
 
+### version
+
+```toml
+version = 3   # Config schema version (required)
+```
+
 ### [project] Section
 
 ```toml
 [project]
-name = "my-project"        # Project name (optional)
-type = "core"              # "core" or "associated"
+namespace = "REQ"          # ID prefix (e.g. "REQ" -> REQ-p00001)
+name = "my-project"        # Project name (used in reports)
 ```
 
-### [patterns] Section
+### [levels] Section
 
-Controls requirement ID format and type definitions.
+Defines requirement levels with rank, letter, display name, and
+hierarchy rules. Lower rank = higher in hierarchy.
 
 ```toml
-[patterns]
-id_template = "{prefix}-{type}{id}"   # ID template with tokens
-prefix = "REQ"                         # ID prefix
+[levels.prd]
+rank = 1                   # Hierarchy rank (1 = highest)
+letter = "p"               # Character in ID (REQ-p00001)
+display_name = "Product"   # Display name in reports
+implements = ["prd"]       # Which levels this level may implement
 
-# Type definitions (PRD, OPS, DEV levels)
-[patterns.types.prd]
-id = "p"           # Character in ID (REQ-p00001)
-name = "PRD"       # Display name
-level = 1          # Hierarchy level (1=highest)
+[levels.ops]
+rank = 2
+letter = "o"
+display_name = "Operations"
+implements = ["ops", "prd"]
 
-[patterns.types.ops]
-id = "o"
-name = "OPS"
-level = 2
+[levels.dev]
+rank = 3
+letter = "d"
+display_name = "Development"
+implements = ["dev", "ops", "prd"]
+```
 
-[patterns.types.dev]
-id = "d"
-name = "DEV"
-level = 3
+### [id-patterns] Section
 
-# ID number formatting
-[patterns.id_format]
-style = "numeric"      # Format style
-digits = 5             # Number of digits (0 = variable)
-leading_zeros = true   # Pad with zeros (00001 vs 1)
+Controls requirement ID format and parsing.
+
+```toml
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"  # ID template
+separators = ["-", "_"]    # Accepted separator characters
+prefix_optional = false    # Whether namespace prefix is required
+
+[id-patterns.aliases]
+short = "{level.letter}{component}"   # Named alias patterns
+
+[id-patterns.component]
+style = "numeric"          # "numeric" | "alphanumeric" | "named"
+digits = 5                 # Number of digits (0 = variable length)
+leading_zeros = true       # Pad with zeros (00001 vs 1)
+# pattern = "[A-Z]{2}[0-9]{3}"   # For alphanumeric style
+# max_length = 32                 # For named style
+
+[id-patterns.assertions]
+label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
+max_count = 26             # Maximum assertions per requirement
+# zero_pad = false         # Pad numeric labels with zeros
+# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
 ```
 
 **Template Tokens:**
-  `{prefix}`     ID prefix (e.g., "REQ")
-  `{type}`       Type character (e.g., "p", "o", "d")
-  `{associated}` Associated repo prefix (if enabled)
-  `{id}`         Numeric ID
+  `{namespace}`      ID prefix (e.g., "REQ")
+  `{level.letter}`   Level character (e.g., "p", "o", "d")
+  `{component}`      Numeric or named ID
 
-### [patterns.associated] Section
+### [scanning] Section
 
-For multi-repository setups with associated requirement IDs.
-
-```toml
-[patterns.associated]
-enabled = true              # Enable associated repo IDs
-position = "after_prefix"   # Position in ID
-format = "uppercase"        # Format style
-length = 3                  # Prefix length
-separator = "-"             # Separator character
-```
-
-### [spec] Section
-
-Controls spec file discovery.
+Unified file scanning configuration. Each kind has its own
+sub-section with directories, file_patterns, skip_files, skip_dirs.
 
 ```toml
-[spec]
-directories = ["spec"]      # Directories to scan
-patterns = ["*.md"]         # File patterns to include
-skip_files = []             # Files to skip (legacy; prefer [ignore].spec)
-skip_dirs = []              # Subdirectories to skip (legacy; prefer [ignore].spec)
+[scanning]
+skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+skip_files = ["README.md", "INDEX.md"]
+skip_dirs = []
+# index_file = "INDEX.md"       # Optional index file for ordering
+
+[scanning.code]
+directories = ["src"]
+file_patterns = []
+skip_files = []
+skip_dirs = []
+# source_roots = []             # Root directories for import resolution
+
+[scanning.test]
+enabled = false                  # Enable test mapping and coverage
+directories = ["tests"]
+file_patterns = ["test_*.py", "*_test.py"]
+skip_files = []
+skip_dirs = []
+reference_keyword = "Verifies"   # Keyword for test-to-req references
+reference_patterns = []          # Additional reference patterns
+prescan_command = ""             # External test discovery command
+# prescan_command receives file paths on stdin, outputs JSON on stdout:
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+
+[scanning.result]
+directories = []
+file_patterns = []               # JUnit XML, pytest JSON patterns
+skip_files = []
+skip_dirs = []
+run_meta_file = ""               # Test run metadata file
+
+[scanning.journey]
+directories = ["spec"]
+file_patterns = ["*.md"]
+skip_files = []
+skip_dirs = []
+
+[scanning.docs]
+directories = ["docs"]
+file_patterns = ["*.md"]
+skip_files = []
+skip_dirs = []
 ```
 
 ### [rules] Section
 
-Hierarchy relationship rules.
+Hierarchy and format enforcement rules.
 
 ```toml
 [rules.hierarchy]
-dev = ["ops", "prd"]        # DEV can implement OPS or PRD
-ops = ["prd"]               # OPS can implement PRD
-prd = []                    # PRD cannot implement anything
-```
+allow_circular = false              # Allow circular dependency chains
+allow_structural_orphans = false    # Allow nodes without FILE ancestor
+# cross_repo_implements = true      # Allow cross-repo implementations
+# allow_orphans = false             # Allow orphaned nodes
 
-### [ignore] Section
+[rules.format]
+require_hash = true                 # Require hash footer
+require_rationale = false           # Require Rationale section
+require_assertions = true           # Require Assertions section
+require_status = true               # Require Status field
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+# content_rules = []                # Additional content rules
 
-Controls which files are skipped during scanning. Each scope applies
-to a specific scanning context. See `elspais docs ignore` for details.
-
-```toml
-[ignore]
-global = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
-spec = ["README.md", "INDEX.md"]
-code = ["*_test.py", "conftest.py", "test_*.py"]
-test = ["fixtures/**", "__snapshots__"]
-```
-
-### [testing] Section
-
-Configure test file scanning.
-
-```toml
-[testing]
-enabled = false                         # Enable test scanning
-test_dirs = ["tests"]                   # Directories to scan
-patterns = ["test_*.py", "*_test.py"]   # File patterns
-result_files = []                       # JUnit XML / pytest JSON paths
-reference_patterns = []                 # Additional reference patterns
-reference_keyword = "Validates"         # Default reference keyword
-```
-
-### [references] Section
-
-Configure how code/test references are parsed.
-
-```toml
-[references.defaults]
-separators = ["-", "_"]              # ID separators
-case_sensitive = false               # Case-sensitive matching
-prefix_optional = false              # Allow omitting prefix
-comment_styles = ["#", "//", "--"]   # Comment styles to scan
-multi_assertion_separator = "+"      # Separator for REQ-xxx-A+B+C syntax
-
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-verifies = ["Verifies", "VERIFIES"]
-refines = ["Refines", "REFINES"]
-
-# Override settings for specific file patterns
-[[references.overrides]]
-match = "*.java"
-comment_styles = ["//"]
-keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
+[rules.format.status_roles]
+active = ["Active"]                 # Counted in coverage and analysis
+provisional = ["Draft", "Proposed"] # Excluded from coverage
+aspirational = ["Roadmap", "Future"]  # Excluded from coverage and analysis
+retired = ["Deprecated", "Superseded"]  # Excluded from everything
 ```
 
 ### [validation] Section
 
 ```toml
 [validation]
-hash_mode = "normalized-text"   # Hash computation mode
+hash_mode = "normalized-text"       # "full-text" | "normalized-text"
+allow_unresolved_cross_repo = false # Allow unresolved cross-repo refs
+# hash_algorithm = "sha256"         # Hash algorithm
+# hash_length = 8                   # Hash truncation length
+# strict_hierarchy = false          # Strict hierarchy validation
 ```
 
 ### [changelog] Section
@@ -190,16 +215,18 @@ Controls changelog enforcement for Active requirements.
 
 ```toml
 [changelog]
-enforce = true                 # Enable changelog enforcement
-require_present = false        # Require ## Changelog section exists
-id_source = "gh"               # Change order ID source
-date_format = "iso"            # Date format (iso = YYYY-MM-DD)
-require_change_order = false   # Require change order ID
-require_reason = true          # Require reason field
-require_author_name = true     # Require author name
-require_author_id = true       # Require author ID
-author_id_format = "email"     # Author ID format
-allowed_author_ids = "all"     # Allowed author IDs ("all" or list)
+hash_current = true            # Check hashes against changelog entries
+present = false                # Require ## Changelog section exists
+id_source = "gh"               # Author ID source: "gh" | "git"
+date_format = "iso"            # Date format: "iso" | "us" | "eu"
+author_id_format = "email"     # Author ID format: "email" | "handle"
+allowed_author_ids = "all"     # "all" or list of allowed values
+
+[changelog.require]
+reason = true                  # Require reason field
+author_name = true             # Require author name
+author_id = true               # Require author ID
+change_order = false           # Require change order ID
 ```
 
 ### [keywords] Section
@@ -209,94 +236,68 @@ allowed_author_ids = "all"     # Allowed author IDs ("all" or list)
 min_length = 3    # Minimum keyword length for extraction
 ```
 
-### [graph] Section
+### [output] Section
 
 ```toml
-[graph]
-satellite_kinds = ["assertion", "result"]   # Kinds collapsed in graph views
+[output]
+formats = []      # Output formats (e.g. ["markdown", "html"])
+dir = ""          # Output directory
 ```
 
 ### [associates] Section
 
-Configure paths to associated repositories for combined validation.
+Configure associated repositories for combined validation.
+Each entry has a name, path, and namespace.
 
 ```toml
-[associates]
-paths = ["../callisto", "../phoenix"]   # Relative to repo root
+[associates.callisto]
+path = "../callisto"     # Relative to canonical repo root
+namespace = "CAL"        # Namespace prefix for this repo
+
+[associates.phoenix]
+path = "../phoenix"
+namespace = "PHX"
 ```
 
 Relative paths resolve from the **canonical** repository root,
 so they work correctly from git worktrees. Each path must contain
-a `.elspais.toml` with `project.type = "associated"`.
-
-### [associated] Section
-
-For associated (satellite) repositories to declare their identity.
-
-```toml
-[associated]
-prefix = "TTN"              # Associated repo prefix
-id_range = [1, 99999]       # ID range for this repo
-```
-
-### [core] Section
-
-For associated repos referencing their core.
-
-```toml
-[core]
-path = "../core"            # Path to core repository
-```
+a `.elspais.toml` with its own configuration.
 
 ## Config Commands
 
   $ elspais config show                   # View all settings
   $ elspais config show --section rules
   $ elspais config show --format json     # JSON output
-  $ elspais config get patterns.prefix
+  $ elspais config get scanning.test.enabled
   $ elspais config set project.name "NewName"
-  $ elspais config unset associated.prefix
-  $ elspais config add spec.directories src/spec
-  $ elspais config remove spec.directories src/spec
+  $ elspais config unset changelog.present
+  $ elspais config add scanning.spec.directories src/spec
+  $ elspais config remove scanning.spec.directories src/spec
   $ elspais config path                   # Show file location
+  $ elspais config schema                 # Print JSON Schema to stdout
+  $ elspais config schema -o schema.json  # Write JSON Schema to file
+
+### Schema Export
+
+Generate the JSON Schema for `.elspais.toml` configuration:
+
+  $ elspais config schema                 # Print to stdout
+  $ elspais config schema --output schema.json
+
+The schema is derived from the Pydantic `ElspaisConfig` model and includes
+a `$schema` self-reference for IDE autocompletion. A committed copy lives at
+`src/elspais/config/elspais-schema.json` and is kept in sync via CI.
 
 ## Environment Variable Overrides
 
 Any config key can be overridden via environment variables:
 
-  ELSPAIS_PATTERNS_PREFIX=MYREQ elspais health
-  ELSPAIS_TESTING_ENABLED=true elspais health
+  ELSPAIS_PROJECT_NAMESPACE=MYREQ elspais health
+  ELSPAIS_SCANNING_TEST_ENABLED=true elspais health
 
 **Conversion:**
-  `ELSPAIS_PATTERNS_PREFIX` -> `patterns.prefix`
-  `ELSPAIS_TESTING_ENABLED` -> `testing.enabled`
+  `ELSPAIS_PROJECT_NAMESPACE` -> `project.namespace`
+  `ELSPAIS_SCANNING_TEST_ENABLED` -> `scanning.test.enabled`
 
 Rule: Remove `ELSPAIS_`, lowercase, single underscores become dots.
 Use double underscore (`__`) for a literal underscore in key names.
-
-## Multi-Repository Setup
-
-**Core Repository (.elspais.toml):**
-
-```toml
-[project]
-name = "core-product"
-type = "core"
-
-[patterns]
-prefix = "REQ"
-```
-
-**Associated Repository (.elspais.toml):**
-
-```toml
-[project]
-name = "titan-extension"
-type = "associated"
-
-[associated]
-prefix = "TTN"
-
-[core]
-path = "../core-product"
-```

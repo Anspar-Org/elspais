@@ -121,17 +121,28 @@ class TestExampleCommand:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
+version = 3
+
 [project]
 namespace = "SPEC"
 
-[id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-ops = { level = 2, aliases = { letter = "o" } }
-dev = { level = 3, aliases = { letter = "d" } }
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -261,13 +272,9 @@ class TestExampleTemplateContent:
 class TestCLIIntegration:
     """Integration tests using the CLI entry point."""
 
-    def test_cli_main_help_includes_example(self, capsys):
-        """Test main --help mentions example command."""
-        from elspais.cli import create_parser
+    def test_cli_main_help_includes_example(self):
+        """Test example subcommand is recognized by the parser."""
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        help_text = parser.format_help()
-
-        assert "example" in help_text
-        assert "elspais example" in help_text
-        assert "Documentation:" in help_text
+        args = parse_args(["example"])
+        assert args.command == "example"

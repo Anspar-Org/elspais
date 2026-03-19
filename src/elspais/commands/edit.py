@@ -23,7 +23,7 @@ from elspais.utilities.spec_writer import modify_implements, modify_status, move
 
 def run(args: argparse.Namespace) -> int:
     """Run the edit command."""
-    from elspais.config import DEFAULT_CONFIG, find_config_file, get_spec_directories, load_config
+    from elspais.config import config_defaults, find_config_file, get_spec_directories, load_config
 
     # Load configuration
     config_path = args.config if hasattr(args, "config") else None
@@ -32,7 +32,7 @@ def run(args: argparse.Namespace) -> int:
     if config_path and config_path.exists():
         config = load_config(config_path)
     else:
-        config = DEFAULT_CONFIG
+        config = config_defaults()
 
     # Get spec directories
     spec_dir = args.spec_dir if hasattr(args, "spec_dir") and args.spec_dir else None

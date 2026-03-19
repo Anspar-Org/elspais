@@ -14,12 +14,23 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from elspais.commands.health import HealthCheck, HealthReport
+from elspais.config.schema import ElspaisConfig
 
-if TYPE_CHECKING:
-    from elspais.config import ConfigLoader
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
 
 
 # =============================================================================
@@ -97,22 +108,20 @@ def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthChe
         )
 
 
-def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
+def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
     """Check that required configuration sections exist."""
-    raw = config.get_raw()
+    typed_config = _validate_config(config)
     missing = []
 
-    id_patterns = raw.get("id-patterns", {})
-    if not id_patterns.get("types"):
-        missing.append("id-patterns.types (requirement type definitions)")
+    if not typed_config.levels:
+        missing.append("levels (requirement level definitions)")
 
-    spec = raw.get("spec", {})
-    if not spec.get("directories"):
-        missing.append("spec.directories (where to find spec files)")
+    if not typed_config.scanning.spec.directories:
+        missing.append("scanning.spec.directories (where to find spec files)")
 
-    rules = raw.get("rules", {})
-    if not rules.get("hierarchy"):
-        missing.append("rules.hierarchy (requirement hierarchy rules)")
+    has_levels_with_implements = any(level.implements for level in typed_config.levels.values())
+    if not has_levels_with_implements:
+        missing.append("levels.*.implements (requirement hierarchy rules)")
 
     if missing:
         return HealthCheck(
@@ -131,20 +140,21 @@ def check_config_required_fields(config: ConfigLoader) -> HealthCheck:
     )
 
 
-def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
+def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
     """Validate that the ID pattern template uses valid placeholders."""
     import re
 
-    template = config.get("id-patterns.canonical", "")
-    valid_tokens = {"{namespace}", "{type}", "{component}"}
-    # Also allow {type.<alias>} tokens
-    type_alias_re = re.compile(r"\{type\.\w+\}")
+    typed_config = _validate_config(config)
+    template = typed_config.id_patterns.canonical
+    valid_tokens = {"{namespace}", "{level}", "{component}"}
+    # Also allow {level.<field>} tokens (e.g. {level.letter})
+    level_field_re = re.compile(r"\{level\.\w+\}")
 
     found_tokens = set(re.findall(r"\{[^}]+\}", template))
 
     invalid = set()
     for tok in found_tokens:
-        if tok not in valid_tokens and not type_alias_re.match(tok):
+        if tok not in valid_tokens and not level_field_re.match(tok):
             invalid.add(tok)
     if invalid:
         return HealthCheck(
@@ -152,7 +162,7 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
             passed=False,
             message=(
                 f"ID pattern has unrecognized placeholders: {', '.join(invalid)}. "
-                f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{type.<alias>}}"
+                f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{level.<field>}}"
             ),
             category="config",
             details={"invalid_tokens": list(invalid), "valid_tokens": list(valid_tokens)},
@@ -177,50 +187,31 @@ def check_config_pattern_tokens(config: ConfigLoader) -> HealthCheck:
     )
 
 
-def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
+def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
-    hierarchy = config.get("rules.hierarchy", {})
-    types = config.get("id-patterns.types", {})
+    typed_config = _validate_config(config)
+    levels = typed_config.levels
 
-    if not isinstance(hierarchy, dict):
+    if not isinstance(levels, dict):
         return HealthCheck(
             name="config.hierarchy_rules",
             passed=False,
-            message=f"Hierarchy rules should be a table, but found {type(hierarchy).__name__}",
-            category="config",
-        )
-
-    if not isinstance(types, dict):
-        return HealthCheck(
-            name="config.hierarchy_rules",
-            passed=False,
-            message=f"Requirement types should be a table, but found {type(types).__name__}",
+            message=f"Levels should be a table, but found {type(levels).__name__}",
             category="config",
         )
 
     issues = []
-    non_level_keys = {
-        "allowed_implements",
-        "allow_circular",
-        "allow_orphans",
-        "allow_structural_orphans",
-        "allowed",
-    }
 
-    for level, allowed_parents in hierarchy.items():
-        if level in non_level_keys:
-            continue
-        if level not in types:
-            issues.append(f"Rule references unknown level '{level}'")
-            continue
-        if not isinstance(allowed_parents, list):
+    for level_name, level_config in levels.items():
+        if not isinstance(level_config.implements, list):
             issues.append(
-                f"Rule for '{level}' should be a list, found {type(allowed_parents).__name__}"
+                f"Implements for '{level_name}' should be a list, "
+                f"found {type(level_config.implements).__name__}"
             )
             continue
-        for parent in allowed_parents:
-            if parent not in types:
-                issues.append(f"Level '{level}' references unknown parent level '{parent}'")
+        for parent in level_config.implements:
+            if parent not in levels:
+                issues.append(f"Level '{level_name}' references unknown parent level '{parent}'")
 
     if issues:
         return HealthCheck(
@@ -234,14 +225,15 @@ def check_config_hierarchy_rules(config: ConfigLoader) -> HealthCheck:
     return HealthCheck(
         name="config.hierarchy_rules",
         passed=True,
-        message=f"Hierarchy rules are valid ({len(hierarchy)} levels configured)",
+        message=f"Hierarchy rules are valid ({len(levels)} levels configured)",
         category="config",
     )
 
 
-def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCheck:
+def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
-    spec_dirs = config.get("spec.directories", ["spec"])
+    typed_config = _validate_config(config)
+    spec_dirs = typed_config.scanning.spec.directories
 
     if not isinstance(spec_dirs, list):
         return HealthCheck(
@@ -279,87 +271,67 @@ def check_config_paths_exist(config: ConfigLoader, start_path: Path) -> HealthCh
     )
 
 
-def check_config_project_type(config: ConfigLoader) -> HealthCheck:
-    """Check project type configuration is consistent."""
-    from elspais.config import validate_project_config
+def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
+    """Check project configuration is valid."""
+    from pydantic import ValidationError
 
-    raw = config.get_raw()
-    errors = validate_project_config(raw)
+    raw = config
 
-    if errors:
+    try:
+        typed_config = _validate_config(raw)
+    except ValidationError as exc:
+        errors = [str(e["msg"]) for e in exc.errors()]
         return HealthCheck(
             name="config.project_type",
             passed=False,
-            message=errors[0],
+            message=errors[0] if errors else str(exc),
             category="config",
             details={"errors": errors},
         )
 
-    project_type = raw.get("project", {}).get("type")
-    if project_type:
+    project_name = typed_config.project.name
+    if project_name:
         return HealthCheck(
             name="config.project_type",
             passed=True,
-            message=f"Project type '{project_type}' is properly configured",
+            message=f"Project '{project_name}' is properly configured",
             category="config",
-            details={"type": project_type},
+            details={"name": project_name},
         )
 
     return HealthCheck(
         name="config.project_type",
         passed=True,
-        message="Project type not set (using defaults)",
+        message="Project name not set (using defaults)",
         category="config",
         severity="info",
     )
 
 
 def check_config_associated_section(raw: dict) -> HealthCheck:
-    """Check that associated projects have a valid [associated] section."""
-    project_type = raw.get("project", {}).get("type")
-    if project_type != "associated":
+    """Check that associates configuration is valid."""
+    typed_config = _validate_config(raw)
+    associates = typed_config.associates
+    if not associates:
         return HealthCheck(
             name="config.associated_section",
             passed=True,
-            message="Not an associated project (check not applicable)",
+            message="No associated projects configured",
             category="config",
             severity="info",
         )
 
-    associated = raw.get("associated", {})
-    if not associated:
-        return HealthCheck(
-            name="config.associated_section",
-            passed=False,
-            message=(
-                "Project type is 'associated' but [associated] section is missing. "
-                "Add [associated] with a 'prefix' key (e.g., prefix = \"CAL\")."
-            ),
-            category="config",
-        )
-
-    prefix = associated.get("prefix", "")
-    if not prefix:
-        return HealthCheck(
-            name="config.associated_section",
-            passed=False,
-            message=(
-                "Project type is 'associated' but prefix is empty. "
-                'Set a non-empty prefix (e.g., prefix = "CAL").'
-            ),
-            category="config",
-        )
-
+    names = list(associates.keys())
     return HealthCheck(
         name="config.associated_section",
         passed=True,
-        message=f"Associated project configured with prefix '{prefix}'",
+        message=f"{len(names)} associate(s) configured: {', '.join(names)}",
         category="config",
     )
 
 
 def run_config_checks(
-    config_path: Path | None, config: ConfigLoader, start_path: Path
+    config_path: Path | None, config: dict[str, Any], start_path: Path
 ) -> list[HealthCheck]:
     """Run all configuration checks."""
     return [
@@ -367,7 +339,7 @@ def run_config_checks(
         check_config_syntax(config_path, start_path),
         check_config_required_fields(config),
         check_config_project_type(config),
-        check_config_associated_section(config.get_raw()),
+        check_config_associated_section(config),
         check_config_pattern_tokens(config),
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
@@ -411,9 +383,12 @@ def check_worktree_status(git_root: Path | None, canonical_root: Path | None) ->
 
 def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCheck:
     """Check that each configured associate path exists on disk."""
-    associate_paths = config.get("associates", {}).get("paths", [])
+    # Implements: REQ-d00202-A, REQ-d00212-K
+    from elspais.config import get_associates_config
 
-    if not associate_paths:
+    associates = get_associates_config(config)
+
+    if not associates:
         return HealthCheck(
             name="associate.paths_resolvable",
             passed=True,
@@ -424,14 +399,15 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
 
     missing = []
     found = []
-    for path_str in associate_paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         p = Path(path_str)
         if not p.is_absolute() and canonical_root:
             p = canonical_root / p
         if p.exists():
             found.append(str(path_str))
         else:
-            missing.append(f"{path_str} (expected at {p})")
+            missing.append(f"{assoc_name}: {path_str} (expected at {p})")
 
     if missing:
         return HealthCheck(
@@ -454,10 +430,11 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
 def check_associate_configs(config: dict, canonical_root: Path | None) -> HealthCheck:
     """Check that each discovered associate has valid configuration."""
     from elspais.associates import discover_associate_from_path
+    from elspais.config import get_associates_config  # Implements: REQ-d00202-A, REQ-d00212-K
 
-    associate_paths = config.get("associates", {}).get("paths", [])
+    associates = get_associates_config(config)
 
-    if not associate_paths:
+    if not associates:
         return HealthCheck(
             name="associate.configs_valid",
             passed=True,
@@ -468,7 +445,8 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
 
     invalid = []
     valid = []
-    for path_str in associate_paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         p = Path(path_str)
         if not p.is_absolute() and canonical_root:
             p = canonical_root / p
@@ -476,9 +454,9 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
             continue  # Already reported by check_associate_paths
         result = discover_associate_from_path(p)
         if isinstance(result, str):
-            invalid.append(f"{path_str}: {result}")
+            invalid.append(f"{assoc_name}: {result}")
         else:
-            valid.append(f"{path_str} ({result.code})")
+            valid.append(f"{assoc_name} ({result.code})")
 
     if invalid:
         return HealthCheck(
@@ -548,18 +526,22 @@ def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthChec
             severity="info",
         )
 
+    # Implements: REQ-d00212-F
     cross_repo_paths = []
-    spec_dirs = data.get("spec", {}).get("directories", [])
+    spec_dirs = data.get("scanning", {}).get("spec", {}).get("directories", [])
     if isinstance(spec_dirs, list):
         for d in spec_dirs:
             if ".." in str(d):
-                cross_repo_paths.append(f"spec.directories: {d}")
+                cross_repo_paths.append(f"scanning.spec.directories: {d}")
 
-    assoc_paths = data.get("associates", {}).get("paths", [])
-    if isinstance(assoc_paths, list):
-        for p in assoc_paths:
-            if ".." in str(p):
-                cross_repo_paths.append(f"associates.paths: {p}")
+    # Check named associates for cross-repo paths (v3 format)
+    associates = data.get("associates", {})
+    if isinstance(associates, dict):
+        for assoc_name, assoc_info in associates.items():
+            if isinstance(assoc_info, dict):
+                assoc_path = assoc_info.get("path", "")
+                if ".." in str(assoc_path):
+                    cross_repo_paths.append(f"associates.{assoc_name}.path: {assoc_path}")
 
     if cross_repo_paths:
         return HealthCheck(
@@ -599,9 +581,112 @@ def run_environment_checks(
     ]
 
 
+# =============================================================================
+# Docs Drift Check
+# =============================================================================
+
+
+# Implements: REQ-d00210
+# Schema sections to check (alias names for TOML keys).
+# Excludes project-type-conditional sections (associates, core, associated).
+_CONDITIONAL_SECTIONS = {"associates"}
+
+_SCHEMA_SECTIONS: set[str] = set()
+
+
+def _get_schema_sections() -> set[str]:
+    """Return the set of required schema section names (cached)."""
+    global _SCHEMA_SECTIONS  # noqa: PLW0603
+    if _SCHEMA_SECTIONS:
+        return _SCHEMA_SECTIONS
+
+    sections: set[str] = set()
+    for name, field_info in ElspaisConfig.model_fields.items():
+        alias = field_info.alias or name
+        sections.add(alias)
+    _SCHEMA_SECTIONS = sections - _CONDITIONAL_SECTIONS
+    return _SCHEMA_SECTIONS
+
+
+def _parse_docs_sections(docs_path: Path) -> set[str]:
+    """Extract top-level TOML section headers from a docs markdown file.
+
+    Only looks inside fenced code blocks (```toml ... ```) and only
+    captures top-level sections (no dots in the name).
+    """
+    import re
+
+    content = docs_path.read_text(encoding="utf-8")
+    sections: set[str] = set()
+    in_toml_block = False
+    in_section = False  # True once we see the first [section] header
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```toml"):
+            in_toml_block = True
+            in_section = False
+            continue
+        if stripped.startswith("```") and in_toml_block:
+            in_toml_block = False
+            continue
+        if in_toml_block:
+            # Match top-level [section] or extract parent from [section.sub]
+            m = re.match(r"^\[([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_.-]+)?\]", stripped)
+            if m:
+                sections.add(m.group(1))
+                in_section = True
+            # Match bare top-level keys before any section (e.g. "version = 3")
+            elif not in_section:
+                m = re.match(r"^([A-Za-z0-9_-]+)\s*=", stripped)
+                if m:
+                    sections.add(m.group(1))
+    return sections
+
+
+def check_docs_drift(docs_path: Path) -> HealthCheck:
+    """Check for drift between ElspaisConfig schema and docs/configuration.md."""
+    if not docs_path.exists():
+        return HealthCheck(
+            name="docs.config_drift",
+            passed=True,
+            message="No docs/configuration.md found (skipping drift check)",
+            category="docs",
+            severity="info",
+        )
+
+    schema_sections = _get_schema_sections()
+    docs_sections = _parse_docs_sections(docs_path) - _CONDITIONAL_SECTIONS
+
+    undocumented = sorted(schema_sections - docs_sections)
+    stale = sorted(docs_sections - schema_sections)
+
+    if not undocumented and not stale:
+        return HealthCheck(
+            name="docs.config_drift",
+            passed=True,
+            message="docs/configuration.md is in sync with schema",
+            category="docs",
+        )
+
+    parts = []
+    if undocumented:
+        parts.append(f"{len(undocumented)} undocumented: {', '.join(undocumented)}")
+    if stale:
+        parts.append(f"{len(stale)} stale: {', '.join(stale)}")
+
+    return HealthCheck(
+        name="docs.config_drift",
+        passed=False,
+        message=f"Config docs drift detected: {'; '.join(parts)}",
+        category="docs",
+        severity="warning",
+        details={"undocumented": undocumented, "stale": stale},
+    )
+
+
 def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
     """Print human-readable doctor report."""
-    categories = ["config", "environment"]
+    categories = ["config", "environment", "docs"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))
@@ -648,7 +733,7 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
 
 def run(args: argparse.Namespace) -> int:
     """Run the doctor command."""
-    from elspais.config import ConfigLoader, find_config_file, find_git_root, get_config
+    from elspais.config import find_config_file, find_git_root, get_config
 
     config_path = getattr(args, "config", None)
     if config_path:
@@ -664,9 +749,10 @@ def run(args: argparse.Namespace) -> int:
     config_dict = {}
     try:
         config_dict = get_config(
-            config_path, start_path=start_path, overrides=getattr(args, "config_overrides", None)
+            config_path,
+            start_path=start_path,
         )
-        config = ConfigLoader.from_dict(config_dict)
+        config = config_dict
         for check in run_config_checks(config_path, config, start_path):
             report.add(check)
     except Exception as e:
@@ -689,6 +775,10 @@ def run(args: argparse.Namespace) -> int:
         config_dict, git_root, canonical_root, actual_config_path, start_path
     ):
         report.add(check)
+
+    # Docs drift check
+    docs_path = (git_root or start_path) / "docs" / "configuration.md"
+    report.add(check_docs_drift(docs_path))
 
     # Output
     fmt = getattr(args, "format", "text") or "text"

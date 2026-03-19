@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from elspais.config.schema import ElspaisConfig
 from elspais.utilities.git import (
     detect_moved_requirements,
     filter_spec_files,
@@ -19,6 +20,20 @@ from elspais.utilities.git import (
     get_repo_root,
     get_req_locations_from_graph,
 )
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
 
 
 def load_configuration(args: argparse.Namespace) -> dict | None:
@@ -30,7 +45,7 @@ def load_configuration(args: argparse.Namespace) -> dict | None:
     from elspais.config import get_config
 
     return get_config(
-        config_path=getattr(args, "config", None), overrides=getattr(args, "config_overrides", None)
+        config_path=getattr(args, "config", None),
     )
 
 
@@ -47,9 +62,9 @@ def run(args: argparse.Namespace) -> int:
     if config is None:
         return 1
 
-    spec_dir = config.get("directories", {}).get("spec", "spec")
-    if isinstance(spec_dir, list):
-        spec_dir = spec_dir[0] if spec_dir else "spec"
+    typed_config = _validate_config(config)
+    spec_dirs = typed_config.scanning.spec.directories
+    spec_dir = spec_dirs[0] if spec_dirs else "spec"
 
     base_branch = getattr(args, "base_branch", None) or "main"
     json_output = getattr(args, "format", "text") == "json"

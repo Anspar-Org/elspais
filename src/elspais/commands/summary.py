@@ -50,7 +50,7 @@ def run(args: argparse.Namespace) -> int:
 
     from elspais.config import get_config
 
-    raw_config = get_config(config_path, overrides=getattr(args, "config_overrides", None))
+    raw_config = get_config(config_path)
 
     graph = build_graph(
         config=raw_config,

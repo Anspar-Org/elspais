@@ -7,7 +7,6 @@ __all__ = [
     "analyze",
     "associate_cmd",
     "changed",
-    "completion",
     "config_cmd",
     "edit",
     "example_cmd",

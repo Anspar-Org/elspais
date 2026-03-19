@@ -5,7 +5,6 @@ from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.comments import CommentsParser
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
@@ -14,7 +13,7 @@ from elspais.utilities.patterns import build_resolver
 
 def _make_resolver(config):
     """Build IdResolver from loaded config."""
-    return build_resolver(config.get_raw())
+    return build_resolver(config)
 
 
 def create_parser_registry(resolver) -> ParserRegistry:
@@ -211,14 +210,16 @@ class TestMultiAssertionPipelineExpansion:
         for content in spec_deserializer.deserialize(spec_registry):
             builder.add_parsed_content(content)
 
-        # Optionally parse code files
+        # Optionally parse code files via Lark FileDispatcher
         if include_code:
-            code_registry = ParserRegistry()
-            code_registry.register(CodeParser(resolver))
+            from elspais.graph.parsers.lark import FileDispatcher
+
+            dispatcher = FileDispatcher(resolver)
             code_dir = root_dir / "src"
-            code_deserializer = DomainFile(code_dir, patterns=["*.py"], recursive=True)
-            for content in code_deserializer.deserialize(code_registry):
-                builder.add_parsed_content(content)
+            for py_file in sorted(code_dir.rglob("*.py")):
+                text = py_file.read_text(encoding="utf-8")
+                for parsed in dispatcher.dispatch_code(text, str(py_file)):
+                    builder.add_parsed_content(parsed)
 
         return builder.build()
 

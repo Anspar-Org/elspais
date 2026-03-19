@@ -14,16 +14,14 @@ def _make_project(tmp_path: Path, index_content: str | None = None) -> tuple:
     """
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        """[project]
+        """version = 3
+
+[project]
 name = "test-index"
+namespace = "REQ"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 """
     )
 

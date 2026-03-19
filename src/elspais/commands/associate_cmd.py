@@ -86,7 +86,9 @@ def cmd_link(args: argparse.Namespace) -> int:
 
     canonical_root = getattr(args, "canonical_root", None)
     cr = Path(canonical_root) if canonical_root else None
-    already_linked = _add_path_to_local_config(config_dir, str(repo_path), cr)
+    already_linked = _add_path_to_local_config(
+        config_dir, str(repo_path), result.name, result.code, cr
+    )
     if already_linked:
         print(f"Already linked: {result.name} ({result.code}) at {repo_path}")
         return 0
@@ -137,7 +139,9 @@ def cmd_all(args: argparse.Namespace) -> int:
     cr = Path(canonical_root) if canonical_root else None
     linked_count = 0
     for repo_path, assoc in found:
-        already_linked = _add_path_to_local_config(config_dir, str(repo_path), cr)
+        already_linked = _add_path_to_local_config(
+            config_dir, str(repo_path), assoc.name, assoc.code, cr
+        )
         status = "already linked" if already_linked else "linked"
         print(f"  Found: {repo_path} ({assoc.code}) [{status}]")
         if not already_linked:
@@ -150,7 +154,7 @@ def cmd_all(args: argparse.Namespace) -> int:
 def cmd_list(args: argparse.Namespace) -> int:
     """List current associate links and their status.
 
-    Reads [associates].paths from merged config and checks each path.
+    Reads named [associates.<name>] entries from merged config and checks each path.
 
     Args:
         args: Parsed arguments.
@@ -158,16 +162,18 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    from elspais.config import get_config
+    # Implements: REQ-d00202-A, REQ-d00212-K
+    from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
     config = get_config(
-        config_path=config_path, quiet=True, overrides=getattr(args, "config_overrides", None)
+        config_path=config_path,
+        quiet=True,
     )
 
-    paths = config.get("associates", {}).get("paths", [])
+    associates = get_associates_config(config)
 
-    if not paths:
+    if not associates:
         print("No associates linked.")
         print("Use 'elspais associate <path>' or 'elspais associate --all' to link.")
         return 0
@@ -178,19 +184,18 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} Path")
     print("-" * 72)
 
-    for path_str in paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         repo_path = Path(path_str)
         if not repo_path.is_absolute() and canonical_root:
             repo_path = Path(canonical_root) / repo_path
         if not repo_path.exists():
-            name = repo_path.name
-            print(f"{name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
             continue
 
         result = discover_associate_from_path(repo_path)
         if isinstance(result, str):
-            name = repo_path.name
-            print(f"{name:<20} {'?':<10} {'BROKEN':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'BROKEN':<12} {path_str}")
         else:
             spec_dir = repo_path / result.spec_path
             status = "OK" if spec_dir.exists() else "NO SPEC"
@@ -221,68 +226,45 @@ def cmd_unlink(args: argparse.Namespace) -> int:
         print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
         return 1
 
+    # Implements: REQ-d00212-K
     doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
     associates = doc.get("associates", {})
-    paths = associates.get("paths", [])
 
-    if not paths:
+    if not associates or not any(isinstance(v, dict) for v in associates.values()):
         print(f"Error: No associate '{name}' found.", file=sys.stderr)
         return 1
 
-    # Find the path matching the name using multiple strategies:
-    # 1. Exact path match, 2. Directory basename, 3. Project name, 4. Prefix code
-    canonical_root = getattr(args, "canonical_root", None)
-    found_idx = None
+    # Find matching entry by name, namespace code, or path basename
+    found_key = None
     found_path = None
+    name_lower = name.lower()
 
-    # Strategy 1: exact path match
-    for idx, path_str in enumerate(paths):
-        if path_str == name:
-            found_idx = idx
+    for assoc_key, entry in associates.items():
+        if not isinstance(entry, dict):
+            continue
+        path_str = entry.get("path", "")
+        ns = entry.get("namespace", "")
+
+        if (
+            assoc_key == name
+            or assoc_key.lower() == name_lower
+            or ns.lower() == name_lower
+            or Path(path_str).name == name
+        ):
+            found_key = assoc_key
             found_path = path_str
             break
 
-    # Strategy 2: directory basename match
-    if found_idx is None:
-        for idx, path_str in enumerate(paths):
-            if Path(path_str).name == name:
-                found_idx = idx
-                found_path = path_str
-                break
-
-    # Strategy 3: path component substring (e.g., "callisto" in "callisto-worktrees/branch")
-    if found_idx is None:
-        for idx, path_str in enumerate(paths):
-            if any(name in part for part in Path(path_str).parts):
-                found_idx = idx
-                found_path = path_str
-                break
-
-    # Strategy 4 & 5: project name or prefix code (requires reading config)
-    if found_idx is None:
-        name_lower = name.lower()
-        for idx, path_str in enumerate(paths):
-            repo_path = Path(path_str)
-            if not repo_path.is_absolute() and canonical_root:
-                repo_path = Path(canonical_root) / repo_path
-            result = discover_associate_from_path(repo_path)
-            if isinstance(result, Associate) and (
-                result.name == name or result.code.lower() == name_lower
-            ):
-                found_idx = idx
-                found_path = path_str
-                break
-
-    if found_idx is None:
-        print(f"Error: No associate '{name}' found in linked paths.", file=sys.stderr)
+    if found_key is None:
+        print(f"Error: No associate '{name}' found in linked associates.", file=sys.stderr)
         return 1
 
     # Remove the entry
-    del paths[found_idx]
+    del associates[found_key]
     # Write back
     local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
-    print(f"Unlinked {name} (was {found_path})")
+    print(f"Unlinked {name} (was {found_key}: {found_path})")
     return 0
 
 
@@ -353,21 +335,28 @@ def _find_by_name(name: str, args: argparse.Namespace) -> Path | None:
 
 
 def _add_path_to_local_config(
-    config_dir: Path, repo_path: str, canonical_root: Path | None = None
+    config_dir: Path,
+    repo_path: str,
+    assoc_name: str,
+    namespace: str,
+    canonical_root: Path | None = None,
 ) -> bool:
-    """Add a path to [associates].paths in .elspais.local.toml.
+    """Add a named associate to .elspais.local.toml.
 
-    Creates the file and section if they don't exist.
-    Returns True if the path was already present (no change made).
+    Creates the file and [associates.<name>] section if they don't exist.
+    Returns True if the associate was already present (no change made).
 
     Args:
         config_dir: Directory containing the config files.
         repo_path: Absolute path string to add.
+        assoc_name: Name for the associate entry.
+        namespace: Namespace prefix for the associate.
         canonical_root: Canonical repo root for resolving existing relative paths.
 
     Returns:
         True if already linked, False if newly added.
     """
+    # Implements: REQ-d00212-K
     local_path = config_dir / ".elspais.local.toml"
 
     if local_path.exists():
@@ -381,16 +370,14 @@ def _add_path_to_local_config(
 
     associates = doc["associates"]
 
-    # Ensure paths array exists
-    if "paths" not in associates:
-        associates["paths"] = tomlkit.array()
-
-    paths = associates["paths"]
-
-    # Check for duplicates (resolve existing paths to catch relative/absolute matches)
+    # Check for duplicates by name or resolved path
     resolved_new = Path(repo_path).resolve()
-    for existing in paths:
-        existing_path = Path(existing)
+    for existing_name, entry in associates.items():
+        if not isinstance(entry, dict):
+            continue
+        if existing_name == assoc_name:
+            return True
+        existing_path = Path(entry.get("path", ""))
         if not existing_path.is_absolute() and canonical_root:
             existing_resolved = (canonical_root / existing_path).resolve()
         else:
@@ -398,8 +385,11 @@ def _add_path_to_local_config(
         if existing_resolved == resolved_new:
             return True
 
-    # Append new path
-    paths.append(repo_path)
+    # Add named associate entry
+    entry = tomlkit.table()
+    entry["path"] = repo_path
+    entry["namespace"] = namespace
+    associates.add(assoc_name, entry)
 
     # Write back
     local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")

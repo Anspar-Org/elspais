@@ -252,15 +252,11 @@ class TestJUnitXMLParserCustomConfig:
         assert len(results) == 1
         assert "SPEC-p00102" in results[0]["verifies"]
 
-    def test_REQ_d00082_K_instantiation_with_pattern_config_and_resolver(self):
-        """REQ-d00082-K: Parser instantiation with IdResolver and ReferenceResolver."""
+    def test_REQ_d00082_K_instantiation_with_pattern_config(self):
+        """REQ-d00082-K: Parser instantiation with IdResolver."""
         from pathlib import Path
 
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
-        from elspais.utilities.reference_config import (
-            ReferenceConfig,
-            ReferenceResolver,
-        )
 
         id_resolver = IdResolver(
             IdPatternConfig.from_dict(
@@ -280,22 +276,15 @@ class TestJUnitXMLParserCustomConfig:
             )
         )
 
-        ref_config = ReferenceConfig(
-            separators=["-", "_"],
-            case_sensitive=False,
-        )
-        ref_resolver = ReferenceResolver(ref_config)
         base_path = Path(".")
 
         # Verify instantiation succeeds with all parameters
         parser = JUnitXMLParser(
             resolver=id_resolver,
-            reference_resolver=ref_resolver,
             base_path=base_path,
         )
 
         assert parser._resolver == id_resolver
-        assert parser._reference_resolver == ref_resolver
         assert parser._base_path == base_path
 
     def test_REQ_d00082_K_extracts_custom_prefix_ids(self):

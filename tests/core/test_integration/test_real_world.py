@@ -27,7 +27,7 @@ def real_resolver():
         pytest.skip("No .elspais.toml found in repo root")
 
     config = load_config(CONFIG_FILE)
-    return build_resolver(config.get_raw())
+    return build_resolver(config)
 
 
 @pytest.fixture

@@ -19,31 +19,28 @@ from elspais.commands.health import (
     check_spec_refines_resolve,
     check_test_results,
 )
-from elspais.config import ConfigLoader, get_config
+from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 
 
-def _load_config(config_path: Path) -> ConfigLoader:
+def _load_config(config_path: Path) -> dict:
     raw = get_config(config_path)
-    return ConfigLoader.from_dict(raw)
+    return _merge_configs(config_defaults(), raw)
 
 
 def _make_config(tmp_path: Path) -> Path:
     """Create a minimal .elspais.toml config and return its path."""
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        """[project]
+        """version = 3
+
+[project]
 name = "test"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 """
     )
     return config_path
@@ -159,29 +156,31 @@ class TestCheckSpecHierarchyLevelsFindings:
     def test_REQ_d00085_I_hierarchy_violations_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [validation]
 strict_hierarchy = true
 
-[rules.hierarchy]
-prd = []
-ops = ["prd"]
-dev = ["ops", "prd"]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = []
 
-[patterns.types]
-prd = { id = "p", level = 1 }
-ops = { id = "o", level = 2 }
-dev = { id = "d", level = 3 }
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["ops", "prd"]
 """
         )
 
@@ -230,19 +229,16 @@ class TestCheckBrokenReferencesFindings:
     def test_REQ_d00085_I_broken_refs_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
-
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 """
         )
         spec_dir = tmp_path / "spec"
@@ -287,16 +283,13 @@ class TestCheckSpecFormatRulesFindings:
     def test_REQ_d00085_I_format_violations_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [rules.format]
 require_hash = true
@@ -337,21 +330,20 @@ class TestCheckTestResultsFindings:
     def test_REQ_d00085_I_test_failures_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test"
 
-[requirements]
-spec_dirs = ["spec"]
+[scanning.spec]
+directories = ["spec"]
 
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
-
-[testing]
+[scanning.test]
 enabled = true
-test_dirs = ["tests"]
-result_files = ["results/junit.xml"]
+directories = ["tests"]
+
+[scanning.result]
+file_patterns = ["results/junit.xml"]
 """
         )
 

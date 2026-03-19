@@ -54,9 +54,11 @@ class TestCodeDirectoryScanning:
 [project]
 name = "test-code-dirs"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 """,
             encoding="utf-8",
         )
@@ -90,12 +92,12 @@ code = ["src"]
 [project]
 name = "test-both-sources"
 
-[directories]
-spec = "spec"
-code = ["lib"]
+[scanning.spec]
+directories = ["spec"]
 
-[traceability]
-scan_patterns = ["scripts/*.py"]
+[scanning.code]
+directories = ["lib"]
+file_patterns = ["scripts/*.py"]
 """,
             encoding="utf-8",
         )
@@ -128,12 +130,12 @@ scan_patterns = ["scripts/*.py"]
 [project]
 name = "test-dedup"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
 
-[traceability]
-scan_patterns = ["src/**/*.py"]
+[scanning.code]
+directories = ["src"]
+file_patterns = ["src/**/*.py"]
 """,
             encoding="utf-8",
         )
@@ -165,10 +167,12 @@ scan_patterns = ["src/**/*.py"]
 [project]
 name = "test-ignore"
 
-[directories]
-spec = "spec"
-code = ["src"]
-ignore = ["vendor"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+skip_dirs = ["vendor"]
 """,
             encoding="utf-8",
         )
@@ -199,23 +203,25 @@ ignore = ["vendor"]
             len(app_nodes) > 0
         ), f"Non-ignored src/app.py should produce CODE node, got: {code_ids}"
 
-    def test_REQ_d00054_A_code_directories_default_src_when_exists(self, tmp_path: Path) -> None:
-        """When [directories].code is not set in config, the default 'src'
-        directory is still scanned if it exists."""
+    def test_REQ_d00054_A_code_directories_explicit_src_scanned(self, tmp_path: Path) -> None:
+        """When scanning.code.directories is explicitly set to ["src"],
+        the src directory is scanned."""
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """\
 [project]
-name = "test-default-src"
+name = "test-explicit-src"
 
-[directories]
-spec = "spec"
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 """,
             encoding="utf-8",
         )
 
         _write_spec(tmp_path / "spec")
-        # get_code_directories defaults to ["src"]
         _write_code_file(tmp_path / "src" / "default.py")
 
         graph = build_graph(
@@ -228,7 +234,7 @@ spec = "spec"
         code_ids = [n.id for n in code_nodes]
 
         has_default = any("default.py" in cid for cid in code_ids)
-        assert has_default, f"Default src/ directory should be scanned, got: {code_ids}"
+        assert has_default, f"Explicit src/ directory should be scanned, got: {code_ids}"
 
     def test_REQ_d00054_A_nonexistent_code_directory_is_skipped(self, tmp_path: Path) -> None:
         """When [directories].code lists a non-existent directory, build_graph
@@ -239,9 +245,11 @@ spec = "spec"
 [project]
 name = "test-missing-dir"
 
-[directories]
-spec = "spec"
-code = ["does_not_exist"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["does_not_exist"]
 """,
             encoding="utf-8",
         )
@@ -278,9 +286,11 @@ class TestBuildGraphCoverageAnnotation:
 [project]
 name = "test-coverage"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 """,
             encoding="utf-8",
         )
@@ -345,9 +355,11 @@ A. The system SHALL perform action X.
 [project]
 name = "test-rollup"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 """,
             encoding="utf-8",
         )
@@ -418,9 +430,11 @@ B. The system SHALL do B.
 [project]
 name = "test-summary"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
 """,
             encoding="utf-8",
         )

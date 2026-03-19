@@ -1,18 +1,22 @@
+version = 3
+
 [project]
 name = "assertions-test"
-type = "core"
 namespace = "REQ"
 
-[directories]
-spec = "spec"
+[levels.prd]
+rank = 1
+letter = "p"
+
+[levels.dev]
+rank = 3
+letter = "d"
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+canonical = "{namespace}-{level.letter}{component}"
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-dev = { level = 3, aliases = { letter = "d" } }
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -22,6 +26,9 @@ leading_zeros = true
 [id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
+
+[scanning.spec]
+directories = ["spec"]
 
 [rules.format]
 require_hash = true

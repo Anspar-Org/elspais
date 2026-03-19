@@ -54,7 +54,8 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_canonical_root, find_config_file, get_config, get_project_name
+from elspais.config import find_canonical_root, find_config_file, get_config
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
     annotate_graph_git_state,
@@ -70,6 +71,22 @@ from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.utilities.patterns import build_resolver
+
+# Known schema fields (by alias and Python name) for filtering non-schema keys
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    # Strip legacy-format associates (contains 'paths' list instead of named entries)
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source path helper
@@ -523,7 +540,8 @@ def _add_changelog_for_active_mutations(
     if not active_ids:
         return
 
-    id_source = config.get("changelog", {}).get("id_source", "gh")
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    id_source = typed_config.changelog.id_source
     try:
         author = get_author_info(id_source)
     except ValueError:
@@ -587,11 +605,7 @@ def _refresh_graph(
     if hasattr(new_graph, "iter_repos"):
         for entry in new_graph.iter_repos():
             if entry.config is not None:
-                from elspais.config import ConfigLoader
-
-                root_config = (
-                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
-                )
+                root_config = entry.config
                 break
 
     return {
@@ -1311,7 +1325,8 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     REQ-o00061-A: Returns repository path, project name, and configuration summary.
     REQ-o00061-D: Reads configuration from unified config system.
     """
-    project_name = get_project_name(config)
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    project_name = typed_config.project.name or "unknown"
 
     config_file = find_config_file(working_dir)
 
@@ -1322,10 +1337,9 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         local_config_exists = local_path.is_file()
 
     config_summary = {
-        "prefix": config.get("project", {}).get("namespace", "REQ"),
-        "spec_directories": config.get("spec", {}).get("directories", ["spec"]),
-        "testing_enabled": config.get("testing", {}).get("enabled", False),
-        "project_type": config.get("project", {}).get("type"),
+        "prefix": typed_config.project.namespace,
+        "spec_directories": typed_config.scanning.spec.directories,
+        "testing_enabled": typed_config.scanning.test.enabled,
         "local_config": local_config_exists,
     }
 
@@ -1345,54 +1359,52 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
 def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Build ID pattern info from config."""
-    namespace = config.get("project", {}).get("namespace", "REQ")
-    id_patterns = config.get("id-patterns", {})
-    canonical = id_patterns.get("canonical", "{namespace}-{type.letter}{component}")
-    component = id_patterns.get("component", {})
-    types = id_patterns.get("types", {})
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    namespace = typed_config.project.namespace
+    id_patterns = typed_config.id_patterns
+    canonical = id_patterns.canonical
+    component = id_patterns.component
 
     # Synthesize example IDs for each type
-    digits = component.get("digits", 5)
-    leading_zeros = component.get("leading_zeros", True)
+    digits = component.digits
+    leading_zeros = component.leading_zeros
     example_num = "0" * (digits - 1) + "1" if leading_zeros else "1"
     examples = {}
-    for type_key, type_def in types.items():
-        aliases = type_def.get("aliases", {})
-        type_letter = aliases.get("letter", type_key[0])
-        examples[type_key] = f"{namespace}-{type_letter}{example_num}"
+    for level_key, level_config in typed_config.levels.items():
+        type_letter = level_config.letter
+        examples[level_key] = f"{namespace}-{type_letter}{example_num}"
 
     return {
         "prefix": namespace,
         "template": canonical,
-        "id_format": dict(component) if component else {},
-        "types": {k: dict(v) for k, v in types.items()},
+        "id_format": component.model_dump(),
+        "levels": {k: v.model_dump() for k, v in typed_config.levels.items()},
         "examples": examples,
     }
 
 
 def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     """Build assertion format info from config."""
-    namespace = config.get("project", {}).get("namespace", "REQ")
-    id_patterns = config.get("id-patterns", {})
-    assertions = id_patterns.get("assertions", {})
-    types = id_patterns.get("types", {})
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    namespace = typed_config.project.namespace
+    id_patterns = typed_config.id_patterns
+    assertions = id_patterns.assertions
 
     # Pick first type for the example
     first_type_letter = "p"
-    for _key, type_def in types.items():
-        aliases = type_def.get("aliases", {})
-        first_type_letter = aliases.get("letter", _key[0])
+    for _key, level_config in typed_config.levels.items():
+        first_type_letter = level_config.letter
         break
 
-    digits = id_patterns.get("component", {}).get("digits", 5)
+    digits = id_patterns.component.digits
     example_num = "0" * (digits - 1) + "1"
 
     # Read multi-assertion separator from id-patterns assertions (default: "+")
-    ma_sep = assertions.get("multi_separator", "+")
+    ma_sep = assertions.multi_separator or "+"
 
     return {
-        "label_style": assertions.get("label_style", "uppercase"),
-        "max_count": assertions.get("max_count", 26),
+        "label_style": assertions.label_style,
+        "max_count": assertions.max_count,
         "example": f"{namespace}-{first_type_letter}{example_num}-A",
         "multi_assertion_syntax": (
             f"{namespace}-{first_type_letter}{example_num}-A{ma_sep}B{ma_sep}C expands to "
@@ -1405,20 +1417,15 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
 
 def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
     """Build hierarchy rules info from config."""
-    hierarchy = config.get("rules", {}).get("hierarchy", {})
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    levels = typed_config.levels
 
-    # Extract allowed_implements if present, otherwise build from type keys
-    allowed = hierarchy.get("allowed_implements", [])
-    if not allowed:
-        # Build from individual type keys (dev, ops, prd)
-        rules = {}
-        for key in ("dev", "ops", "prd"):
-            targets = hierarchy.get(key, [])
-            if targets:
-                rules[key] = targets
-        return {"rules": rules}
-
-    return {"allowed_implements": list(allowed)}
+    # Build from levels config
+    rules = {}
+    for name, level in levels.items():
+        if level.implements:
+            rules[name] = list(level.implements)
+    return {"rules": rules}
 
 
 def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) -> dict[str, Any]:
@@ -1486,17 +1493,17 @@ def _workspace_profile_testing(
     graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for writing/updating tests with REQ references."""
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
     result = dict(base)
     result["detail"] = "testing"
 
-    testing_cfg = config.get("testing", {})
     result["id_patterns"] = _build_id_patterns(config)
     result["assertion_format"] = _build_assertion_format(config)
     result["testing"] = {
-        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
-        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
-        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
-        "result_files": testing_cfg.get("result_files", []),
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     return result
@@ -1509,18 +1516,15 @@ def _workspace_profile_code_refs(
     graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for adding code references (# Implements: comments)."""
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
     result = dict(base)
     result["detail"] = "code-refs"
 
-    refs_defaults = config.get("references", {}).get("defaults", {})
-    keywords = refs_defaults.get("keywords", {})
     result["id_patterns"] = _build_id_patterns(config)
     result["code_references"] = {
-        "code_directories": config.get("directories", {}).get("code", []),
-        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
-        "implements_keywords": keywords.get("implements", ["Implements"]),
-        "refines_keywords": keywords.get("refines", ["Refines"]),
-        "separators": refs_defaults.get("separators", ["-", "_"]),
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": False,
     }
     result["assertion_format"] = _build_assertion_format(config)
 
@@ -1550,6 +1554,7 @@ def _workspace_profile_retrofit(
     graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile for systematically adding traceability to existing code."""
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
     result = dict(base)
     result["detail"] = "retrofit"
 
@@ -1557,22 +1562,17 @@ def _workspace_profile_retrofit(
     result["assertion_format"] = _build_assertion_format(config)
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
 
-    refs_defaults = config.get("references", {}).get("defaults", {})
-    keywords = refs_defaults.get("keywords", {})
     result["code_references"] = {
-        "code_directories": config.get("directories", {}).get("code", []),
-        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
-        "implements_keywords": keywords.get("implements", ["Implements"]),
-        "refines_keywords": keywords.get("refines", ["Refines"]),
-        "separators": refs_defaults.get("separators", ["-", "_"]),
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": False,
     }
 
-    testing_cfg = config.get("testing", {})
     result["testing"] = {
-        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
-        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
-        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
-        "result_files": testing_cfg.get("result_files", []),
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
@@ -1614,10 +1614,9 @@ def _workspace_profile_worktree(
 
     result["id_patterns"] = _build_id_patterns(config)
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
     result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
-    result["config_summary"]["spec_directories"] = config.get("spec", {}).get(
-        "directories", ["spec"]
-    )
+    result["config_summary"]["spec_directories"] = typed_config.scanning.spec.directories
 
     return result
 
@@ -1629,6 +1628,7 @@ def _workspace_profile_all(
     graph: FederatedGraph | None,
 ) -> dict[str, Any]:
     """Profile returning all available information."""
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
     result = dict(base)
     result["detail"] = "all"
 
@@ -1638,23 +1638,18 @@ def _workspace_profile_all(
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
 
     # Code references
-    refs_defaults = config.get("references", {}).get("defaults", {})
-    keywords = refs_defaults.get("keywords", {})
     result["code_references"] = {
-        "code_directories": config.get("directories", {}).get("code", []),
-        "comment_styles": refs_defaults.get("comment_styles", ["#", "//"]),
-        "implements_keywords": keywords.get("implements", ["Implements"]),
-        "refines_keywords": keywords.get("refines", ["Refines"]),
-        "separators": refs_defaults.get("separators", ["-", "_"]),
+        "code_directories": list(typed_config.scanning.code.directories),
+        "separators": typed_config.id_patterns.separators,
+        "case_sensitive": False,
     }
 
     # Testing
-    testing_cfg = config.get("testing", {})
     result["testing"] = {
-        "reference_keyword": testing_cfg.get("reference_keyword", "Validates"),
-        "test_dirs": testing_cfg.get("test_dirs", ["tests"]),
-        "file_patterns": testing_cfg.get("patterns", ["test_*.py", "*_test.py"]),
-        "result_files": testing_cfg.get("result_files", []),
+        "reference_keyword": typed_config.scanning.test.reference_keyword,
+        "test_dirs": typed_config.scanning.test.directories,
+        "file_patterns": typed_config.scanning.test.file_patterns,
+        "result_files": typed_config.scanning.result.file_patterns,
     }
 
     # Coverage and health (graph-dependent)
@@ -1711,11 +1706,7 @@ def _get_workspace_info(
     if config is None and graph is not None and hasattr(graph, "iter_repos"):
         for entry in graph.iter_repos():
             if entry.config is not None:
-                from elspais.config import ConfigLoader
-
-                config = (
-                    entry.config._data if isinstance(entry.config, ConfigLoader) else entry.config
-                )
+                config = entry.config
                 break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)
@@ -4804,7 +4795,8 @@ def create_server(
 
         # Check changelog enforcement for Active requirements
         config = _state.get("config", {})
-        changelog_enforce = config.get("changelog", {}).get("enforce", True)
+        typed_config = _validate_config(config) if isinstance(config, dict) else config
+        changelog_enforce = typed_config.changelog.hash_current
 
         if changelog_enforce:
             active_mutated = _get_active_mutated_reqs(graph)

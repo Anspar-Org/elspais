@@ -142,8 +142,6 @@ jobs:
   self-validate:
     name: Self-Validate Specs
     runs-on: ubuntu-latest
-    env:
-      ELSPAIS_VERSION: "0.104.43"
 
     steps:
       - uses: actions/checkout@v4
@@ -194,15 +192,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install package and audit tools
+      - name: Install package
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[all]"
-          pip install pip-audit safety
 
       - name: Audit dependencies for known vulnerabilities
-        run: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit
 
       - name: Check with safety
-        run: safety check
+        run: |
+          pip install safety
+          safety check
         continue-on-error: true

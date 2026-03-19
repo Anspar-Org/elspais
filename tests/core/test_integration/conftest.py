@@ -104,20 +104,30 @@ The system SHALL timeout sessions after 30 minutes of inactivity.
 namespace = "REQ"
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
-
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-ops = { level = 2, aliases = { letter = "o" } }
-dev = { level = 3, aliases = { letter = "d" } }
+canonical = "{namespace}-{level.letter}{component}"
+aliases = { short = "{level.letter}{component}" }
 
 [id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[spec]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
 directories = ["spec"]
 """
         )
@@ -199,13 +209,8 @@ def authenticate():
 namespace = "REQ"
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
-
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-ops = { level = 2, aliases = { letter = "o" } }
-dev = { level = 3, aliases = { letter = "d" } }
+canonical = "{namespace}-{level.letter}{component}"
+aliases = { short = "{level.letter}{component}" }
 
 [id-patterns.component]
 style = "numeric"
@@ -215,11 +220,26 @@ leading_zeros = true
 [id-patterns.assertions]
 multi_separator = "+"
 
-[spec]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
 directories = ["spec"]
 
-[directories]
-code = ["src"]
+[scanning.code]
+directories = ["src"]
 """
         )
 

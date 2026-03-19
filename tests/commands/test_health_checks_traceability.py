@@ -16,7 +16,7 @@ from elspais.commands.health import (
     check_unlinked_tests,
     run_spec_checks,
 )
-from elspais.config import ConfigLoader, get_config
+from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
@@ -30,7 +30,7 @@ from ..core.graph_test_helpers import (
 )
 
 
-def _wrap(graph: TraceGraph, config: ConfigLoader | None = None) -> FederatedGraph:
+def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
     """Wrap a bare TraceGraph in a federation-of-one."""
     return FederatedGraph.from_single(graph, config, graph.repo_root or Path("/test/repo"))
 
@@ -302,7 +302,8 @@ class TestCheckBrokenReferences:
         graph._broken_references = [
             BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
-        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+        override = {"validation": {"allow_unresolved_cross_repo": True}}
+        config = _merge_configs(config_defaults(), override)
 
         # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
         fed = _wrap(graph, config)
@@ -318,7 +319,8 @@ class TestCheckBrokenReferences:
         graph._broken_references = [
             BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
         ]
-        config = ConfigLoader.from_dict({"validation": {"allow_unresolved_cross_repo": True}})
+        override = {"validation": {"allow_unresolved_cross_repo": True}}
+        config = _merge_configs(config_defaults(), override)
 
         check = check_broken_references(_wrap(graph, config), config)
         assert not check.passed
@@ -331,7 +333,7 @@ class TestCheckBrokenReferences:
         graph._broken_references = [
             BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
-        config = ConfigLoader.from_dict({})
+        config = config_defaults()
 
         check = check_broken_references(_wrap(graph, config))
         assert not check.passed
@@ -349,23 +351,20 @@ class TestConfigBackwardCompat:
         """run_spec_checks() falls back to allow_orphans when allow_structural_orphans is absent."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-compat"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [rules.hierarchy]
 allow_orphans = true
 """
         )
         raw = get_config(config_path)
-        config = ConfigLoader.from_dict(raw)
+        config = _merge_configs(config_defaults(), raw)
 
         # Build a graph with an orphan
         graph = build_graph(
@@ -385,16 +384,13 @@ allow_orphans = true
         """allow_structural_orphans takes precedence over allow_orphans."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """[project]
+            """version = 3
+
+[project]
 name = "test-precedence"
 
-[requirements]
-spec_dirs = ["spec"]
-
-[requirements.id_pattern]
-prefix = "REQ"
-separator = "-"
-pattern = "REQ-[a-z]\\\\d{5}"
+[scanning.spec]
+directories = ["spec"]
 
 [rules.hierarchy]
 allow_orphans = true
@@ -402,7 +398,7 @@ allow_structural_orphans = false
 """
         )
         raw = get_config(config_path)
-        config = ConfigLoader.from_dict(raw)
+        config = _merge_configs(config_defaults(), raw)
 
         graph = build_graph(
             make_requirement("REQ-p00001", title="Parent", level="PRD"),

@@ -1,9 +1,9 @@
 """Config module - Configuration loading and management.
 
 Exports:
-- ConfigLoader: Configuration container with dot-notation access
 - load_config: Load config from TOML file
 - find_config_file: Find .elspais.toml in directory hierarchy
+- config_defaults: Get default config dict from Pydantic schema
 """
 
 from __future__ import annotations
@@ -11,165 +11,40 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
-# Default configuration values
-DEFAULT_CONFIG: dict[str, Any] = {
-    "project": {
-        "namespace": "REQ",
-    },
-    "id-patterns": {
-        "canonical": "{namespace}-{type.letter}{component}",
-        "aliases": {"short": "{type.letter}{component}"},
-        "types": {
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "ops": {"level": 2, "aliases": {"letter": "o"}},
-            "dev": {"level": 3, "aliases": {"letter": "d"}},
-        },
-        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-        "assertions": {
-            "label_style": "uppercase",
-            "max_count": 26,
-        },
-    },
-    "spec": {
-        "directories": ["spec"],
-        "patterns": ["*.md"],
-        "skip_files": [],
-        "skip_dirs": [],
-    },
-    "rules": {
-        "hierarchy": {
-            "dev": ["ops", "prd"],
-            "ops": ["prd"],
-            "prd": [],
-        },
-    },
-    "testing": {
-        "enabled": False,
-        "test_dirs": ["tests"],
-        "skip_dirs": [],
-        "patterns": ["test_*.py", "*_test.py"],
-        "result_files": [],
-        "run_meta_file": "",
-        "reference_patterns": [],
-        "reference_keyword": "Verifies",
-        "prescan_command": "",
-    },
-    "ignore": {
-        "global": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
-        "spec": ["README.md", "INDEX.md"],
-        "code": ["*_test.py", "conftest.py", "test_*.py"],
-        "test": ["fixtures/**", "__snapshots__"],
-    },
-    "references": {
-        "defaults": {
-            "separators": ["-", "_"],
-            "case_sensitive": False,
-            "prefix_optional": False,
-            "comment_styles": ["#", "//", "--"],
-            "keywords": {
-                "implements": ["Implements", "IMPLEMENTS"],
-                "verifies": ["Verifies", "VERIFIES"],
-                "refines": ["Refines", "REFINES"],
-                # Implements: REQ-d00069-H
-                "satisfies": ["Satisfies", "SATISFIES"],
-            },
-        },
-        "overrides": [],
-    },
-    "keywords": {
-        "min_length": 3,
-    },
-    "validation": {
-        "hash_mode": "normalized-text",
-        "allow_unresolved_cross_repo": False,
-    },
-    "graph": {
-        "satellite_kinds": ["assertion", "result"],
-    },
-    "changelog": {
-        "enforce": True,
-        "require_present": False,
-        "id_source": "gh",
-        "date_format": "iso",
-        "require_change_order": False,
-        "require_reason": True,
-        "require_author_name": True,
-        "require_author_id": True,
-        "author_id_format": "email",
-        "allowed_author_ids": "all",
-    },
-}
 
+# Implements: REQ-d00207-A
+def config_defaults() -> dict[str, Any]:
+    """Get default configuration dict derived from Pydantic schema.
 
-class ConfigLoader:
-    """Configuration container with dot-notation access."""
+    All defaults are defined as Pydantic field defaults in schema.py.
+    This function validates an empty dict to produce the full defaults,
+    then dumps to a hyphenated-key dict for backward compatibility.
 
-    def __init__(self, data: dict[str, Any]) -> None:
-        """Initialize with configuration data.
+    Returns:
+        Default configuration dictionary with hyphenated keys.
+    """
+    from elspais.config.schema import ElspaisConfig
 
-        Args:
-            data: Configuration dictionary.
-        """
-        self._data = data
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ConfigLoader:
-        """Create ConfigLoader from dictionary.
-
-        Args:
-            data: Configuration dictionary.
-
-        Returns:
-            ConfigLoader instance.
-        """
-        merged = _merge_configs(DEFAULT_CONFIG, data)
-        return cls(merged)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value by dot-notation key.
-
-        Args:
-            key: Dot-separated key path (e.g., "patterns.prefix").
-            default: Default value if key not found.
-
-        Returns:
-            Configuration value or default.
-        """
-        parts = key.split(".")
-        value = self._data
-
-        for part in parts:
-            if isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                return default
-
-        return value
-
-    def get_raw(self) -> dict[str, Any]:
-        """Get raw configuration dictionary.
-
-        Returns:
-            Complete configuration dictionary.
-        """
-        return self._data
+    return ElspaisConfig.model_validate({}).model_dump(by_alias=True, exclude_none=True)
 
 
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
-    """Migrate legacy [patterns] config to [id-patterns] format.
+    """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
     Configs without an explicit ``version`` field (pre-v2) may define ID
     patterns in the old ``[patterns]`` section.  This function synthesizes
-    the equivalent ``[id-patterns]`` so that ``IdResolver`` works correctly.
+    the equivalent ``[id-patterns]`` and ``[levels]`` so that ``IdResolver``
+    works correctly.
 
-    Once all repos have migrated to ``[id-patterns]`` and set ``version = 2``,
-    this migration path can be removed.
+    Once all repos have migrated to v3 format, this migration path can be
+    removed.
     """
     # v2+ configs must use [id-patterns] directly — skip migration
     config_version = config.get("version")
@@ -182,17 +57,20 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
     # Only migrate if [id-patterns] is still at defaults (user didn't define it)
     id_patterns = config.get("id-patterns", {})
-    if id_patterns.get("canonical") != DEFAULT_CONFIG["id-patterns"]["canonical"]:
+    canonical = id_patterns.get("canonical")
+    default_canonical = config_defaults()["id-patterns"]["canonical"]
+    if canonical is not None and canonical != default_canonical:
         return config  # user has explicit [id-patterns], don't override
 
-    # Build type definitions: old types.*.id -> new types.*.aliases.letter
+    # Build level definitions from old types: old types.*.id -> levels.*.letter
     old_types = patterns.get("types", {})
-    new_types: dict[str, Any] = {}
+    new_levels: dict[str, Any] = {}
     for code, tdef in old_types.items():
         if isinstance(tdef, dict):
-            new_types[code] = {
-                "level": tdef.get("level", 1),
-                "aliases": {"letter": tdef.get("id", code[0])},
+            new_levels[code] = {
+                "rank": tdef.get("level", 1),
+                "letter": tdef.get("id", code[0]),
+                "implements": [code],  # self-reference as minimal default
             }
 
     # Build component format from old id_format
@@ -210,7 +88,7 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     canonical = old_template
     canonical = canonical.replace("{prefix}", "{namespace}")
     canonical = canonical.replace("{id}", "{component}")
-    canonical = canonical.replace("{type}", "{type.letter}")
+    canonical = canonical.replace("{type}", "{level.letter}")
 
     # Handle {associated} token: replace with literal prefix if configured
     associated_config = patterns.get("associated", {})
@@ -238,37 +116,51 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
 
     # Also set namespace from patterns.prefix if not already in [project]
     namespace = patterns.get("prefix", "REQ")
-    if config.get("project", {}).get("namespace") == DEFAULT_CONFIG["project"]["namespace"]:
+    if config.get("project", {}).get("namespace") == config_defaults()["project"]["namespace"]:
         config.setdefault("project", {})["namespace"] = namespace
 
     # Write synthesized [id-patterns]
     config["id-patterns"] = {
         "canonical": canonical,
         "aliases": {"short": canonical.split("-", 1)[1] if "-" in canonical else canonical},
-        "types": new_types,
         "component": new_component,
         "assertions": new_assertions or id_patterns.get("assertions", {}),
     }
 
+    # Write synthesized [levels]
+    if new_levels:
+        config["levels"] = new_levels
+
     return config
 
 
-def load_config(config_path: Path) -> ConfigLoader:
+CURRENT_CONFIG_VERSION = 3
+
+MIGRATIONS: dict[int, Callable[[dict], dict]] = {
+    1: _migrate_legacy_patterns,  # [patterns] -> [id-patterns]
+}
+
+
+# Implements: REQ-d00207-B
+def load_config(config_path: Path) -> dict[str, Any]:
     """Load configuration from a TOML file.
 
     Loads config_path, then deep-merges .elspais.local.toml (if present
     alongside it) on top — following the docker-compose.override.yml / .env.local
     convention for developer-local overrides.
 
+    All defaults are provided by `ElspaisConfig` Pydantic field defaults.
+    Returns a plain dict produced by ``model_dump(by_alias=True)``.
+
     Args:
         config_path: Path to the .elspais.toml file.
 
     Returns:
-        ConfigLoader with merged configuration.
+        Configuration dictionary with hyphenated keys.
     """
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
-    merged = _merge_configs(DEFAULT_CONFIG, user_config)
+    merged = _merge_configs(config_defaults(), user_config)
 
     # Deep-merge developer-local overrides if present
     local_path = config_path.parent / ".elspais.local.toml"
@@ -277,8 +169,39 @@ def load_config(config_path: Path) -> ConfigLoader:
         merged = _merge_configs(merged, local_config)
 
     merged = _apply_env_overrides(merged)
-    merged = _migrate_legacy_patterns(merged)
-    return ConfigLoader(merged)
+
+    # Version-gated sequential migration
+    version = merged.get("version", 1)
+    for v in range(version, CURRENT_CONFIG_VERSION):
+        if v in MIGRATIONS:
+            merged = MIGRATIONS[v](merged)
+
+    # Strip legacy/unknown keys before Pydantic validation, but keep them
+    # for backward-compatible config.get() access afterwards.
+    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths", "references"}
+    stripped: dict[str, Any] = {}
+    for key in _LEGACY_TOP_LEVEL_KEYS:
+        if key in merged:
+            stripped[key] = merged.pop(key)
+
+    # Strip legacy associates.paths list before validation (v3 expects named entries)
+    assoc = merged.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        stripped["associates"] = merged.pop("associates")
+
+    # Validate via Pydantic schema
+    from elspais.config.schema import ElspaisConfig
+
+    validated = ElspaisConfig.model_validate(merged)
+
+    # Produce hyphenated dict for backward-compatible access
+    result = validated.model_dump(by_alias=True, exclude_none=True)
+
+    # Restore stripped legacy keys so existing config access still works
+    for key, value in stripped.items():
+        result[key] = value
+
+    return result
 
 
 def find_git_root(start_path: Path | None = None) -> Path | None:
@@ -349,18 +272,6 @@ def find_canonical_root(start_path: Path | None = None) -> Path | None:
             pass
 
     return git_root
-
-
-def get_project_name(config: dict[str, Any] | None = None) -> str:
-    """Get the project name from config.
-
-    Returns config["project"]["name"] if set, otherwise "unknown".
-    """
-    if config:
-        name = config.get("project", {}).get("name")
-        if name:
-            return name
-    return "unknown"
 
 
 def find_config_file(start_path: Path) -> Path | None:
@@ -487,33 +398,6 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
-def apply_cli_overrides(config: dict[str, Any], overrides: list[str] | None) -> dict[str, Any]:
-    """Apply ``--set key=value`` CLI overrides to a config dict.
-
-    Each override must be in ``key=value`` format where *key* is a
-    dot-separated path (e.g. ``spec.directories``) and *value* is parsed
-    via :func:`_try_parse_env_value` (supports JSON, booleans, strings).
-
-    Args:
-        config: Configuration dictionary to modify in place.
-        overrides: List of ``key=value`` strings, or *None*.
-
-    Returns:
-        The mutated *config* dict (for convenience).
-
-    Raises:
-        ValueError: If an override string does not contain ``=``.
-    """
-    if not overrides:
-        return config
-    for item in overrides:
-        if "=" not in item:
-            raise ValueError(f"Invalid override format: {item!r}  (expected key=value)")
-        key, value = item.split("=", 1)
-        _set_nested(config, key.strip(), _try_parse_env_value(value.strip()))
-    return config
-
-
 def _parse_toml(content: str) -> dict[str, Any]:
     """Parse TOML content into a plain dictionary.
 
@@ -571,7 +455,6 @@ def get_config(
     config_path: Path | None = None,
     start_path: Path | None = None,
     quiet: bool = False,
-    overrides: list[str] | None = None,
 ) -> dict[str, Any]:
     """Get configuration with auto-discovery and fallback.
 
@@ -581,16 +464,14 @@ def get_config(
     - Config file discovery from start_path
     - Fallback to defaults if no config found
     - Error reporting (unless quiet=True)
-    - CLI ``--set`` overrides (applied last, highest precedence)
 
     Override precedence (highest first):
-        ``--set`` > env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
+        env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
 
     Args:
         config_path: Explicit config file path (optional)
         start_path: Directory to search for config (defaults to cwd)
         quiet: Suppress error messages
-        overrides: List of ``key=value`` strings from ``--set`` CLI flag.
 
     Returns:
         Configuration dictionary (defaults if not found)
@@ -603,7 +484,7 @@ def get_config(
 
     if resolved_path and resolved_path.exists():
         try:
-            config = load_config(resolved_path).get_raw()
+            config = load_config(resolved_path)
         except Exception as e:
             # A config file that exists but can't be parsed is always an error.
             # Silently falling back to defaults would hide the problem and cause
@@ -614,10 +495,8 @@ def get_config(
             ) from e
     else:
         # Return defaults (no config file found)
-        config = dict(DEFAULT_CONFIG)
+        config = config_defaults()
 
-    # Apply CLI overrides (highest precedence)
-    apply_cli_overrides(config, overrides)
     return config
 
 
@@ -642,10 +521,8 @@ def get_spec_directories(
     if base_path is None:
         base_path = Path.cwd()
 
-    # Get directories from config - check both "directories" and "spec" sections
-    dir_config = config.get("directories", {}).get("spec")
-    if dir_config is None:
-        dir_config = config.get("spec", {}).get("directories", ["spec"])
+    # Get directories from v3 scanning.spec.directories
+    dir_config = config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])
 
     # Handle both string and list
     if isinstance(dir_config, str):
@@ -681,7 +558,7 @@ def get_code_directories(
     if base_path is None:
         base_path = Path.cwd()
 
-    dir_config = config.get("directories", {}).get("code", ["src"])
+    dir_config = config.get("scanning", {}).get("code", {}).get("directories", ["src"])
 
     # Handle both string and list
     if isinstance(dir_config, str):
@@ -707,7 +584,7 @@ def get_docs_directories(
 ) -> list[Path]:
     """Get documentation directories from configuration.
 
-    Uses [directories].docs config for scanning documentation files
+    Uses [scanning.docs].directories config for scanning documentation files
     for requirement references and traceability.
 
     Args:
@@ -720,7 +597,7 @@ def get_docs_directories(
     if base_path is None:
         base_path = Path.cwd()
 
-    dir_config = config.get("directories", {}).get("docs", ["docs"])
+    dir_config = config.get("scanning", {}).get("docs", {}).get("directories", ["docs"])
 
     # Handle both string and list
     if isinstance(dir_config, str):
@@ -853,74 +730,13 @@ class IgnoreConfig:
         return patterns
 
 
-class ConfigValidationError(Exception):
-    """Raised when configuration validation fails."""
-
-    pass
-
-
-def validate_project_config(config: dict[str, Any]) -> list[str]:
-    """Validate project type configuration consistency.
-
-    Checks that project.type matches the presence of [core] and [associated] sections:
-    - project.type = "core" → [associated] MAY exist (defines associated repos)
-    - project.type = "associated" → [core] MUST exist (specifies core repo path)
-    - project.type not set → [core] and [associated] sections are ERRORS
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-
-    project_type = config.get("project", {}).get("type")
-    has_core_section = "core" in config and isinstance(config["core"], dict)
-    has_associated_section = "associated" in config and isinstance(config["associated"], dict)
-
-    if project_type == "associated":
-        # Associated repos MUST have a [core] section
-        if not has_core_section:
-            errors.append(
-                "project.type='associated' requires a [core] section with 'path' "
-                "to the core repository"
-            )
-        elif not config["core"].get("path"):
-            errors.append(
-                "[core] section must specify 'path' to core repository " "for associated projects"
-            )
-    elif project_type == "core":
-        # Core repos MAY have [associated] section - no validation needed
-        pass
-    elif project_type is None:
-        # No project type set - [core] and [associated] sections are errors
-        if has_core_section:
-            errors.append(
-                "[core] section found but project.type is not set. "
-                "Set project.type='associated' to use this section"
-            )
-        if has_associated_section:
-            errors.append(
-                "[associated] section found but project.type is not set. "
-                "Set project.type='core' or 'associated' to use this section"
-            )
-    else:
-        # Unknown project type
-        errors.append(
-            f"Unknown project.type='{project_type}'. " "Valid values: 'core', 'associated'"
-        )
-
-    return errors
-
-
 def get_test_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
 ) -> list[Path]:
     """Get test directories from configuration.
 
-    Uses [testing].test_dirs config, falling back to common defaults.
+    Uses [scanning.test].directories config, falling back to common defaults.
 
     Args:
         config: Configuration dictionary
@@ -932,9 +748,8 @@ def get_test_directories(
     if base_path is None:
         base_path = Path.cwd()
 
-    # Get from [testing] section first, then fall back to defaults
-    testing_config = config.get("testing", {})
-    dir_config = testing_config.get("test_dirs", ["tests"])
+    # Get from scanning.test.directories
+    dir_config = config.get("scanning", {}).get("test", {}).get("directories", ["tests"])
 
     # Handle both string and list
     if isinstance(dir_config, str):
@@ -961,36 +776,34 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
     during file scanning. It supports glob patterns and scope-specific rules.
 
     Args:
-        config: Configuration dictionary from get_config() or load_config().get_raw()
+        config: Configuration dictionary from get_config() or load_config()
 
     Returns:
-        IgnoreConfig instance with patterns from [ignore] section or defaults.
+        IgnoreConfig instance with patterns from [scanning] section or defaults.
     """
-    ignore_data = config.get("ignore", {})
+    scanning = config.get("scanning", {})
 
-    # Also check legacy spec.skip_files and spec.skip_dirs and merge them
-    spec_config = config.get("spec", {})
-    legacy_skip_files = spec_config.get("skip_files", [])
-    legacy_skip_dirs = spec_config.get("skip_dirs", [])
+    # Global skip patterns
+    global_patterns = list(scanning.get("skip", []))
 
-    # Merge legacy patterns into spec scope
-    merged_spec = list(ignore_data.get("spec", []))
-    merged_spec.extend(legacy_skip_files)
-    merged_spec.extend(legacy_skip_dirs)
+    # Per-kind skip patterns (skip_files + skip_dirs merged)
+    def _kind_patterns(kind: str) -> list[str]:
+        kind_cfg = scanning.get(kind, {})
+        patterns = list(kind_cfg.get("skip_files", []))
+        patterns.extend(kind_cfg.get("skip_dirs", []))
+        return patterns
 
-    # Create config with merged patterns
     return IgnoreConfig(
-        global_patterns=ignore_data.get("global", []),
-        spec_patterns=list(set(merged_spec)),  # Deduplicate
-        code_patterns=ignore_data.get("code", []),
-        test_patterns=ignore_data.get("test", []),
+        global_patterns=global_patterns,
+        spec_patterns=_kind_patterns("spec"),
+        code_patterns=_kind_patterns("code"),
+        test_patterns=_kind_patterns("test"),
     )
 
 
 __all__ = [
-    "ConfigLoader",
-    "ConfigValidationError",
     "IgnoreConfig",
+    "config_defaults",
     "load_config",
     "find_config_file",
     "find_canonical_root",
@@ -1001,14 +814,11 @@ __all__ = [
     "get_docs_directories",
     "get_test_directories",
     "get_ignore_config",
-    "validate_project_config",
-    "DEFAULT_CONFIG",
     "parse_toml",
     "parse_toml_document",
     "get_status_roles",
     "_try_parse_numeric",
     "_try_parse_env_value",
-    "apply_cli_overrides",
     "get_associates_config",
     "validate_no_transitive_associates",
 ]
@@ -1026,14 +836,14 @@ def get_associates_config(
 
     Each associate entry has:
     - path (str, required): relative path to the associate repo
-    - git (str | None, optional): remote URL for clone assistance
+    - namespace (str, required): namespace prefix for the associate
 
     Args:
         config: The project configuration dictionary.
         repo_root: Repository root for resolving relative legacy paths.
 
     Returns:
-        Dict mapping associate name to {"path": str, "git": str | None}.
+        Dict mapping associate name to {"path": str, "namespace": str}.
         Empty dict if no [associates] section exists.
     """
     associates = config.get("associates", {})
@@ -1044,7 +854,7 @@ def get_associates_config(
         if isinstance(entry, dict):
             result[name] = {
                 "path": entry["path"],
-                "git": entry.get("git"),
+                "namespace": entry.get("namespace", ""),
             }
 
     # Support legacy [associates] paths = ["../repo"] format

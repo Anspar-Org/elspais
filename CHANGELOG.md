@@ -4,6 +4,121 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.6]
+
+### Changed
+
+- Migrate all config consumers to v3 schema paths:
+  - `doctor.py`: `check_associate_paths()`, `check_associate_configs()`, `check_cross_repo_in_committed_config()` now use `get_associates_config()` and `scanning.spec.directories`
+  - `index.py`: `_resolve_spec_dir_info()` now uses typed `ElspaisConfig` instead of raw dict access
+  - `validate.py`: Associate path checks now use `get_associates_config()` instead of `associates.paths` array
+  - `associate_cmd.py`: `cmd_list()` now uses `get_associates_config()`
+  - `associates.py`: Remove legacy `associates.paths` array fallback
+- Update all tests from v2 `associates.paths` array format to v3 named `[associates.<name>]` sections
+
+## [0.108.5]
+
+### Removed
+
+- Delete `reference_config.py` (`ReferenceConfig`, `ReferenceOverride`, `ReferenceResolver`) - fully replaced by Lark parser and `IdResolver`.
+- Delete legacy `CodeParser` (`graph/parsers/code.py`) and `TestParser` (`graph/parsers/test.py`) - replaced by Lark `FileDispatcher`.
+- Remove `ReferencesConfig` from Pydantic schema and `[references]` section from config. Existing configs with `[references]` are silently stripped for backwards compatibility.
+- Delete associated test files: `test_reference_config.py`, `test_code_parser.py`, `test_test_parser.py`, `test_colon_optional.py`.
+
+## [0.108.4]
+
+### Changed
+
+- Remove `ReferenceResolver` construction and legacy `code_registry`/`test_registry` from `factory.py`. Remove unused `CodeParser`, `TestParser`, and `ReferenceResolver` imports.
+
+## [0.108.3]
+
+### Changed
+
+- Remove `ReferenceConfig`/`ReferenceResolver` from result parsers (`JUnitXMLParser`, `PytestJSONParser`). ID extraction now uses `IdResolver.search_regex()` and `normalize_ref()` directly.
+- `IdResolver.search_regex()` now matches both hyphen and underscore separators (e.g. `REQ-p00001` and `REQ_p00001`) with a negative lookahead to prevent false assertion captures.
+
+## [0.108.2]
+
+### Changed
+
+- Remove `ReferenceConfig` parameter from `GrammarFactory` and `FileDispatcher`. Comment styles and reference keywords are now hardcoded (Implements/IMPLEMENTS, Verifies/VERIFIES, Refines/REFINES).
+
+## [0.108.1]
+
+### Changed
+
+- Extract prescan/language detection utilities from legacy `CodeParser` and `TestParser` into standalone `prescan.py` module. Lark `FileDispatcher` now imports from `prescan` instead of legacy parsers.
+
+## [0.108.0]
+
+### Changed
+
+- **BREAKING: ElspaisConfig v3 restructuring** -- Major config schema reorganization with 6 structural changes:
+  - **New `levels` top-level field** -- `dict[str, LevelConfig]` replaces `[patterns.types]`. Each level declares `rank`, `letter`, `display_name`, and `implements` rules (hierarchy rules moved here from `[rules.hierarchy.allowed_implements]`).
+  - **New `scanning` top-level field** -- Unified `ScanningConfig` with per-kind subclasses (`spec`, `code`, `test`, `result`, `journey`, `docs`), each with `directories`, `file_patterns`, `skip_files`, `skip_dirs`. Global `skip` list replaces `[ignore]` and `[directories].ignore`.
+  - **New `output` top-level field** -- `OutputConfig` with `formats` and `dir`, replacing `[traceability].output_formats` and `output_dir`.
+  - **Removed `[directories]`** -- Absorbed into `[scanning.<kind>].directories`.
+  - **Removed `[spec]`** -- Replaced by `[scanning.spec]` (with `index_file`, `skip_files`, etc.).
+  - **Removed `[testing]`** -- Split into `[scanning.test]` (test discovery) and `[scanning.result]` (result files).
+  - **Removed `[ignore]`** -- Absorbed into `[scanning].skip` and per-kind `skip_files`/`skip_dirs`.
+  - **Removed `[graph]`** -- `satellite_kinds` hardcoded internally.
+  - **Removed `[traceability]`** -- Output fields moved to `[output]`; scan patterns absorbed into `[scanning.code]`.
+  - **Removed `[core]` and `[associated]`** -- No more core/associated project type distinction.
+  - **`IdPatternsConfig` updated** -- Added `separators`, `prefix_optional`; removed `types` (now `levels`) and `associated`; canonical template uses `{level.letter}` instead of `{type.letter}`.
+  - **`HierarchyConfig` simplified** -- Removed per-level keys; only boolean flags remain (`allow_circular`, `allow_structural_orphans`, `cross_repo_implements`). Implements rules moved to `levels.<name>.implements`.
+  - **`ReferencesConfig` simplified** -- Only `enabled` + `case_sensitive`; removed `defaults` and `overrides` sub-sections.
+  - **`ProjectConfig` simplified** -- Removed `version` (now top-level) and `type` (no core/associated distinction).
+  - **`AssociateEntryConfig` simplified** -- Only `path` + `namespace`; removed `git` and `spec` fields.
+  - **Config version defaults to 3**.
+
+## [0.107.0]
+
+### Added
+
+- **`LevelConfig` schema model** -- Per-level Pydantic model with `rank`, `letter`, `display_name`, and `implements` fields for declarative hierarchy level configuration.
+- **Unified `ScanningConfig` schema models** -- `ScanningKindConfig` base class with `directories`, `file_patterns`, `skip_files`, `skip_dirs` fields, plus specialized subclasses: `SpecScanningConfig`, `CodeScanningConfig`, `TestScanningConfig`, `ResultScanningConfig`, `JourneyScanningConfig`, `DocsScanningConfig`. Composite `ScanningConfig` model groups all kinds with a global `skip` list.
+- **`OutputConfig` schema model** -- Pydantic model for output configuration with `formats` and `dir` fields.
+- **`ChangelogRequireConfig` schema model** -- Groups changelog requirement booleans (`reason`, `author_name`, `author_id`, `change_order`) into a `[changelog.require]` sub-section.
+
+### Changed
+
+- **`ChangelogConfig` field renames (BREAKING)** -- `enforce` renamed to `hash_current`, `require_present` renamed to `present`. Per-field requirement booleans (`require_reason`, `require_author_name`, `require_author_id`, `require_change_order`) moved into a nested `require` sub-model (`[changelog.require]` in TOML). Old field names are no longer accepted.
+
+### Added
+
+- **Viewer config-driven dropdowns** -- Requirement types, relationship kinds, and allowed statuses are now derived from `ElspaisConfig` and passed to the viewer template context (REQ-d00211).
+- **`docs.config_drift` health check in `elspais doctor`** -- Compares `ElspaisConfig` schema sections against `docs/configuration.md` and reports undocumented and stale sections. Ensures documentation stays in sync with the config schema (REQ-d00210).
+- **Schema-driven `elspais init` template generation** -- `generate_config()` now walks the `ElspaisConfig` Pydantic model to produce TOML configuration instead of using hardcoded template strings. This ensures `elspais init` always generates config that validates against the current schema.
+- **`elspais config schema` subcommand** -- Exports the JSON Schema for `.elspais.toml` to stdout (or to a file with `--output`/`-o`). The committed schema file `src/elspais/config/elspais-schema.json` stays in sync with the Pydantic model via CI test. A `$schema` key is injected into the generated schema for IDE support.
+- **Tyro core dependency** -- Added `tyro>=0.9` to `pyproject.toml` core dependencies for declarative CLI generation replacing argparse (CONFIG-SCHEMA Phase 3).
+- **CLI arg dataclasses** (`commands/args.py`) -- Tyro-compatible dataclass definitions for all 23 top-level subcommands and nested subcommands (config, rules, mcp, link, install, uninstall). `GlobalArgs` is the root dataclass with `Command` Union type for subcommand dispatch.
+- **Pydantic v2 core dependency** -- Added `pydantic>=2.0` to `pyproject.toml` core dependencies in preparation for declarative config schema validation (CONFIG-SCHEMA Phase 1).
+- **Pydantic config schema** (`config/schema.py`) -- All Pydantic models for `.elspais.toml` validation: `ElspaisConfig` root with nested models for project, ID patterns, spec, rules, testing, ignore, references, keywords, validation, graph, changelog, directories, traceability, associates. `extra="forbid"` catches unknown keys; `frozen=True` ensures immutability; `Field(alias=...)` handles TOML hyphenated keys.
+- **Cross-field config validators** -- `@model_validator` on `ElspaisConfig` enforces `project.type='associated'` requires `[core]` section.
+- **Version-gated migration system** -- `CURRENT_CONFIG_VERSION` and `MIGRATIONS` registry in `config/__init__.py` replaces direct `_migrate_legacy_patterns()` call with sequential version-gated migration in `load_config()`. Fixed latent bug where absent `[id-patterns]` section blocked migration.
+- **Pydantic-validated config loading** -- `load_config()` now validates `.elspais.toml` through `ElspaisConfig.model_validate()` and returns a plain `dict[str, Any]` via `model_dump(by_alias=True, exclude_none=True)`. Unknown top-level keys are rejected. Legacy keys (`patterns`, `requirements`, `paths`) are stripped before validation and restored afterward for backward compatibility.
+
+### Changed
+
+- **CLI rewrite: argparse replaced with Tyro** -- `cli.py` now uses `tyro.cli(GlobalArgs)` for argument parsing. `OmitSubcommandPrefixes` and `OmitArgPrefixes` markers maintain clean `elspais health --format json` syntax. Compatibility shim converts typed dataclasses to `argparse.Namespace` for existing command `run()` functions. All CLI flag names and short aliases (`-o`, `-v`, `-q`, `-C`, `-n`, `-m`, `-a`) preserved via `tyro.conf.arg()`.
+- **`graph/factory.py` config migration** -- Converted 21 `config.get()` call chains to typed `ElspaisConfig` attribute access in `build_graph()` and `_resolve_spec_dir_config()`. Added `_validate_config()` helper for safe Pydantic conversion at function boundaries.
+- **`mcp/server.py` config migration** -- Converted 21 config dict access calls across 10 MCP workspace/tool functions to typed `ElspaisConfig` attribute access.
+- **Consumer config migration (Tasks 9-12)** -- Migrated all remaining `config.get()` calls to typed `ElspaisConfig` attribute access across `commands/health.py`, `commands/doctor.py`, `commands/fix_cmd.py`, `commands/changed.py`, `commands/example_cmd.py`, `commands/validate.py`, `graph/annotators.py`, `graph/analysis.py`, `associates.py`, `validation/format.py`, `content_rules.py`.
+
+### Fixed
+
+- **`content_rules.py` config loading** -- `load_content_rules()` callers now pass `config.get_raw()` instead of `ConfigLoader` object, fixing `AttributeError: 'ConfigLoader' has no attribute 'items'` in `rules list`.
+- **`TypeConfig.aliases` made optional** -- The Pydantic schema now allows `aliases` to be omitted in `[id-patterns.types]`, fixing validation failures for configs that don't explicitly define type letter aliases.
+- **`ComponentConfig.max_length` added** -- The Pydantic schema now accepts `max_length` in `[id-patterns.component]`, fixing validation failures for named-component configs.
+
+### Removed
+
+- **Dead config helpers** -- Deleted `get_project_name()`, `validate_project_config()`, and `ConfigValidationError` from `config/__init__.py`. Their functionality is now handled by `ElspaisConfig` schema validation and typed attribute access.
+- **`--set` CLI flag and `apply_cli_overrides()`** -- Removed the `--set key=value` runtime config override flag and its implementation. Use `.elspais.local.toml` for local config overrides instead (see [Configuration docs](docs/configuration.md)).
+- **`completion` command and argcomplete support** -- Removed the `elspais completion` subcommand, `[completion]` pip extra, and argcomplete integration. Shell completion based on argcomplete is incompatible with the Tyro CLI framework.
+- **`ConfigLoader` class and `DEFAULT_CONFIG` dict** -- Removed from `config/__init__.py`. `load_config()` now returns a plain `dict[str, Any]`. Defaults are derived from the `ElspaisConfig` Pydantic model via `config_defaults()`. All consumers updated to use plain dicts.
+
 ### Docs
 
 - **`spec/requirements-spec.md`** -- Added `Validates:` field documentation in the JNY format section with multi-assertion syntax example (`Validates: REQ-xxx-A+B`), new "User Journeys Declaring Validation Relationships" subsection, and updated relationship table to include UAT coverage role. Updated "non-normative" note to clarify JNYs may declare `Validates:` references.
@@ -62,7 +177,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
-- **CLI config overrides** -- `--set key=value` repeatable flag overrides any config value at runtime. Supports dotted paths, JSON lists, and booleans. Precedence: `--set` > env vars > `.elspais.local.toml` > `.elspais.toml` > defaults.
+- **CLI config overrides** -- `--set key=value` repeatable flag overrides any config value at runtime. Supports dotted paths, JSON lists, and booleans. Precedence: `--set` > env vars > `.elspais.local.toml` > `.elspais.toml` > defaults. *(Removed in [Unreleased] -- use `.elspais.local.toml` instead.)*
 
 ## [0.104.15] - 2026-03-14
 

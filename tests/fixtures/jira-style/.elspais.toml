@@ -1,27 +1,26 @@
 # Jira-style configuration
 # Uses PROJ-123 format (no type distinction, variable length IDs)
 
+version = 3
+
 [project]
 name = "jira-style-fixture"
-type = "core"
 namespace = "PROJ"
 
-[directories]
-spec = "requirements"
+[levels.req]
+rank = 1
+implements = ["req"]
 
 [id-patterns]
 canonical = "{namespace}-{component}"
-
-[id-patterns.types]
-req = { level = 1 }
 
 [id-patterns.component]
 style = "numeric"
 digits = 0  # Variable length
 leading_zeros = false
 
+[scanning.spec]
+directories = ["requirements"]
+
 [rules.hierarchy]
-allowed_implements = [
-    "req -> req",
-]
 allow_structural_orphans = true

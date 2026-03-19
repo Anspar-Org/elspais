@@ -16,6 +16,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from elspais.config.schema import ElspaisConfig
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
+
+
 if TYPE_CHECKING:
     from elspais.graph import GraphNode
 
@@ -269,5 +285,6 @@ def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     Returns:
         FormatRulesConfig instance from [rules.format] section
     """
-    rules_data = config.get("rules", {}).get("format", {})
+    typed_config = _validate_config(config)
+    rules_data = typed_config.rules.format.model_dump()
     return FormatRulesConfig.from_dict(rules_data)

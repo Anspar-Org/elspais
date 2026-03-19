@@ -1,49 +1,55 @@
 # HHT-Diary style configuration
 # This fixture matches the hht-diary repository structure
 
+version = 3
+
 [project]
 name = "hht-like-fixture"
-type = "core"
 namespace = "REQ"
 
-[directories]
-spec = "spec"
-docs = "docs"
-database = "database"
-code = ["apps", "packages", "server", "tools"]
-ignore = ["node_modules", ".git", "build", "dist"]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["ops", "prd"]
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+canonical = "{namespace}-{level.letter}{component}"
 
-[id-patterns.types]
-prd = { level = 1, aliases = { letter = "p" } }
-ops = { level = 2, aliases = { letter = "o" } }
-dev = { level = 3, aliases = { letter = "d" } }
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
 
-[id-patterns.associated]
-enabled = true
-position = "after_prefix"
-format = "uppercase"
-length = 3
-separator = "-"
+[scanning]
+skip = ["node_modules", ".git", "build", "dist"]
 
-[spec]
+[scanning.spec]
+directories = ["spec"]
 index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
-[rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",
-    "ops -> prd",
-    "prd -> prd",
+[scanning.code]
+directories = ["apps", "packages", "server", "tools"]
+file_patterns = [
+    "database/**/*.sql",
+    "apps/**/*.dart",
+    "packages/**/*.dart",
 ]
+
+[rules.hierarchy]
 allow_circular = false
 allow_structural_orphans = false
 
@@ -58,12 +64,3 @@ allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 strict_hierarchy = true
 hash_algorithm = "sha256"
 hash_length = 8
-
-[traceability]
-output_formats = ["markdown", "html"]
-output_dir = "."
-scan_patterns = [
-    "database/**/*.sql",
-    "apps/**/*.dart",
-    "packages/**/*.dart",
-]

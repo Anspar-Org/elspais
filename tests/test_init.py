@@ -31,7 +31,7 @@ class TestInitConfig:
         assert config_path.exists()
         content = config_path.read_text()
         assert "[project]" in content
-        assert 'type = "core"' in content
+        assert "version = 3" in content
 
     def test_init_core_type(self, tmp_path: Path, monkeypatch):
         """Test init with explicit core type."""
@@ -51,7 +51,8 @@ class TestInitConfig:
 
         assert result == 0
         content = (tmp_path / ".elspais.toml").read_text()
-        assert 'type = "core"' in content
+        assert "version = 3" in content
+        assert "[project]" in content
 
     def test_init_associated_type(self, tmp_path: Path, monkeypatch):
         """Test init with associated type."""
@@ -71,8 +72,8 @@ class TestInitConfig:
 
         assert result == 0
         content = (tmp_path / ".elspais.toml").read_text()
-        assert 'type = "associated"' in content
-        assert 'prefix = "CAL"' in content
+        assert "version = 3" in content
+        assert 'namespace = "CAL"' in content
 
     def test_init_associated_requires_prefix(self, tmp_path: Path, monkeypatch, capsys):
         """Test init associated type requires --associated-prefix."""
@@ -252,8 +253,9 @@ class TestInitTemplate:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """
-[directories]
-spec = "requirements"
+version = 3
+[scanning.spec]
+directories = ["requirements"]
 """
         )
 
@@ -299,19 +301,17 @@ class TestInitCLIIntegration:
 
     def test_cli_init_template_flag(self):
         """Test init --template flag is registered."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["init", "--template"])
+        args = parse_args(["init", "--template"])
         assert args.command == "init"
         assert args.template is True
 
     def test_cli_init_template_with_force(self):
         """Test init --template --force flags together."""
-        from elspais.cli import create_parser
+        from elspais.cli import parse_args
 
-        parser = create_parser()
-        args = parser.parse_args(["init", "--template", "--force"])
+        args = parse_args(["init", "--template", "--force"])
         assert args.template is True
         assert args.force is True
 

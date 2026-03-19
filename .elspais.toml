@@ -1,31 +1,45 @@
-# elspais configuration for elspais project itself
+# elspais configuration - Core Repository
 #
 # Tip: Create .elspais.local.toml alongside this file for developer-local
 # overrides (e.g. associate paths). It is deep-merged and gitignored.
 
-version = 2
+version = 3
+
+# Project identity
 
 [project]
-name = "elspais"
-version = "0.1.0"
 namespace = "REQ"
+name = "elspais"
 
-[directories]
-spec = ["spec"]
-code = ["src", ".github/workflows"]
+# Requirement level definitions with hierarchy rules
 
-[spec]
-skip_dirs = ["roadmap"]
+[levels.prd]
+rank = 1
+letter = "p"
+display_name = "Product"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+display_name = "Operations"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+display_name = "Development"
+implements = ["dev", "ops", "prd"]
+
+# Requirement ID format
 
 [id-patterns]
-canonical = "{namespace}-{type.letter}{component}"
-aliases = { short = "{type.letter}{component}" }
+canonical = "{namespace}-{level.letter}{component}"
+separators = ["-", "_"]
+prefix_optional = false
 
-[id-patterns.types]
-product = { level = 1, aliases = { letter = "p" } }
-operations = { level = 2, aliases = { letter = "o" } }
-development = { level = 3, aliases = { letter = "d" } }
-integration = { level = 3, aliases = { letter = "int-d" } }
+[id-patterns.aliases]
+short = "{level.letter}{component}"
 
 [id-patterns.component]
 style = "numeric"
@@ -35,16 +49,84 @@ leading_zeros = true
 [id-patterns.assertions]
 label_style = "uppercase"
 max_count = 26
-multi_separator = "+"
+
+# File scanning configuration
+
+[scanning]
+skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
+skip_dirs = ["roadmap"]
+
+[scanning.code]
+directories = ["src", ".github/workflows"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py", "*_test.py"]
+skip_dirs = ["fixtures"]
+reference_keyword = "Validates"
+
+[scanning.result]
+file_patterns = ["test-results.xml"]
+run_meta_file = "test-run-meta.json"
+
+# Validation rules
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = false
+
+[rules.format]
+require_hash = true
+require_rationale = false
+require_assertions = true
+require_status = true
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future"]
+retired = ["Deprecated", "Superseded"]
+
+# Changelog enforcement
+
+[changelog]
+hash_current = true
+present = false
+id_source = "gh"
+date_format = "iso"
+author_id_format = "email"
+allowed_author_ids = "all"
+
+[changelog.require]
+reason = true
+author_name = true
+author_id = true
+change_order = false
+
+# Reference parsing
+
+[references]
+enabled = true
+case_sensitive = false
+
+# Keyword extraction settings
+
+[keywords]
+min_length = 3
+
+# Hash and validation settings
 
 [validation]
 hash_mode = "normalized-text"
+allow_unresolved_cross_repo = false
 
-[testing]
-enabled = true
-test_dirs = ["tests"]
-skip_dirs = ["fixtures"]
-patterns = ["test_*.py", "*_test.py"]
-reference_keyword = "Validates"
-result_files = ["test-results.xml"]
-run_meta_file = "test-run-meta.json"
+# Output settings
+
+[output]

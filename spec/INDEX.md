@@ -4,7 +4,7 @@
 
 # Requirements Index
 
-## PRD
+## PRODUCT
 
 | ID         | Title                                            | File                     | Hash     |
 | ---------- | ------------------------------------------------ | ------------------------ | -------- |
@@ -28,7 +28,7 @@
 | REQ-p00061 | Requirement Decomposition Rules                  | requirements-spec.md     | fc1e85fe |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-pdf-generation.md    | bfc0cadf |
 
-## OPS
+## OPERATIONS
 
 | ID         | Title                               | File                     | Hash     |
 | ---------- | ----------------------------------- | ------------------------ | -------- |
@@ -47,7 +47,7 @@
 | REQ-o00070 | MCP Scoped Search Tool              | 08-mcp-server.md         | e1cb96d9 |
 | REQ-o00071 | MCP Discover Requirements Tool      | 08-mcp-server.md         | fea647ee |
 
-## DEV
+## DEVELOPMENT
 
 | ID         | Title                                                         | File                     | Hash     |
 | ---------- | ------------------------------------------------------------- | ------------------------ | -------- |
@@ -113,6 +113,12 @@
 | REQ-d00204 | Per-Repo Health Check Delegation                              | 07-graph-architecture.md | 2313140d |
 | REQ-d00205 | MCP Federation Support                                        | 08-mcp-server.md         | ccc0ca12 |
 | REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md  | b4fae1d0 |
+| REQ-d00207 | Declarative Config Schema Cleanup                             | 07-graph-architecture.md | 8d323813 |
+| REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | 07-graph-architecture.md | 2b82ef02 |
+| REQ-d00209 | Schema-Driven Init Template Generation                        | 07-graph-architecture.md | 44aeb496 |
+| REQ-d00210 | Documentation Drift Detection                                 | 07-graph-architecture.md | eb94434a |
+| REQ-d00211 | Config-Driven Viewer UI Values                                | 07-graph-architecture.md | b322b22e |
+| REQ-d00212 | Config Schema v3 Models                                       | 07-graph-architecture.md | 039007e7 |
 
 ## User Journeys
 

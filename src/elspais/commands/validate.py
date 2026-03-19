@@ -17,7 +17,22 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
+
+_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+    ElspaisConfig.model_fields.keys()
+)
+
+
+def _validate_config(config: dict) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
+
+    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
+    assoc = filtered.get("associates")
+    if isinstance(assoc, dict) and "paths" in assoc:
+        filtered.pop("associates", None)
+    return ElspaisConfig.model_validate(filtered)
 
 
 def compute_hash_for_node(node, hash_mode: str) -> str | None:
@@ -113,17 +128,20 @@ def run(args: argparse.Namespace) -> int:
     fixable = []  # Issues that can be auto-fixed
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
+    # Implements: REQ-d00202-A, REQ-d00212-K
     if mode == "combined":
-        from elspais.config import get_config
+        from elspais.config import get_associates_config, get_config
 
         config_dict = get_config(
-            config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+            config_path,
+            start_path=repo_root,
         )
-        associate_paths = config_dict.get("associates", {}).get("paths", [])
-        if associate_paths:
+        associates = get_associates_config(config_dict)
+        if associates:
             from elspais.associates import discover_associate_from_path
 
-            for path_str in associate_paths:
+            for assoc_name, assoc_info in associates.items():
+                path_str = assoc_info["path"]
                 p = Path(path_str)
                 if not p.is_absolute() and canonical_root:
                     p = canonical_root / p
@@ -131,9 +149,10 @@ def run(args: argparse.Namespace) -> int:
                     errors.append(
                         {
                             "rule": "config.associate_path_missing",
-                            "id": path_str,
+                            "id": assoc_name,
                             "message": (
-                                f"Associate path does not exist: {path_str} " f"(resolved to {p})"
+                                f"Associate '{assoc_name}' path does not exist: {path_str} "
+                                f"(resolved to {p})"
                             ),
                         }
                     )
@@ -143,8 +162,10 @@ def run(args: argparse.Namespace) -> int:
                         errors.append(
                             {
                                 "rule": "config.associate_invalid",
-                                "id": path_str,
-                                "message": f"Associate path is misconfigured: {disc_result}",
+                                "id": assoc_name,
+                                "message": (
+                                    f"Associate '{assoc_name}' is misconfigured: {disc_result}"
+                                ),
                             }
                         )
                     else:
@@ -154,9 +175,9 @@ def run(args: argparse.Namespace) -> int:
                             errors.append(
                                 {
                                     "rule": "config.associate_no_specs",
-                                    "id": path_str,
+                                    "id": assoc_name,
                                     "message": (
-                                        f"Associate at {path_str} has no spec"
+                                        f"Associate '{assoc_name}' at {path_str} has no spec"
                                         f" directory: {disc_result.spec_path}"
                                     ),
                                 }
@@ -165,9 +186,9 @@ def run(args: argparse.Namespace) -> int:
                             errors.append(
                                 {
                                     "rule": "config.associate_no_specs",
-                                    "id": path_str,
+                                    "id": assoc_name,
                                     "message": (
-                                        f"Associate at {path_str} has empty spec"
+                                        f"Associate '{assoc_name}' at {path_str} has empty spec"
                                         f" directory: {disc_result.spec_path}"
                                     ),
                                 }
@@ -185,11 +206,15 @@ def run(args: argparse.Namespace) -> int:
     from elspais.config import get_config
 
     validate_config = get_config(
-        config_path, start_path=repo_root, overrides=getattr(args, "config_overrides", None)
+        config_path,
+        start_path=repo_root,
     )
-    hierarchy_rules = validate_config.get("rules", {}).get("hierarchy", {})
-    allow_orphans = hierarchy_rules.get(
-        "allow_structural_orphans", hierarchy_rules.get("allow_orphans", False)
+    _typed_vc = _validate_config(validate_config)
+    _hier = _typed_vc.rules.hierarchy
+    allow_orphans = (
+        _hier.allow_structural_orphans
+        if _hier.allow_structural_orphans is not None
+        else (_hier.allow_orphans or False)
     )
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):

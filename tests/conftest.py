@@ -151,39 +151,33 @@ The system SHALL do something.
 def sample_config_dict() -> dict:
     """Return sample configuration dictionary."""
     return {
+        "version": 3,
         "project": {
             "name": "test-project",
-            "type": "core",
             "namespace": "REQ",
         },
-        "directories": {
-            "spec": "spec",
-            "docs": "docs",
+        "levels": {
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+            "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
+        },
+        "scanning": {
+            "spec": {"directories": ["spec"]},
+            "docs": {"directories": ["docs"]},
         },
         "id-patterns": {
-            "canonical": "{namespace}-{type.letter}{component}",
-            "aliases": {"short": "{type.letter}{component}"},
-            "types": {
-                "prd": {"level": 1, "aliases": {"letter": "p"}},
-                "ops": {"level": 2, "aliases": {"letter": "o"}},
-                "dev": {"level": 3, "aliases": {"letter": "d"}},
-            },
+            "canonical": "{namespace}-{level.letter}{component}",
+            "aliases": {"short": "{level.letter}{component}"},
             "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
         },
         "rules": {
             "hierarchy": {
-                "allowed_implements": [
-                    "dev -> ops, prd",
-                    "ops -> prd",
-                    "prd -> prd",
-                ],
                 "allow_circular": False,
                 "allow_structural_orphans": False,
             },
             "format": {
                 "require_hash": True,
                 "require_assertions": True,
-                "acceptance_criteria": "warn",
             },
         },
     }

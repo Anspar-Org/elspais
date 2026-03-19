@@ -76,7 +76,7 @@ def run(
     config = None
     graph_sections = {"health", "summary", "trace"}
     if set(sections) & graph_sections:
-        from elspais.config import ConfigLoader, get_config
+        from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
         spec_dir = getattr(args, "spec_dir", None)
@@ -87,8 +87,7 @@ def run(
             config_path=config_path,
             canonical_root=canonical_root,
         )
-        config_dict = get_config(config_path, overrides=getattr(args, "config_overrides", None))
-        config = ConfigLoader.from_dict(config_dict)
+        config = get_config(config_path)
 
     outputs: list[str] = []
     worst_exit = 0
@@ -132,7 +131,7 @@ def _render_section(
     elif name == "summary":
         from elspais.commands.summary import render_section
 
-        raw_config = config.get_raw() if config is not None else None
+        raw_config = config if config is not None else None
         return render_section(graph, args, config=raw_config)
     elif name == "trace":
         from elspais.commands.trace import render_section
