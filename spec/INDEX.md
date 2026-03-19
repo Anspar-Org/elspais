@@ -14,12 +14,6 @@
 | REQ-p00004 | Change Detection and Auditability                | prd-elspais.md           | f8ff5509 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-elspais.md           | 7964180f |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-elspais.md           | b3dd4d1a |
-| REQ-p00007 | Collaborative Review System                      | prd-elspais.md           | f275694a |
-| REQ-p00008 | Review User Interface                            | prd-elspais.md           | 2c550af9 |
-| REQ-p00009 | Review Data Model                                | prd-elspais.md           | 8967dc31 |
-| REQ-p00010 | Review Git Integration                           | prd-elspais.md           | a410550e |
-| REQ-p00011 | Review Package Lifecycle                         | prd-elspais.md           | 0c09b663 |
-| REQ-p00012 | Review Backend Services                          | prd-elspais.md           | c1ec12e5 |
 | REQ-p00013 | Automated Testing                                | prd-elspais.md           | 3fc90ebc |
 | REQ-p00014 | Satisfies Relationship                           | prd-cross-cutting.md     | c3352c1a |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-cross-cutting.md     | b026a15f |
@@ -51,18 +45,7 @@
 
 | ID         | Title                                                         | File                     | Hash     |
 | ---------- | ------------------------------------------------------------- | ------------------------ | -------- |
-| REQ-d00001 | Review Package Management                                     | dev-traceview-review.md  | 557e0c13 |
-| REQ-d00002 | Review Storage Architecture                                   | dev-traceview-review.md  | 6e485776 |
-| REQ-d00003 | Review Package Archival                                       | dev-traceview-review.md  | e2e12ef2 |
-| REQ-d00004 | Review Git Audit Trail                                        | dev-traceview-review.md  | 8eff4c13 |
-| REQ-d00005 | Review Archive Viewer                                         | dev-traceview-review.md  | c31ada6e |
-| REQ-d00006 | Review Threads and Comments                                   | dev-traceview-review.md  | 682ff5d5 |
-| REQ-d00007 | Review Storage Operations                                     | dev-traceview-review.md  | 4916717c |
-| REQ-d00008 | Position Resolution                                           | dev-traceview-review.md  | a9128928 |
-| REQ-d00009 | Git Branch Management                                         | dev-traceview-review.md  | 6181ebb6 |
 | REQ-d00010 | Review API Server                                             | dev-traceview-review.md  | b647ec64 |
-| REQ-d00011 | Status Modifier                                               | dev-traceview-review.md  | 3e581bc6 |
-| REQ-d00012 | Review UI Framework                                           | dev-traceview-review.md  | 448be3b9 |
 | REQ-d00050 | Node Annotator Functions                                      | 07-graph-architecture.md | 35713bbd |
 | REQ-d00051 | Graph Aggregate Functions                                     | 07-graph-architecture.md | bdf07870 |
 | REQ-d00052 | Output Generators Consume Graph Directly                      | 07-graph-architecture.md | a3575fcc |
@@ -91,7 +74,6 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-exit-codes.md        | ada92a29 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-multi-assertion.md   | 2474ef93 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-reference-config.md  | 89956cd7 |
-| REQ-d00083 | Validate Command                                              | dev-cli-validate.md      | eddb3a52 |
 | REQ-d00084 | Trace Command                                                 | dev-cli-trace.md         | f8d407a5 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli-report.md        | 82d76f1a |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli-coverage.md      | 12e1ecaf |
@@ -134,11 +116,9 @@
 | JNY-Dev-Setup-01            | Set Up Requirements for a New Feature             | Sarah (Developer)                      | dev-team.md           |
 | JNY-DevOps-CI-01            | Set Up CI/CD Requirement Validation               | Alex (DevOps Engineer)                 | project-management.md |
 | JNY-PM-MultiRepo-01         | Coordinate Cross-Repository Requirements          | Elvira (Internal Project Manager)      | project-management.md |
-| JNY-PM-Review-01            | Run a Stakeholder Review Session                  | Elvira (Internal Project Manager)      | project-management.md |
 | JNY-PM-Sprint-01            | Track Requirement Status During a Sprint          | Elvira (Internal Project Manager)      | project-management.md |
 | JNY-QA-Coverage-01          | Map Tests to Requirements for Coverage            | Marcus (QA Engineer)                   | dev-team.md           |
 | JNY-Sponsor-PM-01           | Review Milestone Deliverables                     | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
 | JNY-Sponsor-PM-02           | Filter Sponsor-Specific Requirements              | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
 | JNY-SponsorQA-Coverage-01   | Verify Test Coverage Before Release               | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
 | JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates        | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
-| JNY-SponsorQA-Review-01     | Provide Structured Feedback on Requirements       | Rita (Sponsor QA Lead)                 | quality-assurance.md  |

@@ -30,32 +30,6 @@ Elvira has a clear picture of sprint progress: which requirements are complete, 
 
 ---
 
-# JNY-PM-Review-01: Run a Stakeholder Review Session
-
-**Actor**: Elvira (Internal Project Manager)
-**Goal**: Facilitate a structured requirement review meeting with sponsor stakeholders using the collaborative review server
-**Context**: The sponsor QA team wants to review the latest batch of requirements before the next milestone. Elvira sets up the review server so participants can comment on specific requirements in real time.
-Validates: REQ-p00006, REQ-p00007
-
-## Steps
-
-1. Elvira starts the review server with `elspais trace --server --port 8080`.
-2. She shares the review URL with the sponsor QA lead and auditor.
-3. Participants open the review interface in their browsers and see the interactive traceability view.
-4. The sponsor QA lead adds a comment thread on REQ-p00007: "Assertion B needs a specific timeout value."
-5. The auditor flags REQ-d00003 for clarification on data retention policy.
-6. Elvira monitors the incoming comments during the meeting and assigns action items to developers.
-7. After the meeting, she exports the review comments as a JSON package for record-keeping.
-8. She creates follow-up tasks from the flagged requirements and tracks them to resolution.
-
-## Expected Outcome
-
-The review session produced structured, requirement-level feedback from all stakeholders. Comments are linked to specific requirements and exported for traceability. Action items are captured and tracked.
-
-*End* *Run a Stakeholder Review Session*
-
----
-
 # JNY-PM-MultiRepo-01: Coordinate Cross-Repository Requirements
 
 **Actor**: Elvira (Internal Project Manager)
