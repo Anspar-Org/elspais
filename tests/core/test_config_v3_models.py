@@ -21,7 +21,7 @@ ResultScanningConfig = _schema.ResultScanningConfig
 ScanningConfig = _schema.ScanningConfig
 ScanningKindConfig = _schema.ScanningKindConfig
 SpecScanningConfig = _schema.SpecScanningConfig
-TestScanningCfg = _schema.TestScanningConfig  # Alias to avoid pytest class name collision
+TestScanningCfg = _schema.TestScanningConfig
 
 
 # ---------------------------------------------------------------------------

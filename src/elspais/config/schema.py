@@ -103,6 +103,8 @@ class CodeScanningConfig(ScanningKindConfig):
 
 
 class TestScanningConfig(ScanningKindConfig):
+    __test__ = False  # Prevent pytest collection
+
     directories: list[str] = Field(default_factory=lambda: ["tests"])
     file_patterns: list[str] = Field(default_factory=lambda: ["test_*.py", "*_test.py"])
     enabled: bool = False
