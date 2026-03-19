@@ -188,20 +188,17 @@ class TestDocsDriftDetails:
 class TestDocsDriftRealFile:
     """Validates REQ-d00210-B: detects actual drift in the real docs/configuration.md."""
 
-    def test_REQ_d00210_B_real_configuration_md_has_drift(self) -> None:
-        """The real docs/configuration.md is known to be drifted from schema."""
+    def test_REQ_d00210_B_real_configuration_md_in_sync(self) -> None:
+        """The real docs/configuration.md should be in sync with schema."""
         from elspais.commands.doctor import check_docs_drift
 
-        # The real file uses old names like [patterns] instead of [id-patterns]
         real_docs = Path(__file__).resolve().parents[2] / "docs" / "configuration.md"
         if not real_docs.exists():
             pytest.skip("docs/configuration.md not found in repo")
 
         result = check_docs_drift(real_docs)
 
-        # The real file IS drifted, so this should fail
-        assert result.passed is False
-        assert "undocumented" in result.details or "stale" in result.details
+        assert result.passed is True, f"Docs drift detected: {result.message}"
 
 
 class TestDocsDriftExcludesConditional:

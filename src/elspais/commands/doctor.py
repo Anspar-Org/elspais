@@ -609,18 +609,27 @@ def _parse_docs_sections(docs_path: Path) -> set[str]:
     content = docs_path.read_text(encoding="utf-8")
     sections: set[str] = set()
     in_toml_block = False
+    in_section = False  # True once we see the first [section] header
     for line in content.splitlines():
         stripped = line.strip()
         if stripped.startswith("```toml"):
             in_toml_block = True
+            in_section = False
             continue
         if stripped.startswith("```") and in_toml_block:
             in_toml_block = False
             continue
         if in_toml_block:
-            m = re.match(r"^\[([A-Za-z0-9_-]+)\]", stripped)
+            # Match top-level [section] or extract parent from [section.sub]
+            m = re.match(r"^\[([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_.-]+)?\]", stripped)
             if m:
                 sections.add(m.group(1))
+                in_section = True
+            # Match bare top-level keys before any section (e.g. "version = 3")
+            elif not in_section:
+                m = re.match(r"^([A-Za-z0-9_-]+)\s*=", stripped)
+                if m:
+                    sections.add(m.group(1))
     return sections
 
 
@@ -636,7 +645,7 @@ def check_docs_drift(docs_path: Path) -> HealthCheck:
         )
 
     schema_sections = _get_schema_sections()
-    docs_sections = _parse_docs_sections(docs_path)
+    docs_sections = _parse_docs_sections(docs_path) - _CONDITIONAL_SECTIONS
 
     undocumented = sorted(schema_sections - docs_sections)
     stale = sorted(docs_sections - schema_sections)
@@ -758,7 +767,7 @@ def run(args: argparse.Namespace) -> int:
         report.add(check)
 
     # Docs drift check
-    docs_path = (canonical_root or git_root or start_path) / "docs" / "configuration.md"
+    docs_path = (git_root or start_path) / "docs" / "configuration.md"
     report.add(check_docs_drift(docs_path))
 
     # Output

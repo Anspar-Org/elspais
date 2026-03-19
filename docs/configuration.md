@@ -103,6 +103,8 @@ leading_zeros = true
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
 max_count = 26             # Maximum assertions per requirement
+# zero_pad = false         # Pad numeric labels with zeros
+# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
 
 #──────────────────────────────────────────────────────────────────────────────
 # SCANNING - Unified file scanning configuration
@@ -199,6 +201,10 @@ hash_mode = "normalized-text"
 # Allow unresolved cross-repo references
 allow_unresolved_cross_repo = false
 
+# hash_algorithm = "sha256"         # Hash algorithm
+# hash_length = 8                   # Hash truncation length (characters)
+# strict_hierarchy = false          # Strict hierarchy validation
+
 #──────────────────────────────────────────────────────────────────────────────
 # HIERARCHY RULES
 #──────────────────────────────────────────────────────────────────────────────
@@ -212,6 +218,7 @@ allow_structural_orphans = false
 
 # Allow cross-repository implementations (associated -> core)
 cross_repo_implements = true
+# allow_orphans = false            # Allow orphaned nodes
 
 #──────────────────────────────────────────────────────────────────────────────
 # FORMAT RULES
@@ -232,6 +239,7 @@ require_assertions = true
 
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+# content_rules = []               # Additional content validation rules
 
 # Status role classification -- determines behavior in metrics and viewer
 # Each role controls how requirements with that status are treated:

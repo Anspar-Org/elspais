@@ -135,6 +135,8 @@ _SECTION_COMMENTS: dict[str, str] = {
     "scanning.code": "Code file scanning",
     "scanning.test": "Test file scanning and reference detection",
     "scanning.result": "Test result file scanning",
+    "scanning.journey": "User journey file scanning",
+    "scanning.docs": "Documentation file scanning",
     "rules": "Validation rules",
     "rules.hierarchy": "Global hierarchy settings",
     "rules.format": "Format enforcement rules",
@@ -300,6 +302,76 @@ def _add_table(
         doc.add(key, value)
 
 
+# Optional fields not in config_defaults() (None values are excluded).
+# Keyed by the TOML line after which to insert; value is a list of
+# commented-out lines to append.
+_OPTIONAL_FIELD_INJECTIONS: list[tuple[str, list[str]]] = [
+    # id-patterns.component
+    (
+        "leading_zeros = true",
+        [
+            '# pattern = "[A-Z]{2}[0-9]{3}"  # For alphanumeric',
+            "# max_length = 32               # For named style",
+        ],
+    ),
+    # id-patterns.assertions
+    (
+        "max_count = 26",
+        [
+            "# zero_pad = false              # Pad numeric labels",
+            '# multi_separator = "+"         # Multi-assertion (A+B+C)',
+        ],
+    ),
+    # rules.hierarchy
+    (
+        "allow_structural_orphans = false",
+        [
+            "# cross_repo_implements = true  # Cross-repo implements",
+            "# allow_orphans = false         # Allow orphaned nodes",
+        ],
+    ),
+    # rules.format
+    (
+        'allowed_statuses = ["Active"',
+        [
+            "# content_rules = []            # Content validation rules",
+        ],
+    ),
+    # validation
+    (
+        "allow_unresolved_cross_repo = false",
+        [
+            '# hash_algorithm = "sha256"     # Hash algorithm',
+            "# hash_length = 8               # Hash truncation length",
+            "# strict_hierarchy = false       # Strict hierarchy mode",
+        ],
+    ),
+]
+
+
+def _inject_optional_fields(toml_text: str) -> str:
+    """Insert commented-out optional fields into generated TOML."""
+    lines = toml_text.split("\n")
+    result: list[str] = []
+    current_section = ""
+    for line in lines:
+        result.append(line)
+        stripped = line.strip()
+        # Track current section for context-aware injection
+        if stripped.startswith("[") and "]" in stripped:
+            current_section = stripped[1 : stripped.index("]")]
+        for anchor, inj_lines in _OPTIONAL_FIELD_INJECTIONS:
+            if anchor in stripped:
+                result.extend(inj_lines)
+                break
+        # Section-specific optional fields (only inject in the right section)
+        if current_section == "scanning.spec" and stripped.startswith("skip_dirs"):
+            result.append('# index_file = "INDEX.md"  # Index file for ordering')
+        if current_section == "scanning.code" and stripped.startswith("skip_dirs"):
+            result.append("# source_roots = []    # Import resolution roots")
+    return "\n".join(result)
+
+
 def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
     """Generate configuration file content from the ElspaisConfig schema.
 
@@ -382,4 +454,4 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
         _add_table(doc, section, data[section], comment)
         doc.add(tomlkit.nl())
 
-    return tomlkit.dumps(doc)
+    return _inject_optional_fields(tomlkit.dumps(doc))
