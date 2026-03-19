@@ -28,7 +28,6 @@ EXPECTED_SCHEMA_SECTIONS = {
     "levels",
     "scanning",
     "rules",
-    "references",
     "keywords",
     "validation",
     "changelog",

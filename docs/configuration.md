@@ -276,17 +276,6 @@ author_id = true
 change_order = false
 
 #──────────────────────────────────────────────────────────────────────────────
-# REFERENCE PARSING
-#──────────────────────────────────────────────────────────────────────────────
-
-[references]
-# Enable reference parsing in code/test files
-enabled = true
-
-# Case-sensitive matching (false = REQ, req, Req all match)
-case_sensitive = false
-
-#──────────────────────────────────────────────────────────────────────────────
 # KEYWORD SEARCH
 #──────────────────────────────────────────────────────────────────────────────
 

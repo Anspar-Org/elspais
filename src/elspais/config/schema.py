@@ -63,12 +63,6 @@ class RulesConfig(_StrictModel):
     content_rules: list[str] | None = None
 
 
-# Implements: REQ-d00212-I
-class ReferencesConfig(_StrictModel):
-    enabled: bool = True
-    case_sensitive: bool = False
-
-
 class KeywordsSearchConfig(_StrictModel):
     min_length: int = 3
 
@@ -193,7 +187,6 @@ class ElspaisConfig(_StrictModel):
     )
     scanning: ScanningConfig = Field(default_factory=ScanningConfig)
     rules: RulesConfig = Field(default_factory=RulesConfig)
-    references: ReferencesConfig = Field(default_factory=ReferencesConfig)
     keywords: KeywordsSearchConfig = Field(default_factory=KeywordsSearchConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     changelog: ChangelogConfig = Field(default_factory=ChangelogConfig)

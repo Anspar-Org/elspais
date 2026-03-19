@@ -131,7 +131,6 @@ class TestGeneratedSections:
         "scanning",
         "rules",
         "changelog",
-        "references",
     ]
 
     # Schema-complete: all sections the schema defines that should appear
@@ -144,7 +143,6 @@ class TestGeneratedSections:
         "scanning",
         "rules",
         "changelog",
-        "references",
         "keywords",
         "validation",
         "output",
@@ -192,7 +190,7 @@ class TestGeneratedSections:
         content = generate_config("associated", associated_prefix="TST")
         parsed = tomlkit.parse(content)
         # At minimum, associated should have these beyond the basics
-        expected_extra = ["references", "scanning"]
+        expected_extra = ["scanning"]
         missing = [s for s in expected_extra if s not in parsed]
         assert not missing, f"Associated config missing sections: {missing}"
 

@@ -584,23 +584,6 @@
       "title": "ProjectConfig",
       "type": "object"
     },
-    "ReferencesConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "default": true,
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "case_sensitive": {
-          "default": false,
-          "title": "Case Sensitive",
-          "type": "boolean"
-        }
-      },
-      "title": "ReferencesConfig",
-      "type": "object"
-    },
     "ResultScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -885,9 +868,6 @@
     },
     "rules": {
       "$ref": "#/$defs/RulesConfig"
-    },
-    "references": {
-      "$ref": "#/$defs/ReferencesConfig"
     },
     "keywords": {
       "$ref": "#/$defs/KeywordsSearchConfig"

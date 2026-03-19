@@ -178,7 +178,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     # Strip legacy/unknown keys before Pydantic validation, but keep them
     # for backward-compatible config.get() access afterwards.
-    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths"}
+    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths", "references"}
     stripped: dict[str, Any] = {}
     for key in _LEGACY_TOP_LEVEL_KEYS:
         if key in merged:

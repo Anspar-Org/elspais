@@ -13,7 +13,6 @@ from elspais.config import schema as _schema
 ElspaisConfig = _schema.ElspaisConfig
 IdPatternsConfig = _schema.IdPatternsConfig
 HierarchyConfig = _schema.HierarchyConfig
-ReferencesConfig = _schema.ReferencesConfig
 ProjectConfig = _schema.ProjectConfig
 AssociateEntryConfig = _schema.AssociateEntryConfig
 LevelConfig = _schema.LevelConfig
@@ -200,35 +199,6 @@ class TestHierarchyConfigBooleansOnly:
         """HierarchyConfig rejects unknown fields (strict mode)."""
         with pytest.raises(ValidationError, match="extra"):
             HierarchyConfig(unknown_field="x")
-
-
-# ---------------------------------------------------------------------------
-# REQ-d00212-I: ReferencesConfig simplified
-# ---------------------------------------------------------------------------
-
-
-class TestReferencesConfigSimplified:
-    """Validates REQ-d00212-I: ReferencesConfig simplified."""
-
-    def test_REQ_d00212_I_has_enabled(self):
-        """ReferencesConfig has 'enabled' field (bool, default True)."""
-        assert "enabled" in ReferencesConfig.model_fields
-        cfg = ReferencesConfig()
-        assert cfg.enabled is True
-
-    def test_REQ_d00212_I_has_case_sensitive(self):
-        """ReferencesConfig has 'case_sensitive' field (bool, default False)."""
-        assert "case_sensitive" in ReferencesConfig.model_fields
-        cfg = ReferencesConfig()
-        assert cfg.case_sensitive is False
-
-    def test_REQ_d00212_I_no_defaults_field(self):
-        """ReferencesConfig does NOT have a 'defaults' field."""
-        assert "defaults" not in ReferencesConfig.model_fields
-
-    def test_REQ_d00212_I_no_overrides_field(self):
-        """ReferencesConfig does NOT have an 'overrides' field."""
-        assert "overrides" not in ReferencesConfig.model_fields
 
 
 # ---------------------------------------------------------------------------

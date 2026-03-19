@@ -146,7 +146,6 @@ _SECTION_COMMENTS: dict[str, str] = {
         "# retired: concluded - excluded from everything"
     ),
     "changelog": "Changelog enforcement",
-    "references": "Reference parsing configuration",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",
     "output": "Output settings",
@@ -236,7 +235,6 @@ _CORE_SECTIONS = [
     "scanning",
     "rules",
     "changelog",
-    "references",
     "keywords",
     "validation",
     "output",
@@ -250,7 +248,6 @@ _ASSOCIATED_SECTIONS = [
     "levels",
     "scanning",
     "rules",
-    "references",
     "keywords",
     "validation",
     "output",
