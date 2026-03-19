@@ -149,7 +149,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     config = get_config(config_path)
     typed_config = _validate_config(config)
-    changelog_enforce = typed_config.changelog.enforce
+    changelog_enforce = typed_config.changelog.hash_current
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,

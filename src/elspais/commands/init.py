@@ -182,14 +182,17 @@ _CORE_OVERRIDES: dict[str, Any] = {
         },
     },
     "changelog": {
-        "enforce": True,
+        "hash_current": True,
+        "present": False,
         "id_source": "gh",
         "date_format": "iso",
-        "require_change_order": False,
-        "require_reason": True,
-        "require_author_name": True,
-        "require_author_id": True,
         "author_id_format": "email",
+        "require": {
+            "reason": True,
+            "author_name": True,
+            "author_id": True,
+            "change_order": False,
+        },
     },
     "testing": {
         "enabled": False,

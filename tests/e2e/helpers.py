@@ -308,7 +308,7 @@ def base_config(
     associated_format: str = "uppercase",
     associated_length: int = 3,
     # Changelog
-    changelog_enforce: bool = False,
+    changelog_hash_current: bool = False,
 ) -> dict[str, Any]:
     """Build a base config dict with sensible defaults."""
     if types is None:
@@ -361,7 +361,7 @@ def base_config(
             },
         },
         "changelog": {
-            "enforce": changelog_enforce,
+            "hash_current": changelog_hash_current,
         },
     }
 
@@ -468,7 +468,7 @@ def associate_config(
             },
         },
         "changelog": {
-            "enforce": False,
+            "hash_current": False,
         },
     }
 

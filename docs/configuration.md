@@ -400,8 +400,11 @@ commit_msg = true
 #──────────────────────────────────────────────────────────────────────────────
 
 [changelog]
-# Enforce changelog entries when Active requirement hashes change
-enforce = true
+# Check current hashes against recorded changelog entries
+hash_current = true
+
+# Require changelog section to be present in spec files
+present = false
 
 # Author identity source: "gh" (GitHub CLI), "git" (git config)
 id_source = "gh"
@@ -409,23 +412,18 @@ id_source = "gh"
 # Date format: "iso" (YYYY-MM-DD), "us" (MM/DD/YYYY), "eu" (DD/MM/YYYY)
 date_format = "iso"
 
-# Require a ticket or change-order reference in each entry
-require_change_order = false
-
-# Require a reason/description in each entry
-require_reason = true
-
-# Require author full name
-require_author_name = true
-
-# Require author identity (email or handle)
-require_author_id = true
-
 # Author ID format: "email" or "handle"
 author_id_format = "email"
 
 # Restrict allowed author IDs: "all" or a list of allowed values
 allowed_author_ids = "all"
+
+# Required fields in each changelog entry
+[changelog.require]
+reason = true
+author_name = true
+author_id = true
+change_order = false
 
 #──────────────────────────────────────────────────────────────────────────────
 # UNIFIED REFERENCE CONFIGURATION (v0.10.0+)

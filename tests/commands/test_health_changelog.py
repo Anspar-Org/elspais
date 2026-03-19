@@ -14,14 +14,25 @@ from elspais.utilities.hasher import compute_normalized_hash
 
 def _make_config(tmp_path: Path, changelog_overrides: dict | None = None) -> Path:
     changelog = {
-        "enforce": True,
-        "require_reason": True,
-        "require_author_name": True,
-        "require_author_id": True,
-        "require_change_order": False,
+        "hash_current": True,
+    }
+    changelog_require = {
+        "reason": True,
+        "author_name": True,
+        "author_id": True,
+        "change_order": False,
     }
     if changelog_overrides:
+        if "require" in changelog_overrides:
+            changelog_require.update(changelog_overrides.pop("require"))
         changelog.update(changelog_overrides)
+
+    def _fmt(v):
+        if isinstance(v, bool):
+            return str(v).lower()
+        elif isinstance(v, str):
+            return f'"{v}"'
+        return str(v)
 
     lines = [
         '[project]\nname = "test"\n',
@@ -33,12 +44,11 @@ def _make_config(tmp_path: Path, changelog_overrides: dict | None = None) -> Pat
         "[changelog]",
     ]
     for k, v in changelog.items():
-        if isinstance(v, bool):
-            lines.append(f"{k} = {str(v).lower()}")
-        elif isinstance(v, str):
-            lines.append(f'{k} = "{v}"')
-        else:
-            lines.append(f"{k} = {v}")
+        lines.append(f"{k} = {_fmt(v)}")
+    lines.append("")
+    lines.append("[changelog.require]")
+    for k, v in changelog_require.items():
+        lines.append(f"{k} = {_fmt(v)}")
 
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text("\n".join(lines) + "\n")
@@ -202,7 +212,7 @@ class TestChangelogFormat:
         assert result.name == "spec.changelog_format"
 
     def test_REQ_p00004_A_changelog_format_fails_missing_reason(self, tmp_path: Path):
-        """Entry with empty reason when require_reason=true fails."""
+        """Entry with empty reason when require.reason=true fails."""
         config_path = _make_config(tmp_path)
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()

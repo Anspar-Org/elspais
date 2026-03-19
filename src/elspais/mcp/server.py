@@ -4824,7 +4824,7 @@ def create_server(
         # Check changelog enforcement for Active requirements
         config = _state.get("config", {})
         typed_config = _validate_config(config) if isinstance(config, dict) else config
-        changelog_enforce = typed_config.changelog.enforce
+        changelog_enforce = typed_config.changelog.hash_current
 
         if changelog_enforce:
             active_mutated = _get_active_mutated_reqs(graph)
