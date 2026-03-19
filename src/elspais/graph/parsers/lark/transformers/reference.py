@@ -22,7 +22,9 @@ from elspais.graph.parsers import ParsedContent
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
-    from elspais.utilities.reference_config import ReferenceConfig
+
+# Hardcoded comment styles for empty-comment detection
+_COMMENT_STYLES = ["#", "//", "--"]
 
 
 class ReferenceTransformer:
@@ -31,7 +33,6 @@ class ReferenceTransformer:
     Args:
         resolver: IdResolver for normalizing requirement IDs.
         content_type: Output content type -- "code_ref" or "test_ref".
-        ref_config: Reference configuration for keyword matching.
         line_context: Pre-scan data mapping line_number -> (func_name, class_name, func_line).
         file_default_verifies: File-level default verifies (for test files).
         expected_broken_count: From elspais control marker (for test files).
@@ -42,7 +43,6 @@ class ReferenceTransformer:
         self,
         resolver: IdResolver,
         content_type: str,
-        ref_config: ReferenceConfig,
         line_context: dict[int, tuple[str | None, str | None, int]] | None = None,
         file_default_verifies: list[str] | None = None,
         expected_broken_count: int = 0,
@@ -50,7 +50,6 @@ class ReferenceTransformer:
     ) -> None:
         self.resolver = resolver
         self.content_type = content_type
-        self.ref_config = ref_config
         self.line_context = line_context or {}
         self.file_default_verifies = file_default_verifies or []
         self.expected_broken_count = expected_broken_count
@@ -338,14 +337,12 @@ class ReferenceTransformer:
 
     def _text_has_verify_keyword(self, text: str) -> bool:
         """Check if text contains a verify-type keyword."""
-        verify_kw = self.ref_config.keywords.get("verifies", ["Verifies", "VERIFIES"])
-        lower = text.lower()
-        return any(kw.lower() in lower for kw in verify_kw)
+        return "verifies" in text.lower()
 
     def _is_empty_comment(self, text: str) -> bool:
         """Check if a line is an empty comment."""
         stripped = text.strip()
-        for style in self.ref_config.comment_styles:
+        for style in _COMMENT_STYLES:
             if stripped.startswith(style):
                 remainder = stripped[len(style) :].strip().rstrip("#/-").strip()
                 if not remainder:

@@ -246,7 +246,6 @@ class FileDispatcher:
         """Parse a code file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 
-        ref_config = self._ref_config or self._default_ref_config()
         if not content.endswith("\n"):
             content += "\n"
 
@@ -260,7 +259,7 @@ class FileDispatcher:
 
         parser = self._get_ref_parser()
         tree = parser.parse(content)
-        transformer = ReferenceTransformer(self._resolver, "code_ref", ref_config, line_context)
+        transformer = ReferenceTransformer(self._resolver, "code_ref", line_context)
         return transformer.transform(tree)
 
     def dispatch_test(
@@ -273,7 +272,6 @@ class FileDispatcher:
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import ast_prescan, external_prescan, text_prescan
 
-        ref_config = self._ref_config or self._default_ref_config()
         if not content.endswith("\n"):
             content += "\n"
 
@@ -320,8 +318,7 @@ class FileDispatcher:
                     continue
                 text = str(token)
                 # Check if it's a verifies-type comment at file level
-                verify_kw = ref_config.keywords.get("verifies", ["Verifies"])
-                if any(kw.lower() in text.lower() for kw in verify_kw):
+                if "verifies" in text.lower():
                     for ref_match in _re.finditer(
                         rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+", text, _re.IGNORECASE
                     ):
@@ -332,19 +329,12 @@ class FileDispatcher:
         transformer = ReferenceTransformer(
             self._resolver,
             "test_ref",
-            ref_config,
             line_context=line_context,
             file_default_verifies=file_default_verifies,
             expected_broken_count=expected_broken_count,
             all_test_funcs=all_test_funcs,
         )
         return transformer.transform(tree)
-
-    @staticmethod
-    def _default_ref_config():
-        from elspais.utilities.reference_config import ReferenceConfig
-
-        return ReferenceConfig()
 
 
 __all__ = ["GrammarFactory", "FileDispatcher"]
