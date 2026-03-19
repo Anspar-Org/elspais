@@ -87,6 +87,12 @@ class RequirementTransformer:
                     remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
 
         self._flush_remainder(remainder_lines, results)
+
+        # Fill blank-line gaps that the Lark grammar discards as anonymous _NL.
+        # Without this, blank lines between content blocks are lost on render.
+        if self._source_lines:
+            results = self._fill_blank_line_gaps(results)
+
         return results
 
     # ------------------------------------------------------------------
@@ -441,6 +447,54 @@ class RequirementTransformer:
             raw_text=raw_text,
             parsed_data=parsed_data,
         )
+
+    # ------------------------------------------------------------------
+    # Gap filling
+    # ------------------------------------------------------------------
+
+    def _fill_blank_line_gaps(self, results: list[ParsedContent]) -> list[ParsedContent]:
+        """Insert REMAINDER blocks for blank lines between parsed content.
+
+        The Lark grammar treats bare newlines (_NL) at file level as
+        anonymous tokens, so they are discarded from the parse tree.
+        This method reconstructs those blank lines from the original
+        source text, creating REMAINDER nodes so that render_file
+        can reproduce them faithfully.
+
+        When content is later deleted, its REMAINDER separators are
+        removed too, giving automatic compaction.
+        """
+        if not results:
+            return results
+
+        results.sort(key=lambda r: r.start_line)
+        total_lines = len(self._source_lines)
+        filled: list[ParsedContent] = []
+        prev_end = 0
+
+        for item in results:
+            if item.start_line > prev_end + 1:
+                gap_lines = [
+                    (ln, self._source_lines[ln - 1])
+                    for ln in range(prev_end + 1, item.start_line)
+                    if ln - 1 < total_lines
+                ]
+                if gap_lines:
+                    self._flush_remainder(gap_lines, filled)
+            filled.append(item)
+            prev_end = max(prev_end, item.end_line)
+
+        # Trailing blank lines
+        if prev_end < total_lines:
+            gap_lines = [
+                (ln, self._source_lines[ln - 1])
+                for ln in range(prev_end + 1, total_lines + 1)
+                if ln - 1 < total_lines
+            ]
+            if gap_lines:
+                self._flush_remainder(gap_lines, filled)
+
+        return filled
 
     # ------------------------------------------------------------------
     # Remainder handling
