@@ -220,28 +220,47 @@ def render_file(node: GraphNode) -> str:
     if node.kind != NodeKind.FILE:
         raise ValueError(f"render_file() requires a FILE node, got {node.kind}")
 
-    # Collect CONTAINS children with their render_order
-    children_with_order: list[tuple[float, GraphNode]] = []
+    # Collect CONTAINS children with their render_order and line metadata
+    children_with_meta: list[tuple[float, int, int, GraphNode]] = []
 
     for edge in node.iter_outgoing_edges():
         if edge.kind == EdgeKind.CONTAINS:
             order = edge.metadata.get("render_order", 0.0)
-            children_with_order.append((order, edge.target))
+            start = edge.metadata.get("start_line", 0)
+            end = edge.metadata.get("end_line", 0)
+            children_with_meta.append((order, start, end, edge.target))
 
-    if not children_with_order:
+    if not children_with_meta:
         return ""
 
     # Sort by render_order
-    children_with_order.sort(key=lambda x: x[0])
+    children_with_meta.sort(key=lambda x: x[0])
 
-    # Render each child and concatenate
+    # Render each child and concatenate, preserving blank-line gaps
+    # between children based on their original line positions.
     parts: list[str] = []
-    for _order, child in children_with_order:
+    prev_end_line = 0
+    for _order, start_line, end_line, child in children_with_meta:
         rendered = render_node(child)
-        if rendered:
-            parts.append(rendered)
+        if not rendered:
+            continue
 
-    return "\n".join(parts)
+        # Insert blank lines for gaps between consecutive children.
+        # A gap of N lines means N-1 blank lines (since the join adds one \n).
+        if start_line > 0 and prev_end_line > 0:
+            gap = start_line - prev_end_line - 1
+            for _ in range(gap):
+                parts.append("")
+
+        parts.append(rendered)
+        if end_line > 0:
+            prev_end_line = end_line
+
+    result = "\n".join(parts)
+    # Preserve trailing newline (files end with newline)
+    if result and not result.endswith("\n"):
+        result += "\n"
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────
