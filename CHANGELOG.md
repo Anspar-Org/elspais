@@ -4,6 +4,18 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.6]
+
+### Changed
+
+- Migrate all config consumers to v3 schema paths:
+  - `doctor.py`: `check_associate_paths()`, `check_associate_configs()`, `check_cross_repo_in_committed_config()` now use `get_associates_config()` and `scanning.spec.directories`
+  - `index.py`: `_resolve_spec_dir_info()` now uses typed `ElspaisConfig` instead of raw dict access
+  - `validate.py`: Associate path checks now use `get_associates_config()` instead of `associates.paths` array
+  - `associate_cmd.py`: `cmd_list()` now uses `get_associates_config()`
+  - `associates.py`: Remove legacy `associates.paths` array fallback
+- Update all tests from v2 `associates.paths` array format to v3 named `[associates.<name>]` sections
+
 ## [0.108.5]
 
 ### Removed

@@ -57,7 +57,9 @@ class TestDoctorExitCodes:
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         local_config = tmp_path / ".elspais.local.toml"
-        local_config.write_text('[associates]\npaths = ["/nonexistent/sponsor"]\n')
+        local_config.write_text(
+            '[associates.sponsor]\npath = "/nonexistent/sponsor"\nnamespace = "SPO"\n'
+        )
         (tmp_path / "spec").mkdir()
 
         args = argparse.Namespace(
@@ -253,7 +255,9 @@ class TestValidateAssociateCount:
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         local_config = tmp_path / ".elspais.local.toml"
-        local_config.write_text('[associates]\npaths = ["/nonexistent/sponsor"]\n')
+        local_config.write_text(
+            '[associates.sponsor]\npath = "/nonexistent/sponsor"\nnamespace = "SPO"\n'
+        )
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         # Add a valid requirement so this isn't the zero-req check

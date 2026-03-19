@@ -452,7 +452,9 @@ class TestAssociateList:
 
         core = _make_core_repo(tmp_path / "core")
         local_config = core / ".elspais.local.toml"
-        local_config.write_text('[associates]\npaths = ["/nonexistent/callisto"]\n')
+        local_config.write_text(
+            '[associates.callisto]\npath = "/nonexistent/callisto"\nnamespace = "CAL"\n'
+        )
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(

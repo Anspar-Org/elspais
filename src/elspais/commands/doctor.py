@@ -383,9 +383,12 @@ def check_worktree_status(git_root: Path | None, canonical_root: Path | None) ->
 
 def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCheck:
     """Check that each configured associate path exists on disk."""
-    associate_paths = config.get("associates", {}).get("paths", [])
+    # Implements: REQ-d00202-A, REQ-d00212-K
+    from elspais.config import get_associates_config
 
-    if not associate_paths:
+    associates = get_associates_config(config)
+
+    if not associates:
         return HealthCheck(
             name="associate.paths_resolvable",
             passed=True,
@@ -396,14 +399,15 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
 
     missing = []
     found = []
-    for path_str in associate_paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         p = Path(path_str)
         if not p.is_absolute() and canonical_root:
             p = canonical_root / p
         if p.exists():
             found.append(str(path_str))
         else:
-            missing.append(f"{path_str} (expected at {p})")
+            missing.append(f"{assoc_name}: {path_str} (expected at {p})")
 
     if missing:
         return HealthCheck(
@@ -426,10 +430,11 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
 def check_associate_configs(config: dict, canonical_root: Path | None) -> HealthCheck:
     """Check that each discovered associate has valid configuration."""
     from elspais.associates import discover_associate_from_path
+    from elspais.config import get_associates_config  # Implements: REQ-d00202-A, REQ-d00212-K
 
-    associate_paths = config.get("associates", {}).get("paths", [])
+    associates = get_associates_config(config)
 
-    if not associate_paths:
+    if not associates:
         return HealthCheck(
             name="associate.configs_valid",
             passed=True,
@@ -440,7 +445,8 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
 
     invalid = []
     valid = []
-    for path_str in associate_paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         p = Path(path_str)
         if not p.is_absolute() and canonical_root:
             p = canonical_root / p
@@ -448,9 +454,9 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
             continue  # Already reported by check_associate_paths
         result = discover_associate_from_path(p)
         if isinstance(result, str):
-            invalid.append(f"{path_str}: {result}")
+            invalid.append(f"{assoc_name}: {result}")
         else:
-            valid.append(f"{path_str} ({result.code})")
+            valid.append(f"{assoc_name} ({result.code})")
 
     if invalid:
         return HealthCheck(
@@ -520,18 +526,22 @@ def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthChec
             severity="info",
         )
 
+    # Implements: REQ-d00212-F
     cross_repo_paths = []
-    spec_dirs = data.get("spec", {}).get("directories", [])
+    spec_dirs = data.get("scanning", {}).get("spec", {}).get("directories", [])
     if isinstance(spec_dirs, list):
         for d in spec_dirs:
             if ".." in str(d):
-                cross_repo_paths.append(f"spec.directories: {d}")
+                cross_repo_paths.append(f"scanning.spec.directories: {d}")
 
-    assoc_paths = data.get("associates", {}).get("paths", [])
-    if isinstance(assoc_paths, list):
-        for p in assoc_paths:
-            if ".." in str(p):
-                cross_repo_paths.append(f"associates.paths: {p}")
+    # Check named associates for cross-repo paths (v3 format)
+    associates = data.get("associates", {})
+    if isinstance(associates, dict):
+        for assoc_name, assoc_info in associates.items():
+            if isinstance(assoc_info, dict):
+                assoc_path = assoc_info.get("path", "")
+                if ".." in str(assoc_path):
+                    cross_repo_paths.append(f"associates.{assoc_name}.path: {assoc_path}")
 
     if cross_repo_paths:
         return HealthCheck(

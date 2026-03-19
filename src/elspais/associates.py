@@ -57,9 +57,7 @@ def get_associate_spec_directories(
     """
     Get all associate spec directories from configuration.
 
-    Handles two cases:
-    - Named associates from [associates.<name>] config sections
-    - Legacy path-based loading from config["associates"]["paths"]
+    Loads named associates from [associates.<name>] config sections.
 
     Args:
         config: Main elspais configuration dictionary
@@ -94,23 +92,6 @@ def get_associate_spec_directories(
             spec_dirs.append(spec_dir)
         else:
             errors.append(f"Spec directory not found: {spec_dir}")
-
-    # Legacy format: associates.paths is a list (not typed by schema)
-    associate_paths = config.get("associates", {}).get("paths", [])
-    if isinstance(associate_paths, list):
-        for repo_path_str in associate_paths:
-            repo_path = Path(repo_path_str)
-            if not repo_path.is_absolute() and canonical_root:
-                repo_path = canonical_root / repo_path
-            result = discover_associate_from_path(repo_path)
-            if isinstance(result, str):
-                errors.append(result)
-                continue
-            spec_dir = repo_path / result.spec_path
-            if spec_dir.exists() and spec_dir.is_dir():
-                spec_dirs.append(spec_dir)
-            else:
-                errors.append(f"Spec directory not found: {spec_dir}")
 
     return spec_dirs, errors
 

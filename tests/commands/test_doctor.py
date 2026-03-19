@@ -115,14 +115,16 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         (assoc_dir / ".elspais.toml").write_text('version = 3\n[project]\nname = "callisto"\n')
-        config = {"associates": {"paths": [str(assoc_dir)]}}
+        config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_paths(config, None)
         assert result.passed is True
 
     def test_REQ_p00005_E_associate_path_missing(self, tmp_path):
         from elspais.commands.doctor import check_associate_paths
 
-        config = {"associates": {"paths": [str(tmp_path / "nonexistent")]}}
+        config = {
+            "associates": {"callisto": {"path": str(tmp_path / "nonexistent"), "namespace": "CAL"}}
+        }
         result = check_associate_paths(config, None)
         assert result.passed is False
         assert "not found" in result.message.lower()
@@ -133,7 +135,7 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         # No .elspais.toml = invalid
-        config = {"associates": {"paths": [str(assoc_dir)]}}
+        config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_configs(config, None)
         assert result.passed is False
         assert "invalid" in result.message.lower() or "configuration" in result.message.lower()
@@ -165,7 +167,7 @@ class TestDoctorCrossRepoCheck:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[spec]\ndirectories = ["spec"]')
+        config_path.write_text('[scanning.spec]\ndirectories = ["spec"]')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is True
 
@@ -173,7 +175,7 @@ class TestDoctorCrossRepoCheck:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('[spec]\ndirectories = ["spec", "../../callisto/spec"]')
+        config_path.write_text('[scanning.spec]\ndirectories = ["spec", "../../callisto/spec"]')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
         assert ".elspais.local.toml" in result.message

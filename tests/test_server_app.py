@@ -849,7 +849,7 @@ class TestGetFileContent:
         spec_file.write_text("# REQ-A-p00001: Test Requirement\n")
 
         # Config registers the associate repo path for discovery
-        config = {"associates": {"paths": [str(assoc_repo)]}}
+        config = {"associates": {"assoc": {"path": str(assoc_repo), "namespace": "A"}}}
 
         # Build graph with a node whose source path is the absolute path
         # (this is what happens when associated repos are outside the main repo)

@@ -158,7 +158,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    from elspais.config import get_config
+    # Implements: REQ-d00202-A, REQ-d00212-K
+    from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
     config = get_config(
@@ -166,10 +167,9 @@ def cmd_list(args: argparse.Namespace) -> int:
         quiet=True,
     )
 
-    # Legacy format: associates.paths is a list (not schema-typed)
-    paths = config.get("associates", {}).get("paths", [])
+    associates = get_associates_config(config)
 
-    if not paths:
+    if not associates:
         print("No associates linked.")
         print("Use 'elspais associate <path>' or 'elspais associate --all' to link.")
         return 0
@@ -180,19 +180,18 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} Path")
     print("-" * 72)
 
-    for path_str in paths:
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
         repo_path = Path(path_str)
         if not repo_path.is_absolute() and canonical_root:
             repo_path = Path(canonical_root) / repo_path
         if not repo_path.exists():
-            name = repo_path.name
-            print(f"{name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
             continue
 
         result = discover_associate_from_path(repo_path)
         if isinstance(result, str):
-            name = repo_path.name
-            print(f"{name:<20} {'?':<10} {'BROKEN':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'BROKEN':<12} {path_str}")
         else:
             spec_dir = repo_path / result.spec_path
             status = "OK" if spec_dir.exists() else "NO SPEC"

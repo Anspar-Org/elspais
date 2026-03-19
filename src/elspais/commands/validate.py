@@ -128,18 +128,20 @@ def run(args: argparse.Namespace) -> int:
     fixable = []  # Issues that can be auto-fixed
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
+    # Implements: REQ-d00202-A, REQ-d00212-K
     if mode == "combined":
-        from elspais.config import get_config
+        from elspais.config import get_associates_config, get_config
 
         config_dict = get_config(
             config_path,
             start_path=repo_root,
         )
-        associate_paths = config_dict.get("associates", {}).get("paths", [])
-        if associate_paths:
+        associates = get_associates_config(config_dict)
+        if associates:
             from elspais.associates import discover_associate_from_path
 
-            for path_str in associate_paths:
+            for assoc_name, assoc_info in associates.items():
+                path_str = assoc_info["path"]
                 p = Path(path_str)
                 if not p.is_absolute() and canonical_root:
                     p = canonical_root / p
@@ -147,9 +149,10 @@ def run(args: argparse.Namespace) -> int:
                     errors.append(
                         {
                             "rule": "config.associate_path_missing",
-                            "id": path_str,
+                            "id": assoc_name,
                             "message": (
-                                f"Associate path does not exist: {path_str} " f"(resolved to {p})"
+                                f"Associate '{assoc_name}' path does not exist: {path_str} "
+                                f"(resolved to {p})"
                             ),
                         }
                     )
@@ -159,8 +162,10 @@ def run(args: argparse.Namespace) -> int:
                         errors.append(
                             {
                                 "rule": "config.associate_invalid",
-                                "id": path_str,
-                                "message": f"Associate path is misconfigured: {disc_result}",
+                                "id": assoc_name,
+                                "message": (
+                                    f"Associate '{assoc_name}' is misconfigured: {disc_result}"
+                                ),
                             }
                         )
                     else:
@@ -170,9 +175,9 @@ def run(args: argparse.Namespace) -> int:
                             errors.append(
                                 {
                                     "rule": "config.associate_no_specs",
-                                    "id": path_str,
+                                    "id": assoc_name,
                                     "message": (
-                                        f"Associate at {path_str} has no spec"
+                                        f"Associate '{assoc_name}' at {path_str} has no spec"
                                         f" directory: {disc_result.spec_path}"
                                     ),
                                 }
@@ -181,9 +186,9 @@ def run(args: argparse.Namespace) -> int:
                             errors.append(
                                 {
                                     "rule": "config.associate_no_specs",
-                                    "id": path_str,
+                                    "id": assoc_name,
                                     "message": (
-                                        f"Associate at {path_str} has empty spec"
+                                        f"Associate '{assoc_name}' at {path_str} has empty spec"
                                         f" directory: {disc_result.spec_path}"
                                     ),
                                 }

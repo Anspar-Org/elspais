@@ -15,7 +15,7 @@ from elspais.associates import get_associate_spec_directories
 class TestGetAssociateSpecDirectoriesCanonicalRoot:
     """Validates REQ-p00005-F: get_associate_spec_directories canonical_root handling.
 
-    Path-based associate loading (config['associates']['paths']) uses
+    Named associate loading (config['associates']['<name>']) uses
     canonical_root for relative paths. Absolute paths are unaffected.
     """
 
@@ -49,7 +49,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
 
         config: dict = {
             "associates": {
-                "paths": ["associates/test-repo"],
+                "test-repo": {"path": "associates/test-repo", "namespace": "TST"},
             },
         }
 
@@ -75,7 +75,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
 
         config: dict = {
             "associates": {
-                "paths": [str(associate_repo)],
+                "associate": {"path": str(associate_repo), "namespace": "ABS"},
             },
         }
 
@@ -88,33 +88,21 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         assert spec_dirs[0] == associate_repo / "spec"
 
     def test_REQ_p00005_F_none_canonical_root_uses_base_path_for_relative(self, tmp_path: Path):
-        """When canonical_root is None, relative paths are not rebased (backward compat).
-
-        With canonical_root=None the relative path is passed directly to
-        discover_associate_from_path, which will fail to find the repo
-        because relative resolution falls back to cwd-relative behavior.
-        We set up the associate repo at the expected cwd-relative location
-        to confirm the old behavior still works.
-        """
+        """When canonical_root is None, absolute paths still resolve correctly."""
         base = tmp_path / "base"
         base.mkdir()
 
-        # Without canonical_root, relative path is passed as-is to
-        # discover_associate_from_path (Path("associates/test-repo"))
-        # which is resolved relative to cwd. We create the repo relative
-        # to base to confirm base_path is NOT used for path-based loading
-        # when canonical_root is None (the path stays relative).
         associate_repo = tmp_path / "associates" / "test-repo"
         self._create_associate_repo(associate_repo)
 
         config: dict = {
             "associates": {
-                "paths": [str(associate_repo)],
+                "test-repo": {"path": str(associate_repo), "namespace": "TST"},
             },
         }
 
         # Use absolute path in config to guarantee it resolves correctly
-        # when canonical_root is None -- verifying no crash and correct behavior
+        # when canonical_root is None
         spec_dirs, errors = get_associate_spec_directories(
             config, base_path=base, canonical_root=None
         )

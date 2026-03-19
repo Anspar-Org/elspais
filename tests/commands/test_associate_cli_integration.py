@@ -5,12 +5,9 @@ Validates REQ-p00005-D: Auto-discovery of associate identity.
 Validates REQ-p00005-E: Clear error for invalid associate paths.
 """
 
-import argparse
-
 import tomlkit
 
 from elspais.associates import get_associate_spec_directories
-from elspais.commands.config_cmd import cmd_add
 
 
 def _make_core_repo(tmp_path):
@@ -36,24 +33,20 @@ def _make_associate_repo(base, name, prefix):
 
 
 def test_REQ_p00005_C_config_add_registers_associate(tmp_path, monkeypatch):
-    """Full workflow: config add → get_associate_spec_directories finds it."""
+    """Full workflow: add named associate to config → get_associate_spec_directories finds it."""
     core = _make_core_repo(tmp_path / "core")
     assoc = _make_associate_repo(tmp_path, "callisto", "CAL")
 
-    # Use config add to register the associate path
     monkeypatch.chdir(core)
-    args = argparse.Namespace(
-        key="associates.paths",
-        value=str(assoc),
-        config=core / ".elspais.toml",
-        quiet=True,
-    )
-    rc = cmd_add(args)
-    assert rc == 0
 
-    # Verify the TOML was written correctly
-    config_doc = tomlkit.parse((core / ".elspais.toml").read_text())
-    assert str(assoc) in config_doc["associates"]["paths"]
+    # Write v3 named associate directly into config
+    config_path = core / ".elspais.toml"
+    config_doc = tomlkit.parse(config_path.read_text())
+    config_doc.add("associates", tomlkit.table())
+    config_doc["associates"].add("callisto", tomlkit.table())
+    config_doc["associates"]["callisto"]["path"] = str(assoc)
+    config_doc["associates"]["callisto"]["namespace"] = "CAL"
+    config_path.write_text(tomlkit.dumps(config_doc))
 
     # Verify get_associate_spec_directories picks it up
     config = dict(config_doc)
@@ -65,25 +58,25 @@ def test_REQ_p00005_C_config_add_registers_associate(tmp_path, monkeypatch):
 
 
 def test_REQ_p00005_D_config_add_discovers_identity(tmp_path, monkeypatch):
-    """Config add + discovery reads associate's name and prefix."""
+    """Named associate + discovery reads associate's name and prefix."""
     core = _make_core_repo(tmp_path / "core")
     assoc = _make_associate_repo(tmp_path, "europa", "EUR")
 
     monkeypatch.chdir(core)
-    args = argparse.Namespace(
-        key="associates.paths",
-        value=str(assoc),
-        config=core / ".elspais.toml",
-        quiet=True,
-    )
-    cmd_add(args)
+
+    # Write v3 named associate
+    config_path = core / ".elspais.toml"
+    config_doc = tomlkit.parse(config_path.read_text())
+    config_doc.add("associates", tomlkit.table())
+    config_doc["associates"].add("europa", tomlkit.table())
+    config_doc["associates"]["europa"]["path"] = str(assoc)
+    config_doc["associates"]["europa"]["namespace"] = "EUR"
+    config_path.write_text(tomlkit.dumps(config_doc))
 
     # Load config and verify discovery works
     from elspais.associates import discover_associate_from_path
 
-    config_doc = tomlkit.parse((core / ".elspais.toml").read_text())
-    paths = config_doc["associates"]["paths"]
-    result = discover_associate_from_path(paths[0])
+    result = discover_associate_from_path(assoc)
 
     from elspais.associates import Associate
 
@@ -93,22 +86,17 @@ def test_REQ_p00005_D_config_add_discovers_identity(tmp_path, monkeypatch):
 
 
 def test_REQ_p00005_E_config_add_invalid_path_produces_error(tmp_path, monkeypatch):
-    """Adding an invalid path succeeds at config level but errors on discovery."""
+    """Adding an invalid path errors on discovery."""
     core = _make_core_repo(tmp_path / "core")
 
     monkeypatch.chdir(core)
-    args = argparse.Namespace(
-        key="associates.paths",
-        value="/nonexistent/repo",
-        config=core / ".elspais.toml",
-        quiet=True,
-    )
-    rc = cmd_add(args)
-    assert rc == 0  # config add itself succeeds
 
-    # But discovery reports the error
-    config_doc = tomlkit.parse((core / ".elspais.toml").read_text())
-    config = dict(config_doc)
+    # Write v3 named associate with non-existent path
+    config = {
+        "associates": {
+            "broken": {"path": "/nonexistent/repo", "namespace": "BRK"},
+        }
+    }
     dirs, errors = get_associate_spec_directories(config, core)
 
     assert len(dirs) == 0

@@ -155,9 +155,11 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     """Resolve label and level ordering for a spec directory.
 
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
-    the project name and ``[id-patterns].types`` level definitions.
+    the project name and level definitions via typed config.
     """
+    # Implements: REQ-d00212-F, REQ-d00207-C
     from elspais.config import get_config
+    from elspais.config.schema import ElspaisConfig
 
     resolved = spec_dir.resolve()
     current = resolved
@@ -165,21 +167,29 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
         config_file = current / ".elspais.toml"
         if config_file.exists():
             cfg = get_config(config_file, current)
-            project_name = cfg.get("project", {}).get("name") or current.name
+            # Use typed config for validated access
+            typed_config = ElspaisConfig.model_validate(
+                {
+                    k: v
+                    for k, v in cfg.items()
+                    if k
+                    in {f.alias or name for name, f in ElspaisConfig.model_fields.items()}
+                    | set(ElspaisConfig.model_fields.keys())
+                }
+            )
+            project_name = typed_config.project.name or current.name
             try:
                 spec_subpath = str(resolved.relative_to(current))
             except ValueError:
                 spec_subpath = resolved.name
             label = f"{project_name}/{spec_subpath}"
 
-            # Build level ordering from [levels]
-            levels = cfg.get("levels", {})
+            # Build level ordering from typed config levels
             level_order: dict[str, int] = {}
             level_names: dict[str, str] = {}
-            for level_key, level_def in levels.items():
-                rank = level_def.get("rank", 99)
-                display = (level_def.get("display_name") or level_key).upper()
-                level_order[level_key] = rank
+            for level_key, level_cfg in typed_config.levels.items():
+                level_order[level_key] = level_cfg.rank
+                display = (level_cfg.display_name or level_key).upper()
                 level_names[level_key] = display
 
             return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
