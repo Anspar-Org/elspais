@@ -202,6 +202,32 @@ class DomainFile:
                     source_context=ctx,
                 )
 
+    def dispatch(
+        self,
+        dispatch_fn: Any,
+        file_path_key: str = "path",
+    ) -> Iterator[ParsedContentWithContext]:
+        """Deserialize files using a Lark FileDispatcher method.
+
+        Args:
+            dispatch_fn: A callable(content, file_path) -> list[ParsedContent].
+            file_path_key: Metadata key for source path (default: "path").
+
+        Yields:
+            ParsedContentWithContext for each parsed region.
+        """
+        for ctx, content in self.iterate_sources():
+            source_path = ctx.metadata.get(file_path_key, ctx.source_id)
+            for parsed in dispatch_fn(content, str(source_path)):
+                yield ParsedContentWithContext(
+                    content_type=parsed.content_type,
+                    start_line=parsed.start_line,
+                    end_line=parsed.end_line,
+                    raw_text=parsed.raw_text,
+                    parsed_data=parsed.parsed_data,
+                    source_context=ctx,
+                )
+
 
 class DomainStdio:
     """Deserializer for stdin content."""

@@ -29,6 +29,7 @@ from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
+from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
@@ -246,11 +247,12 @@ DEFAULT_CODE_PATTERNS = [
 class SpecDirConfig:
     """Per-spec-directory scan configuration.
 
-    Bundles the parser registry with scan settings that may differ between
-    the main project and associated projects.
+    Bundles the parser registry and FileDispatcher with scan settings that
+    may differ between the main project and associated projects.
     """
 
     registry: ParserRegistry
+    dispatcher: FileDispatcher | None = None
     file_patterns: list[str] = field(default_factory=lambda: ["*.md"])
     skip_dirs: list[str] = field(default_factory=list)
     skip_files: list[str] = field(default_factory=list)
@@ -322,6 +324,11 @@ def _resolve_spec_dir_config(
         }
     )
 
+    # Build Lark-based FileDispatcher for spec files
+    ref_config = reference_resolver.defaults
+    dispatcher = FileDispatcher(resolver, ref_config)
+
+    # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
     registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
@@ -336,6 +343,7 @@ def _resolve_spec_dir_config(
     file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
     return SpecDirConfig(
         registry=registry,
+        dispatcher=dispatcher,
         file_patterns=file_patterns,
         skip_dirs=list(typed_repo_config.scanning.spec.skip_dirs),
         skip_files=list(typed_repo_config.scanning.spec.skip_files),
@@ -414,13 +422,15 @@ def build_graph(
     )
 
     # Implements: REQ-d00128-G
-    # Registry for code files (code parser + remainder)
+    # Lark FileDispatcher for code and test files
+    default_ref_config = default_reference_resolver.defaults
+    default_dispatcher = FileDispatcher(default_resolver, default_ref_config)
+
+    # Legacy registries kept for result file parsing
     code_registry = ParserRegistry()
     code_registry.register(CodeParser(default_resolver, default_reference_resolver))
     code_registry.register(RemainderParser())
 
-    # Implements: REQ-d00128-G
-    # Registry for test files (test parser + remainder)
     test_registry = ParserRegistry()
     test_registry.register(TestParser(default_resolver, default_reference_resolver))
     test_registry.register(RemainderParser())
@@ -476,7 +486,8 @@ def build_graph(
             skip_files=dir_config.skip_files,
         )
 
-        for parsed_content in domain_file.deserialize(dir_config.registry):
+        # Use Lark FileDispatcher for spec file parsing
+        for parsed_content in domain_file.dispatch(dir_config.dispatcher.dispatch_spec):
             # Check if source should be ignored using [ignore].spec patterns
             source_path = parsed_content.source_context.metadata.get("path")
             if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
@@ -506,7 +517,7 @@ def build_graph(
                     # Implements: REQ-d00128-A
                     fn = _get_or_create_file_node(path, FileType.CODE)
                     domain_file = DomainFile(path)
-                    for parsed_content in domain_file.deserialize(code_registry):
+                    for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
                         builder.add_parsed_content(parsed_content, file_node=fn)
 
         # 5b. [directories].code with default file patterns
@@ -523,7 +534,7 @@ def build_graph(
             # Track files already checked for ignore/dedup in this loop
             checked_files: set[str] = set()
             skip_files: set[str] = set()
-            for parsed_content in domain_file.deserialize(code_registry):
+            for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
                 source_path = parsed_content.source_context.metadata.get("path")
                 if source_path:
                     resolved = str(Path(source_path).resolve())
@@ -559,13 +570,11 @@ def build_graph(
                     prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
                 )
 
-            # Rebuild test registry with prescan data if available
-            if prescan_data:
-                test_registry = ParserRegistry()
-                test_registry.register(
-                    TestParser(default_resolver, default_reference_resolver, prescan_data)
+            # Build dispatch function with prescan data
+            def _dispatch_test(content: str, file_path: str) -> list:
+                return default_dispatcher.dispatch_test(
+                    content, file_path, prescan_data=prescan_data
                 )
-                test_registry.register(RemainderParser())
 
             for dir_pattern in test_dirs:
                 # Resolve glob pattern to get directories
@@ -579,7 +588,7 @@ def build_graph(
                             recursive=True,
                             skip_dirs=test_skip_dirs,
                         )
-                        for parsed_content in domain_file.deserialize(test_registry):
+                        for parsed_content in domain_file.dispatch(_dispatch_test):
                             # Implements: REQ-d00128-A
                             source_path = parsed_content.source_context.metadata.get("path")
                             fn = None

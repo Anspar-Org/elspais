@@ -1,0 +1,16 @@
+// Common ID syntax rules shared by requirement and reference grammars.
+// Parameterized tokens (substituted by GrammarFactory):
+//   __NAMESPACE__         e.g. "REQ"
+//   __TYPE_PATTERN__      e.g. "p|o|d"
+//   __DIGITS_PATTERN__    e.g. "\\d{5}" or "\\d{1,5}" or "[A-Za-z][A-Za-z0-9]+"
+//   __ASSERTION_LABEL__   e.g. "[A-Z]"
+//   __MULTI_SEP__         e.g. "\\+"
+
+// A requirement ID: REQ-p00001
+REQ_ID: __NAMESPACE__ "-" (__TYPE_PATTERN__) __DIGITS_PATTERN__
+
+// An assertion suffix: -A or -A+B+C
+ASSERTION_SUFFIX: "-" __ASSERTION_LABEL__ ("__MULTI_SEP__" __ASSERTION_LABEL__)*
+
+// A full reference (ID with optional assertion): REQ-p00001 or REQ-p00001-A+B
+req_ref: REQ_ID ASSERTION_SUFFIX?
