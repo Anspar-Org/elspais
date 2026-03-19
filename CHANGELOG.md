@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+## [0.108.4]
+
+### Changed
+
+- Remove `ReferenceResolver` construction and legacy `code_registry`/`test_registry` from `factory.py`. Remove unused `CodeParser`, `TestParser`, and `ReferenceResolver` imports.
+
 ## [0.108.3]
 
 ### Changed

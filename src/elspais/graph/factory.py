@@ -27,15 +27,12 @@ from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.code import CodeParser
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
-from elspais.graph.parsers.test import TestParser
 from elspais.utilities.patterns import build_resolver
-from elspais.utilities.reference_config import ReferenceResolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
@@ -314,15 +311,6 @@ def _resolve_spec_dir_config(
         typed_repo_config = repo_config
 
     resolver = build_resolver(repo_config)
-    reference_resolver = ReferenceResolver.from_config(
-        {
-            "defaults": {
-                "separators": typed_repo_config.id_patterns.separators,
-                "case_sensitive": typed_repo_config.references.case_sensitive,
-                "prefix_optional": typed_repo_config.id_patterns.prefix_optional,
-            },
-        }
-    )
 
     # Build Lark-based FileDispatcher for spec files
     dispatcher = FileDispatcher(resolver)
@@ -331,8 +319,6 @@ def _resolve_spec_dir_config(
     registry = ParserRegistry()
     registry.register(RequirementParser(resolver))
     registry.register(JourneyParser())
-    registry.register(CodeParser(resolver, reference_resolver))
-    registry.register(TestParser(resolver, reference_resolver))
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
@@ -408,30 +394,12 @@ def build_graph(
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
 
-    # 3. Create default resolver and reference resolver
+    # 3. Create default resolver
     default_resolver = build_resolver(config)
-    default_reference_resolver = ReferenceResolver.from_config(
-        {
-            "defaults": {
-                "separators": typed_config.id_patterns.separators,
-                "case_sensitive": typed_config.references.case_sensitive,
-                "prefix_optional": typed_config.id_patterns.prefix_optional,
-            },
-        }
-    )
 
     # Implements: REQ-d00128-G
     # Lark FileDispatcher for code and test files
     default_dispatcher = FileDispatcher(default_resolver)
-
-    # Legacy registries kept for result file parsing
-    code_registry = ParserRegistry()
-    code_registry.register(CodeParser(default_resolver, default_reference_resolver))
-    code_registry.register(RemainderParser())
-
-    test_registry = ParserRegistry()
-    test_registry.register(TestParser(default_resolver, default_reference_resolver))
-    test_registry.register(RemainderParser())
 
     # 4. Build graph from all spec directories
     hash_mode = typed_config.validation.hash_mode
