@@ -1,15 +1,18 @@
 # Implements: REQ-d00206-A+B+C
-"""Tests for Flask server federation endpoints (/api/repos, /api/status repos field)."""
+"""Tests for server federation endpoints (/api/repos, /api/status repos field)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
 
+from starlette.testclient import TestClient
+
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.server.app import create_app
+from elspais.server.state import AppState
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -50,11 +53,15 @@ def _make_federated_multi() -> FederatedGraph:
     return FederatedGraph([root_entry, assoc_entry])
 
 
-def _make_client(fed: FederatedGraph):
-    """Create a Flask test client from a FederatedGraph."""
-    app = create_app(repo_root=Path("/test/root"), graph=fed, config={})
-    app.config["TESTING"] = True
-    return app.test_client()
+def _make_client(fed: FederatedGraph) -> TestClient:
+    """Create a Starlette TestClient from a FederatedGraph."""
+    state = AppState(
+        graph=fed,
+        repo_root=Path("/test/root"),
+        config={},
+    )
+    app = create_app(state=state, mount_mcp=False)
+    return TestClient(app)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +80,7 @@ class TestApiRepos:
         response = client.get("/api/repos")
         assert response.status_code == 200
 
-        data = response.get_json()
+        data = response.json()
         assert "repos" in data
         repos = data["repos"]
         assert len(repos) == 2
@@ -111,7 +118,7 @@ class TestApiRepos:
         client = _make_client(fed)
 
         response = client.get("/api/repos")
-        data = response.get_json()
+        data = response.json()
         repos = data["repos"]
 
         error_repo = next(r for r in repos if r["name"] == "missing-repo")
@@ -141,7 +148,7 @@ class TestApiReposStaleness:
         with patch("elspais.utilities.git.git_status_summary", return_value=mock_summary):
             response = client.get("/api/repos")
 
-        data = response.get_json()
+        data = response.json()
         repos = data["repos"]
 
         for repo in repos:
@@ -165,7 +172,7 @@ class TestApiReposStaleness:
         client = _make_client(fed)
 
         response = client.get("/api/repos")
-        data = response.get_json()
+        data = response.json()
         repo = data["repos"][0]
         assert "staleness" not in repo
 
@@ -181,7 +188,7 @@ class TestApiStatusRepos:
         response = client.get("/api/status")
         assert response.status_code == 200
 
-        data = response.get_json()
+        data = response.json()
         assert "repos" in data
         repos = data["repos"]
         assert len(repos) == 2
@@ -202,7 +209,7 @@ class TestApiStatusRepos:
         client = _make_client(fed)
 
         response = client.get("/api/status")
-        data = response.get_json()
+        data = response.json()
 
         assert "repos" in data
         assert len(data["repos"]) == 1

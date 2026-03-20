@@ -156,48 +156,5 @@ def search_via_daemon(
     regex: bool = False,
     limit: int = 50,
 ) -> list[dict] | None:
-    """Query a running MCP daemon's search tool.
-
-    Returns results list, or None on failure.
-    """
-    try:
-        import anyio
-
-        return anyio.run(
-            _async_search,
-            port,
-            query,
-            field,
-            regex,
-            limit,
-        )
-    except Exception:
-        return None
-
-
-async def _async_search(
-    port: int,
-    query: str,
-    field: str,
-    regex: bool,
-    limit: int,
-) -> list[dict] | None:
-    """Async MCP client call to the daemon's search tool."""
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
-
-    url = f"http://127.0.0.1:{port}/mcp"
-    async with streamablehttp_client(url) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(
-                "search",
-                {
-                    "query": query,
-                    "field": field,
-                    "regex": regex,
-                    "limit": limit,
-                },
-            )
-            # Each list item becomes a separate TextContent
-            return [json.loads(c.text) for c in result.content if hasattr(c, "text")]
+    """Query daemon via REST /api/search (same endpoint as viewer)."""
+    return search_via_viewer(query, field, regex, limit, port=port)

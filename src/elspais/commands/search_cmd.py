@@ -58,35 +58,35 @@ def _try_fast_search(
     regex: bool,
     limit: int,
 ) -> list[dict] | None:
-    """Try viewer server, then MCP daemon."""
-    # 1. Try viewer (fastest — stdlib-only HTTP GET, ~10ms)
-    results = _try_viewer(query, field, regex, limit)
+    """Try viewer server, then MCP daemon (both serve /api/search)."""
+    # 1. Try viewer port first (fastest — stdlib-only HTTP GET, ~10ms)
+    results = _try_http_search(query, field, regex, limit, port=5001)
     if results is not None:
         return results
 
-    # 2. Try MCP daemon (auto-starts if needed, ~43ms warm)
+    # 2. Try daemon (auto-start if needed, ~43ms warm)
     try:
         from elspais.config import find_git_root
-        from elspais.mcp.daemon import ensure_daemon, search_via_daemon
+        from elspais.mcp.daemon import ensure_daemon
 
         repo_root = find_git_root()
         if repo_root is None:
             return None
 
         port = ensure_daemon(repo_root)
-        return search_via_daemon(port, query, field, regex, limit)
+        return _try_http_search(query, field, regex, limit, port=port)
     except Exception:
         return None
 
 
-def _try_viewer(
+def _try_http_search(
     query: str,
     field: str,
     regex: bool,
     limit: int,
     port: int = 5001,
 ) -> list[dict] | None:
-    """Query a running viewer server — stdlib only, no mcp import."""
+    """Query /api/search on a running server — stdlib only, no mcp import."""
     from urllib.error import URLError
     from urllib.parse import quote_plus
     from urllib.request import urlopen

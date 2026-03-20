@@ -5382,100 +5382,58 @@ def run_server(
         ttl_minutes: Auto-exit after N minutes of inactivity (0 = forever).
         daemon_json: Path to write daemon state file (pid, port).
     """
-    # Support daemon mode: env var set by daemon.start_daemon()
     import os as _os
 
+    # Support daemon mode: env var set by daemon.start_daemon()
     env_dj = _os.environ.get("_ELSPAIS_DAEMON_JSON")
     if env_dj and daemon_json is None:
         daemon_json = Path(env_dj)
 
-    mcp = create_server(working_dir=working_dir)
-
-    if transport in ("streamable-http", "sse") and (ttl_minutes > 0 or daemon_json):
-        _run_http_with_ttl(
-            mcp,
-            port=port,
-            ttl_minutes=ttl_minutes,
-            daemon_json=daemon_json,
-        )
+    if transport == "stdio":
+        mcp = create_server(working_dir=working_dir)
+        mcp.run(transport="stdio")
     else:
-        mcp.run(transport=transport)
+        # HTTP: use unified app (REST + MCP + auto-refresh)
+        import json as _json
+        import socket
+        import time
 
+        import anyio
+        import uvicorn
 
-def _run_http_with_ttl(
-    mcp: FastMCP,
-    port: int,
-    ttl_minutes: int,
-    daemon_json: Path | None,
-) -> None:
-    """Run the MCP server over HTTP with optional TTL and daemon.json."""
-    import json as _json
-    import os
-    import socket
-    import sys
-    import threading
-    import time
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
 
-    import uvicorn
+        if working_dir is None:
+            working_dir = Path.cwd()
 
-    # Resolve ephemeral port if port=0
-    if port == 0:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.1", 0))
-            port = s.getsockname()[1]
+        state = AppState.from_config(repo_root=working_dir)
+        app = create_app(state)
 
-    # Write daemon.json so CLI clients can find us
-    if daemon_json:
-        daemon_json.parent.mkdir(parents=True, exist_ok=True)
-        daemon_json.write_text(
-            _json.dumps(
-                {
-                    "pid": os.getpid(),
-                    "port": port,
-                    "repo_root": str(Path.cwd()),
-                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                }
+        if ttl_minutes > 0:
+            from elspais.server.middleware import TTLMiddleware
+
+            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes)
+
+        # Resolve ephemeral port if port=0
+        if port == 0:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+
+        if daemon_json:
+            daemon_json.parent.mkdir(parents=True, exist_ok=True)
+            daemon_json.write_text(
+                _json.dumps(
+                    {
+                        "pid": _os.getpid(),
+                        "port": port,
+                        "repo_root": str(working_dir),
+                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    }
+                )
             )
-        )
 
-    # TTL watchdog — exits process after inactivity
-    if ttl_minutes > 0:
-        last_activity = [time.time()]
-
-        def watchdog() -> None:
-            while True:
-                time.sleep(30)
-                if time.time() - last_activity[0] > ttl_minutes * 60:
-                    if daemon_json and daemon_json.exists():
-                        daemon_json.unlink(missing_ok=True)
-                    sys.exit(0)
-
-        threading.Thread(target=watchdog, daemon=True).start()
-
-        # Wrap the app with TTL-reset middleware
-        app = mcp.streamable_http_app()
-
-        from starlette.middleware.base import BaseHTTPMiddleware
-        from starlette.requests import Request
-        from starlette.responses import Response
-
-        class _TTLMiddleware(BaseHTTPMiddleware):
-            async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
-                last_activity[0] = time.time()
-                return await call_next(request)
-
-        app.add_middleware(_TTLMiddleware)
-    else:
-        app = mcp.streamable_http_app()
-
-    config = uvicorn.Config(
-        app,
-        host="127.0.0.1",
-        port=port,
-        log_level="warning",
-    )
-    server = uvicorn.Server(config)
-    import anyio
-
-    anyio.run(server.serve)
+        uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        anyio.run(uvicorn.Server(uvi_config).serve)
