@@ -76,6 +76,7 @@ from elspais.commands.args import (
     TraceArgs,
     UncoveredArgs,
     UninstallArgs,
+    UnlinkedArgs,
     UntestedArgs,
     UnvalidatedArgs,
     VersionArgs,
@@ -119,6 +120,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UnvalidatedArgs: "unvalidated",
         FailingArgs: "failing",
         BrokenArgs: "broken",
+        UnlinkedArgs: "unlinked",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
         ViewerArgs: "viewer",
@@ -357,6 +359,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import broken
 
             return broken.run(args)
+        elif args.command == "unlinked":
+            from elspais.commands import unlinked
+
+            return unlinked.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":

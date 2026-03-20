@@ -134,6 +134,20 @@ class BrokenArgs:
     """Write output to file instead of stdout."""
 
 
+@dataclasses.dataclass
+class UnlinkedArgs:
+    """List test and code nodes not linked to any requirement."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
+    """Show individual node IDs instead of just file counts."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
 # ---------------------------------------------------------------------------
 # Doctor command
 # ---------------------------------------------------------------------------
@@ -787,6 +801,7 @@ Command = (
     | Annotated[UnvalidatedArgs, tyro.conf.subcommand("unvalidated")]
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
     | Annotated[BrokenArgs, tyro.conf.subcommand("broken")]
+    | Annotated[UnlinkedArgs, tyro.conf.subcommand("unlinked")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
     | Annotated[ViewerArgs, tyro.conf.subcommand("viewer")]
