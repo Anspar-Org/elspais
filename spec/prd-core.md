@@ -1,8 +1,4 @@
-# elspais Product Requirements
-
-This document defines the high-level product requirements for elspais, a requirements validation and traceability tool.
-
----
+# Core Product Requirements
 
 # REQ-p00001: Requirements Management Tool
 
@@ -132,92 +128,6 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 *End* *Change Detection and Auditability* | **Hash**: f8ff5509
 ---
 
-# REQ-p00005: Multi-Repository Requirements
-
-**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
-
-## Rationale
-
-Large organizations often split requirements across multiple repositories:
-
-- A **core** repository containing product-level requirements
-- **Associated** repositories for subsystems, services, or components
-- **Sponsor** repositories for customer-specific or partner-specific requirements
-
-Each repository maintains its own spec directory, but requirements must reference and implement requirements from other repositories. The tool must validate these cross-repository links and generate combined traceability matrices.
-
-This architecture supports:
-
-- Independent versioning of subsystem specifications
-- Access control (not everyone needs access to all specs)
-- Modular development with clear interface contracts
-- Combined views for regulatory submissions
-
-CI/CD pipelines and diverse developer environments mean associated repositories may be located at different filesystem paths on each machine. Rather than requiring each environment to maintain a separate override file, the tool treats all cross-repository resolution as a local path concern: CI systems clone repos and then configure paths via the CLI, developers set paths to match their local directory layout, and the associated repository's own configuration file declares its identity (project type, namespace prefix). This keeps repository topology — which repos exist and where they are hosted — as a CI/infrastructure concern outside the tool, while the tool focuses on discovering and validating whatever local repos it is pointed at.
-
-## Assertions
-
-A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
-
-B. The tool SHALL generate combined traceability matrices spanning multiple repositories.
-
-C. The tool SHALL support CLI-based configuration of associate repository paths so that external systems can register associates without manually editing configuration files.
-
-D. The tool SHALL discover an associated repository's identity — including its project type and namespace prefix — by reading that repository's own configuration file.
-
-E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
-
-F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
-
-*End* *Multi-Repository Requirements* | **Hash**: 7964180f
----
-
-# REQ-p00006: Interactive Traceability Viewer
-
-**Level**: prd | **Status**: Active | **Implements**: REQ-p00003
-
-## Rationale
-
-Static traceability matrices—whether Markdown tables or CSV exports—answer the question "what implements what?" but fail to support exploratory analysis. Reviewers need to navigate requirement hierarchies, drill into specific branches, and understand the full context of a requirement including its test coverage, implementation references, and change history.
-
-The interactive trace viewer transforms the traceability matrix into an explorable interface:
-
-- **Clickable navigation**: Click a requirement to see what it implements and what implements it
-- **Test coverage overlay**: See which requirements have tests, which are untested, and test pass/fail status
-- **Git state awareness**: Visual indicators for uncommitted changes, moved requirements, and branch differences
-- **Implementation references**: Links to source files that reference each requirement
-- **Embedded content**: Optionally include full requirement text for offline review
-
-This supports:
-
-- Design reviews (navigate the hierarchy without switching files)
-- Test planning (identify coverage gaps)
-- Change impact analysis (see what's affected by a modification)
-- Regulatory audits (demonstrate complete traceability in one view)
-
-## Assertions
-
-A. The tool SHALL generate an interactive HTML view with clickable requirement navigation.
-
-B. The tool SHALL display test coverage information per requirement when test data is available.
-
-C. The viewer SHALL display source files inline in a side panel with syntax-highlighted content and stable line numbers, when embedded content is enabled.
-
-*End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
----
-
----
-
----
-
----
-
----
-
----
-
----
-
 # REQ-p00013: Automated Testing
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
@@ -248,3 +158,48 @@ E. The project SHALL include MCP protocol tests that verify tool invocation, sea
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
 *End* *Automated Testing* | **Hash**: 3fc90ebc
+---
+
+## REQ-p00061: Requirement Decomposition Rules
+
+**Level**: prd | **Status**: Active | **Implements**: -
+
+A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
+
+## Assertions
+
+A. A child requirement that adds specificity, constraints, or commits to mechanisms or guarantees SHALL declare its parent requirement using `Implements:` or `Refines:` in its metadata block.
+
+B. `Implements:` and `Refines:` declarations apply to requirements only; code references and test nodes use their own linkage mechanisms.
+
+C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
+
+*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
+---
+
+# REQ-p00080: Spec-to-PDF Compilation
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+UAT documentation review requires formal PDF output with professional formatting. A single compiled document with table of contents, per-requirement page breaks, and a topic index enables offline review, regulatory submission, and stakeholder sign-off. Currently, spec files exist only as Markdown with no PDF generation pipeline.
+
+The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the traceability graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
+
+## Assertions
+
+A. The tool SHALL provide an `elspais pdf` CLI command that compiles spec files into a PDF document.
+
+B. The assembled Markdown SHALL group requirements by level (PRD, OPS, DEV) with each level as a top-level section, and order files within each level by graph depth (root requirements first).
+
+C. The generated PDF SHALL include an auto-generated table of contents derived from requirement headings.
+
+D. The tool SHALL generate an alphabetized topic index with entries derived from filename words, file-level Topics lines, and requirement-level Topics lines, rendered as a Markdown section with hyperlinks.
+
+E. The tool SHALL insert page breaks before each requirement heading to ensure each requirement starts on a new page.
+
+F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
+
+*End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
+---
