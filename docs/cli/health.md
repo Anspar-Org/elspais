@@ -53,36 +53,74 @@ Configuration checks always run as part of the full health check. For focused co
 
 | Check | Description |
 |-------|-------------|
-| `tests.results` | Test pass/fail status from results |
-| `tests.coverage` | Test coverage statistics (informational) |
+| `tests.coverage` | Test coverage statistics with rollup (informational) |
 | `tests.unlinked` | Tests not linked to any requirement |
+| `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
+
+### UAT Checks
+
+UAT (User Acceptance Testing) checks run automatically with `--tests` and report
+coverage and results from user journey validation.
+
+| Check | Description |
+|-------|-------------|
+| `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
+| `uat.results` | Journey pass/fail status from a CSV results file |
+
+#### UAT Results CSV Format
+
+Create a `uat-results.csv` file in the repository root (or configure the path
+via `scanning.journey.results_file` in `.elspais.toml`):
+
+```csv
+journey_id,status
+JNY-Onboard-01,pass
+JNY-Onboard-02,pass
+JNY-Deploy-01,fail
+JNY-Deploy-02,skip
+```
+
+**Columns:**
+
+| Column | Required | Values |
+|--------|----------|--------|
+| `journey_id` | Yes | The journey ID (e.g., `JNY-Onboard-01`) |
+| `status` | Yes | `pass`/`passed`, `fail`/`failed`, or `skip`/`skipped` |
+
+The file is a standard CSV with a header row. When present, `elspais health`
+reports pass/fail/skip counts and flags failing journeys.
+
+**Configuration:**
+
+```toml
+[scanning.journey]
+results_file = "uat-results.csv"   # default
+```
 
 ## Output Formats
 
 ### Text Output (default)
 
 ```
-✓ CONFIG (6/6 checks passed)
+✓ CONFIG (6 passed, 1 skipped)
 ----------------------------------------
   ✓ config.exists: Config file found: .elspais.toml
   ✓ config.syntax: TOML syntax is valid
-  ✓ config.required_fields: All required configuration fields present
-  ✓ config.pattern_tokens: Pattern template valid: {prefix}-{type}{id}
-  ✓ config.hierarchy_rules: Hierarchy rules valid (3 levels configured)
-  ✓ config.paths_exist: All spec directories exist (1 found)
+  ...
 
-✓ SPEC (7/7 checks passed)
+✓ TESTS (1 passed, 2 skipped)
 ----------------------------------------
-  ✓ spec.parseable: Parsed 42 requirements with 128 assertions
-  ✓ spec.no_duplicates: No duplicate requirement IDs
-  ✓ spec.implements_resolve: All Implements references resolve
-  ✓ spec.refines_resolve: All Refines references resolve
-  ✓ spec.hierarchy_levels: All requirements follow hierarchy rules
-  ✓ spec.structural_orphans: No structural orphans
-  ✓ spec.broken_references: No broken references
+  ~ tests.coverage: 82/87 requirements have test coverage (94.3%)
+  ✓ tests.unlinked: All tests linked to requirements
+  ~ tests.results: No test results found
+
+✓ UAT (2 skipped)
+----------------------------------------
+  ~ uat.coverage: 25/87 requirements have UAT coverage (28.7%)
+  ~ uat.results: No UAT results file found (uat-results.csv)
 
 ========================================
-✓ HEALTHY: 13 checks passed
+HEALTHY: 21/21 checks passed, 8 skipped
 ========================================
 ```
 

@@ -228,3 +228,41 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 *End* *Link Suggestion Core Engine* | **Hash**: c927fae8
 ---
+
+## REQ-d00215: Keyword Extraction Annotator
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
+
+## Assertions
+
+A. The keyword extractor SHALL tokenize text into lowercase words, filtering stopwords, short words (fewer than 3 characters), and punctuation, returning a deduplicated list.
+
+B. The keyword annotator SHALL extract keywords from a node's title, body, and assertion text, storing them in the node's keyword field.
+
+C. The keyword annotator SHALL operate on all node kinds with textual content, not only requirements.
+
+D. Keyword search SHALL return nodes matching given keywords with case-insensitive comparison.
+
+E. Keyword collection SHALL return a sorted, deduplicated list of all keywords across the graph.
+
+*End* *Keyword Extraction Annotator* | **Hash**: 3e0a2d00
+
+## REQ-d00216: TraceGraph Deep Clone
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00050
+
+## Assertions
+
+A. The graph clone operation SHALL create a fully independent deep copy such that mutations to the clone do not affect the original.
+
+B. The clone SHALL preserve all node data including IDs, content fields, and metrics.
+
+C. The clone SHALL preserve all edges including parent-child relationships and edge kinds.
+
+D. The clone SHALL preserve the root set, maintaining iteration equivalence with the original.
+
+E. The clone SHALL preserve graph-level metadata such as repository root.
+
+F. The clone SHALL handle DAG structures with multiple parents without infinite recursion.
+
+*End* *TraceGraph Deep Clone* | **Hash**: a007d5ed

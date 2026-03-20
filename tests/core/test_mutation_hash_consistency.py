@@ -79,6 +79,7 @@ B. The system SHALL log errors."""
 class TestAddAssertionHashConsistency:
     """Tests verifying hash consistency after add_assertion."""
 
+    # Implements: REQ-o00062-B
     def test_add_assertion_updates_body_text_and_hash(self):
         """After add_assertion, body_text contains new assertion and hash matches.
 
@@ -107,6 +108,7 @@ class TestAddAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-B
     def test_add_assertion_body_text_preserves_structure(self):
         """After add_assertion, body_text maintains proper structure."""
         graph = build_graph_with_body_text()
@@ -130,6 +132,7 @@ class TestAddAssertionHashConsistency:
 class TestUpdateAssertionHashConsistency:
     """Tests verifying hash consistency after update_assertion."""
 
+    # Implements: REQ-o00062-B
     def test_update_assertion_updates_body_text_and_hash(self):
         """After update_assertion, body_text reflects new text and hash matches.
 
@@ -159,6 +162,7 @@ class TestUpdateAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-B
     def test_update_assertion_preserves_other_assertions(self):
         """After update_assertion, other assertions remain unchanged."""
         graph = build_graph_with_body_text()
@@ -178,6 +182,7 @@ class TestUpdateAssertionHashConsistency:
 class TestDeleteAssertionHashConsistency:
     """Tests verifying hash consistency after delete_assertion."""
 
+    # Implements: REQ-o00062-B
     def test_delete_assertion_updates_body_text_and_hash(self):
         """After delete_assertion, body_text removes assertion and hash matches.
 
@@ -206,6 +211,7 @@ class TestDeleteAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-B
     def test_delete_assertion_with_compact_updates_body_text_and_hash(self):
         """After delete_assertion with compact, body_text renumbers and hash matches.
 
@@ -228,6 +234,7 @@ class TestDeleteAssertionHashConsistency:
         expected_hash = calculate_hash(new_body_text)
         assert new_hash == expected_hash
 
+    # Implements: REQ-o00062-B
     def test_delete_assertion_preserves_other_content(self):
         """After delete_assertion, non-assertion content remains unchanged."""
         graph = build_graph_with_body_text()
@@ -247,6 +254,7 @@ class TestDeleteAssertionHashConsistency:
 class TestRenameAssertionHashConsistency:
     """Tests verifying hash consistency after rename_assertion."""
 
+    # Implements: REQ-o00062-B
     def test_rename_assertion_updates_body_text_and_hash(self):
         """After rename_assertion, body_text reflects new label and hash matches.
 
@@ -276,6 +284,7 @@ class TestRenameAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-B
     def test_rename_assertion_preserves_other_assertions(self):
         """After rename_assertion, other assertions remain unchanged."""
         graph = build_graph_with_body_text()
@@ -295,6 +304,7 @@ class TestRenameAssertionHashConsistency:
 class TestHashConsistencyAfterMultipleMutations:
     """Tests verifying hash consistency after sequences of mutations."""
 
+    # Implements: REQ-o00062-B
     def test_multiple_add_assertions_maintain_hash_consistency(self):
         """After multiple add_assertion calls, hash still matches body_text."""
         graph = build_graph_with_body_text()
@@ -314,6 +324,7 @@ class TestHashConsistencyAfterMultipleMutations:
         assert "C. Third assertion." in body_text
         assert "D. Fourth assertion." in body_text
 
+    # Implements: REQ-o00062-B
     def test_mixed_mutations_maintain_hash_consistency(self):
         """After mixed mutation types, hash still matches body_text."""
         graph = build_graph_with_body_text()
@@ -335,6 +346,7 @@ class TestHashConsistencyAfterMultipleMutations:
         assert "X." in body_text  # B was renamed to X
         assert "C. Third assertion." in body_text
 
+    # Implements: REQ-o00062-B
     def test_delete_then_add_maintains_hash_consistency(self):
         """After delete then add, hash still matches body_text."""
         graph = build_graph_with_body_text()
@@ -351,6 +363,7 @@ class TestHashConsistencyAfterMultipleMutations:
         expected_hash = calculate_hash(body_text)
         assert stored_hash == expected_hash
 
+    # Implements: REQ-o00062-B
     def test_update_all_assertions_maintains_hash_consistency(self):
         """After updating all assertions, hash still matches body_text."""
         graph = build_graph_with_body_text()

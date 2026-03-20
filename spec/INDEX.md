@@ -101,6 +101,13 @@
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | eb94434a |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | b322b22e |
 | REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 039007e7 |
+| REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
+| REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
+| REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | 3e0a2d00 |
+| REQ-d00216 | TraceGraph Deep Clone                                         | dev-graph-core.md       | a007d5ed |
+| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | a1e3915a |
+| REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
+| REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
 
 ## User Journeys
 

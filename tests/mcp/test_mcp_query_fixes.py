@@ -89,6 +89,7 @@ class TestLevelNormalization:
     config type keys (lowercase).
     """
 
+    # Implements: REQ-o00060-C
     def test_resolve_level_maps_uppercase(self):
         """resolve_level() maps uppercase 'PRD' to 'prd'."""
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
@@ -111,6 +112,7 @@ class TestLevelNormalization:
         assert resolver.resolve_level("OPS") == "ops"
         assert resolver.resolve_level("DEV") == "dev"
 
+    # Implements: REQ-o00060-C
     def test_resolve_level_maps_mixed_case(self):
         """resolve_level() maps mixed case 'Dev' to 'dev'."""
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
@@ -132,6 +134,7 @@ class TestLevelNormalization:
         assert resolver.resolve_level("Dev") == "dev"
         assert resolver.resolve_level("Prd") == "prd"
 
+    # Implements: REQ-o00060-C
     def test_resolve_level_unknown_returns_none(self):
         """resolve_level() returns None for unrecognized levels."""
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
@@ -151,6 +154,7 @@ class TestLevelNormalization:
         assert resolver.resolve_level("UNKNOWN") is None
         assert resolver.resolve_level("xyz") is None
 
+    # Implements: REQ-o00060-C
     def test_parser_normalizes_level(self):
         """Parser stores canonical config type key, not raw text."""
         from elspais.graph.parsers.requirement import RequirementParser
@@ -184,6 +188,7 @@ class TestLevelNormalization:
         data = parser._parse_requirement("REQ-p00001", "Test Requirement", text)
         assert data["level"] == "prd"
 
+    # Implements: REQ-o00061-C
     def test_count_by_level_with_config(self, graph_with_body):
         """count_by_level() uses config-derived keys when config is provided."""
         from elspais.graph.annotators import count_by_level
@@ -207,6 +212,7 @@ class TestLevelNormalization:
         # Deprecated excluded from active
         assert counts["active"]["dev"] == 0
 
+    # Implements: REQ-o00061-C
     def test_count_by_level_without_config(self, graph_with_body):
         """count_by_level() uses uppercase defaults when no config is provided."""
         from elspais.graph.annotators import count_by_level
@@ -218,6 +224,7 @@ class TestLevelNormalization:
         assert "OPS" in counts["all"]
         assert "DEV" in counts["all"]
 
+    # Implements: REQ-o00061-C
     def test_group_by_level_with_config(self, graph_with_body):
         """group_by_level() uses config-derived keys when config is provided."""
         from elspais.graph.annotators import group_by_level
@@ -250,6 +257,7 @@ class TestKeywordsWiring:
     Validates that build_graph() automatically populates keyword fields.
     """
 
+    # Implements: REQ-o00060-C
     def test_annotate_keywords_populates_fields(self):
         """annotate_keywords() sets keywords on nodes."""
         from elspais.graph.annotators import annotate_keywords
@@ -283,6 +291,7 @@ class TestBodyFieldSearch:
     Validates REQ-d00061-B: search supports field="body".
     """
 
+    # Implements: REQ-d00061-B
     def test_REQ_d00061_B_search_body_field(self, graph_with_body):
         """REQ-d00061-B: Search with field='body' matches body_text content."""
         pytest.importorskip("mcp")

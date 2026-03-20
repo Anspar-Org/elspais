@@ -407,6 +407,7 @@ class TestGetHierarchy:
 class TestRefreshGraph:
     """Tests for refresh_graph() tool."""
 
+    # Implements: REQ-o00060-B
     def test_refresh_rebuilds_graph(self, sample_graph):
         """Refresh should rebuild the graph from spec files."""
         pytest.importorskip("mcp")
@@ -421,6 +422,7 @@ class TestRefreshGraph:
             mock_build.assert_called_once()
             assert result["success"] is True
 
+    # Implements: REQ-o00060-B
     def test_refresh_full_clears_caches(self, sample_graph):
         """Refresh with full=True should clear all caches."""
         pytest.importorskip("mcp")
@@ -1136,6 +1138,7 @@ class TestGetProjectSummary:
         assert result["coverage"] == expected_coverage
         assert result["changes"] == expected_git
 
+    # Implements: REQ-o00060-A
     def test_returns_orphan_and_broken_counts(self, sample_graph):
         """Returns orphan and broken reference counts."""
         pytest.importorskip("mcp")
@@ -1147,6 +1150,7 @@ class TestGetProjectSummary:
         assert "broken_reference_count" in result
         assert "total_nodes" in result
 
+    # Implements: REQ-o00061-B
     def test_coverage_with_annotated_nodes(self, sample_graph):
         """Coverage stats work with annotated coverage metrics."""
         pytest.importorskip("mcp")
@@ -1282,6 +1286,7 @@ class TestRoundTripFidelity:
 
         return graph
 
+    # Implements: REQ-d00062-B
     def test_children_flat_list_with_kind(self, rich_graph):
         """Children should be a single flat list with 'kind' field."""
         pytest.importorskip("mcp")
@@ -1297,6 +1302,7 @@ class TestRoundTripFidelity:
         assert "assertion" in kinds
         assert "remainder" in kinds
 
+    # Implements: REQ-d00062-B
     def test_children_document_order(self, rich_graph):
         """Children should be in document order (by line number)."""
         pytest.importorskip("mcp")
@@ -1314,6 +1320,7 @@ class TestRoundTripFidelity:
         assert doc_children[0]["kind"] == "remainder"
         assert doc_children[0]["line"] == 14
 
+    # Implements: REQ-d00062-B
     def test_assertion_children_have_line(self, rich_graph):
         """Assertion children should include line number."""
         pytest.importorskip("mcp")
@@ -1332,6 +1339,7 @@ class TestRoundTripFidelity:
         b_node = next(a for a in assertions if a["label"] == "B")
         assert b_node["line"] == 21
 
+    # Implements: REQ-d00062-B
     def test_remainder_children_have_line(self, rich_graph):
         """Remainder (section) children should include line number."""
         pytest.importorskip("mcp")
@@ -1345,6 +1353,7 @@ class TestRoundTripFidelity:
             assert "line" in s
             assert s["line"] is not None
 
+    # Implements: REQ-d00062-B
     def test_parents_include_edge_kind(self, rich_graph):
         """Parent entries should include edge_kind (IMPLEMENTS or REFINES)."""
         pytest.importorskip("mcp")
@@ -1357,6 +1366,7 @@ class TestRoundTripFidelity:
         assert parent["id"] == "REQ-p00001"
         assert parent["edge_kind"] == "implements"
 
+    # Implements: REQ-d00062-B
     def test_parents_edge_kind_refines(self, rich_graph):
         """REFINES edge kind should be exposed on parent."""
         pytest.importorskip("mcp")
@@ -1378,6 +1388,7 @@ class TestRoundTripFidelity:
 class TestGetProjectSummaryChanges:
     """Tests for get_project_summary() change metrics (CUR-879)."""
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_D_project_summary_includes_change_metrics(self, sample_graph):
         """REQ-CUR879-D: get_project_summary returns non-zero change metrics."""
         pytest.importorskip("mcp")
@@ -1422,6 +1433,7 @@ class TestGetProjectSummaryChanges:
 class TestGetChangedRequirements:
     """Tests for get_changed_requirements() tool (CUR-879)."""
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_E_get_changed_requirements_returns_changed(self, sample_graph):
         """REQ-CUR879-E: get_changed_requirements returns changed requirements."""
         pytest.importorskip("mcp")
@@ -1469,6 +1481,7 @@ class TestGetChangedRequirements:
         assert "summary" in result
         assert result["summary"]["uncommitted"] >= 1
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_F_get_changed_requirements_empty_when_clean(self, sample_graph):
         """REQ-CUR879-F: get_changed_requirements returns empty when no changes."""
         pytest.importorskip("mcp")
@@ -1496,6 +1509,7 @@ class TestGetChangedRequirements:
 class TestAgentInstructions:
     """Tests for agent_instructions() tool."""
 
+    # Implements: REQ-o00061-A
     def test_agent_instructions_empty_when_no_rules(self, tmp_path):
         """agent_instructions returns empty list when no rules configured."""
         pytest.importorskip("mcp")
@@ -1507,6 +1521,7 @@ class TestAgentInstructions:
         assert result["instructions"] == []
         assert result["count"] == 0
 
+    # Implements: REQ-o00061-A
     def test_agent_instructions_returns_configured_rules(self, tmp_path):
         """agent_instructions returns rules with correct metadata and content."""
         pytest.importorskip("mcp")

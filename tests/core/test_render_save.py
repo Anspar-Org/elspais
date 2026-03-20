@@ -360,6 +360,7 @@ class TestParseDirtyFileDetection:
     Validates: REQ-p00002-A
     """
 
+    # Implements: REQ-d00132-A
     def test_parse_dirty_requirement_marks_file_dirty_without_mutations(self, tmp_path: Path):
         # Verifies: REQ-p00002-A
         """A FILE node whose REQUIREMENT child has parse_dirty=True appears in dirty set
@@ -384,6 +385,7 @@ class TestParseDirtyFileDetection:
             result["saved_count"] >= 1
         ), "Expected file to be saved because its requirement child has parse_dirty=True"
 
+    # Implements: REQ-d00132-A
     def test_no_parse_dirty_no_save_without_mutations(self, tmp_path: Path):
         # Verifies: REQ-p00002-A
         """Without parse_dirty or mutations, no file is saved."""

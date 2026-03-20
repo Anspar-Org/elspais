@@ -124,6 +124,7 @@ def multi_req_graph():
 class TestExtractKeywords:
     """Tests for the extract_keywords utility function."""
 
+    # Implements: REQ-d00215-A
     def test_extracts_words_from_text(self):
         """Extract meaningful words from text."""
         from elspais.graph.annotators import extract_keywords
@@ -135,6 +136,7 @@ class TestExtractKeywords:
         assert "authentication" in keywords
         assert "system" in keywords
 
+    # Implements: REQ-d00215-A
     def test_lowercases_keywords(self):
         """Keywords are normalized to lowercase."""
         from elspais.graph.annotators import extract_keywords
@@ -146,6 +148,7 @@ class TestExtractKeywords:
         assert "github" in keywords
         assert "jwt" in keywords
 
+    # Implements: REQ-d00215-A
     def test_filters_stopwords(self):
         """Common stopwords are filtered out but normative keywords preserved."""
         from elspais.graph.annotators import extract_keywords
@@ -159,6 +162,7 @@ class TestExtractKeywords:
         assert "validate" in keywords
         assert "input" in keywords
 
+    # Implements: REQ-d00215-A
     def test_filters_short_words(self):
         """Words shorter than 3 characters are filtered."""
         from elspais.graph.annotators import extract_keywords
@@ -172,6 +176,7 @@ class TestExtractKeywords:
         assert "be" not in keywords
         assert "or" not in keywords
 
+    # Implements: REQ-d00215-A
     def test_removes_punctuation(self):
         """Punctuation is stripped from words."""
         from elspais.graph.annotators import extract_keywords
@@ -183,6 +188,7 @@ class TestExtractKeywords:
         assert "jwt" in keywords or "jwt-based" in keywords
         assert "authentication" in keywords
 
+    # Implements: REQ-d00215-A
     def test_handles_empty_text(self):
         """Empty text returns empty list."""
         from elspais.graph.annotators import extract_keywords
@@ -190,6 +196,7 @@ class TestExtractKeywords:
         keywords = extract_keywords("")
         assert keywords == []
 
+    # Implements: REQ-d00215-A
     def test_deduplicates_keywords(self):
         """Duplicate keywords are removed."""
         from elspais.graph.annotators import extract_keywords
@@ -208,6 +215,7 @@ class TestExtractKeywords:
 class TestAnnotateKeywords:
     """Tests for the annotate_keywords graph annotator."""
 
+    # Implements: REQ-d00050-E
     def test_stores_keywords_in_node_content(self, simple_graph):
         """Keywords are stored in node._content["keywords"]."""
         from elspais.graph.annotators import annotate_keywords
@@ -219,6 +227,8 @@ class TestAnnotateKeywords:
 
         assert isinstance(keywords, list)
         assert len(keywords) > 0
+
+    # Implements: REQ-d00215-B
 
     def test_extracts_from_title(self, simple_graph):
         """Keywords include terms from requirement title."""
@@ -232,6 +242,8 @@ class TestAnnotateKeywords:
         # Title is "User Authentication System"
         assert "user" in keywords
         assert "authentication" in keywords
+
+    # Implements: REQ-d00215-B
 
     def test_extracts_from_assertions(self, simple_graph):
         """Keywords include terms from assertion text."""
@@ -250,6 +262,8 @@ class TestAnnotateKeywords:
         assert "jwt" in keywords
         assert "rsa" in keywords
 
+    # Implements: REQ-d00215-C
+
     def test_annotates_all_node_kinds(self, simple_graph):
         """All node kinds get keywords, including assertions."""
         from elspais.graph.annotators import annotate_keywords
@@ -264,6 +278,8 @@ class TestAnnotateKeywords:
         assert isinstance(keywords, list)
         assert len(keywords) > 0
         assert "oauth2" in keywords or "authentication" in keywords
+
+    # Implements: REQ-d00215-B
 
     def test_handles_requirements_without_assertions(self, multi_req_graph):
         """Requirements without assertions still get keywords from title."""
@@ -289,6 +305,8 @@ class TestAnnotateKeywords:
 class TestFindByKeywords:
     """Tests for keyword-based requirement search."""
 
+    # Implements: REQ-d00215-D
+
     def test_finds_requirements_with_keyword(self, multi_req_graph):
         """Find requirements containing a specific keyword."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
@@ -300,6 +318,8 @@ class TestFindByKeywords:
         result_ids = [n.id for n in results]
         assert "REQ-o00001" in result_ids
         assert "REQ-d00001" in result_ids
+
+    # Implements: REQ-d00215-D
 
     def test_finds_requirements_with_multiple_keywords(self, multi_req_graph):
         """Find requirements matching multiple keywords (AND logic)."""
@@ -313,6 +333,8 @@ class TestFindByKeywords:
         assert "REQ-d00001" in result_ids
         assert len(result_ids) == 1
 
+    # Implements: REQ-d00215-D
+
     def test_returns_empty_for_no_match(self, multi_req_graph):
         """Returns empty list when no requirements match."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
@@ -321,6 +343,8 @@ class TestFindByKeywords:
         results = find_by_keywords(multi_req_graph, ["nonexistent"])
 
         assert results == []
+
+    # Implements: REQ-d00215-D
 
     def test_keyword_matching_is_case_insensitive(self, multi_req_graph):
         """Keyword search is case-insensitive."""
@@ -343,6 +367,8 @@ class TestFindByKeywords:
 class TestCollectAllKeywords:
     """Tests for collecting all keywords from a graph."""
 
+    # Implements: REQ-d00215-E
+
     def test_collects_unique_keywords(self, multi_req_graph):
         """Collect all unique keywords from the graph."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords
@@ -355,6 +381,8 @@ class TestCollectAllKeywords:
         assert "oauth" in all_keywords
         assert "github" in all_keywords
 
+    # Implements: REQ-d00215-E
+
     def test_returns_sorted_keywords(self, multi_req_graph):
         """Keywords are returned in sorted order."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords
@@ -362,8 +390,10 @@ class TestCollectAllKeywords:
         annotate_keywords(multi_req_graph)
         all_keywords = collect_all_keywords(multi_req_graph)
 
+        # Implements: REQ-d00215-E
         assert all_keywords == sorted(all_keywords)
 
+    # Implements: REQ-d00215-E
     def test_no_duplicates(self, multi_req_graph):
         """Each keyword appears only once."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords

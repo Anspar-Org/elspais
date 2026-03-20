@@ -85,6 +85,7 @@ class TestRenameNode:
         assert graph.find_by_id("REQ-p00099") is not None
         assert graph.find_by_id("REQ-p00099").id == "REQ-p00099"
 
+    # Implements: REQ-o00062-A
     def test_rename_not_found(self):
         """Renaming non-existent node raises KeyError."""
         graph = build_simple_graph()
@@ -92,6 +93,7 @@ class TestRenameNode:
         with pytest.raises(KeyError, match="not found"):
             graph.rename_node("REQ-nonexistent", "REQ-p00099")
 
+    # Implements: REQ-o00062-A
     def test_rename_conflict(self):
         """Renaming to existing ID raises ValueError."""
         graph = build_hierarchy_graph()
@@ -99,6 +101,7 @@ class TestRenameNode:
         with pytest.raises(ValueError, match="already exists"):
             graph.rename_node("REQ-p00001", "REQ-p00002")
 
+    # Implements: REQ-o00062-A
     def test_rename_updates_assertions(self):
         """Renaming a requirement also updates its assertion IDs."""
         graph = build_graph_with_assertions()
@@ -117,6 +120,7 @@ class TestRenameNode:
         assert graph.find_by_id("REQ-p00099-A") is not None
         assert graph.find_by_id("REQ-p00099-B") is not None
 
+    # Implements: REQ-o00062-A
     def test_rename_preserves_title(self):
         """Renaming preserves the node's title."""
         graph = build_simple_graph()
@@ -128,6 +132,7 @@ class TestRenameNode:
         renamed = graph.find_by_id("REQ-p00099")
         assert renamed.get_label() == original_title
 
+    # Implements: REQ-o00062-E
     def test_rename_logs_mutation(self):
         """Rename operation is logged."""
         graph = build_simple_graph()
@@ -139,6 +144,7 @@ class TestRenameNode:
         entry = graph.mutation_log.last()
         assert entry.operation == "rename_node"
 
+    # Implements: REQ-o00062-G
     def test_rename_undo(self):
         """Undo restores original node ID."""
         graph = build_simple_graph()
@@ -168,6 +174,7 @@ class TestUpdateTitle:
         node = graph.find_by_id("REQ-p00001")
         assert node.get_label() == "New Title"
 
+    # Implements: REQ-o00062-A
     def test_update_title_not_found(self):
         """Updating title of non-existent node raises KeyError."""
         graph = build_simple_graph()
@@ -175,6 +182,7 @@ class TestUpdateTitle:
         with pytest.raises(KeyError, match="not found"):
             graph.update_title("REQ-nonexistent", "New Title")
 
+    # Implements: REQ-o00062-E
     def test_update_title_logs_mutation(self):
         """Title update is logged."""
         graph = build_simple_graph()
@@ -185,6 +193,7 @@ class TestUpdateTitle:
         entry = graph.mutation_log.last()
         assert entry.operation == "update_title"
 
+    # Implements: REQ-o00062-G
     def test_update_title_undo(self):
         """Undo restores original title."""
         graph = build_simple_graph()
@@ -213,6 +222,7 @@ class TestChangeStatus:
         node = graph.find_by_id("REQ-p00001")
         assert node.get_field("status") == "Deprecated"
 
+    # Implements: REQ-o00062-A
     def test_change_status_not_found(self):
         """Changing status of non-existent node raises KeyError."""
         graph = build_simple_graph()
@@ -220,6 +230,7 @@ class TestChangeStatus:
         with pytest.raises(KeyError, match="not found"):
             graph.change_status("REQ-nonexistent", "Active")
 
+    # Implements: REQ-o00062-E
     def test_change_status_logs_mutation(self):
         """Status change is logged."""
         graph = build_simple_graph()
@@ -230,6 +241,7 @@ class TestChangeStatus:
         entry = graph.mutation_log.last()
         assert entry.operation == "change_status"
 
+    # Implements: REQ-o00062-G
     def test_change_status_undo(self):
         """Undo restores original status."""
         graph = build_simple_graph()
@@ -263,6 +275,7 @@ class TestAddRequirement:
         assert node.get_field("level") == "DEV"
         assert node.get_field("status") == "Draft"  # Default
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_with_parent(self):
         """Add with parent creates linked node."""
         graph = build_simple_graph()
@@ -281,6 +294,7 @@ class TestAddRequirement:
         assert parent.has_child(child)
         assert child.has_parent(parent)
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_with_custom_status(self):
         """Add can specify custom status."""
         graph = build_simple_graph()
@@ -295,6 +309,7 @@ class TestAddRequirement:
         node = graph.find_by_id("REQ-p00099")
         assert node.get_field("status") == "Active"
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_computes_hash(self):
         """Add computes an initial hash."""
         graph = build_simple_graph()
@@ -309,6 +324,7 @@ class TestAddRequirement:
         assert node.get_field("hash") is not None
         assert len(node.get_field("hash")) == 8  # 8-char hash
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_duplicate_raises(self):
         """Adding duplicate ID raises ValueError."""
         graph = build_simple_graph()
@@ -320,6 +336,7 @@ class TestAddRequirement:
                 level="PRD",
             )
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_missing_parent_raises(self):
         """Adding with non-existent parent raises KeyError."""
         graph = build_simple_graph()
@@ -332,6 +349,7 @@ class TestAddRequirement:
                 parent_id="REQ-nonexistent",
             )
 
+    # Implements: REQ-o00062-E
     def test_add_requirement_logs_mutation(self):
         """Add operation is logged."""
         graph = build_simple_graph()
@@ -346,6 +364,7 @@ class TestAddRequirement:
         entry = graph.mutation_log.last()
         assert entry.operation == "add_requirement"
 
+    # Implements: REQ-o00062-G
     def test_add_requirement_undo(self):
         """Undo removes the added node."""
         graph = build_simple_graph()
@@ -363,6 +382,7 @@ class TestAddRequirement:
         assert graph.find_by_id("REQ-p00099") is None
         assert graph.node_count() == original_count
 
+    # Implements: REQ-o00062-A
     def test_add_requirement_without_parent_becomes_root(self):
         """Adding without parent makes node a root."""
         graph = build_simple_graph()
@@ -391,6 +411,7 @@ class TestDeleteRequirement:
         assert entry.target_id == "REQ-p00001"
         assert graph.find_by_id("REQ-p00001") is None
 
+    # Implements: REQ-o00062-A
     def test_delete_requirement_not_found(self):
         """Deleting non-existent node raises KeyError."""
         graph = build_simple_graph()
@@ -398,6 +419,7 @@ class TestDeleteRequirement:
         with pytest.raises(KeyError, match="not found"):
             graph.delete_requirement("REQ-nonexistent")
 
+    # Implements: REQ-o00062-A
     def test_delete_requirement_preserves_in_deleted_nodes(self):
         """Deleted node is preserved in _deleted_nodes."""
         graph = build_simple_graph()
@@ -409,6 +431,7 @@ class TestDeleteRequirement:
         assert len(deleted) == 1
         assert deleted[0].id == "REQ-p00001"
 
+    # Implements: REQ-o00062-A
     def test_delete_requirement_removes_from_roots(self):
         """Deleting a root removes it from roots list."""
         graph = build_simple_graph()
@@ -418,6 +441,7 @@ class TestDeleteRequirement:
 
         assert not graph.has_root("REQ-p00001")
 
+    # Implements: REQ-o00062-A
     def test_delete_requirement_orphans_children(self):
         """Deleting a parent orphans its non-assertion children."""
         graph = build_hierarchy_graph()
@@ -427,6 +451,7 @@ class TestDeleteRequirement:
         # Child should now be an orphan
         assert "REQ-p00002" in graph._orphaned_ids
 
+    # Implements: REQ-o00062-A
     def test_delete_requirement_deletes_assertions(self):
         """Deleting a requirement also deletes its assertions."""
         graph = build_graph_with_assertions()
@@ -445,6 +470,7 @@ class TestDeleteRequirement:
         assert "REQ-p00001-A" in deleted_ids
         assert "REQ-p00001-B" in deleted_ids
 
+    # Implements: REQ-o00062-E
     def test_delete_requirement_logs_mutation(self):
         """Delete operation is logged."""
         graph = build_simple_graph()
@@ -455,6 +481,7 @@ class TestDeleteRequirement:
         entry = graph.mutation_log.last()
         assert entry.operation == "delete_requirement"
 
+    # Implements: REQ-o00062-G
     def test_delete_requirement_undo(self):
         """Undo restores the deleted node."""
         graph = build_simple_graph()
@@ -469,6 +496,7 @@ class TestDeleteRequirement:
         assert node is not None
         assert node.get_label() == original_label
 
+    # Implements: REQ-o00062-E
     def test_delete_records_before_state(self):
         """Delete entry records full before state for undo."""
         graph = build_simple_graph()
@@ -484,6 +512,7 @@ class TestDeleteRequirement:
 class TestMultipleMutations:
     """Tests for sequences of mutations."""
 
+    # Implements: REQ-o00062-E
     def test_multiple_mutations_logged(self):
         """Multiple mutations are all logged in order."""
         graph = build_simple_graph()
@@ -498,6 +527,7 @@ class TestMultipleMutations:
         assert entries[1].operation == "update_title"
         assert entries[2].operation == "change_status"
 
+    # Implements: REQ-o00062-G
     def test_undo_multiple_in_reverse(self):
         """Multiple undos reverse operations in order."""
         graph = build_simple_graph()
@@ -511,6 +541,7 @@ class TestMultipleMutations:
         graph.undo_last()  # Undo Title 1
         assert graph.find_by_id("REQ-p00001").get_label() == "Test Requirement"
 
+    # Implements: REQ-o00062-G
     def test_undo_to_specific_mutation(self):
         """undo_to reverts to specific point in history."""
         graph = build_simple_graph()

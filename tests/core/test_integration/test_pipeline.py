@@ -28,6 +28,7 @@ def create_parser_registry(resolver) -> ParserRegistry:
 class TestFullPipeline:
     """Tests for the complete parsing pipeline."""
 
+    # Implements: REQ-o00050-A
     def test_pipeline_parses_all_requirements(self, integration_spec_dir):
         """Verify all requirements are parsed from spec files."""
         # Load config
@@ -59,6 +60,7 @@ class TestFullPipeline:
         assert graph.find_by_id("REQ-o00003") is not None
         assert graph.find_by_id("REQ-o00004") is not None
 
+    # Implements: REQ-o00050-D
     def test_pipeline_creates_assertions(self, integration_spec_dir):
         """Verify assertions are created as child nodes."""
         config_path = find_config_file(integration_spec_dir)
@@ -86,6 +88,7 @@ class TestFullPipeline:
         assert "REQ-p00001-B" in assertion_ids
         assert "REQ-p00001-C" in assertion_ids
 
+    # Implements: REQ-o00050-C
     def test_pipeline_links_implements(self, integration_spec_dir):
         """Verify implements relationships are properly linked."""
         config_path = find_config_file(integration_spec_dir)
@@ -118,6 +121,7 @@ class TestFullPipeline:
         else:
             raise AssertionError("Expected edge from REQ-p00001 to REQ-o00001 not found")
 
+    # Implements: REQ-d00071-A
     def test_pipeline_identifies_roots(self, integration_spec_dir):
         """Verify root nodes are correctly identified."""
         config_path = find_config_file(integration_spec_dir)
@@ -143,6 +147,7 @@ class TestFullPipeline:
         assert not graph.has_root("REQ-o00002")
         assert not graph.has_root("REQ-o00004")
 
+    # Implements: REQ-o00050-A
     def test_pipeline_node_counts(self, integration_spec_dir):
         """Verify expected node counts by type."""
         config_path = find_config_file(integration_spec_dir)

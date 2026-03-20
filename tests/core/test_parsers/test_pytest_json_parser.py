@@ -6,6 +6,7 @@ from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 class TestPytestJSONParserBasic:
     """Basic tests for PytestJSONParser."""
 
+    # Implements: REQ-d00082-L
     def test_parse_passing_test(self):
         """Parses a passing test case."""
         json_content = """
@@ -28,6 +29,7 @@ class TestPytestJSONParserBasic:
         assert results[0]["name"] == "test_login_REQ_p00001"
         assert "REQ-p00001" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-L
     def test_parse_failing_test(self):
         """Parses a failing test case."""
         json_content = """
@@ -52,6 +54,7 @@ class TestPytestJSONParserBasic:
         assert results[0]["status"] == "failed"
         assert "AssertionError" in results[0]["message"]
 
+    # Implements: REQ-d00082-L
     def test_parse_skipped_test(self):
         """Parses a skipped test case."""
         json_content = """
@@ -72,6 +75,7 @@ class TestPytestJSONParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "skipped"
 
+    # Implements: REQ-d00082-L
     def test_parse_error_test(self):
         """Parses a test with error."""
         json_content = """
@@ -95,6 +99,7 @@ class TestPytestJSONParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "error"
 
+    # Implements: REQ-d00082-L
     def test_parse_multiple_tests(self):
         """Parses multiple test cases."""
         json_content = """
@@ -116,6 +121,7 @@ class TestPytestJSONParserBasic:
 class TestPytestJSONParserReqExtraction:
     """Tests for requirement ID extraction."""
 
+    # Implements: REQ-d00082-G
     def test_extracts_req_from_name(self):
         """Extracts REQ ID from test name."""
         json_content = """
@@ -135,6 +141,7 @@ class TestPytestJSONParserReqExtraction:
 
         assert "REQ-p00001" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-G
     def test_extracts_multiple_reqs(self):
         """Extracts multiple REQ IDs from test name."""
         json_content = """
@@ -155,6 +162,7 @@ class TestPytestJSONParserReqExtraction:
         assert "REQ-p00001" in results[0]["verifies"]
         assert "REQ-o00002" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-G
     def test_extracts_assertion_refs(self):
         """Extracts assertion references like REQ-p00001-A."""
         json_content = """
@@ -174,6 +182,7 @@ class TestPytestJSONParserReqExtraction:
 
         assert "REQ-p00001-A" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-L
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
         json_content = """
@@ -198,6 +207,7 @@ class TestPytestJSONParserReqExtraction:
 class TestPytestJSONParserEdgeCases:
     """Edge case tests for PytestJSONParser."""
 
+    # Implements: REQ-d00082-L
     def test_invalid_json_returns_empty(self):
         """Returns empty list for invalid JSON."""
         parser = PytestJSONParser()
@@ -206,6 +216,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results == []
 
+    # Implements: REQ-d00082-L
     def test_empty_tests_array(self):
         """Handles empty tests array."""
         json_content = '{"tests": []}'
@@ -215,6 +226,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results == []
 
+    # Implements: REQ-d00082-L
     def test_xfailed_maps_to_skipped(self):
         """Maps xfailed (expected failure) to skipped."""
         json_content = """
@@ -234,6 +246,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results[0]["status"] == "skipped"
 
+    # Implements: REQ-d00082-L
     def test_xpassed_maps_to_passed(self):
         """Maps xpassed (unexpected pass) to passed."""
         json_content = """
@@ -253,6 +266,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results[0]["status"] == "passed"
 
+    # Implements: REQ-d00082-L
     def test_simple_list_format(self):
         """Handles simple list format."""
         json_content = """
@@ -269,6 +283,7 @@ class TestPytestJSONParserEdgeCases:
         assert results[0]["status"] == "passed"
         assert results[1]["status"] == "failed"
 
+    # Implements: REQ-d00082-L
     def test_nodeid_with_class(self):
         """Handles nodeid with class name."""
         json_content = """
@@ -293,6 +308,7 @@ class TestPytestJSONParserEdgeCases:
 class TestPytestJSONParserCanParse:
     """Tests for can_parse method."""
 
+    # Implements: REQ-d00082-L
     def test_can_parse_pytest_json(self):
         """Returns True for pytest JSON files."""
         from pathlib import Path
@@ -303,6 +319,7 @@ class TestPytestJSONParserCanParse:
         assert parser.can_parse(Path("test-results.json")) is True
         assert parser.can_parse(Path("results.json")) is True
 
+    # Implements: REQ-d00082-L
     def test_cannot_parse_non_json(self):
         """Returns False for non-JSON files."""
         from pathlib import Path

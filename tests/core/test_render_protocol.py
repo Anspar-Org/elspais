@@ -151,6 +151,7 @@ class TestRenderDispatch:
         result = render_node(rem)
         assert result == "hello world"
 
+    # Implements: REQ-d00131-D
     def test_render_remainder_kind_raises(self):
         """render_node() should handle all known kinds gracefully."""
         from elspais.graph.render import render_node
@@ -591,6 +592,7 @@ class TestRenderRoundTrip:
         graph = build_graph(repo_root=tmp_path)
         return graph, spec_dir / "test.md", content
 
+    # Implements: REQ-d00131-I
     def test_render_roundtrip_line_identical(self, built_graph):
         """Rendered output matches original file line-by-line (except hash/canonical header)."""
         from elspais.graph.render import render_file

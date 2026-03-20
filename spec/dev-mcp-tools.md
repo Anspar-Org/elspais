@@ -458,3 +458,25 @@ Without federation-aware config access, all MCP operations use the root repo's c
 
 *End* *MCP Federation Support* | **Hash**: ccc0ca12
 ---
+
+## REQ-d00214: MCP Server Install/Uninstall CLI Commands
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00060
+
+## Assertions
+
+A. The mcp install subcommand SHALL register the elspais MCP server with the Claude CLI, supporting both project-scope and user-scope modes.
+
+B. The mcp uninstall subcommand SHALL remove the elspais MCP server registration from the Claude CLI.
+
+C. Install and uninstall SHALL detect the Claude CLI binary and produce a clear error if not found.
+
+D. Install SHALL detect the elspais binary and produce a clear error if not found.
+
+E. Install SHALL support Claude Desktop configuration with platform-specific config paths (Linux, macOS) and an unsupported-platform error for others.
+
+F. The --desktop flag SHALL write or remove the MCP server entry in the Claude Desktop JSON config file.
+
+G. All operations SHALL produce a clear error when the underlying CLI command fails.
+
+*End* *MCP Server Install/Uninstall CLI Commands* | **Hash**: f1518d2c

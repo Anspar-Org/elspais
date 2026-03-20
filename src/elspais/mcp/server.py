@@ -1849,6 +1849,169 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
     }
 
 
+_FAQ_ENTRIES: list[dict[str, str]] = [
+    {
+        "topic": "linking",
+        "question": "How do I link a test to a requirement?",
+        "answer": (
+            "Add a comment above the test function at column 0 (no indentation):\n"
+            "\n"
+            "  # Implements: REQ-d00001-A\n"
+            "  def test_hashing(self):\n"
+            "      ...\n"
+            "\n"
+            "Any keyword works: Implements, Tests, Validates, Refines.\n"
+            "All create VERIFIES edges in the traceability graph.\n"
+            "The comment character (#, //, --) MUST start at column 0."
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "Why is my test still showing as unlinked?",
+        "answer": (
+            "Common causes:\n"
+            "1. The comment is indented (must start at column 0)\n"
+            "2. The requirement ID doesn't exist in any spec file\n"
+            "3. The graph hasn't been refreshed (run refresh_graph(full=True))\n"
+            "4. The file isn't in a configured test directory (check scanning.test.directories)"
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "Can I use # Implements: in test files or only # Tests:?",
+        "answer": (
+            "Both work identically in test files. The scanner recognizes all reference\n"
+            "keywords (Implements, Tests, Validates, Refines) and always creates VERIFIES\n"
+            "edges for test files. The keyword choice is purely stylistic."
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "How do I link a test to multiple assertions?",
+        "answer": (
+            "Use multi-assertion syntax with + separator:\n"
+            "\n"
+            "  # Implements: REQ-d00001-A+B+C\n"
+            "\n"
+            "This expands to REQ-d00001-A, REQ-d00001-B, REQ-d00001-C.\n"
+            "Or list them comma-separated:\n"
+            "\n"
+            "  # Implements: REQ-d00001-A, REQ-d00002-B"
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "How do file-level vs function-level links work?",
+        "answer": (
+            "A comment placed before the first function definition applies to ALL\n"
+            "test functions in the file (file-level default).\n"
+            "A comment placed above a specific function applies only to that function.\n"
+            "Function-level links override file-level defaults."
+        ),
+    },
+    {
+        "topic": "coverage",
+        "question": "What is the difference between direct and indirect coverage?",
+        "answer": (
+            "Direct coverage: a test explicitly references a requirement via comment\n"
+            "or function name.\n"
+            "Indirect coverage: a test covers code that implements a requirement,\n"
+            "creating an inferred coverage chain (test -> code -> requirement).\n"
+            "Both contribute to the coverage percentage."
+        ),
+    },
+    {
+        "topic": "coverage",
+        "question": "Why does coverage show less than I expect?",
+        "answer": (
+            "Coverage is calculated per-assertion, not per-requirement.\n"
+            "A requirement with 5 assertions needs all 5 covered.\n"
+            "Check with get_test_coverage(req_id) to see which assertions are covered."
+        ),
+    },
+    {
+        "topic": "mutation",
+        "question": "How do I persist changes made with mutate_* tools?",
+        "answer": (
+            "All mutate_* tools modify the in-memory graph only.\n"
+            "To persist to spec files, call save_mutations().\n"
+            "Use save_mutations(save_branch=True) to create a safety branch first.\n"
+            "Use undo_last_mutation() or undo_to_mutation(id) to revert mistakes."
+        ),
+    },
+    {
+        "topic": "health",
+        "question": "What does 'structural orphan' mean vs 'unlinked'?",
+        "answer": (
+            "Structural orphan: a node with no FILE parent (not contained in any file).\n"
+            "This usually indicates a graph build error.\n"
+            "Unlinked: a CODE or TEST node that exists in a file but has no traceability\n"
+            "edge to any requirement. This is normal for utility code/tests."
+        ),
+    },
+    {
+        "topic": "assertions",
+        "question": "What is the assertion format?",
+        "answer": (
+            "Assertions are lettered sub-items of a requirement:\n"
+            "\n"
+            "  **A.** The system SHALL do X.\n"
+            "  **B.** The system SHALL do Y.\n"
+            "\n"
+            "Labels are uppercase letters (A-Z). Use SHALL for mandatory behavior.\n"
+            "Reference them as REQ-d00001-A, REQ-d00001-B, etc."
+        ),
+    },
+]
+
+
+def _get_faq(topic: str) -> dict[str, Any]:
+    """Return FAQ entries, optionally filtered by topic keyword."""
+    if topic:
+        needle = topic.lower()
+        entries = [
+            e
+            for e in _FAQ_ENTRIES
+            if needle in e["topic"]
+            or needle in e["question"].lower()
+            or needle in e["answer"].lower()
+        ]
+    else:
+        entries = list(_FAQ_ENTRIES)
+
+    return {
+        "entries": entries,
+        "count": len(entries),
+        "filter": topic or "(all)",
+    }
+
+
+def _get_docs(topic: str) -> dict[str, Any]:
+    """Return documentation content for a topic, or list available topics."""
+    from elspais.utilities.docs_loader import get_available_topics, load_topic
+
+    available = get_available_topics()
+
+    if not topic:
+        return {
+            "topics": available,
+            "count": len(available),
+            "hint": "Call docs(topic) with a topic name to read its content.",
+        }
+
+    content = load_topic(topic)
+    if content is None:
+        return {
+            "error": f"Topic '{topic}' not found",
+            "available_topics": available,
+        }
+
+    return {
+        "topic": topic,
+        "content": content,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Mutation Tool Functions (REQ-o00062)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2366,7 +2529,8 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
         kind: Optional filter — "test" or "code". If None, returns both.
 
     Returns:
-        Dictionary with unlinked nodes grouped by kind with counts.
+        Dictionary with counts by file and kind, plus a compact list of
+        (source, label) pairs.
     """
     kinds_to_check: list[NodeKind] = []
     if kind is None:
@@ -2376,33 +2540,27 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
     elif kind == "code":
         kinds_to_check = [NodeKind.CODE]
 
-    unlinked: list[dict[str, Any]] = []
-    by_kind: dict[str, list[dict[str, Any]]] = {}
+    by_file: dict[str, int] = {}
+    by_kind_count: dict[str, int] = {}
+    total = 0
 
     for nk in kinds_to_check:
         for node in graph.iter_unlinked(nk):
-            entry: dict[str, Any] = {
-                "id": node.id,
-                "kind": node.kind.value,
-                "label": node.get_label(),
-            }
-            _fn = node.file_node()
-            _line = node.get_field("parse_line")
-            if _fn and _line is not None:
-                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
-            elif _fn:
-                entry["source"] = _fn.get_field("relative_path")
-            unlinked.append(entry)
-
+            total += 1
             kind_name = node.kind.value
-            if kind_name not in by_kind:
-                by_kind[kind_name] = []
-            by_kind[kind_name].append(entry)
+            by_kind_count[kind_name] = by_kind_count.get(kind_name, 0) + 1
+
+            _fn = node.file_node()
+            file_path = _fn.get_field("relative_path") if _fn else "unknown"
+            by_file[file_path] = by_file.get(file_path, 0) + 1
+
+    # Sort files by count descending for quick triage
+    sorted_files = sorted(by_file.items(), key=lambda x: -x[1])
 
     return {
-        "unlinked": unlinked,
-        "count": len(unlinked),
-        "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
+        "count": total,
+        "by_kind": by_kind_count,
+        "by_file": [{"file": f, "count": c} for f, c in sorted_files],
     }
 
 
@@ -4404,6 +4562,33 @@ def create_server(
         conventions for assertion format, keyword style, hash handling, etc.
         """
         return _get_agent_instructions(_state["config"], _state["working_dir"])
+
+    @mcp.tool()
+    def faq(topic: str = "") -> dict[str, Any]:
+        """Frequently asked questions about elspais concepts and usage.
+
+        Use when: you need guidance on how something works (linking, coverage,
+        assertions, etc.) or the user asks a "how do I…" question.
+
+        Args:
+            topic: Optional keyword to filter (e.g., "linking", "test", "coverage").
+                   If empty, returns all FAQ entries.
+        """
+        return _get_faq(topic)
+
+    @mcp.tool()
+    def docs(topic: str = "") -> dict[str, Any]:
+        """Browse elspais documentation topics.
+
+        Use when: you need detailed guidance on a specific feature — linking,
+        health checks, configuration, assertions, etc.  Returns the full
+        docs/cli/*.md content for the requested topic.
+
+        Args:
+            topic: Topic name (e.g., "linking", "health", "config", "format").
+                   If empty, returns the list of available topics.
+        """
+        return _get_docs(topic)
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)

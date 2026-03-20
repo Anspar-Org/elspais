@@ -595,6 +595,7 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+# Refines: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 

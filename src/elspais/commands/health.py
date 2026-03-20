@@ -1489,7 +1489,14 @@ def check_test_coverage(
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check test coverage statistics."""
+    """Check test coverage statistics.
+
+    Uses RollupMetrics computed by annotate_coverage() to report three
+    distinct coverage dimensions:
+    - test: assertions verified by TEST nodes (direct_tested, includes rollup)
+    - uat: assertions validated by USER_JOURNEY nodes (uat_covered)
+    - overall: combined coverage_pct (test + code + rollup, excludes INDIRECT)
+    """
     from elspais.graph import NodeKind
 
     if exclude_status is None:
@@ -1497,41 +1504,94 @@ def check_test_coverage(
 
         exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    req_count = sum(
-        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in exclude_status
-    )
+    req_count = 0
+    test_covered = 0
+    uat_covered = 0
+    overall_covered = 0
 
-    # Count requirements with at least one TEST child
-    covered_reqs = set()
-    for node in graph.nodes_by_kind(NodeKind.TEST):
-        for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT and parent.status not in exclude_status:
-                covered_reqs.add(parent.id)
-            elif parent.kind == NodeKind.ASSERTION:
-                for grandparent in parent.iter_parents():
-                    if (
-                        grandparent.kind == NodeKind.REQUIREMENT
-                        and grandparent.status not in exclude_status
-                    ):
-                        covered_reqs.add(grandparent.id)
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            continue
+        req_count += 1
+        metrics = node.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        if metrics.direct_tested > 0:
+            test_covered += 1
+        if metrics.uat_covered > 0:
+            uat_covered += 1
+        if metrics.coverage_pct > 0:
+            overall_covered += 1
 
-    coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
+    test_pct = (test_covered / req_count * 100) if req_count > 0 else 0
+    overall_pct = (overall_covered / req_count * 100) if req_count > 0 else 0
+    note = _excluded_note(graph, exclude_status)
+
     note = _excluded_note(graph, exclude_status)
 
     return HealthCheck(
         name="tests.coverage",
         passed=True,  # Informational only
         message=(
-            f"{len(covered_reqs)}/{req_count} requirements "
-            f"have test references ({coverage_pct:.1f}%){note}"
+            f"{test_covered}/{req_count} requirements "
+            f"have test coverage ({test_pct:.1f}%){note}"
         ),
         category="tests",
         severity="info",
         details={
             "test_nodes": test_count,
-            "requirements_with_tests": len(covered_reqs),
+            "requirements_with_tests": test_covered,
+            "requirements_with_any_coverage": overall_covered,
             "total_requirements": req_count,
-            "coverage_percent": round(coverage_pct, 1),
+            "test_coverage_percent": round(test_pct, 1),
+            "overall_coverage_percent": round(overall_pct, 1),
+        },
+    )
+
+
+def check_uat_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
+    """Check UAT (User Acceptance Test) coverage via journey validation.
+
+    Reports requirements validated by USER_JOURNEY nodes through
+    Validates: edges (test -> journey -> requirement chain).
+    """
+    from elspais.graph import NodeKind
+
+    if exclude_status is None:
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
+
+    req_count = 0
+    uat_covered = 0
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            continue
+        req_count += 1
+        metrics = node.get_metric("rollup_metrics")
+        if metrics is not None and metrics.uat_covered > 0:
+            uat_covered += 1
+
+    uat_pct = (uat_covered / req_count * 100) if req_count > 0 else 0
+    note = _excluded_note(graph, exclude_status)
+
+    return HealthCheck(
+        name="uat.coverage",
+        passed=True,  # Informational only
+        message=(
+            f"{uat_covered}/{req_count} requirements " f"have UAT coverage ({uat_pct:.1f}%){note}"
+        ),
+        category="uat",
+        severity="info",
+        details={
+            "requirements_with_uat": uat_covered,
+            "total_requirements": req_count,
+            "uat_coverage_percent": round(uat_pct, 1),
         },
     )
 
@@ -1579,14 +1639,128 @@ def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Check UAT results from a journey results CSV file.
+
+    Expects a CSV file with columns: journey_id, status (pass/fail/skip).
+    The file path is configured via scanning.journey.results_file in .elspais.toml,
+    defaulting to 'uat-results.csv' in the repository root.
+    """
+    cfg = config or {}
+    journey_cfg = cfg.get("scanning", {}).get("journey", {})
+    results_file = journey_cfg.get("results_file", "uat-results.csv")
+
+    results_path = Path(results_file)
+    if not results_path.is_absolute():
+        git_root = cfg.get("_git_root")
+        if git_root:
+            results_path = Path(git_root) / results_path
+        elif not results_path.exists():
+            # Try cwd
+            results_path = Path.cwd() / results_file
+
+    if not results_path.exists():
+        return HealthCheck(
+            name="uat.results",
+            passed=True,
+            message=f"No UAT results file found ({results_file})",
+            category="uat",
+            severity="info",
+        )
+
+    import csv
+
+    passed = 0
+    failed = 0
+    skipped = 0
+    failures: list[str] = []
+
+    try:
+        with open(results_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                jid = row.get("journey_id", row.get("id", "")).strip()
+                status = row.get("status", "").strip().lower()
+                if status in ("pass", "passed"):
+                    passed += 1
+                elif status in ("fail", "failed"):
+                    failed += 1
+                    failures.append(jid)
+                elif status in ("skip", "skipped"):
+                    skipped += 1
+    except Exception as e:
+        return HealthCheck(
+            name="uat.results",
+            passed=False,
+            message=f"Error reading UAT results: {e}",
+            category="uat",
+            severity="warning",
+        )
+
+    total = passed + failed + skipped
+    if total == 0:
+        return HealthCheck(
+            name="uat.results",
+            passed=True,
+            message=f"UAT results file is empty ({results_file})",
+            category="uat",
+            severity="info",
+        )
+
+    pass_rate = (passed / total * 100) if total > 0 else 0
+
+    if failed > 0:
+        findings = [HealthFinding(message=f"Failed: {jid}", node_id=jid) for jid in failures]
+        return HealthCheck(
+            name="uat.results",
+            passed=False,
+            message=(
+                f"UAT failures: {passed} passed, {failed} failed, "
+                f"{skipped} skipped ({pass_rate:.1f}% pass rate)"
+            ),
+            category="uat",
+            severity="warning",
+            details={
+                "passed": passed,
+                "failed": failed,
+                "skipped": skipped,
+                "pass_rate": round(pass_rate, 1),
+            },
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="uat.results",
+        passed=True,
+        message=f"All UAT passing: {passed} passed, {skipped} skipped",
+        category="uat",
+        details={
+            "passed": passed,
+            "failed": failed,
+            "skipped": skipped,
+            "pass_rate": round(pass_rate, 1),
+        },
+    )
+
+
 def run_test_checks(
     graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
-        check_test_results(graph, config=config),
-        check_test_coverage(graph, exclude_status=exclude_status),
+        check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
+        check_test_results(graph, config=config),
+    ]
+
+
+def run_uat_checks(
+    graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
+) -> list[HealthCheck]:
+    """Run all UAT (User Acceptance Test) health checks."""
+    return [
+        check_uat_coverage(graph, exclude_status=exclude_status, config=config),
+        check_uat_results(graph, config=config),
     ]
 
 
@@ -1627,6 +1801,8 @@ def render_section(
         for check in run_code_checks(graph, exclude_status=exclude_status):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
+            report.add(check)
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     output = _format_report(report, args)
@@ -1743,6 +1919,11 @@ def run(args: argparse.Namespace) -> int:
         for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
+    # UAT checks (always run when tests run)
+    if run_tests and graph:
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
+            report.add(check)
+
     return _output_report(report, args)
 
 
@@ -1794,7 +1975,7 @@ def _print_text_report(
     include_passing_details: bool = False,
 ) -> None:
     """Print human-readable health report."""
-    categories = ["config", "spec", "code", "tests"]
+    categories = ["config", "spec", "code", "tests", "uat"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))
@@ -1806,20 +1987,17 @@ def _print_text_report(
         passed = sum(1 for c in checks if c.passed and c.severity != "info")
         total = len(checks) - skipped
         has_errors = any(not c.passed and c.severity == "error" for c in checks)
-        has_warnings = any(not c.passed and c.severity == "warning" for c in checks)
         if passed == total:
             status = "✓"
         elif has_errors:
             status = "✗"
         else:
             status = "⚠"
-        suffix = ""
-        if has_warnings and not has_errors:
-            warn_count = sum(1 for c in checks if not c.passed and c.severity == "warning")
-            suffix = f", {warn_count} warnings"
+        failed = sum(1 for c in checks if not c.passed and c.severity in ("error", "warning"))
+        parts = [f"{passed} passed", f"{failed} failed"]
         if skipped:
-            suffix += f", {skipped} skipped"
-        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{suffix})")
+            parts.append(f"{skipped} skipped")
+        print(f"\n{status} {category.upper()} ({', '.join(parts)})")
         print("-" * 40)
 
         for check in checks:
@@ -1917,7 +2095,7 @@ def _render_markdown(
     lines.append("# Health Report")
     lines.append("")
 
-    categories = ["config", "spec", "code", "tests"]
+    categories = ["config", "spec", "code", "tests", "uat"]
     for category in categories:
         checks = list(report.iter_by_category(category))
         if not checks:
@@ -1996,7 +2174,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "code", "tests"]
+    categories = ["config", "spec", "code", "tests", "uat"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))

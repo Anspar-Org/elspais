@@ -324,6 +324,30 @@ def ast_prescan(
                 break
         line_context[ln] = (func_name, class_name, func_line)
 
+    # Forward-looking fixup: comment lines above a function def fall outside
+    # the AST range.  Look ahead up to 5 lines to bind them to the next
+    # function — same logic that text_prescan already applies.
+    for idx, (ln, text) in enumerate(lines):
+        func_name, _class_name, _func_line = line_context[ln]
+        if func_name is not None:
+            continue
+
+        stripped = text.strip()
+        is_comment = False
+        for prefix in ("#", "//", "--", "/*", "<!--"):
+            if stripped.startswith(prefix):
+                is_comment = True
+                break
+        if not is_comment:
+            continue
+
+        for ahead in range(1, min(6, len(lines) - idx)):
+            ahead_ln, _ahead_text = lines[idx + ahead]
+            ahead_func, ahead_class, ahead_fline = line_context.get(ahead_ln, (None, None, 0))
+            if ahead_func is not None:
+                line_context[ln] = (ahead_func, ahead_class, ahead_fline)
+                break
+
     return line_context, all_test_funcs, first_def_line
 
 

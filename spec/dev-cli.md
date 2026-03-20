@@ -254,3 +254,69 @@ A CLI command provides immediate visibility into which requirements are most fou
 
 *End* *Analysis CLI Command* | **Hash**: 3cd66dbe
 ---
+
+## REQ-d00213: Version Check and Update Notification
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The tool SHALL parse semantic version strings into comparable representations, stripping pre-release/dev/local suffixes.
+
+B. The tool SHALL determine whether a remote version is strictly newer than the locally installed version.
+
+C. The tool SHALL detect the installation method (pipx, brew, editable, user install, virtual environment) to determine the appropriate upgrade path.
+
+D. The tool SHALL provide the correct upgrade command for the detected installation method.
+
+E. The tool SHALL query the package index for the latest published version, returning gracefully on network failure without raising.
+
+F. The tool SHALL compare local vs. remote versions and report whether the installation is up-to-date, an update is available (with upgrade instructions), or the check failed (silently suppressed).
+
+*End* *Version Check and Update Notification* | **Hash**: 56b62d01
+
+## REQ-d00217: INDEX.md Regeneration
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00003
+
+## Assertions
+
+A. INDEX.md generation SHALL read the project name and level rank/display name from project configuration to populate headers and table structure.
+
+B. INDEX.md generation SHALL classify each requirement node to its correct spec directory based on source file location.
+
+C. The regenerated INDEX.md SHALL contain per-level requirement tables sorted by dependency order.
+
+D. When multiple spec directories exist, the INDEX.md SHALL include subsections for each directory.
+
+*End* *INDEX.md Regeneration* | **Hash**: a1e3915a
+
+## REQ-d00218: Health Check Coverage Rollup
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00085
+
+## Assertions
+
+A. The tests.coverage health check SHALL use the rollup coverage metric from the annotation pipeline, not a direct parent walk from TEST nodes.
+
+B. The tests.coverage check SHALL report test-specific coverage (assertions verified by TEST nodes) separately from code coverage.
+
+C. When a child requirement has test coverage, its parent requirement SHALL receive coverage credit through the rollup mechanism.
+
+*End* *Health Check Coverage Rollup* | **Hash**: 64b0dfbb
+
+## REQ-d00219: UAT Health Check Section
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00085
+
+## Assertions
+
+A. The health report SHALL include a UAT section below the TESTS section, reporting journey-based validation coverage and results separately.
+
+B. The uat.coverage check SHALL report requirements validated through USER_JOURNEY nodes via Validates edges, using the rollup UAT coverage metric.
+
+C. The uat.results check SHALL parse a CSV file with journey_id and status columns, reporting pass/fail/skip counts and flagging failing journeys.
+
+D. When no UAT results CSV file exists, the uat.results check SHALL report as skipped (informational) without failing.
+
+*End* *UAT Health Check Section* | **Hash**: 3a95ff57

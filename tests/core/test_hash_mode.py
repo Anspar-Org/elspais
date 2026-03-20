@@ -81,16 +81,19 @@ def build_graph(hash_mode: str = "full-text") -> TraceGraph:
 class TestFullTextMode:
     """Tests for full-text hash mode (default)."""
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_text_is_default(self):
         """GraphBuilder defaults to normalized-text hash mode."""
         builder = GraphBuilder()
         assert builder.hash_mode == "normalized-text"
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_full_text_graph_has_mode(self):
         """Built graph preserves the hash_mode setting."""
         graph = build_graph(hash_mode="full-text")
         assert graph.hash_mode == "full-text"
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_full_text_body_change_changes_hash(self):
         """In full-text mode, changing body_text causes the hash to change.
 
@@ -109,6 +112,7 @@ class TestFullTextMode:
         new_hash = parent.get_field("hash")
         assert new_hash != old_hash
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_full_text_stable_body_stable_hash(self):
         """In full-text mode, if body_text does not change, hash remains stable.
 
@@ -121,6 +125,7 @@ class TestFullTextMode:
         hash2 = graph2.find_by_id("REQ-p00001").get_field("hash")
         assert hash1 == hash2
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_full_text_hash_matches_calculate_hash(self):
         """In full-text mode, the stored hash matches calculate_hash(body_text)."""
         graph = build_graph(hash_mode="full-text")
@@ -138,11 +143,13 @@ class TestFullTextMode:
 class TestNormalizedTextMode:
     """Tests for normalized-text hash mode."""
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_normalized_text_graph_has_mode(self):
         """Built graph preserves the normalized-text hash_mode setting."""
         graph = build_graph(hash_mode="normalized-text")
         assert graph.hash_mode == "normalized-text"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_non_assertion_body_change_hash_unchanged(self):
         """In normalized-text mode, changing non-assertion body text does NOT change hash.
 
@@ -175,6 +182,7 @@ class TestNormalizedTextMode:
             hash_before == hash_after
         ), "Non-assertion body text change should NOT affect hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_assertion_text_change_hash_changes(self):
         """In normalized-text mode, changing assertion text DOES change hash.
 
@@ -193,6 +201,7 @@ class TestNormalizedTextMode:
             hash_before != hash_after
         ), "Assertion text change SHOULD affect hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_assertion_reorder_hash_changes(self):
         """In normalized-text mode, reordering assertions DOES change hash.
 
@@ -212,6 +221,7 @@ class TestNormalizedTextMode:
             hash_before != hash_after
         ), "Assertion label rename SHOULD affect hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_trailing_space_hash_unchanged(self):
         """In normalized-text mode, trailing spaces on assertion text do NOT change hash.
 
@@ -260,6 +270,7 @@ class TestNormalizedTextMode:
             hash_clean == hash_trailing
         ), "Trailing whitespace should NOT affect hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_case_change_hash_changes(self):
         """In normalized-text mode, case changes in assertion text DO change hash.
 
@@ -279,6 +290,7 @@ class TestNormalizedTextMode:
             hash_upper != hash_lower
         ), "Case change in assertion text SHOULD affect hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_hash_matches_compute_normalized_hash(self):
         """In normalized-text mode, stored hash matches compute_normalized_hash output.
 
@@ -302,6 +314,7 @@ class TestNormalizedTextMode:
 
         assert stored_hash == expected_hash
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_add_assertion_changes_hash(self):
         """In normalized-text mode, adding an assertion changes the hash."""
         graph = build_graph(hash_mode="normalized-text")
@@ -316,6 +329,7 @@ class TestNormalizedTextMode:
             hash_before != hash_after
         ), "Adding an assertion SHOULD change the hash in normalized-text mode"
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_delete_assertion_changes_hash(self):
         """In normalized-text mode, deleting an assertion changes the hash."""
         graph = build_graph(hash_mode="normalized-text")
@@ -334,6 +348,7 @@ class TestNormalizedTextMode:
 class TestHashModeDifference:
     """Tests verifying that full-text and normalized-text modes produce different hashes."""
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_modes_produce_different_hashes(self):
         """full-text and normalized-text modes compute different hashes for same content.
 
@@ -360,6 +375,7 @@ class TestHashModeDifference:
             "because they hash different content"
         )
 
+    # Implements: REQ-d00131-J
     def test_hash_mode_normalized_stable_across_non_assertion_changes(self):
         """Normalized-text hash is stable when non-assertion content varies.
 
@@ -411,6 +427,7 @@ B. The system SHALL log errors."""
             "regardless of differences in non-assertion body text"
         )
 
+    # Implements: REQ-p00004-A
     def test_hash_mode_full_text_sensitive_to_non_assertion_changes(self):
         """Full-text hash changes when non-assertion content varies.
 

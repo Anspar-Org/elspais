@@ -10,6 +10,7 @@ from pathlib import Path
 class TestInitConfig:
     """Tests for init command configuration generation."""
 
+    # Implements: REQ-d00209-A
     def test_init_creates_config(self, tmp_path: Path, monkeypatch):
         """Test init creates .elspais.toml."""
         from elspais.commands.init import run
@@ -33,6 +34,7 @@ class TestInitConfig:
         assert "[project]" in content
         assert "version = 3" in content
 
+    # Implements: REQ-d00209-A
     def test_init_core_type(self, tmp_path: Path, monkeypatch):
         """Test init with explicit core type."""
         from elspais.commands.init import run
@@ -54,6 +56,7 @@ class TestInitConfig:
         assert "version = 3" in content
         assert "[project]" in content
 
+    # Implements: REQ-d00209-B
     def test_init_associated_type(self, tmp_path: Path, monkeypatch):
         """Test init with associated type."""
         from elspais.commands.init import run
@@ -75,6 +78,7 @@ class TestInitConfig:
         assert "version = 3" in content
         assert 'namespace = "CAL"' in content
 
+    # Implements: REQ-d00209-B
     def test_init_associated_requires_prefix(self, tmp_path: Path, monkeypatch, capsys):
         """Test init associated type requires --associated-prefix."""
         from elspais.commands.init import run
@@ -95,6 +99,7 @@ class TestInitConfig:
         captured = capsys.readouterr()
         assert "--associated-prefix required" in captured.out
 
+    # Implements: REQ-d00209-A
     def test_init_refuses_overwrite_without_force(self, tmp_path: Path, monkeypatch, capsys):
         """Test init refuses to overwrite existing config."""
         from elspais.commands.init import run
@@ -119,6 +124,7 @@ class TestInitConfig:
         assert "already exists" in captured.out
         assert config_path.read_text() == "existing config"
 
+    # Implements: REQ-d00209-A
     def test_init_overwrites_with_force(self, tmp_path: Path, monkeypatch):
         """Test init overwrites existing config with --force."""
         from elspais.commands.init import run
@@ -145,6 +151,7 @@ class TestInitConfig:
 class TestInitTemplate:
     """Tests for init --template flag."""
 
+    # Implements: REQ-d00209-C
     def test_init_template_creates_example(self, tmp_path: Path, monkeypatch, capsys):
         """Test --template creates example requirement file."""
         from elspais.commands.init import run
@@ -171,6 +178,7 @@ class TestInitTemplate:
         assert "SHALL" in content
         assert "Example Requirement Title" in content
 
+    # Implements: REQ-d00209-A
     def test_init_template_creates_spec_dir(self, tmp_path: Path, monkeypatch):
         """Test --template creates spec directory if needed."""
         from elspais.commands.init import run
@@ -193,6 +201,7 @@ class TestInitTemplate:
         assert (tmp_path / "spec").exists()
         assert (tmp_path / "spec").is_dir()
 
+    # Implements: REQ-d00209-A
     def test_init_template_refuses_overwrite(self, tmp_path: Path, monkeypatch, capsys):
         """Test --template refuses to overwrite existing example."""
         from elspais.commands.init import run
@@ -219,6 +228,7 @@ class TestInitTemplate:
         assert "already exists" in captured.out
         assert example_path.read_text() == "existing content"
 
+    # Implements: REQ-d00209-A
     def test_init_template_overwrites_with_force(self, tmp_path: Path, monkeypatch):
         """Test --template overwrites with --force."""
         from elspais.commands.init import run
@@ -243,6 +253,7 @@ class TestInitTemplate:
         assert result == 0
         assert "REQ-d00001" in example_path.read_text()
 
+    # Implements: REQ-d00209-A
     def test_init_template_uses_config_spec_dir(self, tmp_path: Path, monkeypatch):
         """Test --template uses spec dir from config if available."""
         from elspais.commands.init import run
@@ -273,6 +284,7 @@ directories = ["requirements"]
         example_path = tmp_path / "requirements" / "EXAMPLE-requirement.md"
         assert example_path.exists()
 
+    # Implements: REQ-d00209-A
     def test_init_template_shows_next_steps(self, tmp_path: Path, monkeypatch, capsys):
         """Test --template shows helpful next steps."""
         from elspais.commands.init import run
@@ -299,6 +311,7 @@ directories = ["requirements"]
 class TestInitCLIIntegration:
     """CLI integration tests for init command."""
 
+    # Implements: REQ-d00209-A
     def test_cli_init_template_flag(self):
         """Test init --template flag is registered."""
         from elspais.cli import parse_args
@@ -307,6 +320,7 @@ class TestInitCLIIntegration:
         assert args.command == "init"
         assert args.template is True
 
+    # Implements: REQ-d00209-A
     def test_cli_init_template_with_force(self):
         """Test init --template --force flags together."""
         from elspais.cli import parse_args
@@ -319,6 +333,7 @@ class TestInitCLIIntegration:
 class TestExampleRequirementContent:
     """Tests for the example requirement template content."""
 
+    # Implements: REQ-d00209-C
     def test_example_has_all_sections(self):
         """Test example requirement has all required sections."""
         from elspais.commands.init import EXAMPLE_REQUIREMENT
@@ -332,6 +347,7 @@ class TestExampleRequirementContent:
         assert "*End*" in EXAMPLE_REQUIREMENT
         assert "**Hash**:" in EXAMPLE_REQUIREMENT
 
+    # Implements: REQ-d00209-C
     def test_example_uses_shall_in_assertions(self):
         """Test example uses SHALL in assertions."""
         from elspais.commands.init import EXAMPLE_REQUIREMENT
@@ -341,6 +357,7 @@ class TestExampleRequirementContent:
         assert "A. The system SHALL" in EXAMPLE_REQUIREMENT
         assert "B. The system SHALL" in EXAMPLE_REQUIREMENT
 
+    # Implements: REQ-d00209-D
     def test_example_includes_format_notes(self):
         """Test example includes helpful format notes."""
         from elspais.commands.init import EXAMPLE_REQUIREMENT

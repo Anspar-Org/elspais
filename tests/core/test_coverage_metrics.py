@@ -14,6 +14,7 @@ from tests.core.graph_test_helpers import (
 class TestRollupMetrics:
     """Tests for RollupMetrics dataclass."""
 
+    # Implements: REQ-d00086-B
     def test_add_contribution(self):
         """Contributions are stored by assertion label."""
         metrics = RollupMetrics(total_assertions=2)
@@ -28,6 +29,7 @@ class TestRollupMetrics:
         assert metrics.assertion_coverage["A"][0] == contrib_a
         assert metrics.assertion_coverage["B"][0] == contrib_b
 
+    # Implements: REQ-d00069-D
     def test_finalize_computes_aggregates(self):
         """Finalize computes aggregate counts and percentage."""
         metrics = RollupMetrics(total_assertions=4)
@@ -43,6 +45,7 @@ class TestRollupMetrics:
         assert metrics.inferred_covered == 0
         assert metrics.coverage_pct == 50.0
 
+    # Implements: REQ-d00069-D
     def test_finalize_handles_zero_assertions(self):
         """Finalize handles zero assertions gracefully."""
         metrics = RollupMetrics(total_assertions=0)
@@ -51,6 +54,7 @@ class TestRollupMetrics:
 
         assert metrics.coverage_pct == 0.0
 
+    # Implements: REQ-d00086-B
     def test_multiple_contributors_same_assertion(self):
         """Multiple contributors to same assertion only count once."""
         metrics = RollupMetrics(total_assertions=1)
@@ -68,6 +72,7 @@ class TestRollupMetrics:
 class TestAnnotateCoverageDirect:
     """Tests for direct coverage (TEST/CODE → assertion)."""
 
+    # Implements: REQ-d00086-B
     def test_direct_coverage_from_test(self):
         """TEST node validates assertion → DIRECT coverage."""
         # Build: REQ-100 with assertion A, validated by test
@@ -90,6 +95,7 @@ class TestAnnotateCoverageDirect:
         assert metrics.direct_covered == 1
         assert metrics.coverage_pct == 100.0
 
+    # Implements: REQ-d00086-B
     def test_direct_coverage_from_code(self):
         """CODE node implements assertion → DIRECT coverage."""
         graph = build_graph(
@@ -114,6 +120,7 @@ class TestAnnotateCoverageDirect:
 class TestAnnotateCoverageExplicit:
     """Tests for explicit coverage (REQ → specific assertions)."""
 
+    # Implements: REQ-d00086-B
     def test_explicit_coverage_from_req_with_assertion_syntax(self):
         """REQ implements specific assertion(s) → EXPLICIT coverage."""
         # REQ-020 implements REQ-100-B (explicit assertion syntax)
@@ -153,6 +160,7 @@ class TestAnnotateCoverageExplicit:
 class TestAnnotateCoverageInferred:
     """Tests for inferred coverage (REQ → parent REQ)."""
 
+    # Implements: REQ-d00086-B
     def test_inferred_coverage_from_req_implements_parent(self):
         """REQ implements parent REQ → INFERRED coverage for all assertions."""
         # REQ-020 implements REQ-100 (all assertions implied)
@@ -188,6 +196,7 @@ class TestAnnotateCoverageInferred:
 class TestAnnotateCoverageRefines:
     """Tests for REFINES edge (no coverage contribution)."""
 
+    # Implements: REQ-d00069-J
     def test_refines_does_not_contribute_coverage(self):
         """REFINES edge does NOT contribute to coverage."""
         # REQ-010 refines REQ-100-A - should NOT count as coverage
@@ -219,6 +228,7 @@ class TestAnnotateCoverageRefines:
 class TestAnnotateCoverageMixed:
     """Tests for mixed coverage sources."""
 
+    # Implements: REQ-d00086-B
     def test_mixed_coverage_sources(self):
         """Multiple coverage sources on different assertions."""
         # REQ-100 has A, B, C, D
@@ -276,6 +286,7 @@ class TestUserExample:
       - B: DIRECT from TEST + EXPLICIT from REQ-020
     """
 
+    # Implements: REQ-d00069-J
     def test_user_example_scenario(self):
         """User's 4-assertion scenario with refines vs implements."""
         graph = build_graph(
@@ -347,6 +358,7 @@ class TestUserExample:
 class TestNoAssertions:
     """Tests for requirements without assertions."""
 
+    # Implements: REQ-d00051-E
     def test_requirement_with_no_assertions(self):
         """Requirements with no assertions have zero metrics."""
         graph = build_graph(
@@ -370,6 +382,7 @@ class TestNoAssertions:
 class TestCoveragePercentStored:
     """Verify coverage_pct is stored in node metrics."""
 
+    # Implements: REQ-d00055-D
     def test_coverage_pct_stored_in_metrics(self):
         """coverage_pct is stored directly in node._metrics for convenience."""
         graph = build_graph(
@@ -399,6 +412,7 @@ class TestCoveragePercentStored:
 class TestTestSpecificMetrics:
     """Tests for TEST-specific metrics (direct_tested, validated, has_failures)."""
 
+    # Implements: REQ-d00069-B
     def test_direct_tested_counts_test_coverage(self):
         """direct_tested counts assertions with TEST nodes (not CODE)."""
         graph = build_graph(
@@ -424,6 +438,7 @@ class TestTestSpecificMetrics:
         assert rollup.direct_tested == 1  # Only A (TEST), not B (CODE)
         assert rollup.covered_assertions == 2  # Both A and B covered
 
+    # Implements: REQ-d00069-F
     def test_validated_counts_passing_tests(self):
         """validated counts assertions with passing TEST_RESULTs."""
         from tests.core.graph_test_helpers import make_test_result
@@ -466,6 +481,7 @@ class TestTestSpecificMetrics:
         assert rollup.validated == 1  # Only A has passing result
         assert rollup.has_failures is True  # B failed
 
+    # Implements: REQ-d00069-F
     def test_has_failures_true_when_test_fails(self):
         """has_failures is True when any TEST_RESULT is failed/error."""
         from tests.core.graph_test_helpers import make_test_result
@@ -487,6 +503,7 @@ class TestTestSpecificMetrics:
 
         assert rollup.has_failures is True
 
+    # Implements: REQ-d00069-F
     def test_has_failures_false_when_all_pass(self):
         """has_failures is False when all tests pass."""
         from tests.core.graph_test_helpers import make_test_result
@@ -509,6 +526,7 @@ class TestTestSpecificMetrics:
         assert rollup.has_failures is False
         assert rollup.validated == 1
 
+    # Implements: REQ-d00069-B
     def test_no_tests_means_zero_test_metrics(self):
         """Without TEST nodes, test metrics are zero."""
         graph = build_graph(

@@ -82,10 +82,12 @@ class TestPasswordHashing:
 
 ## Test Linking -- Comments
 
-Use `Tests` or `Validates` comments in test files:
+Use any reference keyword (`Implements`, `Tests`, `Validates`, `Refines`) in
+test files.  All keywords create the same VERIFIES edge in the traceability
+graph -- the keyword choice is purely stylistic:
 
 ```python
-# Tests: REQ-d00001-A
+# Implements: REQ-d00001-A
 def test_password_hashing():
     ...
 ```
@@ -96,7 +98,26 @@ def test_full_auth_flow():
     ...
 ```
 
-The colon is optional for all keywords (`Implements`, `Tests`, `Validates`, `Refines`).
+The colon is optional for all keywords.
+
+> **Important -- column 0 rule:** The comment character (`#`, `//`, etc.)
+> must begin at column 0 (no leading whitespace).  This applies even for
+> methods inside a test class.  The grammar does not match indented reference
+> comments:
+>
+> ```python
+> class TestAuth:
+>     # WRONG -- indented comment is ignored by the scanner
+>     # Implements: REQ-d00001-A
+>     def test_hashing(self):
+>         ...
+>
+> class TestAuth:
+>     # CORRECT -- column 0
+> # Implements: REQ-d00001-A
+>     def test_hashing(self):
+>         ...
+> ```
 
 A comment placed before any function definition applies to the entire file:
 

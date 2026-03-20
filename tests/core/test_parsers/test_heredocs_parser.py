@@ -12,11 +12,13 @@ from elspais.graph.parsers.heredocs import HeredocsParser
 class TestHeredocsParserBasic:
     """Basic tests for HeredocsParser."""
 
+    # Implements: REQ-d00128-G
     def test_parser_has_low_priority(self):
         """Parser has priority 10 (runs before requirements)."""
         parser = HeredocsParser()
         assert parser.priority == 10
 
+    # Implements: REQ-d00128-G
     def test_claims_triple_quoted_string_with_req(self):
         """Claims triple-quoted strings containing requirement patterns."""
         lines = [
@@ -38,6 +40,7 @@ class TestHeredocsParserBasic:
         assert results[0].end_line == 4
         assert results[0].content_type == "heredoc"
 
+    # Implements: REQ-d00128-G
     def test_ignores_strings_without_req(self):
         """Does not claim strings that don't contain REQ patterns."""
         lines = [
@@ -56,6 +59,7 @@ class TestHeredocsParserBasic:
         # Should not claim any lines
         assert len(results) == 0
 
+    # Implements: REQ-d00128-G
     def test_claims_single_quoted_heredoc(self):
         """Claims single-quoted heredoc strings with REQ patterns."""
         lines = [
@@ -78,6 +82,7 @@ class TestHeredocsParserBasic:
 class TestHeredocsParserEdgeCases:
     """Edge case tests for HeredocsParser."""
 
+    # Implements: REQ-d00128-G
     def test_claims_multiline_f_string(self):
         """Claims f-strings that contain REQ patterns."""
         lines = [
@@ -94,6 +99,7 @@ class TestHeredocsParserEdgeCases:
 
         assert len(results) == 1
 
+    # Implements: REQ-d00128-G
     def test_handles_multiple_heredocs(self):
         """Handles multiple heredoc blocks in same file."""
         lines = [
@@ -118,6 +124,7 @@ class TestHeredocsParserEdgeCases:
         assert results[1].start_line == 5
         assert results[1].end_line == 7
 
+    # Implements: REQ-d00128-G
     def test_non_python_file_skipped(self):
         """Skips non-Python files."""
         lines = [
@@ -133,6 +140,7 @@ class TestHeredocsParserEdgeCases:
         # Should not claim markdown file content
         assert len(results) == 0
 
+    # Implements: REQ-d00128-G
     def test_preserves_raw_text(self):
         """Preserves the raw text content in the result."""
         lines = [
@@ -157,6 +165,7 @@ class TestHeredocsParserEdgeCases:
 class TestHeredocsParserRubyStyle:
     """Tests for Ruby/Shell style heredocs."""
 
+    # Implements: REQ-d00128-G
     def test_claims_shell_heredoc(self):
         """Claims shell-style heredocs with REQ patterns."""
         lines = [
@@ -175,6 +184,7 @@ class TestHeredocsParserRubyStyle:
         assert len(results) == 1
         assert results[0].content_type == "heredoc"
 
+    # Implements: REQ-d00128-G
     def test_claims_shell_heredoc_double_quotes(self):
         """Claims shell heredocs with double quotes in marker."""
         lines = [

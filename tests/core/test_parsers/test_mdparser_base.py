@@ -10,6 +10,7 @@ from elspais.graph.parsers import (
 class TestParsedContent:
     """Tests for ParsedContent dataclass."""
 
+    # Implements: REQ-d00054-A
     def test_create_minimal_defaults(self):
         """Non-obvious default: parsed_data defaults to empty dict."""
         content = ParsedContent(
@@ -20,6 +21,7 @@ class TestParsedContent:
         )
         assert content.parsed_data == {}
 
+    # Implements: REQ-d00054-A
     def test_line_count(self):
         content = ParsedContent(
             content_type="comment",
@@ -33,10 +35,12 @@ class TestParsedContent:
 class TestParserRegistry:
     """Tests for ParserRegistry - manages parser priority ordering."""
 
+    # Implements: REQ-d00128-G
     def test_empty_registry(self):
         registry = ParserRegistry()
         assert registry.parsers == []
 
+    # Implements: REQ-d00128-G
     def test_register_parser(self):
         registry = ParserRegistry()
 
@@ -50,6 +54,7 @@ class TestParserRegistry:
         registry.register(parser)
         assert len(registry.parsers) == 1
 
+    # Implements: REQ-d00128-G
     def test_parsers_sorted_by_priority(self):
         registry = ParserRegistry()
 
@@ -78,6 +83,7 @@ class TestParserRegistry:
         priorities = [p.priority for p in registry.get_ordered()]
         assert priorities == [10, 50, 100]
 
+    # Implements: REQ-d00128-G
     def test_parse_all_calls_parsers_in_order(self):
         registry = ParserRegistry()
         call_order = []
@@ -116,6 +122,7 @@ class TestParserRegistry:
 
         assert call_order == [1, 2]
 
+    # Implements: REQ-d00128-G
     def test_claimed_lines_not_passed_to_later_parsers(self):
         registry = ParserRegistry()
         lines_seen_by_parser2 = []

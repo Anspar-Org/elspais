@@ -52,6 +52,7 @@ def _clean_git_env(monkeypatch):
 class TestGitChangeInfo:
     """Tests for GitChangeInfo dataclass."""
 
+    # Implements: REQ-p00004-B
     def test_create_empty(self):
         """Empty GitChangeInfo has empty sets."""
         info = GitChangeInfo()
@@ -61,6 +62,7 @@ class TestGitChangeInfo:
         assert info.branch_changed_files == set()
         assert info.committed_req_locations == {}
 
+    # Implements: REQ-p00004-B
     def test_all_changed_files(self):
         """all_changed_files returns union of all file sets."""
         info = GitChangeInfo(
@@ -71,6 +73,7 @@ class TestGitChangeInfo:
 
         assert info.all_changed_files == {"a.md", "b.md", "c.md"}
 
+    # Implements: REQ-p00004-B
     def test_uncommitted_files(self):
         """uncommitted_files returns modified and untracked."""
         info = GitChangeInfo(
@@ -85,6 +88,7 @@ class TestGitChangeInfo:
 class TestMovedRequirement:
     """Tests for MovedRequirement dataclass."""
 
+    # Implements: REQ-p00004-B
     def test_create(self):
         """Create MovedRequirement with all fields."""
         moved = MovedRequirement(
@@ -287,6 +291,7 @@ class TestGetGitChanges:
 class TestTemporaryWorktree:
     """Tests for temporary_worktree context manager."""
 
+    # Implements: REQ-p00004-B
     def test_creates_and_cleans_up_worktree(self):
         """Creates worktree, yields path, cleans up on exit."""
         repo_root = get_repo_root()
@@ -305,6 +310,7 @@ class TestTemporaryWorktree:
         assert worktree_path is not None
         assert not worktree_path.exists()
 
+    # Implements: REQ-p00004-B
     def test_raises_on_invalid_ref(self):
         """Raises CalledProcessError for invalid git ref."""
         repo_root = get_repo_root()
@@ -319,6 +325,7 @@ class TestTemporaryWorktree:
 class TestGetReqLocationsFromGraph:
     """Tests for get_req_locations_from_graph function."""
 
+    # Implements: REQ-p00004-B
     def test_returns_dict(self):
         """Returns dict mapping REQ IDs to paths."""
         repo_root = get_repo_root()
@@ -333,6 +340,7 @@ class TestGetReqLocationsFromGraph:
             assert isinstance(req_id, str)
             assert isinstance(path, str)
 
+    # Implements: REQ-p00004-B
     def test_uses_full_canonical_id(self):
         """Uses the full canonical ID (e.g., 'REQ-d00001') as keys."""
         repo_root = get_repo_root()
@@ -977,6 +985,7 @@ class TestCommitAndPushWithRemote:
 class TestAnsiStripping:
     """Tests for ANSI escape code stripping in commit error messages."""
 
+    # Implements: REQ-p00004-E
     def test_ansi_codes_stripped_from_commit_error(self, tmp_path):
         """ANSI escape codes are removed from commit failure error messages."""
         _init_git_repo(tmp_path)
@@ -1121,6 +1130,7 @@ class TestFullGitSyncWorkflowWithRemote:
     REQ-p00004-C through REQ-p00004-F together.
     """
 
+    # Implements: REQ-p00004-E
     def test_full_workflow_branch_commit_push_sync(self, tmp_path):
         """Complete workflow: create branch, edit, commit, push, sync."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -1178,6 +1188,7 @@ class TestFullGitSyncWorkflowWithRemote:
         assert result["success"] is True
         assert (clone_a / "spec" / "prd.md").read_text() == "# REQ-p00001 Updated by B\n"
 
+    # Implements: REQ-p00004-F
     def test_sync_conflict_from_concurrent_edits(self, tmp_path):
         """Two clones edit same file on same branch → sync detects conflict."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
