@@ -118,23 +118,21 @@ class TestMarkdownFormatPassingDetails:
     """Validates REQ-d00085-F: markdown format respects passing-detail flags."""
 
     def test_REQ_d00085_F_markdown_include_passing_details_shows_findings(self) -> None:
-        """Markdown with --include-passing-details shows <details> block for passing checks."""
+        """Markdown is a checklist -- no findings even with flag."""
         report = _make_passing_report()
         args = _make_args(format="markdown", include_passing_details=True)
         output = _format_report(report, args)
-        # Should include findings detail for passing checks
-        assert "REQ-p00001-A" in output
-        assert "<details>" in output or "REQ-p00001-A resolves" in output
+        assert "valid_references" in output
+        assert "- [x]" in output
+        assert "<details>" not in output
 
     def test_REQ_d00085_F_markdown_skip_passing_details_hides_findings(self) -> None:
-        """Markdown with --skip-passing-details hides findings for passing checks."""
+        """Markdown checklist shows check name/message, never findings."""
         report = _make_passing_report()
         args = _make_args(format="markdown", include_passing_details=False)
         output = _format_report(report, args)
-        # Passing check row should appear in the table
         assert "valid_references" in output
-        assert "PASS" in output
-        # But individual findings should NOT appear
+        assert "- [x]" in output
         assert "REQ-p00001-A resolves" not in output
 
 

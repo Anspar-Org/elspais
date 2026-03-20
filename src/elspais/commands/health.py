@@ -2028,7 +2028,8 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     if fmt == "json":
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
-        return _render_markdown(report, include_passing_details=include_passing)
+        data = _build_report_data(report)
+        return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
     elif fmt == "sarif":
@@ -2231,76 +2232,28 @@ def _print_text_report(
 
 
 # Implements: REQ-d00085-E
-def _render_markdown(
-    report: HealthReport,
-    include_passing_details: bool = False,
-) -> str:
-    """Render health report as markdown."""
-    lines = []
-    lines.append("# Health Report")
-    lines.append("")
+def _render_markdown(data: _ReportData) -> str:
+    """Render _ReportData as markdown checklist."""
+    lines: list[str] = []
 
-    categories = ["config", "spec", "code", "tests", "uat"]
-    for category in categories:
-        checks = list(report.iter_by_category(category))
-        if not checks:
-            continue
-
-        passed = sum(1 for c in checks if c.passed)
-        total = len(checks)
-        has_errors = any(not c.passed and c.severity == "error" for c in checks)
-        if passed == total:
-            status = "pass"
-        elif has_errors:
-            status = "FAIL"
-        else:
-            status = "WARN"
-        lines.append(f"## {category.upper()} ({passed}/{total} {status})")
+    for i, section in enumerate(data.sections):
+        if i > 0:
+            lines.append("---")
+            lines.append("")
+        lines.append(f"## {section.icon} {section.name} ({section.stats})")
         lines.append("")
-        lines.append("| Check | Status | Message |")
-        lines.append("|-------|--------|---------|")
-        for check in checks:
-            if check.passed:
-                icon = "PASS"
-            elif check.severity == "warning":
-                icon = "WARN"
+        for check in section.checks:
+            if check.icon == "~":
+                lines.append(f"- [ ] ~ {check.name}: {check.message}")
+            elif check.icon == "\u2713":
+                lines.append(f"- [x] {check.name}: {check.message}")
             else:
-                icon = "FAIL"
-            lines.append(f"| {check.name} | {icon} | {check.message} |")
-
-            # Include findings detail for passing checks if requested
-            if check.passed and include_passing_details and check.findings:
-                lines.append("")
-                lines.append("<details>")
-                lines.append(f"<summary>{check.name} details</summary>")
-                lines.append("")
-                for finding in check.findings:
-                    loc = ""
-                    if finding.file_path:
-                        loc = f"{finding.file_path}"
-                        if finding.line is not None:
-                            loc += f":{finding.line}"
-                        loc += ": "
-                    lines.append(f"- {loc}{finding.message}")
-                lines.append("")
-                lines.append("</details>")
+                lines.append(f"- [ ] {check.name}: {check.message}")
         lines.append("")
 
-    # Summary
-    counted = len(report.checks) - report.skipped
-    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
-    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
-        lines.append(f"**HEALTHY**: {counted}/{counted} checks passed{skip_suffix}")
-    elif report.failed == 0 and report.warnings == 0:
-        lines.append(f"**{report.passed}/{counted}** checks passed{skip_suffix}")
-    elif report.failed == 0:
-        lines.append(
-            f"**{report.passed}/{counted}** checks passed, {report.warnings} warnings{skip_suffix}"
-        )
-    else:
-        lines.append(
-            f"**UNHEALTHY**: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
-        )
+    lines.append("---")
+    lines.append("")
+    lines.append(data.summary_line)
 
     return "\n".join(lines)
 

@@ -13,6 +13,7 @@ from elspais.commands.health import (
     HealthReport,
     _build_hint,
     _build_report_data,
+    _render_markdown,
 )
 
 
@@ -292,3 +293,84 @@ class TestRenderText:
         data = _build_report_data(report)
         output = _render_text(data)
         assert "  ~ code.coverage: info only" in output
+
+
+class TestRenderMarkdown:
+    """Tests for _render_markdown checklist renderer."""
+
+    def test_no_h1_title(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert not output.startswith("# ")
+        assert "# Health Report" not in output
+
+    def test_category_header_h2_with_icon(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "## \u2717 SPEC (1 passed, 1 failed)" in output
+
+    def test_passing_check_uses_checked_box(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "- [x] spec.format: all valid" in output
+
+    def test_failing_check_uses_unchecked_box(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "- [ ] spec.refs: 2 broken references" in output
+
+    def test_info_check_uses_tilde_prefix(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "- [ ] ~ code.coverage: info only" in output
+
+    def test_no_tables(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "| Check" not in output
+        assert "|---" not in output
+
+    def test_no_details_blocks(self) -> None:
+        from elspais.commands.health import HealthFinding
+
+        report = HealthReport()
+        report.add(
+            HealthCheck(
+                name="ok",
+                passed=True,
+                message="good",
+                category="spec",
+                findings=[HealthFinding(message="detail")],
+            )
+        )
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "<details>" not in output
+
+    def test_summary_line(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "UNHEALTHY" in output
+
+    def test_separator_between_categories(self) -> None:
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "---" in output
+
+    def test_same_stats_as_text(self) -> None:
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        text = _render_text(data)
+        md = _render_markdown(data)
+        assert "1 passed, 1 failed" in text
+        assert "1 passed, 1 failed" in md
