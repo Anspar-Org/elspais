@@ -231,3 +231,28 @@ def _make_args(**kwargs: object) -> object:
     ns.status = kwargs.get("status", None)
     ns.command = kwargs.get("command", "gaps")
     return ns
+
+
+# ---- Composability tests ----
+
+
+class TestGapComposability:
+    def test_gap_sections_registered(self) -> None:
+        from elspais.commands.report import COMPOSABLE_SECTIONS
+
+        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+            assert name in COMPOSABLE_SECTIONS
+
+    def test_gap_format_support(self) -> None:
+        from elspais.commands.report import FORMAT_SUPPORT
+
+        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+            assert "text" in FORMAT_SUPPORT[name]
+            assert "markdown" in FORMAT_SUPPORT[name]
+            assert "json" in FORMAT_SUPPORT[name]
+
+    def test_checks_renamed_from_health(self) -> None:
+        from elspais.commands.report import COMPOSABLE_SECTIONS
+
+        assert "checks" in COMPOSABLE_SECTIONS
+        assert "health" not in COMPOSABLE_SECTIONS

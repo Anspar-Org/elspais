@@ -51,6 +51,79 @@ class ChecksArgs:
 
 
 # ---------------------------------------------------------------------------
+# Gap listing commands
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class GapsArgs:
+    """List all traceability gaps."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
+class UncoveredArgs:
+    """List requirements without code coverage."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
+class UntestedArgs:
+    """List requirements without test coverage."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
+class UnvalidatedArgs:
+    """List requirements without UAT (journey) coverage."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
+class FailingArgs:
+    """List requirements with failing test or UAT results."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+# ---------------------------------------------------------------------------
 # Doctor command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -697,6 +770,11 @@ class CompletionArgs:
 # ---------------------------------------------------------------------------
 Command = (
     Annotated[ChecksArgs, tyro.conf.subcommand("checks")]
+    | Annotated[GapsArgs, tyro.conf.subcommand("gaps")]
+    | Annotated[UncoveredArgs, tyro.conf.subcommand("uncovered")]
+    | Annotated[UntestedArgs, tyro.conf.subcommand("untested")]
+    | Annotated[UnvalidatedArgs, tyro.conf.subcommand("unvalidated")]
+    | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
     | Annotated[ViewerArgs, tyro.conf.subcommand("viewer")]

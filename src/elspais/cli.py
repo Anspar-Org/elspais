@@ -54,7 +54,9 @@ from elspais.commands.args import (
     DoctorArgs,
     EditArgs,
     ExampleArgs,
+    FailingArgs,
     FixArgs,
+    GapsArgs,
     GlobalArgs,
     GraphArgs,
     InitArgs,
@@ -71,7 +73,10 @@ from elspais.commands.args import (
     RulesShowArgs,
     SummaryArgs,
     TraceArgs,
+    UncoveredArgs,
     UninstallArgs,
+    UntestedArgs,
+    UnvalidatedArgs,
     VersionArgs,
     ViewerArgs,
 )
@@ -107,6 +112,11 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
     # Determine the command name and nested action for dispatch
     _CMD_MAP: dict[type, str] = {
         ChecksArgs: "checks",
+        GapsArgs: "gaps",
+        UncoveredArgs: "uncovered",
+        UntestedArgs: "untested",
+        UnvalidatedArgs: "unvalidated",
+        FailingArgs: "failing",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
         ViewerArgs: "viewer",
@@ -337,6 +347,10 @@ def main(argv: list[str] | None = None) -> int:
         # Dispatch to command handlers
         if args.command == "checks":
             return health.run(args)
+        elif args.command in ("gaps", "uncovered", "untested", "unvalidated", "failing"):
+            from elspais.commands import gaps
+
+            return gaps.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":
@@ -415,6 +429,11 @@ Usage: elspais [options] <command> [command-options]
 
 Commands:
   health      Check repository and configuration health
+  gaps        List all traceability gaps
+  uncovered   List requirements without code coverage
+  untested    List requirements without test coverage
+  unvalidated List requirements without UAT coverage
+  failing     List requirements with failing results
   doctor      Diagnose environment and installation health
   trace       Generate traceability matrix
   viewer      Interactive traceability viewer (live server or static HTML)

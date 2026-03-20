@@ -14,7 +14,17 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-COMPOSABLE_SECTIONS = ("checks", "summary", "trace", "changed")
+COMPOSABLE_SECTIONS = (
+    "checks",
+    "summary",
+    "trace",
+    "changed",
+    "uncovered",
+    "untested",
+    "unvalidated",
+    "failing",
+    "gaps",
+)
 
 # Implements: REQ-d00085-E
 FORMAT_SUPPORT = {
@@ -22,6 +32,23 @@ FORMAT_SUPPORT = {
     "summary": {"text", "markdown", "json", "csv"},
     "trace": {"text", "markdown", "json", "csv"},
     "changed": {"text", "json"},
+    "uncovered": {"text", "markdown", "json"},
+    "untested": {"text", "markdown", "json"},
+    "unvalidated": {"text", "markdown", "json"},
+    "failing": {"text", "markdown", "json"},
+    "gaps": {"text", "markdown", "json"},
+}
+
+EXIT_BIT: dict[str, int] = {
+    "checks": 1,
+    "summary": 2,
+    "trace": 4,
+    "changed": 8,
+    "uncovered": 16,
+    "untested": 16,
+    "unvalidated": 16,
+    "failing": 16,
+    "gaps": 16,
 }
 
 
@@ -74,7 +101,16 @@ def run(
     # Build graph once for sections that need it
     graph = None
     config = None
-    graph_sections = {"checks", "summary", "trace"}
+    graph_sections = {
+        "checks",
+        "summary",
+        "trace",
+        "uncovered",
+        "untested",
+        "unvalidated",
+        "failing",
+        "gaps",
+    }
     if set(sections) & graph_sections:
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
@@ -90,20 +126,14 @@ def run(
         config = get_config(config_path)
 
     outputs: list[str] = []
-    worst_exit = 0
+    combined_exit = 0
 
     for section in sections:
         output, exit_code = _render_section(section, graph, config, args)
         if output:
             outputs.append(output)
-        worst_exit = max(worst_exit, exit_code)
-
-    # Implements: REQ-d00085-G
-    if args.lenient and worst_exit == 1:
-        # Re-check: only suppress if it was warnings-only
-        # (the individual sections already handle --lenient in their exit codes,
-        # so this is a safety net for the composed case)
-        pass
+        if exit_code:
+            combined_exit |= EXIT_BIT.get(section, 0)
 
     combined = "\n\n".join(outputs)
     if args.output:
@@ -114,7 +144,7 @@ def run(
         if combined:
             print(combined)
 
-    return worst_exit
+    return combined_exit
 
 
 def _render_section(
@@ -139,6 +169,14 @@ def _render_section(
         return render_section(graph, args)
     elif name == "changed":
         return _render_changed(args)
+    elif name in ("uncovered", "untested", "unvalidated", "failing"):
+        from elspais.commands.gaps import render_section as gap_render
+
+        return gap_render(graph, config, args, gap_types=[name])
+    elif name == "gaps":
+        from elspais.commands.gaps import render_section as gap_render
+
+        return gap_render(graph, config, args)
     else:
         return f"Error: Unknown section '{name}'", 1
 
