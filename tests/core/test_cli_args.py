@@ -24,7 +24,9 @@ from elspais.commands.args import (
     DoctorArgs,
     EditArgs,
     ExampleArgs,
+    FailingArgs,
     FixArgs,
+    GapsArgs,
     GlobalArgs,
     GraphArgs,
     InitArgs,
@@ -40,8 +42,11 @@ from elspais.commands.args import (
     RulesShowArgs,
     SummaryArgs,
     TraceArgs,
+    UncoveredArgs,
     UninstallArgs,
     UninstallLocalArgs,
+    UntestedArgs,
+    UnvalidatedArgs,
     VersionArgs,
     ViewerArgs,
 )
@@ -51,7 +56,7 @@ class TestCliArgsDataclasses:
     """Validates REQ-p00001-A: CLI arg dataclass definitions and Tyro parsing."""
 
     def test_REQ_p00001_A_global_args_has_all_subcommands(self) -> None:
-        """All 22 top-level subcommand types are present in the Command Union."""
+        """All top-level subcommand types are present in the Command Union."""
         # Extract the types from the Union
         args = typing.get_args(Command)
         # Each arg is Annotated[SomeArgs, subcommand(...)], extract the base type
@@ -87,9 +92,14 @@ class TestCliArgsDataclasses:
             McpArgs,
             LinkArgs,
             CompletionArgs,
+            GapsArgs,
+            UncoveredArgs,
+            UntestedArgs,
+            UnvalidatedArgs,
+            FailingArgs,
         }
         assert base_types == expected
-        assert len(args) == 23
+        assert len(args) == 28
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
         """ChecksArgs defaults are correct."""
@@ -233,6 +243,11 @@ class TestCliArgsDataclasses:
             LinkArgs,
             LinkSuggestArgs,
             CompletionArgs,
+            GapsArgs,
+            UncoveredArgs,
+            UntestedArgs,
+            UnvalidatedArgs,
+            FailingArgs,
             GlobalArgs,
         ]
         for cls in args_classes:

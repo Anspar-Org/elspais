@@ -284,31 +284,35 @@ Run `elspais checks --help` for the full list of flags.  Options are
 defined in `commands/args.py:ChecksArgs` — that dataclass is the single
 source of truth for flag names and descriptions.
 
-## Passing Check Detail Control
+## Gap Listings
 
-By default, `elspais checks` suppresses verbose detail for passing checks (`--skip-passing-details`). Use `--include-passing-details` to include them. The two flags are mutually exclusive.
+Use standalone gap commands or compose them with checks:
 
-The effect varies by output format:
+```bash
+elspais gaps                      # All gaps
+elspais uncovered                 # Requirements without code coverage
+elspais untested                  # Requirements without test coverage
+elspais unvalidated               # Requirements without UAT coverage
+elspais failing                   # Requirements with failing results
+elspais checks gaps               # Checklist + all gaps
+elspais checks untested           # Checklist + untested gaps
+```
 
-| Format | Default (`--skip-passing-details`) | With `--include-passing-details` |
-|--------|-------------------------------------|----------------------------------|
-| text | Aggregate summary message only | Adds verbose detail keys for each passing check |
-| markdown | Table with aggregate status | Adds a `<details>` block with per-finding list |
-| json | Full findings always included | No change |
-| junit | Empty `<testcase/>` element | Adds `<system-out>` with finding messages |
-| sarif | Omits passing checks always | No change |
-
-JSON and SARIF formats are unaffected by this flag: JSON always includes full findings, and SARIF always omits passing checks.
+Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | All checks passed (healthy) |
-| 1 | One or more errors found |
+Exit codes use a bitfield so composed reports indicate which sections failed:
 
-Most configuration issues are classified as errors and cause a non-zero exit.
-Only advisory checks (e.g., cross-repo paths in committed config) use warning severity.
+| Bit | Value | Section |
+|-----|-------|---------|
+| 0 | 1 | checks |
+| 1 | 2 | summary (reserved) |
+| 2 | 4 | trace (reserved) |
+| 3 | 8 | changed (reserved) |
+| 4 | 16 | gaps (reserved) |
+
+Composed reports OR the bits together. Currently only `checks` returns non-zero (when checks fail). Use `--lenient` to suppress warnings-only failures.
 
 ## Severity Levels
 
