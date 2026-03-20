@@ -2059,6 +2059,159 @@ def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
     return 0 if healthy else 1
 
 
+# =============================================================================
+# Report Data Intermediate Representation
+# =============================================================================
+
+
+@dataclass
+class _CheckLine:
+    """Pre-computed display data for a single health check."""
+
+    icon: str  # "\u2713", "\u2717", "\u26a0", "~"
+    name: str
+    message: str
+
+
+@dataclass
+class _SectionData:
+    """Pre-computed display data for a health check category."""
+
+    name: str  # "CONFIG", "SPEC", etc.
+    icon: str  # "\u2713", "\u2717", "\u26a0"
+    stats: str  # "3 passed, 1 failed" or "3 passed, 1 failed, 1 skipped"
+    checks: list[_CheckLine]
+
+
+@dataclass
+class _ReportData:
+    """Pre-computed display data for an entire health report."""
+
+    sections: list[_SectionData]
+    summary_line: str
+    is_healthy: bool
+    hint: str | None
+
+
+def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
+    """Build a hint string about how to get more details on failures.
+
+    Returns None if no categories have failures. Uses 'elspais checks'
+    (the renamed command).
+    """
+    failed_categories: set[str] = set()
+    for check in report.checks:
+        if not check.passed and check.severity in ("error", "warning"):
+            failed_categories.add(check.category)
+
+    if not failed_categories:
+        return None
+
+    category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
+    if len(failed_categories) == 1:
+        cat = next(iter(failed_categories))
+        flag = category_flags.get(cat, "")
+        scope = f" {flag}" if flag else ""
+    else:
+        scope = ""
+
+    if not already_verbose:
+        return (
+            f"Run 'elspais -v checks{scope}' for details,\n"
+            f" or 'elspais checks{scope} --format json -o health.json'"
+            f" for machine-readable output."
+        )
+    else:
+        return (
+            f"Run 'elspais checks{scope} --format json -o health.json'"
+            f" for machine-readable output."
+        )
+
+
+def _build_summary_line(report: HealthReport) -> str:
+    """Build the summary line string (matches _print_summary_line logic)."""
+    counted = len(report.checks) - report.skipped
+    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
+    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
+        if report.skipped:
+            return f"HEALTHY: {counted}/{counted} checks passed{skip_suffix}"
+        else:
+            return f"HEALTHY: {counted}/{counted} checks passed"
+    elif report.failed == 0 and report.warnings == 0:
+        return f"{report.passed}/{counted} checks passed{skip_suffix}"
+    elif report.failed == 0:
+        return (
+            f"{report.passed}/{counted} checks passed," f" {report.warnings} warnings{skip_suffix}"
+        )
+    else:
+        return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
+
+
+def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportData:
+    """Build the intermediate representation for rendering a health report.
+
+    Extracts all stat computation logic: category icon selection, pass/fail/skip
+    counting (excluding info-severity from pass/total), check icon selection,
+    summary line, and hint string.
+    """
+    categories = ["config", "spec", "code", "tests", "uat"]
+    sections: list[_SectionData] = []
+
+    for category in categories:
+        checks = list(report.iter_by_category(category))
+        if not checks:
+            continue
+
+        skipped = sum(1 for c in checks if c.severity == "info")
+        passed = sum(1 for c in checks if c.passed and c.severity != "info")
+        total = len(checks) - skipped
+        has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        failed = sum(1 for c in checks if not c.passed and c.severity in ("error", "warning"))
+
+        if passed == total:
+            icon = "\u2713"
+        elif has_errors:
+            icon = "\u2717"
+        else:
+            icon = "\u26a0"
+
+        parts = [f"{passed} passed", f"{failed} failed"]
+        if skipped:
+            parts.append(f"{skipped} skipped")
+
+        check_lines: list[_CheckLine] = []
+        for check in checks:
+            if check.severity == "info":
+                c_icon = "~"
+            elif check.passed:
+                c_icon = "\u2713"
+            elif check.severity == "warning":
+                c_icon = "\u26a0"
+            else:
+                c_icon = "\u2717"
+            check_lines.append(_CheckLine(icon=c_icon, name=check.name, message=check.message))
+
+        sections.append(
+            _SectionData(
+                name=category.upper(),
+                icon=icon,
+                stats=", ".join(parts),
+                checks=check_lines,
+            )
+        )
+
+    summary_line = _build_summary_line(report)
+    is_healthy = report.is_healthy
+    hint = _build_hint(report, verbose) if not is_healthy else None
+
+    return _ReportData(
+        sections=sections,
+        summary_line=summary_line,
+        is_healthy=is_healthy,
+        hint=hint,
+    )
+
+
 def _print_text_report(
     report: HealthReport,
     verbose: bool = False,
