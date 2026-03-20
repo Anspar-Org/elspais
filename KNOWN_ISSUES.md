@@ -13,7 +13,7 @@
 - This will be used for UAT: we treat the JNYs as a the set of manual tests to run that will cover all the REQs and demonstrate the correct functionality.
 - This corresponds to the PQ
 
-[ ] Parsing Schema
+[x] Parsing Schema
 - formal schema for REQUIREMENTS
 - formal schema for USER-JOURNEYS (the PQ of PQ/EQ/IQ system)
 
@@ -30,13 +30,13 @@
 - Implemented: add the `publish` label to a PR before merging to trigger release + PyPI + Homebrew publish.
 - Merges without the label are silent (no publish, no spam).
 
-[ ] CONFIG_DESIGN.md
+[x] CONFIG_DESIGN.md
 
-[ ] LARK_PARSER_DESIGN.md
+[x] LARK_PARSER_DESIGN.md
 
 [x] Chore: The elspais fix command output is confusing. It makes it look like errors have occured, rather than being fixed.
 
-[ ] Feature: **Declarative config schema and versioned migration**
+[x] Feature: **Declarative config schema and versioned migration**
 - There is no single authoritative schema for .elspais.toml. Config fields are defined across three sources that drift independently: `DEFAULT_CONFIG` (code), `elspais init` template (hardcoded string), and `docs/configuration.md`.
 - Some fields used in code are absent from DEFAULT_CONFIG (e.g. `version`, `associated.prefix`, `core.path`, `directories.code`, `directories.ignore`, `traceability.scan_patterns`, `traceability.source_roots`).
 - Unknown config keys are silently ignored; missing keys silently fall back to defaults. No validation errors for typos or stale settings.
@@ -73,7 +73,7 @@
 
 ---
 
-[ ] Major Project: In elspais repo, udpdate spec file naming convention
+[x] Major Project: In elspais repo, udpdate spec file naming convention
 - Rename spec/ files more sensibly  and consistently
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
 - The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.

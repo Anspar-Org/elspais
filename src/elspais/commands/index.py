@@ -168,15 +168,15 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
         if config_file.exists():
             cfg = get_config(config_file, current)
             # Use typed config for validated access
-            typed_config = ElspaisConfig.model_validate(
-                {
-                    k: v
-                    for k, v in cfg.items()
-                    if k
-                    in {f.alias or name for name, f in ElspaisConfig.model_fields.items()}
-                    | set(ElspaisConfig.model_fields.keys())
-                }
-            )
+            schema_fields = {
+                f.alias or name for name, f in ElspaisConfig.model_fields.items()
+            } | set(ElspaisConfig.model_fields.keys())
+            filtered = {k: v for k, v in cfg.items() if k in schema_fields}
+            # Strip legacy associates.paths list (v3 expects named entries)
+            assoc = filtered.get("associates")
+            if isinstance(assoc, dict) and "paths" in assoc:
+                filtered.pop("associates", None)
+            typed_config = ElspaisConfig.model_validate(filtered)
             project_name = typed_config.project.name or current.name
             try:
                 spec_subpath = str(resolved.relative_to(current))
