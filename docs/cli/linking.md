@@ -100,21 +100,12 @@ def test_full_auth_flow():
 
 The colon is optional for all keywords.
 
-> **Important -- column 0 rule:** The comment character (`#`, `//`, etc.)
-> must begin at column 0 (no leading whitespace).  This applies even for
-> methods inside a test class.  The grammar does not match indented reference
-> comments:
+> **Note:** Indented reference comments are supported.  Both column-0 and
+> indented placements work:
 >
 > ```python
 > class TestAuth:
->     # WRONG -- indented comment is ignored by the scanner
 >     # Implements: REQ-d00001-A
->     def test_hashing(self):
->         ...
->
-> class TestAuth:
->     # CORRECT -- column 0
-> # Implements: REQ-d00001-A
 >     def test_hashing(self):
 >         ...
 > ```
