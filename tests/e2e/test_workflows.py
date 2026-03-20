@@ -34,7 +34,7 @@ class TestInitThenHealth:
         # Create the spec directory that init references in its config
         (tmp_path / "spec").mkdir(exist_ok=True)
 
-        health_result = run_elspais("health", "--lenient", cwd=tmp_path)
+        health_result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health_result.returncode == 0, f"health failed after init: {health_result.stderr}"
 
 
@@ -42,7 +42,7 @@ class TestHealthSummaryConsistency:
     """Validates REQ-d00085-A: summary is consistent across runs."""
 
     def test_REQ_d00085_A_health_summary_same_total(self):
-        health_result = run_elspais("health", "--format", "json", "--lenient")
+        health_result = run_elspais("checks", "--format", "json", "--lenient")
         assert health_result.returncode == 0, f"health failed: {health_result.stderr}"
         health_data = json.loads(health_result.stdout)
         assert isinstance(health_data, (dict, list))
@@ -144,7 +144,7 @@ class TestFixThenHealth:
         assert fix_result.returncode == 0, f"fix failed: {fix_result.stderr}"
 
         # Verify health passes after fix
-        health_result = run_elspais("health", "--lenient", cwd=tmp_path)
+        health_result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health_result.returncode == 0, f"health failed after fix: {health_result.stderr}"
 
 

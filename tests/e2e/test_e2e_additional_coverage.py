@@ -56,7 +56,7 @@ class TestZeroPaddedNumericAssertions:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
 
@@ -139,7 +139,7 @@ class TestRefinesRelationship:
             spec_files={"spec/prd.md": [prd1, prd2]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         trace = run_elspais("trace", "--format", "json", cwd=tmp_path)
@@ -178,7 +178,7 @@ class TestDraftStatusRequirements:
         )
 
         # Health sees both
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
 
@@ -219,7 +219,7 @@ class TestMultipleCodeFilesForSameReq:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -246,7 +246,7 @@ class TestHeadingLevel3:
             spec_files={"spec/prd.md": [prd]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -286,7 +286,7 @@ class TestSpecFilePreamble:
 
         build_project(tmp_path, cfg, spec_files={})
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -411,7 +411,7 @@ class TestDeepHierarchy:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -806,7 +806,7 @@ class TestHealthOutputToFile:
 
         out_file = tmp_path / "health-output.json"
         result = run_elspais(
-            "health",
+            "checks",
             "--format",
             "json",
             "--lenient",
@@ -990,7 +990,7 @@ class TestTwoTierHierarchy:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -1029,7 +1029,7 @@ class TestEmptyAssertions:
 
         init_git_repo(tmp_path)
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 

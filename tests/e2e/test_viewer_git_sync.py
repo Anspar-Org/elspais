@@ -132,7 +132,7 @@ class TestGitSyncWorkflowE2E:
         _git(tmp_path, "add", ".")
         _git(tmp_path, "commit", "-m", "update spec")
 
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert data["summary"]["failed"] == 0

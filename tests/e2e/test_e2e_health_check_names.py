@@ -68,7 +68,7 @@ class TestHealthCheckNames:
     def test_REQ_d00085_new_check_names_present(self, tmp_path) -> None:
         """health --json includes the new traceability check names."""
         self._build(tmp_path)
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
         data = json.loads(result.stdout)
         check_names = {c["name"] for c in data.get("checks", [])}
@@ -85,7 +85,7 @@ class TestHealthCheckNames:
     def test_REQ_d00085_old_check_names_absent(self, tmp_path) -> None:
         """health --json does NOT include the old renamed check names."""
         self._build(tmp_path)
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
         data = json.loads(result.stdout)
         check_names = {c["name"] for c in data.get("checks", [])}

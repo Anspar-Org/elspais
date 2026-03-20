@@ -55,7 +55,7 @@ class TestIgnorePatterns:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
     def test_spec_ignore_excludes_pattern(self, tmp_path):
@@ -76,7 +76,7 @@ class TestIgnorePatterns:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -121,7 +121,7 @@ class TestCustomHierarchyRules:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
     def test_allow_structural_orphans(self, tmp_path):
@@ -139,7 +139,7 @@ class TestCustomHierarchyRules:
             spec_files={"spec/dev-orphan.md": [orphan]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -168,7 +168,7 @@ class TestRequireRationale:
         subprocess.run(["git", "commit", "-m", "add"], cwd=tmp_path, capture_output=True)
         run_elspais("fix", cwd=tmp_path)
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stdout}"
 
 
@@ -201,7 +201,7 @@ class TestRequireShallDisabled:
             spec_files={"spec/prd.md": [prd]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -245,7 +245,7 @@ class TestMultiAssertionSeparator:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -290,7 +290,7 @@ class TestReferencesOverrides:
         js_file.parent.mkdir(parents=True, exist_ok=True)
         js_file.write_text("// Implements: REQ-d00001\nfunction feature() {}\n")
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -356,7 +356,7 @@ class TestLargeHierarchy:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -438,7 +438,7 @@ class TestStatusFiltering:
         )
 
         # Health should pass (both statuses allowed)
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         # Summary default (Active only) should show 1
@@ -491,7 +491,7 @@ class TestTestingConfig:
         test_file = test_dir / "verify_feature.py"
         test_file.write_text("# Verifies: REQ-d00001\ndef verify_feature():\n    assert True\n")
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -626,7 +626,7 @@ class TestAllowStructuralOrphansConfig:
         )
         build_project(tmp_path, cfg, spec_files={"spec/dev.md": [dev]})
 
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         # The orphan check should pass (not just be a warning)
@@ -649,7 +649,7 @@ class TestAllowStructuralOrphansConfig:
         )
         build_project(tmp_path, cfg, spec_files={"spec/dev.md": [dev]})
 
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         data = json.loads(result.stdout)
         orphan_check = next(
             (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None

@@ -147,7 +147,7 @@ class TestFixThenHealthPasses:
         fix_result = run_elspais("fix", cwd=tmp_path)
         assert fix_result.returncode == 0
 
-        health_result = run_elspais("health", "--lenient", cwd=tmp_path)
+        health_result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health_result.returncode == 0
 
 
@@ -386,7 +386,7 @@ class TestInitCommand:
         run_elspais("init", cwd=tmp_path)
         (tmp_path / "spec").mkdir(exist_ok=True)
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -467,7 +467,7 @@ class TestFixFDAStyle:
         fix = run_elspais("fix", cwd=tmp_path)
         assert fix.returncode == 0
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
 
@@ -524,7 +524,7 @@ class TestHealthSkipFiles:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -580,5 +580,5 @@ class TestMultiAssertionSyntax:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
