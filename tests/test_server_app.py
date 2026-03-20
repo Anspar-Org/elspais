@@ -227,10 +227,9 @@ class TestGetRequirement:
         data = resp.get_json()
         assert data["id"] == "REQ-p00001"
         assert data["title"] == "Platform Security"
-        assert data["kind"] == "requirement"
-        assert data["properties"]["level"] == "PRD"
-        assert data["properties"]["status"] == "Active"
-        assert "children" in data
+        assert data["level"] == "PRD"
+        assert data["status"] == "Active"
+        assert "assertions" in data
 
     def test_REQ_d00010_A_requirement_not_found(self, client):
         """GET /api/requirement returns 404 for unknown ID."""
@@ -243,7 +242,7 @@ class TestGetRequirement:
         """Requirement response includes assertion children."""
         resp = client.get("/api/requirement/REQ-p00001")
         data = resp.get_json()
-        assertions = [c for c in data["children"] if c["kind"] == "assertion"]
+        assertions = data["assertions"]
         assert len(assertions) == 2
         labels = {a["label"] for a in assertions}
         assert labels == {"A", "B"}

@@ -269,7 +269,7 @@ class TestGetRequirement:
         assert "REQ-p00001" in find_calls
 
     def test_REQ_d00062_B_returns_node_fields(self, sample_graph):
-        """REQ-d00062-B: Returns id, title, kind, plus properties with level, status, hash."""
+        """REQ-d00062-B: Returns id, title, level, status, hash as top-level fields."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
@@ -277,10 +277,9 @@ class TestGetRequirement:
 
         assert result["id"] == "REQ-p00001"
         assert result["title"] == "Platform Security"
-        assert result["kind"] == "requirement"
-        assert result["properties"]["level"] == "PRD"
-        assert result["properties"]["status"] == "Active"
-        assert result["properties"]["hash"] == "abc12345"
+        assert result["level"] == "PRD"
+        assert result["status"] == "Active"
+        assert result["hash"] == "abc12345"
 
     def test_REQ_d00062_C_returns_assertions(self, sample_graph):
         """REQ-d00062-C: Returns assertions from iter_children()."""
@@ -289,8 +288,8 @@ class TestGetRequirement:
 
         result = _get_requirement(sample_graph, "REQ-p00001")
 
-        assert "children" in result
-        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
+        assert "assertions" in result
+        assertions = result["assertions"]
         assert len(assertions) == 2
 
         labels = {a["label"] for a in assertions}
@@ -298,16 +297,14 @@ class TestGetRequirement:
         assert "B" in labels
 
     def test_REQ_d00062_D_returns_relationships(self, sample_graph):
-        """REQ-d00062-D: Returns relationships from iter_outgoing_edges()."""
+        """REQ-d00062-D: Returns requirement children in children list."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
         result = _get_requirement(sample_graph, "REQ-p00001")
 
         assert "children" in result
-        # PRD should have OPS as child (kind=="requirement")
-        req_children = [c for c in result["children"] if c["kind"] == "requirement"]
-        assert any(c["id"] == "REQ-o00001" for c in req_children)
+        assert any(c["id"] == "REQ-o00001" for c in result["children"])
 
     def test_REQ_d00062_F_returns_error_for_missing(self, sample_graph):
         """REQ-d00062-F: Returns error for non-existent requirements."""
@@ -1286,72 +1283,32 @@ class TestRoundTripFidelity:
 
         return graph
 
-    # Implements: REQ-d00062-B
-    def test_children_flat_list_with_kind(self, rich_graph):
-        """Children should be a single flat list with 'kind' field."""
+    # Implements: REQ-d00062-C
+    def test_assertions_separate_list(self, rich_graph):
+        """Assertions should be in a dedicated 'assertions' list."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        assert "assertions" in result
+        assert len(result["assertions"]) == 2
+        labels = {a["label"] for a in result["assertions"]}
+        assert labels == {"A", "B"}
+
+    # Implements: REQ-d00062-D
+    def test_children_are_requirements_only(self, rich_graph):
+        """Children list should contain only requirement children."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
         result = _get_requirement(rich_graph, "REQ-p00001")
 
         assert "children" in result
-        assert "assertions" not in result
-        assert "remainder" not in result
-
-        kinds = [c["kind"] for c in result["children"]]
-        assert "assertion" in kinds
-        assert "remainder" in kinds
-
-    # Implements: REQ-d00062-B
-    def test_children_document_order(self, rich_graph):
-        """Children should be in document order (by line number)."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        children = result["children"]
-        # Filter to assertions and sections (skip requirement children)
-        doc_children = [c for c in children if c["kind"] in ("assertion", "remainder")]
-
-        # Section at line 14 should come before assertions at 20, 21
-        lines = [c["line"] for c in doc_children]
-        assert lines == sorted(lines), f"Children not in document order: {lines}"
-        assert doc_children[0]["kind"] == "remainder"
-        assert doc_children[0]["line"] == 14
-
-    # Implements: REQ-d00062-B
-    def test_assertion_children_have_line(self, rich_graph):
-        """Assertion children should include line number."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
-        for a in assertions:
-            assert "line" in a
-            assert a["line"] is not None
-
-        # Check specific line numbers
-        a_node = next(a for a in assertions if a["label"] == "A")
-        assert a_node["line"] == 20
-        b_node = next(a for a in assertions if a["label"] == "B")
-        assert b_node["line"] == 21
-
-    # Implements: REQ-d00062-B
-    def test_remainder_children_have_line(self, rich_graph):
-        """Remainder (section) children should include line number."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        sections = [c for c in result["children"] if c["kind"] == "remainder"]
-        assert len(sections) >= 1
-        for s in sections:
-            assert "line" in s
-            assert s["line"] is not None
+        assert any(c["id"] == "REQ-o00001" for c in result["children"])
+        # No assertions or remainders in children
+        for c in result["children"]:
+            assert "level" in c  # requirement children have level
 
     # Implements: REQ-d00062-B
     def test_parents_include_edge_kind(self, rich_graph):

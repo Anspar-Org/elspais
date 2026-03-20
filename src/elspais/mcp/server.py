@@ -1231,17 +1231,21 @@ def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
 
 
 def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
-    """Get single requirement details.
+    """Get requirement details in a focused, readable format.
 
-    Thin wrapper around _get_node() with a kind == REQUIREMENT guard.
-    Preserves the function signature used by ~15 tests and the MCP tool.
+    Returns only the fields useful for understanding a requirement:
+    identity, body, assertions, hierarchy, and coverage metrics.
+    For the full generic node envelope use ``_get_node()`` / ``get_node()``.
 
     REQ-d00062-A: Uses graph.find_by_id() for O(1) lookup.
     REQ-d00062-B: Returns node fields.
     REQ-d00062-C: Returns assertions from iter_children().
     REQ-d00062-D: Returns relationships from iter_outgoing_edges().
+    REQ-d00062-E: Returns metrics from node without recomputation.
     REQ-d00062-F: Returns error for non-existent requirements.
     """
+    from elspais.graph.relations import EdgeKind as EK
+
     node = graph.find_by_id(req_id)
 
     if node is None:
@@ -1250,7 +1254,67 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     if node.kind != NodeKind.REQUIREMENT:
         return {"error": f"Node '{req_id}' is not a requirement"}
 
-    return _serialize_node_generic(node, graph)
+    # Assertions
+    assertions = []
+    for child in node.iter_children(edge_kinds={EK.STRUCTURES}):
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append(
+                {"id": child.id, "label": child.get_field("label"), "text": child.get_label()}
+            )
+
+    # Hierarchy: requirement parents and children only
+    req_parents = []
+    for edge in node.iter_incoming_edges():
+        if (
+            edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES)
+            and edge.source.kind == NodeKind.REQUIREMENT
+        ):
+            req_parents.append(
+                {
+                    "id": edge.source.id,
+                    "title": edge.source.get_label(),
+                    "edge_kind": edge.kind.value,
+                }
+            )
+
+    req_children = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.REQUIREMENT:
+            req_children.append(
+                {"id": child.id, "title": child.get_label(), "level": child.get_field("level")}
+            )
+
+    # Coverage metrics
+    metrics_data = None
+    metrics = node.get_metric("rollup_metrics")
+    if metrics is not None:
+        metrics_data = {
+            "coverage_pct": metrics.coverage_pct,
+            "total_assertions": metrics.total_assertions,
+            "covered_assertions": metrics.covered_assertions,
+        }
+
+    # Source location
+    fn = node.file_node()
+    source_path = (
+        _relative_source_path(node, graph)
+        if graph
+        else (fn.get_field("relative_path") if fn else None)
+    )
+
+    return {
+        "id": node.id,
+        "title": node.get_label(),
+        "level": node.get_field("level"),
+        "status": node.get_field("status"),
+        "hash": node.get_field("hash"),
+        "body": node.get_field("body_text"),
+        "source": {"path": source_path, "line": node.get_field("parse_line")},
+        "assertions": assertions,
+        "parents": req_parents,
+        "children": req_children,
+        "coverage": metrics_data,
+    }
 
 
 def _get_hierarchy(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
@@ -4600,19 +4664,23 @@ def create_server(
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
-        """Get full details for a single requirement.
+        """Get focused details for a single requirement.
 
-        Use when: you have a requirement ID and need its title, status, level,
-        assertions, parent/child relationships, code refs, and test coverage.
+        Returns: id, title, level, status, hash, body, source location,
+        assertions, parent/child requirements, and coverage metrics.
+        For the full generic node envelope, use get_node().
         """
         return _get_requirement(_state["graph"], req_id)
 
     @mcp.tool()
     def get_node(node_id: str) -> dict[str, Any]:
-        """Get full details for any graph node by ID (requirement, assertion, test, code, file).
+        """Get full generic details for any graph node by ID.
 
-        Use when: you have any node ID (not just requirements) and need its details.
-        For requirement IDs specifically, get_requirement() returns richer context.
+        Supports requirement, assertion, test, code, and file nodes.
+
+        Use when: you need the raw node envelope with all children, edges, and
+        kind-specific properties. For requirements, prefer get_requirement() which
+        returns a focused, readable format.
         """
         return _get_node(_state["graph"], node_id)
 

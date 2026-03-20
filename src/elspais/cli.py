@@ -36,6 +36,7 @@ from elspais.commands import (
 from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
+    BrokenArgs,
     ChangedArgs,
     ChecksArgs,
     CompletionArgs,
@@ -117,6 +118,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UntestedArgs: "untested",
         UnvalidatedArgs: "unvalidated",
         FailingArgs: "failing",
+        BrokenArgs: "broken",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
         ViewerArgs: "viewer",
@@ -351,6 +353,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import gaps
 
             return gaps.run(args)
+        elif args.command == "broken":
+            from elspais.commands import broken
+
+            return broken.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":

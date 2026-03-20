@@ -24,6 +24,7 @@ COMPOSABLE_SECTIONS = (
     "unvalidated",
     "failing",
     "gaps",
+    "broken",
 )
 
 # Implements: REQ-d00085-E
@@ -37,6 +38,7 @@ FORMAT_SUPPORT = {
     "unvalidated": {"text", "markdown", "json"},
     "failing": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
+    "broken": {"text", "markdown", "json"},
 }
 
 EXIT_BIT: dict[str, int] = {
@@ -49,6 +51,7 @@ EXIT_BIT: dict[str, int] = {
     "unvalidated": 16,
     "failing": 16,
     "gaps": 16,
+    "broken": 32,
 }
 
 
@@ -110,6 +113,7 @@ def run(
         "unvalidated",
         "failing",
         "gaps",
+        "broken",
     }
     if set(sections) & graph_sections:
         from elspais.config import get_config
@@ -177,6 +181,10 @@ def _render_section(
         from elspais.commands.gaps import render_section as gap_render
 
         return gap_render(graph, config, args)
+    elif name == "broken":
+        from elspais.commands.broken import render_section as broken_render
+
+        return broken_render(graph, config, args)
     else:
         return f"Error: Unknown section '{name}'", 1
 

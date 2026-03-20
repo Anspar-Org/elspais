@@ -676,8 +676,7 @@ class TestMCPRenameAssertion:
 
             # Verify renamed
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children = req.get("children", [])
-            labels = [c.get("label", "") for c in children if c.get("kind") == "assertion"]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "X" in labels
             assert "A" not in labels
         finally:
@@ -1103,8 +1102,7 @@ class TestMCPMultiMutationWorkflow:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-o00001"})
             assert req["id"] == "REQ-o00001"
             assert req["title"] == "New Operations Req"
-            children = [c for c in req.get("children", []) if c.get("kind") == "assertion"]
-            assert len(children) == 2
+            assert len(req.get("assertions", [])) == 2
 
             # 5. Check hierarchy
             hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-o00001"})

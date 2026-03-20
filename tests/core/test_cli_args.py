@@ -13,6 +13,7 @@ import tyro
 from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
+    BrokenArgs,
     ChangedArgs,
     ChecksArgs,
     Command,
@@ -97,9 +98,10 @@ class TestCliArgsDataclasses:
             UntestedArgs,
             UnvalidatedArgs,
             FailingArgs,
+            BrokenArgs,
         }
         assert base_types == expected
-        assert len(args) == 28
+        assert len(args) == 29
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
         """ChecksArgs defaults are correct."""
@@ -248,6 +250,7 @@ class TestCliArgsDataclasses:
             UntestedArgs,
             UnvalidatedArgs,
             FailingArgs,
+            BrokenArgs,
             GlobalArgs,
         ]
         for cls in args_classes:

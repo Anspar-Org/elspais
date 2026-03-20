@@ -394,8 +394,7 @@ class TestMCPNumeric1Based:
         proc = start_mcp(tmp_path)
         try:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children = [c for c in req.get("children", []) if c.get("kind") == "assertion"]
-            labels = [c.get("label", "") for c in children]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "1" in labels
             assert "2" in labels
 

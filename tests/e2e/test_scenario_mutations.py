@@ -149,9 +149,7 @@ class TestScenarioMutationsE2E:
             # Verify a specific requirement
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
             assert req["title"] == "Platform Security"
-            assertion_labels = [
-                c["label"] for c in req.get("children", []) if c.get("kind") == "assertion"
-            ]
+            assertion_labels = [a["label"] for a in req.get("assertions", [])]
             assert "A" in assertion_labels
             assert "B" in assertion_labels
             assert "C" in assertion_labels
@@ -292,12 +290,12 @@ class TestScenarioMutationsE2E:
 
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-d00003"})
             assert req is not None
-            a_labels = [c["label"] for c in req.get("children", []) if c.get("kind") == "assertion"]
+            a_labels = [a["label"] for a in req.get("assertions", [])]
             assert "A" in a_labels
             assert "B" in a_labels
 
             req_p2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00002"})
-            assert req_p2["properties"]["status"] == "Draft"
+            assert req_p2["status"] == "Draft"
 
             # Verify mutation count >= 50
             log = mcp_call(proc, "get_mutation_log", {"limit": 100})

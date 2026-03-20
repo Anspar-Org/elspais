@@ -412,9 +412,7 @@ class TestMCPNumericAssertions:
         try:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
             assert req["id"] == "REQ-p00001"
-            children = req.get("children", [])
-            assertion_children = [c for c in children if c.get("kind") == "assertion"]
-            labels = [c.get("label", "") for c in assertion_children]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "0" in labels
             assert "1" in labels
             assert "2" in labels
@@ -432,8 +430,7 @@ class TestMCPNumericAssertions:
 
             # Verify it was added
             req2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children2 = [c for c in req2.get("children", []) if c.get("kind") == "assertion"]
-            labels2 = [c.get("label", "") for c in children2]
+            labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
             assert "3" in labels2
         finally:
             stop_mcp(proc)

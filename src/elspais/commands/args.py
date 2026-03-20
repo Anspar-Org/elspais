@@ -123,6 +123,17 @@ class FailingArgs:
     """Write output to file instead of stdout."""
 
 
+@dataclasses.dataclass
+class BrokenArgs:
+    """List broken references (edges targeting non-existent nodes)."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
 # ---------------------------------------------------------------------------
 # Doctor command
 # ---------------------------------------------------------------------------
@@ -775,6 +786,7 @@ Command = (
     | Annotated[UntestedArgs, tyro.conf.subcommand("untested")]
     | Annotated[UnvalidatedArgs, tyro.conf.subcommand("unvalidated")]
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
+    | Annotated[BrokenArgs, tyro.conf.subcommand("broken")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
     | Annotated[ViewerArgs, tyro.conf.subcommand("viewer")]
