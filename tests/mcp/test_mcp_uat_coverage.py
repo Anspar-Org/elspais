@@ -57,9 +57,8 @@ class TestGetUncoveredAssertionsSource:
         graph = _make_uat_graph()
         result = _get_uncovered_assertions(graph, req_id="REQ-p00001", source="uat")
         assert result["success"] is True
-        labels = [a["label"] for a in result["uncovered_assertions"]]
-        assert "B" in labels
-        assert "A" not in labels  # A is covered by JNY
+        assert "B" in result["uncovered_labels"]
+        assert "A" not in result["uncovered_labels"]  # A is covered by JNY
 
     def test_uncovered_assertions_default_source_is_test_REQ_d00069_A(self):
         """Default source='test' — JNY coverage doesn't count as test coverage."""
@@ -68,8 +67,7 @@ class TestGetUncoveredAssertionsSource:
         graph = _make_uat_graph()
         result = _get_uncovered_assertions(graph, req_id="REQ-p00001", source="test")
         assert result["success"] is True
-        labels = [a["label"] for a in result["uncovered_assertions"]]
-        assert "A" in labels  # JNY doesn't count as automated test
+        assert "A" in result["uncovered_labels"]  # JNY doesn't count as automated test
 
     def test_uncovered_assertions_source_both_REQ_d00069_A(self):
         """source='both' — assertion covered by either test or JNY is not uncovered."""
@@ -78,6 +76,5 @@ class TestGetUncoveredAssertionsSource:
         graph = _make_uat_graph()
         result = _get_uncovered_assertions(graph, req_id="REQ-p00001", source="both")
         assert result["success"] is True
-        labels = [a["label"] for a in result["uncovered_assertions"]]
-        assert "A" not in labels  # covered by JNY
-        assert "B" in labels  # not covered by either
+        assert "A" not in result["uncovered_labels"]  # covered by JNY
+        assert "B" in result["uncovered_labels"]  # not covered by either

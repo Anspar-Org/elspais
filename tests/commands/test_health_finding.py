@@ -235,7 +235,7 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais health --spec -v" in output
+        assert "elspais -v health --spec" in output
         assert "--format json -o health.json" in output
 
     def test_hint_skips_verbose_suggestion_when_already_verbose(
@@ -253,7 +253,7 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=True)
         output = capsys.readouterr().out
-        assert "elspais health --spec -v" not in output
+        assert "elspais -v health --spec" not in output
         assert "--format json -o health.json" in output
 
     def test_hint_not_shown_when_healthy(self, capsys: pytest.CaptureFixture) -> None:
@@ -294,6 +294,6 @@ class TestDetailHint:
         report = HealthReport(checks=checks)
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais health -v" in output
+        assert "elspais -v health" in output
         assert "--spec" not in output
         assert "--code" not in output

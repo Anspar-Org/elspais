@@ -1849,6 +1849,8 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
     }
 
 
+_TOOL_DOCS: dict[str, str] = {}  # Populated by create_server() after tool registration
+
 _FAQ_ENTRIES: list[dict[str, str]] = [
     {
         "topic": "linking",
@@ -1930,6 +1932,25 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         ),
     },
     {
+        "topic": "coverage",
+        "question": "How do I find coverage gaps?",
+        "answer": (
+            "CLI: Use gap flags on the health command:\n"
+            "  elspais health --untested    (requirements without test coverage)\n"
+            "  elspais health --uncovered   (requirements without code coverage)\n"
+            "  elspais health --unvalidated (requirements without UAT coverage)\n"
+            "  elspais health --untraced    (all gaps: uncovered + untested"
+            " + unvalidated + failing)\n"
+            "  elspais health --failing     (requirements with failing results)\n"
+            "\n"
+            "MCP: Use these tools:\n"
+            "  get_uncovered_assertions()          (all assertions without test coverage)\n"
+            "  get_uncovered_assertions(req_id)     (gaps for a specific requirement)\n"
+            "  get_test_coverage(req_id)            (detailed coverage breakdown)\n"
+            "  get_project_summary()                (high-level coverage statistics)"
+        ),
+    },
+    {
         "topic": "mutation",
         "question": "How do I persist changes made with mutate_* tools?",
         "answer": (
@@ -1987,7 +2008,13 @@ def _get_faq(topic: str) -> dict[str, Any]:
 
 
 def _get_docs(topic: str) -> dict[str, Any]:
-    """Return documentation content for a topic, or list available topics."""
+    """Return documentation content for a topic, or search all help surfaces.
+
+    If topic matches an exact topic name, returns that topic's full content.
+    Otherwise, searches docs, CLI flag docstrings, MCP tool docstrings,
+    and FAQ entries for the query string, returning full matched sections
+    with source labels.
+    """
     from elspais.utilities.docs_loader import get_available_topics, load_topic
 
     available = get_available_topics()
@@ -1996,19 +2023,132 @@ def _get_docs(topic: str) -> dict[str, Any]:
         return {
             "topics": available,
             "count": len(available),
-            "hint": "Call docs(topic) with a topic name to read its content.",
+            "hint": (
+                "Call docs(topic) with a topic name,"
+                " or pass a search phrase to find relevant sections."
+            ),
         }
 
+    # Exact topic match
     content = load_topic(topic)
-    if content is None:
+    if content is not None:
         return {
-            "error": f"Topic '{topic}' not found",
-            "available_topics": available,
+            "topic": topic,
+            "content": content,
+        }
+
+    # Search across all help surfaces
+    needle = topic.lower()
+    matches: list[dict[str, Any]] = []
+
+    # Build variant sets for fuzzy singular/plural matching.
+    # For each query word, generate {word, word±s} so "coverage gaps"
+    # matches text containing "coverage" AND ("gap" OR "gaps").
+    words = needle.split()
+    variant_sets: list[set[str]] = []
+    for w in words:
+        variants = {w}
+        if w.endswith("s") and len(w) > 2:
+            variants.add(w[:-1])  # strip trailing s
+        else:
+            variants.add(w + "s")  # add trailing s
+        variant_sets.append(variants)
+
+    def _text_matches(text: str) -> bool:
+        """Return True if text contains at least one variant from each set."""
+        lowered = text.lower()
+        # Fast path: single-word or exact phrase match
+        if needle in lowered:
+            return True
+        # Multi-word: each variant set must have at least one hit
+        return all(any(v in lowered for v in vs) for vs in variant_sets)
+
+    # 1. Search docs/cli/*.md files (section-level granularity)
+    for t in available:
+        tc = load_topic(t)
+        if tc is None:
+            continue
+        lines = tc.splitlines()
+        sections: list[tuple[int, int]] = []
+        section_start = 0
+        for i, line in enumerate(lines):
+            if line.startswith("## ") and i > 0:
+                sections.append((section_start, i))
+                section_start = i
+        sections.append((section_start, len(lines)))
+
+        for s_start, s_end in sections:
+            section_text = "\n".join(lines[s_start:s_end]).rstrip("\n")
+            if _text_matches(section_text):
+                matches.append(
+                    {
+                        "source": f"docs/cli/{t}.md",
+                        "content": section_text,
+                    }
+                )
+
+    # 2. Search CLI flag docstrings (from args.py dataclasses)
+    try:
+        import dataclasses
+
+        from elspais.commands import args as args_mod
+
+        for name in dir(args_mod):
+            obj = getattr(args_mod, name)
+            if not dataclasses.is_dataclass(obj) or not isinstance(obj, type):
+                continue
+            for field in dataclasses.fields(obj):
+                doc = field.metadata.get("help", "") or ""
+                # tyro uses the field's docstring from the class body
+                # Access via __dataclass_fields__ won't have it; check class source
+                if not doc:
+                    # Get the docstring from the class annotations
+                    # Fall back to field name + type
+                    doc = ""
+                # Search field name + any doc
+                field_text = f"--{field.name}: {doc}" if doc else f"--{field.name}"
+                if _text_matches(field_text) or _text_matches(field.name):
+                    matches.append(
+                        {
+                            "source": f"cli:{name}.{field.name}",
+                            "content": field_text,
+                        }
+                    )
+    except Exception:
+        pass
+
+    # 3. Search MCP tool docstrings (collected at registration)
+    for tool_name, doc in _TOOL_DOCS.items():
+        if _text_matches(doc) or _text_matches(tool_name):
+            matches.append(
+                {
+                    "source": f"mcp:{tool_name}",
+                    "content": doc,
+                }
+            )
+
+    # 4. Search FAQ entries
+    for entry in _FAQ_ENTRIES:
+        combined = f"{entry['question']}\n{entry['answer']}"
+        if _text_matches(combined):
+            matches.append(
+                {
+                    "source": f"faq:{entry['topic']}",
+                    "content": f"Q: {entry['question']}\nA: {entry['answer']}",
+                }
+            )
+
+    if not matches:
+        return {
+            "query": topic,
+            "matches": [],
+            "hint": f"No results for '{topic}'. Available topics: {', '.join(available)}",
         }
 
     return {
-        "topic": topic,
-        "content": content,
+        "query": topic,
+        "matches": matches,
+        "count": len(matches),
     }
 
 
@@ -2984,8 +3124,6 @@ def _get_uncovered_assertions(
                 covered.update(labels)
         return covered
 
-    uncovered: list[dict[str, Any]] = []
-
     if req_id is not None:
         node = graph.find_by_id(req_id)
         if node is None:
@@ -2995,66 +3133,56 @@ def _get_uncovered_assertions(
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
         covered = _covered_labels_for_req(node)
+        uncovered_labels = []
 
         for child in node.iter_children():
             if child.kind != NodeKind.ASSERTION:
                 continue
-            if child.get_field("label", "") in covered:
-                continue
+            if child.get_field("label", "") not in covered:
+                uncovered_labels.append(child.get_field("label", ""))
 
-            uncovered.append(
-                {
-                    "id": child.id,
-                    "label": child.get_field("label", ""),
-                    "text": child.get_label(),
-                    "parent_id": req_id,
-                    "parent_title": node.get_label(),
-                }
-            )
+        total = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
 
-            if len(uncovered) >= limit:
-                break
-    else:
-        # REQ-d00067-A: Scan all requirements, collect uncovered assertions
-        req_assertions: dict[str, list[Any]] = {}
+        return {
+            "success": True,
+            "req_id": req_id,
+            "title": node.get_label(),
+            "total_assertions": total,
+            "uncovered_count": len(uncovered_labels),
+            "uncovered_labels": uncovered_labels,
+        }
 
-        for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            covered = _covered_labels_for_req(req_node)
+    # REQ-d00067-A: Scan all requirements, return requirement-level summary
+    gaps: list[dict[str, Any]] = []
 
-            for child in req_node.iter_children():
-                if child.kind != NodeKind.ASSERTION:
-                    continue
-                if child.get_field("label", "") in covered:
-                    continue
+    for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        covered = _covered_labels_for_req(req_node)
+        assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
+        uncovered_labels = [
+            c.get_field("label", "") for c in assertions if c.get_field("label", "") not in covered
+        ]
+        if not uncovered_labels:
+            continue
 
-                if req_node.id not in req_assertions:
-                    req_assertions[req_node.id] = []
-                req_assertions[req_node.id].append((child, req_node))
+        gaps.append(
+            {
+                "req_id": req_node.id,
+                "title": req_node.get_label(),
+                "total_assertions": len(assertions),
+                "uncovered_count": len(uncovered_labels),
+                "uncovered_labels": uncovered_labels,
+            }
+        )
 
-        # Sort by requirement ID and build output
-        for req_id_key in sorted(req_assertions.keys()):
-            for assertion_node, parent_req in req_assertions[req_id_key]:
-                uncovered.append(
-                    {
-                        "id": assertion_node.id,
-                        "label": assertion_node.get_field("label", ""),
-                        "text": assertion_node.get_label(),
-                        "parent_id": parent_req.id,
-                        "parent_title": parent_req.get_label(),
-                    }
-                )
+        if len(gaps) >= limit:
+            break
 
-                if len(uncovered) >= limit:
-                    break
-
-            if len(uncovered) >= limit:
-                break
+    gaps.sort(key=lambda g: g["req_id"])
 
     return {
         "success": True,
-        "assertions": uncovered,
-        "uncovered_assertions": uncovered,
-        "count": len(uncovered),
+        "requirements": gaps,
+        "count": len(gaps),
     }
 
 
@@ -3883,7 +4011,10 @@ def _materialize_cursor_items(
         )
         if not result.get("success"):
             return []
-        return result.get("uncovered", [])
+        # Per-requirement: single item; all: list of requirement summaries
+        if "requirements" in result:
+            return result["requirements"]
+        return [result]
 
     elif query == "scoped_search":
         # Implements: REQ-o00068-F, REQ-d00076-B
@@ -4004,16 +4135,25 @@ The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
 
-1. `agent_instructions()` - Get project-specific authoring guidance
-2. `get_workspace_info(detail=...)` - Understand what project you're working with
-3. `get_project_summary()` - Get overview statistics and health metrics
-4. `search(query)` - Find requirements by keyword
-5. `get_requirement(req_id)` - Get full details including assertions
-6. `get_hierarchy(req_id)` - Navigate parent/child relationships
-7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
-8. `discover_assertions(query)` - Find assertions ranked by relevance
+1. `docs(topic)` - Browse docs by topic, or search all help with a phrase
+2. `faq(topic)` - Quick answers on common topics (linking, coverage, mutations, assertions)
+3. `agent_instructions()` - Get project-specific authoring guidance
+4. `get_workspace_info(detail=...)` - Understand what project you're working with
+5. `get_project_summary()` - Get overview statistics and health metrics
+6. `search(query)` - Find requirements by keyword
+7. `get_requirement(req_id)` - Get full details including assertions
+8. `get_hierarchy(req_id)` - Navigate parent/child relationships
+9. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+10. `discover_assertions(query)` - Find assertions ranked by relevance
 
 ## Tools Overview
+
+### Help & Documentation
+- `docs(topic)` - Browse docs by topic name, or search all help surfaces with a phrase
+  - Exact topic name (e.g., "health") returns full content
+  - Search phrase (e.g., "coverage gap") returns matching sections across all help
+- `faq(topic)` - Quick Q&A on common topics (linking, coverage, mutations, assertions, health)
+- `agent_instructions()` - Project-specific authoring rules and conventions
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
@@ -4169,7 +4309,14 @@ Use `save_mutations()` after making in-memory changes with `mutate_*` tools to p
 
 **Checking project health:**
 1. get_graph_status() for orphans/broken refs
-2. get_project_summary() for coverage gaps
+2. get_project_summary() for coverage statistics
+
+**Finding coverage gaps:**
+1. get_project_summary() for high-level coverage percentages
+2. get_uncovered_assertions() for all assertions without test coverage
+3. get_uncovered_assertions(req_id) to check a specific requirement
+4. get_test_coverage(req_id) for detailed coverage breakdown per requirement
+5. Also: docs("coverage gap") or faq("coverage") for CLI gap flags
 
 **Drafting requirement changes:**
 1. mutate_add_requirement() to create draft
@@ -4578,14 +4725,15 @@ def create_server(
 
     @mcp.tool()
     def docs(topic: str = "") -> dict[str, Any]:
-        """Browse elspais documentation topics.
+        """Browse or search elspais documentation.
 
         Use when: you need detailed guidance on a specific feature — linking,
-        health checks, configuration, assertions, etc.  Returns the full
-        docs/cli/*.md content for the requested topic.
+        health checks, configuration, assertions, etc.
 
         Args:
-            topic: Topic name (e.g., "linking", "health", "config", "format").
+            topic: Exact topic name (e.g., "health") returns full content.
+                   Any other string searches all docs for matching lines
+                   and returns excerpts with context.
                    If empty, returns the list of available topics.
         """
         return _get_docs(topic)
@@ -5145,6 +5293,13 @@ def create_server(
         _stats = ToolStats(stats_path)
         for tool in mcp._tool_manager._tools.values():
             tool.fn = instrument(tool.fn, tool.name, _stats)
+
+    # Collect tool docstrings for docs() search
+    _TOOL_DOCS.clear()
+    for tool in mcp._tool_manager._tools.values():
+        doc = (tool.fn.__doc__ or "").strip()
+        if doc:
+            _TOOL_DOCS[tool.name] = doc
 
     return mcp
 

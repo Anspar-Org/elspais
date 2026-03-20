@@ -204,12 +204,14 @@ class TestGetUncoveredAssertions:
 
         result = _get_uncovered_assertions(coverage_graph, req_id=None)
 
-        # Should find B, C from REQ-p00001 and A from REQ-p00002 (A from p00001 is covered)
-        uncovered_ids = [a["id"] for a in result["assertions"]]
-        assert "REQ-p00001-B" in uncovered_ids
-        assert "REQ-p00001-C" in uncovered_ids
-        assert "REQ-p00002-A" in uncovered_ids
-        assert "REQ-p00001-A" not in uncovered_ids  # This one is covered
+        # Returns requirement-level summaries with uncovered labels
+        reqs = {r["req_id"]: r for r in result["requirements"]}
+        assert "REQ-p00001" in reqs
+        assert "B" in reqs["REQ-p00001"]["uncovered_labels"]
+        assert "C" in reqs["REQ-p00001"]["uncovered_labels"]
+        assert "A" not in reqs["REQ-p00001"]["uncovered_labels"]  # covered
+        assert "REQ-p00002" in reqs
+        assert "A" in reqs["REQ-p00002"]["uncovered_labels"]
 
     def test_REQ_d00067_B_iterates_child_assertions_when_req_id_provided(self, coverage_graph):
         """REQ-d00067-B: SHALL iterate only child assertions when req_id is provided."""
@@ -217,38 +219,31 @@ class TestGetUncoveredAssertions:
 
         result = _get_uncovered_assertions(coverage_graph, req_id="REQ-p00001")
 
-        uncovered_ids = [a["id"] for a in result["assertions"]]
-        assert "REQ-p00001-B" in uncovered_ids
-        assert "REQ-p00001-C" in uncovered_ids
-        # Should NOT include assertions from other requirements
-        assert "REQ-p00002-A" not in uncovered_ids
+        assert result["req_id"] == "REQ-p00001"
+        assert "B" in result["uncovered_labels"]
+        assert "C" in result["uncovered_labels"]
+        assert "A" not in result["uncovered_labels"]  # covered
 
-    def test_REQ_d00067_D_returns_assertion_context(self, coverage_graph):
-        """REQ-d00067-D: SHALL return assertion id, text, label, and parent requirement context."""
+    def test_REQ_d00067_D_returns_requirement_context(self, coverage_graph):
+        """REQ-d00067-D: SHALL return requirement id, title, and uncovered label summary."""
         from elspais.mcp.server import _get_uncovered_assertions
 
         result = _get_uncovered_assertions(coverage_graph, req_id="REQ-p00001")
 
-        assertion = next(a for a in result["assertions"] if a["id"] == "REQ-p00001-B")
-        assert assertion["label"] == "B"
-        assert "TLS" in assertion["text"]
-        assert assertion["parent_id"] == "REQ-p00001"
+        assert result["req_id"] == "REQ-p00001"
+        assert result["title"]  # has a title
+        assert result["total_assertions"] == 3
+        assert result["uncovered_count"] == 2
+        assert set(result["uncovered_labels"]) == {"B", "C"}
 
-    def test_REQ_d00067_E_sorts_by_parent_requirement(self, coverage_graph):
-        """REQ-d00067-E: SHALL sort results by parent requirement for logical grouping."""
+    def test_REQ_d00067_E_sorts_by_requirement_id(self, coverage_graph):
+        """REQ-d00067-E: SHALL sort results by requirement ID for logical grouping."""
         from elspais.mcp.server import _get_uncovered_assertions
 
         result = _get_uncovered_assertions(coverage_graph, req_id=None)
 
-        # Results should be grouped by parent
-        parent_ids = [a["parent_id"] for a in result["assertions"]]
-        # Check that same parent assertions are consecutive
-        seen_parents = []
-        for pid in parent_ids:
-            if pid not in seen_parents:
-                seen_parents.append(pid)
-        # Should be sorted (p00001 before p00002)
-        assert seen_parents == sorted(seen_parents)
+        req_ids = [r["req_id"] for r in result["requirements"]]
+        assert req_ids == sorted(req_ids)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

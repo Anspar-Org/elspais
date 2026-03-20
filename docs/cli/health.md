@@ -280,16 +280,32 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 
 ## Command Options
 
-| Option | Description |
-|--------|-------------|
-| `--spec` | Run spec file checks only |
-| `--code` | Run code reference checks only |
-| `--tests` | Run test mapping checks only |
-| `--format` | Output format: `text`, `markdown`, `json`, `junit`, `sarif` |
-| `--lenient` | Allow warnings without affecting exit code |
-| `-v`, `--verbose` | Show additional details |
-| `--skip-passing-details` | Hide details for passing checks (default) |
-| `--include-passing-details` | Show full details for passing checks |
+Run `elspais health --help` for the full list of flags.  Options are
+defined in `commands/args.py:HealthArgs` — that dataclass is the single
+source of truth for flag names and descriptions.
+
+## Coverage Gap Reporting
+
+Use the gap flags to identify specific requirements that need attention:
+
+```bash
+# Show all traceability gaps
+elspais health --untraced
+
+# Just show what needs tests
+elspais health --untested
+
+# Check for failures
+elspais health --failing
+
+# Combine flags
+elspais health --uncovered --untested
+```
+
+Each flag appends a section after the health report listing the affected
+requirements with their IDs and titles. Sections print "none" when there
+are no gaps. Only Active requirements are included by default (controlled
+by `--status`).
 
 ## Passing Check Detail Control
 
@@ -343,7 +359,7 @@ elspais doctor
 
 ```bash
 # Verbose output for debugging
-elspais health --spec -v
+elspais -v health --spec
 ```
 
 ### JSON Processing
@@ -364,7 +380,7 @@ This usually means:
 
 Run with verbose to see details:
 ```bash
-elspais health --spec -v
+elspais -v health --spec
 ```
 
 ### "Unresolved Implements references"

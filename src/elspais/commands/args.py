@@ -46,6 +46,21 @@ class HealthArgs:
     include_passing_details: bool = False
     """Show full details for passing checks."""
 
+    uncovered: bool = False
+    """List requirements without code coverage."""
+
+    untested: bool = False
+    """List requirements without test coverage."""
+
+    unvalidated: bool = False
+    """List requirements without UAT (journey) coverage."""
+
+    untraced: bool = False
+    """List all traceability gaps (uncovered + untested + unvalidated + failing)."""
+
+    failing: bool = False
+    """List requirements with failing test or UAT results."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 

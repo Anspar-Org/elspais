@@ -1924,7 +1924,97 @@ def run(args: argparse.Namespace) -> int:
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
-    return _output_report(report, args)
+    result = _output_report(report, args)
+
+    # Gap listing flags
+    if graph:
+        show_uncovered = getattr(args, "uncovered", False)
+        show_untested = getattr(args, "untested", False)
+        show_unvalidated = getattr(args, "unvalidated", False)
+        show_failing = getattr(args, "failing", False)
+        show_untraced = getattr(args, "untraced", False)
+        if show_untraced:
+            show_uncovered = show_untested = show_unvalidated = show_failing = True
+
+        if show_uncovered or show_untested or show_unvalidated or show_failing:
+            _print_gap_listing(
+                graph,
+                exclude_status,
+                uncovered=show_uncovered,
+                untested=show_untested,
+                unvalidated=show_unvalidated,
+                failing=show_failing,
+            )
+
+    return result
+
+
+def _print_gap_listing(
+    graph: FederatedGraph,
+    exclude_status: set[str],
+    *,
+    uncovered: bool = False,
+    untested: bool = False,
+    unvalidated: bool = False,
+    failing: bool = False,
+) -> None:
+    """Print requirements missing code, test, or UAT coverage, or with failures."""
+    from elspais.graph import NodeKind
+
+    gaps_uncovered: list[tuple[str, str]] = []
+    gaps_untested: list[tuple[str, str]] = []
+    gaps_unvalidated: list[tuple[str, str]] = []
+    gaps_failing: list[tuple[str, str, str]] = []  # (id, title, source)
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            continue
+        rid = node.id
+        title = node.get_label() or ""
+        metrics = node.get_metric("rollup_metrics")
+
+        if uncovered:
+            has_code = metrics is not None and metrics.coverage_pct > 0
+            if not has_code:
+                gaps_uncovered.append((rid, title))
+
+        if untested:
+            has_test = metrics is not None and metrics.direct_tested > 0
+            if not has_test:
+                gaps_untested.append((rid, title))
+
+        if unvalidated:
+            has_uat = metrics is not None and metrics.uat_covered > 0
+            if not has_uat:
+                gaps_unvalidated.append((rid, title))
+
+        if failing and metrics is not None:
+            if metrics.has_failures:
+                gaps_failing.append((rid, title, "test"))
+            if metrics.uat_has_failures:
+                gaps_failing.append((rid, title, "uat"))
+
+    def _print_section(label: str, gaps: list[tuple[str, str]]) -> None:
+        if not gaps:
+            print(f"\n{label}: none")
+            return
+        print(f"\n{label} ({len(gaps)}):")
+        for rid, title in sorted(gaps):
+            print(f"  {rid:20s} {title}")
+
+    if uncovered:
+        _print_section("UNCOVERED (no code refs)", gaps_uncovered)
+    if untested:
+        _print_section("UNTESTED (no test coverage)", gaps_untested)
+    if unvalidated:
+        _print_section("UNVALIDATED (no UAT coverage)", gaps_unvalidated)
+    if failing:
+        if not gaps_failing:
+            print("\nFAILING: none")
+        else:
+            print(f"\nFAILING ({len(gaps_failing)}):")
+            for rid, title, source in sorted(gaps_failing):
+                print(f"  {rid:20s} [{source}] {title}")
 
 
 def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
@@ -2070,7 +2160,7 @@ def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
         scope = ""
 
     if not already_verbose:
-        print(f"Run 'elspais health{scope} -v' for details,")
+        print(f"Run 'elspais -v health{scope}' for details,")
         print(
             f" or 'elspais health{scope} --format json -o health.json' for machine-readable output."
         )
