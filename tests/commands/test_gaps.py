@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.gaps import collect_gaps
+from elspais.commands.gaps import GapData, collect_gaps, render_gap_markdown, render_gap_text
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -103,3 +103,131 @@ class TestCollectGaps:
 
         data = collect_gaps(graph, exclude_status=set())
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
+
+
+# ---- Rendering tests ----
+
+
+class TestRenderGapText:
+    """Tests for render_gap_text()."""
+
+    def test_uncovered_section(self) -> None:
+        data = GapData(uncovered=[("REQ-p00001", "Login"), ("REQ-p00002", "Signup")])
+        output = render_gap_text("uncovered", data)
+        assert "UNCOVERED (no code refs)" in output
+        assert "(2)" in output
+        assert "REQ-p00001" in output
+        assert "REQ-p00002" in output
+
+    def test_empty_shows_none(self) -> None:
+        data = GapData()
+        output = render_gap_text("uncovered", data)
+        assert "none" in output
+
+    def test_failing_shows_source(self) -> None:
+        data = GapData(failing=[("REQ-p00001", "Login", "test")])
+        output = render_gap_text("failing", data)
+        assert "[test]" in output
+        assert "REQ-p00001" in output
+
+    def test_untested_section(self) -> None:
+        data = GapData(untested=[("REQ-p00003", "Search")])
+        output = render_gap_text("untested", data)
+        assert "UNTESTED (no test coverage)" in output
+        assert "(1)" in output
+
+    def test_unvalidated_section(self) -> None:
+        data = GapData(unvalidated=[("REQ-p00004", "Payment")])
+        output = render_gap_text("unvalidated", data)
+        assert "UNVALIDATED (no UAT coverage)" in output
+
+    def test_sorted_output(self) -> None:
+        data = GapData(uncovered=[("REQ-p00002", "B"), ("REQ-p00001", "A")])
+        output = render_gap_text("uncovered", data)
+        pos_a = output.index("REQ-p00001")
+        pos_b = output.index("REQ-p00002")
+        assert pos_a < pos_b
+
+
+class TestRenderGapMarkdown:
+    """Tests for render_gap_markdown()."""
+
+    def test_uncovered_section(self) -> None:
+        data = GapData(uncovered=[("REQ-p00001", "Login")])
+        output = render_gap_markdown("uncovered", data)
+        assert "## UNCOVERED" in output
+        assert "| REQ-p00001" in output
+        assert "| Requirement | Title |" in output
+
+    def test_empty_shows_no_gaps(self) -> None:
+        data = GapData()
+        output = render_gap_markdown("uncovered", data)
+        assert "No gaps found" in output
+
+    def test_failing_has_source_column(self) -> None:
+        data = GapData(failing=[("REQ-p00001", "Login", "test")])
+        output = render_gap_markdown("failing", data)
+        assert "| Requirement | Source | Title |" in output
+        assert "| REQ-p00001 | test | Login |" in output
+
+    def test_markdown_table_format(self) -> None:
+        data = GapData(uncovered=[("REQ-p00001", "Login")])
+        output = render_gap_markdown("uncovered", data)
+        lines = output.strip().split("\n")
+        # Header, separator, data row
+        assert any("|---" in line for line in lines)
+
+
+class TestRenderSection:
+    """Tests for render_section()."""
+
+    def test_text_format_all_gaps(self) -> None:
+        from elspais.commands.gaps import render_section
+
+        graph = _make_graph(_make_req("REQ-p00001", "Test"))
+        output, exit_code = render_section(graph, {}, _make_args(format="text"))
+        assert exit_code == 0
+        assert "UNCOVERED" in output
+        assert "UNTESTED" in output
+        assert "UNVALIDATED" in output
+        assert "FAILING" in output
+
+    def test_markdown_format(self) -> None:
+        from elspais.commands.gaps import render_section
+
+        graph = _make_graph(_make_req("REQ-p00001", "Test"))
+        output, exit_code = render_section(graph, {}, _make_args(format="markdown"))
+        assert exit_code == 0
+        assert "##" in output
+
+    def test_json_format(self) -> None:
+        import json
+
+        from elspais.commands.gaps import render_section
+
+        graph = _make_graph(_make_req("REQ-p00001", "Test"))
+        output, exit_code = render_section(graph, {}, _make_args(format="json"))
+        assert exit_code == 0
+        parsed = json.loads(output)
+        assert "uncovered" in parsed
+
+    def test_specific_gap_types(self) -> None:
+        from elspais.commands.gaps import render_section
+
+        graph = _make_graph(_make_req("REQ-p00001", "Test"))
+        output, exit_code = render_section(
+            graph, {}, _make_args(format="text"), gap_types=["uncovered"]
+        )
+        assert "UNCOVERED" in output
+        assert "UNTESTED" not in output
+
+
+def _make_args(**kwargs: object) -> object:
+    """Create a simple namespace with given attributes."""
+    import argparse
+
+    ns = argparse.Namespace()
+    ns.format = kwargs.get("format", "text")
+    ns.status = kwargs.get("status", None)
+    ns.command = kwargs.get("command", "gaps")
+    return ns

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -61,3 +64,143 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
                 data.failing.append((req_id, title, "uat"))
 
     return data
+
+
+# =============================================================================
+# Rendering
+# =============================================================================
+
+_LABELS = {
+    "uncovered": "UNCOVERED (no code refs)",
+    "untested": "UNTESTED (no test coverage)",
+    "unvalidated": "UNVALIDATED (no UAT coverage)",
+    "failing": "FAILING",
+}
+
+
+def render_gap_text(gap_type: str, data: GapData) -> str:
+    """Render a single gap section as plain text."""
+    label = _LABELS[gap_type]
+    gaps = getattr(data, gap_type)
+    if not gaps:
+        return f"\n{label}: none"
+    lines = [f"\n{label} ({len(gaps)}):"]
+    if gap_type == "failing":
+        for rid, title, source in sorted(gaps):
+            lines.append(f"  {rid:20s} [{source}] {title}")
+    else:
+        for rid, title in sorted(gaps):
+            lines.append(f"  {rid:20s} {title}")
+    return "\n".join(lines)
+
+
+def render_gap_markdown(gap_type: str, data: GapData) -> str:
+    """Render a single gap section as markdown."""
+    label = _LABELS[gap_type]
+    gaps = getattr(data, gap_type)
+    if not gaps:
+        return f"## {label}\n\nNo gaps found."
+    lines = [f"## {label} ({len(gaps)})", ""]
+    if gap_type == "failing":
+        lines.append("| Requirement | Source | Title |")
+        lines.append("|-------------|--------|-------|")
+        for rid, title, source in sorted(gaps):
+            lines.append(f"| {rid} | {source} | {title} |")
+    else:
+        lines.append("| Requirement | Title |")
+        lines.append("|-------------|-------|")
+        for rid, title in sorted(gaps):
+            lines.append(f"| {rid} | {title} |")
+    return "\n".join(lines)
+
+
+# =============================================================================
+# Composable section
+# =============================================================================
+
+_ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing"]
+
+
+def render_section(
+    graph: FederatedGraph,
+    config: dict[str, Any] | None,
+    args: argparse.Namespace,
+    gap_types: list[str] | None = None,
+) -> tuple[str, int]:
+    """Render gap sections for the given gap types.
+
+    Returns:
+        Tuple of (rendered output string, exit code).
+        Exit code is always 0 (gap sections are informational).
+    """
+    from elspais.commands.health import _resolve_exclude_status
+
+    if gap_types is None:
+        gap_types = _ALL_GAP_TYPES
+
+    exclude_status = _resolve_exclude_status(args, config=config or {})
+    data = collect_gaps(graph, exclude_status)
+
+    fmt = getattr(args, "format", "text")
+
+    if fmt == "json":
+        result: dict[str, Any] = {}
+        for gt in gap_types:
+            result[gt] = [list(item) for item in getattr(data, gt)]
+        return json.dumps(result, indent=2), 0
+
+    if fmt == "markdown":
+        sections = [render_gap_markdown(gt, data) for gt in gap_types]
+        return "\n\n".join(sections), 0
+
+    # Default: text
+    sections = [render_gap_text(gt, data) for gt in gap_types]
+    return "\n\n".join(sections), 0
+
+
+# =============================================================================
+# Standalone run
+# =============================================================================
+
+_GAP_TYPE_MAP: dict[str, str | None] = {
+    "gaps": None,  # None = all gap types
+    "uncovered": "uncovered",
+    "untested": "untested",
+    "unvalidated": "unvalidated",
+    "failing": "failing",
+}
+
+
+def run(args: argparse.Namespace) -> int:
+    """Run a standalone gap listing command.
+
+    Builds the graph and renders the requested gap types.
+    """
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    canonical_root = getattr(args, "canonical_root", None)
+    start_path = Path.cwd()
+
+    config = get_config(config_path, start_path=start_path)
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        canonical_root=canonical_root,
+    )
+
+    command = getattr(args, "command", "gaps")
+    gap_type = _GAP_TYPE_MAP.get(command)
+    gap_types: list[str] | None = [gap_type] if gap_type else None
+
+    output, exit_code = render_section(graph, config, args, gap_types=gap_types)
+
+    output_file = getattr(args, "output", None)
+    if output_file:
+        Path(output_file).write_text(output + "\n")
+    else:
+        print(output)
+
+    return exit_code
