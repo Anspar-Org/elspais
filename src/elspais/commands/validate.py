@@ -96,7 +96,7 @@ def run(args: argparse.Namespace) -> int:
         canonical_root=canonical_root,
     )
 
-    # Implements: REQ-d00083-B
+    # Implements: REQ-d00085-E
     # Handle --export mode (early return, not validation)
     if getattr(args, "export", False):
         export_dict: dict[str, dict] = {}
@@ -370,7 +370,7 @@ def run(args: argparse.Namespace) -> int:
             }
         )
 
-    # Implements: REQ-d00083-A
+    # Implements: REQ-d00085-E
     # Output results
     if getattr(args, "json", False):
         result = {
