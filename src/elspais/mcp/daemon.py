@@ -174,11 +174,19 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
+    Restarts the daemon if its version doesn't match the current install.
     """
-    # Always connect to an existing daemon regardless of cli_ttl
     info = get_daemon_info(repo_root)
     if info:
-        return info["port"]
+        # Version check: restart if daemon is from a different elspais version
+        from elspais import __version__
+
+        daemon_version = info.get("version")
+        if daemon_version and daemon_version != __version__:
+            stop_daemon(repo_root)
+            # Fall through to start a fresh daemon
+        else:
+            return info["port"]
 
     if ttl_minutes is None:
         ttl_minutes = get_cli_ttl(repo_root)

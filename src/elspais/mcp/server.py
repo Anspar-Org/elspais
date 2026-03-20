@@ -5401,6 +5401,7 @@ def run_server(
         import anyio
         import uvicorn
 
+        from elspais import __version__
         from elspais.server.app import create_app
         from elspais.server.state import AppState
 
@@ -5431,6 +5432,7 @@ def run_server(
                         "port": port,
                         "repo_root": str(working_dir),
                         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "version": __version__,
                     }
                 )
             )
