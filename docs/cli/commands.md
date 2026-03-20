@@ -68,9 +68,35 @@ Generate traceability matrix and reports.
   `--tests`              Show test references
   `--output PATH`        Output file path
 
+## search
+
+Search requirements by keyword, with ranked results.
+
+  $ elspais search 'authentication'       # Search all fields
+  $ elspais search 'auth OR login'        # OR queries
+  $ elspais search '"exact phrase"'       # Phrase match
+  $ elspais search '-deprecated auth'     # Exclude term
+  $ elspais search '=security'            # Exact keyword tag
+  $ elspais search 'graph' --field title  # Search titles only
+  $ elspais search 'REQ-p' --regex        # Regex mode
+  $ elspais search 'graph' -n 10          # Limit results
+
+**Options:**
+
+  `--field {all,id,title,body,keywords}`  Fields to search (default: all)
+  `--regex`            Treat query as regex
+  `-n, --limit N`      Max results (default: 50)
+  `--format {text,json}`  Output format
+  `--no-daemon`        Skip daemon, rebuild graph locally
+
+**Performance:** Connects to a running viewer or MCP daemon for instant
+results (~0.1s). Auto-starts a daemon on first use if neither is running.
+Use `--no-daemon` to force a local graph build (~2-4s).
+
 ## viewer
 
-Interactive traceability viewer (live server or static HTML).
+Interactive traceability viewer (live server or static HTML). The viewer
+also serves MCP tools at `/mcp` for AI agent integration.
 
   $ elspais viewer                  # Start server and open browser
   $ elspais viewer --static         # Generate static HTML file

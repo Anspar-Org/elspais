@@ -43,19 +43,19 @@ mcp = ["mcp>=1.0"]
 pdf = []
 # REQ-int-d00002-B: HTML generation requires jinja2
 trace-view = ["jinja2>=3.0", "pygments>=2.0"]
-# REQ-int-d00002-C: Review server requires flask
+# REQ-int-d00002-C: Review server requires starlette
 trace-review = [
     "jinja2>=3.0",
     "pygments>=2.0",
-    "flask>=2.0",
-    "flask-cors>=4.0",
+    "starlette>=0.36",
+    "uvicorn>=0.20",
 ]
 # All optional features
 all = [
     "jinja2>=3.0",
     "pygments>=2.0",
-    "flask>=2.0",
-    "flask-cors>=4.0",
+    "starlette>=0.36",
+    "uvicorn>=0.20",
     "mcp>=1.0",
 ]
 
