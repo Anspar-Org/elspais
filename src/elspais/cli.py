@@ -240,8 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"elspais {__version__}")
         return 0
 
-    # Handle no args or "help" — show help text
-    if not argv or argv == ["help"]:
+    # Handle no args, "help", or bare "--help" — show grouped help text
+    if not argv or argv == ["help"] or argv == ["--help"] or argv == ["-h"]:
         _print_help()
         return 0
 
@@ -433,60 +433,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _print_help() -> None:
-    """Print help text matching the original argparse output."""
-    print(
-        f"""elspais {__version__} — Requirements validation and traceability tools (L-Space)
+    """Print grouped help text for the CLI (auto-generated from dataclasses)."""
+    from elspais.commands.args import generate_help
 
-Usage: elspais [options] <command> [command-options]
-
-Commands:
-  health      Check repository and configuration health
-  gaps        List all traceability gaps
-  uncovered   List requirements without code coverage
-  untested    List requirements without test coverage
-  unvalidated List requirements without UAT coverage
-  failing     List requirements with failing results
-  doctor      Diagnose environment and installation health
-  trace       Generate traceability matrix
-  viewer      Interactive traceability viewer (live server or static HTML)
-  graph       Export the traceability graph structure as JSON
-  fix         Auto-fix spec file issues (hashes, formatting)
-  summary     Coverage summary by level
-  changed     Detect git changes to spec files
-  analysis    Analyze foundational requirement importance
-  version     Show version and check for updates
-  init        Create .elspais.toml configuration
-  example     Display requirement format examples and templates
-  edit        Edit requirements in-place
-  config      View and modify configuration (show, get, set, ...)
-  rules       View and manage content rules (list, show)
-  docs        Read the user guide
-  associate   Manage associate repository links
-  pdf         Compile spec files into a PDF document
-  install     Install elspais variants
-  uninstall   Revert elspais installation
-  mcp         MCP server commands
-  link        Link suggestion tools
-  completion  Generate and install shell tab-completion scripts
-
-Global options:
-  --verbose, -v       Verbose output
-  --quiet, -q         Suppress non-error output
-  --directory, -C DIR Run as if started in this directory
-  --config PATH       Path to configuration file
-  --spec-dir PATH     Override spec directory
-  --version           Show version and exit
-
-Examples:
-  elspais health                # Check project health
-  elspais summary               # Show coverage summary
-  elspais trace --format html   # Generate HTML traceability matrix
-  elspais viewer                # Start interactive viewer
-  elspais health summary trace  # Compose multiple report sections
-  elspais config show           # View all settings
-
-For command help: elspais <command> --help"""
-    )
+    print(generate_help(__version__))
 
 
 def docs_command(args: argparse.Namespace) -> int:

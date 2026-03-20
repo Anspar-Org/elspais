@@ -11,6 +11,7 @@ import typing
 import tyro
 
 from elspais.commands.args import (
+    COMMAND_GROUPS,
     AnalysisArgs,
     AssociateArgs,
     BrokenArgs,
@@ -51,6 +52,7 @@ from elspais.commands.args import (
     UnvalidatedArgs,
     VersionArgs,
     ViewerArgs,
+    generate_help,
 )
 
 
@@ -258,3 +260,36 @@ class TestCliArgsDataclasses:
         ]
         for cls in args_classes:
             assert dataclasses.is_dataclass(cls), f"{cls.__name__} is not a dataclass"
+
+    def test_REQ_p00001_A_command_groups_covers_all_subcommands(self) -> None:
+        """Every subcommand in the Command Union has a COMMAND_GROUPS entry."""
+        args = typing.get_args(Command)
+        subcommand_names = set()
+        for arg in args:
+            if typing.get_origin(arg) is typing.Annotated:
+                _, *metadata = typing.get_args(arg)
+                for m in metadata:
+                    if hasattr(m, "name"):
+                        subcommand_names.add(m.name)
+
+        missing = subcommand_names - set(COMMAND_GROUPS)
+        assert not missing, (
+            f"Subcommands missing from COMMAND_GROUPS: {missing}. "
+            f"Add them to elspais/commands/args.py"
+        )
+        # Also check no stale entries in COMMAND_GROUPS
+        extra = set(COMMAND_GROUPS) - subcommand_names
+        assert not extra, f"Stale entries in COMMAND_GROUPS (not in Command Union): {extra}"
+
+    def test_REQ_p00001_A_generate_help_includes_all_commands(self) -> None:
+        """generate_help() output contains every subcommand name."""
+        help_text = generate_help("0.0.0")
+        args = typing.get_args(Command)
+        for arg in args:
+            if typing.get_origin(arg) is typing.Annotated:
+                _, *metadata = typing.get_args(arg)
+                for m in metadata:
+                    if hasattr(m, "name"):
+                        assert (
+                            m.name in help_text
+                        ), f"Subcommand {m.name!r} not found in help output"

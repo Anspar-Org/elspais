@@ -848,3 +848,155 @@ class GlobalArgs:
 
     quiet: Annotated[bool, tyro.conf.arg(aliases=["-q"])] = False
     """Suppress non-error output."""
+
+
+# ---------------------------------------------------------------------------
+# Grouped help generation
+# ---------------------------------------------------------------------------
+# Maps each subcommand name to its display group.  Group display order is
+# determined by first occurrence (Python 3.7+ insertion order).
+COMMAND_GROUPS: dict[str, str] = {
+    "checks": "Reports",
+    "summary": "Reports",
+    "trace": "Reports",
+    "changed": "Reports",
+    "pdf": "Reports",
+    "gaps": "Gaps & Issues",
+    "uncovered": "Gaps & Issues",
+    "untested": "Gaps & Issues",
+    "unvalidated": "Gaps & Issues",
+    "failing": "Gaps & Issues",
+    "broken": "Gaps & Issues",
+    "unlinked": "Gaps & Issues",
+    "analysis": "Authoring",
+    "fix": "Authoring",
+    "edit": "Authoring",
+    "example": "Authoring",
+    "link": "Authoring",
+    "viewer": "Viewing",
+    "graph": "Viewing",
+    "init": "Configuration",
+    "config": "Configuration",
+    "rules": "Configuration",
+    "associate": "Configuration",
+    "doctor": "Install",
+    "mcp": "Install",
+    "install": "Install",
+    "uninstall": "Install",
+    "completion": "Install",
+    "docs": "Info",
+    "version": "Info",
+}
+
+# Ordered list of groups for display (derived from COMMAND_GROUPS).
+_GROUP_ORDER: list[str] = list(dict.fromkeys(COMMAND_GROUPS.values()))
+
+
+def generate_help(version: str) -> str:
+    """Generate grouped CLI help text from Command Union metadata.
+
+    Reads subcommand names and descriptions directly from the dataclass
+    definitions so the help output cannot drift from reality.
+    """
+    import typing
+
+    # --- Extract subcommand info from the Command Union ---
+    commands: list[tuple[str, str]] = []  # (name, description)
+    for arg in typing.get_args(Command):
+        if typing.get_origin(arg) is not typing.Annotated:
+            continue
+        base_type, *metadata = typing.get_args(arg)
+        # Find the subcommand name from tyro metadata
+        name = None
+        for m in metadata:
+            if hasattr(m, "name"):
+                name = m.name
+        if name is None:
+            continue
+
+        # Description from docstring (first line only)
+        doc = (base_type.__doc__ or "").strip().split("\n")[0]
+        # Strip trailing period for cleaner display
+        if doc.endswith("."):
+            doc = doc[:-1]
+
+        # Auto-detect nested subcommand hints from 'action' field
+        if dataclasses.is_dataclass(base_type):
+            hints = typing.get_type_hints(base_type, include_extras=True)
+            if "action" in hints:
+                action_t = hints["action"]
+                # Unwrap tyro wrapper types to reach the inner Union
+                while (
+                    typing.get_origin(action_t) is not None
+                    and typing.get_origin(action_t) is not typing.Union
+                ):
+                    inner = typing.get_args(action_t)
+                    if inner:
+                        action_t = inner[0]
+                    else:
+                        break
+                # Extract subcommand names from the Union
+                sub_names = []
+                for aa in typing.get_args(action_t):
+                    if typing.get_origin(aa) is typing.Annotated:
+                        _, *ameta = typing.get_args(aa)
+                        for am in ameta:
+                            if hasattr(am, "name"):
+                                sub_names.append(am.name)
+                if sub_names:
+                    doc += f" ({', '.join(sub_names)})"
+
+        assert name in COMMAND_GROUPS, (
+            f"Subcommand {name!r} missing from COMMAND_GROUPS — "
+            f"add it to elspais/commands/args.py"
+        )
+        commands.append((name, doc))
+
+    # --- Build grouped output ---
+    # Bucket commands by group, ordered by COMMAND_GROUPS dict order
+    cmd_lookup: dict[str, str] = dict(commands)
+    groups: dict[str, list[str]] = {g: [] for g in _GROUP_ORDER}
+    for name in COMMAND_GROUPS:
+        if name in cmd_lookup:
+            groups[COMMAND_GROUPS[name]].append(name)
+
+    # Compute column width for subcommands
+    max_name = max((len(n) for n, _ in commands), default=0)
+    cmd_col = max_name + 2
+
+    # Fixed column width for global options (widest entry is --directory, -C DIR)
+    opt_col = 21
+
+    lines: list[str] = []
+    lines.append(
+        f"elspais {version} \u2014 Requirements validation and traceability tools (L-Space)"
+    )
+    lines.append("")
+    lines.append("Usage: elspais [options] <command> [command-options]")
+
+    for group_title in _GROUP_ORDER:
+        entries = groups[group_title]
+        if not entries:
+            continue
+        lines.append("")
+        lines.append(f"{group_title}:")
+        for name in entries:
+            lines.append(f"  {name:<{cmd_col}}{cmd_lookup[name]}")
+
+    lines.append("")
+    lines.append("Global options:")
+    lines.append(f"  {'--verbose, -v':<{opt_col}}Verbose output")
+    lines.append(f"  {'--quiet, -q':<{opt_col}}Suppress non-error output")
+    lines.append(f"  {'--directory, -C DIR':<{opt_col}}Run as if started in this directory")
+    lines.append(f"  {'--config PATH':<{opt_col}}Path to configuration file")
+    lines.append(f"  {'--spec-dir PATH':<{opt_col}}Override spec directory")
+    lines.append(f"  {'--version':<{opt_col}}Show version and exit")
+
+    lines.append("")
+    lines.append("Compose multiple sections:")
+    lines.append("  elspais checks summary trace  # Run checks, summary, and trace together")
+
+    lines.append("")
+    lines.append("For command help: elspais <command> --help")
+
+    return "\n".join(lines)
