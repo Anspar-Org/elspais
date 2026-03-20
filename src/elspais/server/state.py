@@ -11,6 +11,32 @@ from pathlib import Path
 from typing import Any
 
 
+def _compute_allowed_roots(repo_root: Path, config: dict[str, Any]) -> list[Path]:
+    """Derive the list of filesystem roots allowed for file serving.
+
+    Includes the main repo root plus the root of each configured associate repo.
+    Associate repo roots are found by walking up from each associate spec directory
+    to locate the nearest ``.elspais.toml`` marker.
+    """
+    repo_resolved = repo_root.resolve()
+    allowed: list[Path] = [repo_resolved]
+    try:
+        from elspais.associates import get_associate_spec_directories
+
+        spec_dirs, _ = get_associate_spec_directories(config, repo_root)
+        for spec_dir in spec_dirs:
+            candidate = spec_dir.resolve()
+            while candidate != candidate.parent:
+                if (candidate / ".elspais.toml").exists():
+                    if candidate not in allowed:
+                        allowed.append(candidate)
+                    break
+                candidate = candidate.parent
+    except Exception:
+        pass  # Associates not configured; repo root is the only allowed dir
+    return allowed
+
+
 class AppState:
     """Mutable application state shared by REST routes and MCP tools."""
 
@@ -26,7 +52,7 @@ class AppState:
         self.repo_root = repo_root
         self.config = config
         self.canonical_root = canonical_root or repo_root
-        self.allowed_roots = allowed_roots or [repo_root]
+        self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
         self.build_time = time.time()
         self._mtimes: dict[str, float] = {}
         self._mcp_state: dict[str, Any] | None = None  # set by link_mcp_state
@@ -112,6 +138,8 @@ class AppState:
         """Rebuild graph if files changed. Returns True if rebuilt.
 
         Throttled to at most one mtime check per second.
+        Rebuild errors are silently swallowed so the server keeps serving
+        the previous graph rather than crashing on a bad file state.
         """
         now = time.time()
         if now - self._last_stale_check < 1.0:
@@ -119,7 +147,10 @@ class AppState:
         self._last_stale_check = now
         if not self.is_stale():
             return False
-        self._rebuild()
+        try:
+            self._rebuild()
+        except Exception:
+            pass  # Keep serving the old graph on rebuild failure
         return True
 
     def _rebuild(self) -> None:

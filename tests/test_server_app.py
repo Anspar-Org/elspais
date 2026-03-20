@@ -1,8 +1,8 @@
 # Validates REQ-d00010-A, REQ-d00010-F, REQ-d00010-G, REQ-p00004-C+D+E+F, REQ-p00006-A
-"""Tests for the Flask trace-edit REST API server.
+"""Tests for the Starlette trace-edit REST API server.
 
 Validates:
-- REQ-d00010-A: Flask app factory pattern
+- REQ-d00010-A: Starlette app factory pattern
 - REQ-d00010-F: CORS enabled for cross-origin requests
 - REQ-d00010-G: Static file serving
 - REQ-p00004-C: Git status summary endpoint
@@ -15,11 +15,13 @@ Validates:
 from pathlib import Path
 
 import pytest
+from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
+from elspais.server.state import AppState
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -90,20 +92,15 @@ def sample_graph():
 
 @pytest.fixture
 def app(sample_graph):
-    """Create Flask test app."""
-    application = create_app(
-        repo_root=Path("/test/repo"),
-        graph=sample_graph,
-        config={},
-    )
-    application.config["TESTING"] = True
-    return application
+    """Create Starlette test app."""
+    state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+    return create_app(state, mount_mcp=False)
 
 
 @pytest.fixture
 def client(app):
-    """Create Flask test client."""
-    return app.test_client()
+    """Create Starlette test client."""
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -147,16 +144,15 @@ def coverage_graph():
 
 @pytest.fixture
 def coverage_app(coverage_graph):
-    """Create Flask test app with coverage graph."""
-    application = create_app(repo_root=Path("/test/repo"), graph=coverage_graph, config={})
-    application.config["TESTING"] = True
-    return application
+    """Create Starlette test app with coverage graph."""
+    state = AppState(graph=coverage_graph, repo_root=Path("/test/repo"), config={})
+    return create_app(state, mount_mcp=False)
 
 
 @pytest.fixture
 def coverage_client(coverage_app):
-    """Create Flask test client for coverage tests."""
-    return coverage_app.test_client()
+    """Create Starlette test client for coverage tests."""
+    return TestClient(coverage_app)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -165,29 +161,23 @@ def coverage_client(coverage_app):
 
 
 class TestAppFactory:
-    """Validates REQ-d00010-A: Flask app factory pattern."""
+    """Validates REQ-d00010-A: Starlette app factory pattern."""
 
-    def test_REQ_d00010_A_create_app_returns_flask_instance(self, sample_graph):
-        """App factory returns a Flask application."""
-        from flask import Flask
+    def test_REQ_d00010_A_create_app_returns_starlette_instance(self, sample_graph):
+        """App factory returns a Starlette application."""
+        from starlette.applications import Starlette
 
-        app = create_app(
-            repo_root=Path("/test/repo"),
-            graph=sample_graph,
-            config={},
-        )
-        assert isinstance(app, Flask)
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        app = create_app(state, mount_mcp=False)
+        assert isinstance(app, Starlette)
 
     def test_REQ_d00010_A_create_app_accepts_config(self, sample_graph):
         """App factory stores the provided config in internal state."""
         test_config = {"project": {"name": "test"}}
-        app = create_app(
-            repo_root=Path("/another/repo"),
-            graph=sample_graph,
-            config=test_config,
-        )
+        state = AppState(graph=sample_graph, repo_root=Path("/another/repo"), config=test_config)
+        app = create_app(state, mount_mcp=False)
         # Verify the config was applied by hitting an endpoint
-        client = app.test_client()
+        client = TestClient(app)
         resp = client.get("/api/status")
         assert resp.status_code == 200
 
@@ -204,7 +194,7 @@ class TestGetStatus:
         """GET /api/status returns JSON with expected keys."""
         resp = client.get("/api/status")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert "root_count" in data
         assert "node_counts" in data
         assert "total_nodes" in data
@@ -212,7 +202,7 @@ class TestGetStatus:
     def test_REQ_d00010_A_status_contains_node_counts(self, client):
         """Status response includes non-zero node counts."""
         resp = client.get("/api/status")
-        data = resp.get_json()
+        data = resp.json()
         assert data["root_count"] >= 1
         assert data["total_nodes"] >= 1
 
@@ -224,7 +214,7 @@ class TestGetRequirement:
         """GET /api/requirement returns full requirement data."""
         resp = client.get("/api/requirement/REQ-p00001")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["id"] == "REQ-p00001"
         assert data["title"] == "Platform Security"
         assert data["level"] == "PRD"
@@ -235,13 +225,13 @@ class TestGetRequirement:
         """GET /api/requirement returns 404 for unknown ID."""
         resp = client.get("/api/requirement/REQ-NOPE")
         assert resp.status_code == 404
-        data = resp.get_json()
+        data = resp.json()
         assert "error" in data
 
     def test_REQ_d00010_A_requirement_includes_assertions(self, client):
         """Requirement response includes assertion children."""
         resp = client.get("/api/requirement/REQ-p00001")
-        data = resp.get_json()
+        data = resp.json()
         assertions = data["assertions"]
         assert len(assertions) == 2
         labels = {a["label"] for a in assertions}
@@ -255,7 +245,7 @@ class TestGetHierarchy:
         """GET /api/hierarchy returns ancestors and children."""
         resp = client.get("/api/hierarchy/REQ-p00001")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["id"] == "REQ-p00001"
         assert "ancestors" in data
         assert "children" in data
@@ -263,7 +253,7 @@ class TestGetHierarchy:
     def test_REQ_d00010_A_hierarchy_shows_children(self, client):
         """Hierarchy for PRD includes OPS child."""
         resp = client.get("/api/hierarchy/REQ-p00001")
-        data = resp.get_json()
+        data = resp.json()
         child_ids = [c["id"] for c in data["children"]]
         assert "REQ-o00001" in child_ids
 
@@ -280,7 +270,7 @@ class TestGetSearch:
         """GET /api/search?q=Security returns matching results."""
         resp = client.get("/api/search?q=Security")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert isinstance(data, list)
         assert len(data) >= 1
         assert data[0]["id"] == "REQ-p00001"
@@ -289,20 +279,20 @@ class TestGetSearch:
         """Empty query returns empty list."""
         resp = client.get("/api/search?q=")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data == []
 
     def test_REQ_d00010_A_search_no_results(self, client):
         """Non-matching query returns empty list."""
         resp = client.get("/api/search?q=zzzznonexistent")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data == []
 
     def test_REQ_d00010_A_search_with_field(self, client):
         """Search with field parameter narrows results."""
         resp = client.get("/api/search?q=REQ-p00001&field=id")
-        data = resp.get_json()
+        data = resp.json()
         assert len(data) >= 1
 
     def test_REQ_d00061_E_search_with_limit(self, client):
@@ -310,7 +300,7 @@ class TestGetSearch:
         # With limit=1, should get at most 1 result
         resp = client.get("/api/search?q=REQ&limit=1")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert len(data) <= 1
 
     def test_REQ_d00061_E_search_default_limit(self):
@@ -332,24 +322,20 @@ class TestGetSearch:
             big_graph._index[node.id] = node
             big_graph._roots.append(node)
 
-        big_app = create_app(
-            repo_root=Path("/test/repo"),
-            graph=big_graph,
-            config={},
-        )
-        big_app.config["TESTING"] = True
-        big_client = big_app.test_client()
+        big_state = AppState(graph=big_graph, repo_root=Path("/test/repo"), config={})
+        big_app = create_app(big_state, mount_mcp=False)
+        big_client = TestClient(big_app)
 
         resp = big_client.get("/api/search?q=Searchable")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert len(data) == 50
 
     def test_REQ_d00061_C_search_with_regex(self, client):
         """Regex parameter enables regex matching."""
         resp = client.get("/api/search?q=REQ-p0000[0-9]&regex=true")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert len(data) >= 1
         assert data[0]["id"] == "REQ-p00001"
 
@@ -357,7 +343,7 @@ class TestGetSearch:
         """Regex defaults to false - literal bracket chars don't match."""
         resp = client.get("/api/search?q=REQ-p0000[0-9]")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         # Without regex, "[0-9]" is literal text that won't match any node
         assert len(data) == 0
 
@@ -369,7 +355,7 @@ class TestGetTestCoverage:
         """GET /api/test-coverage returns per-assertion test map."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["req_id"] == "REQ-p00001"
         assert "assertion_tests" in data
@@ -379,7 +365,7 @@ class TestGetTestCoverage:
     def test_REQ_d00010_A_test_coverage_assertion_has_tests(self, coverage_client):
         """Covered assertion A includes test entries with results."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
-        data = resp.get_json()
+        data = resp.json()
         a_tests = data["assertion_tests"]["A"]["tests"]
         assert len(a_tests) >= 1
         assert a_tests[0]["id"] == "test:test_encrypt.py::test_encrypt"
@@ -389,14 +375,14 @@ class TestGetTestCoverage:
     def test_REQ_d00010_A_test_coverage_uncovered_assertion(self, coverage_client):
         """Uncovered assertion B has empty test list."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
-        data = resp.get_json()
+        data = resp.json()
         b_tests = data["assertion_tests"]["B"]["tests"]
         assert len(b_tests) == 0
 
     def test_REQ_d00010_A_test_coverage_stats(self, coverage_client):
         """Coverage stats reflect 1 of 2 assertions covered."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
-        data = resp.get_json()
+        data = resp.json()
         assert data["total_assertions"] == 2
         assert data["covered_count"] == 1
         assert data["coverage_pct"] == 50.0
@@ -405,7 +391,7 @@ class TestGetTestCoverage:
         """GET /api/test-coverage returns 404 for unknown ID."""
         resp = coverage_client.get("/api/test-coverage/REQ-NOPE")
         assert resp.status_code == 404
-        data = resp.get_json()
+        data = resp.json()
         assert "error" in data
 
 
@@ -415,7 +401,7 @@ class TestGetTreeData:
     def test_REQ_d00010_A_tree_data_row_structure(self, client):
         """Each tree row has expected keys."""
         resp = client.get("/api/tree-data")
-        data = resp.get_json()
+        data = resp.json()
         row = data[0]
         assert "id" in row
         assert "title" in row
@@ -427,7 +413,7 @@ class TestGetTreeData:
     def test_REQ_d00010_A_tree_data_hierarchy(self, client):
         """Tree data includes parent-child relationships."""
         resp = client.get("/api/tree-data")
-        data = resp.get_json()
+        data = resp.json()
         # Root node at depth 0
         roots = [r for r in data if r["depth"] == 0]
         assert len(roots) >= 1
@@ -445,7 +431,7 @@ class TestGetDirty:
         """Clean graph reports not dirty."""
         resp = client.get("/api/dirty")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["dirty"] is False
         assert data["mutation_count"] == 0
 
@@ -457,7 +443,7 @@ class TestGetDirty:
             json={"node_id": "REQ-p00001", "new_status": "Draft"},
         )
         resp = client.get("/api/dirty")
-        data = resp.get_json()
+        data = resp.json()
         assert data["dirty"] is True
         assert data["mutation_count"] >= 1
 
@@ -486,7 +472,7 @@ class TestMutateStatus:
             json={"node_id": "REQ-p00001", "new_status": "Draft"},
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert "mutation" in data
 
@@ -497,7 +483,7 @@ class TestMutateStatus:
             json={"node_id": "REQ-p00001"},
         )
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
 
     def test_REQ_d00010_A_change_status_invalid_node(self, client):
@@ -507,7 +493,7 @@ class TestMutateStatus:
             json={"node_id": "REQ-NOPE", "new_status": "Draft"},
         )
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
 
 
@@ -521,7 +507,7 @@ class TestMutateTitle:
             json={"node_id": "REQ-p00001", "new_title": "Updated Security"},
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_update_title_missing_params(self, client):
@@ -546,7 +532,7 @@ class TestMutateAssertion:
             },
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_update_assertion_missing_params(self, client):
@@ -572,7 +558,7 @@ class TestMutateAssertionAdd:
             },
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_add_assertion_missing_params(self, client):
@@ -605,7 +591,7 @@ class TestMutateEdge:
             },
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_edge_change_kind(self, client):
@@ -620,7 +606,7 @@ class TestMutateEdge:
             },
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_edge_delete(self, client):
@@ -634,7 +620,7 @@ class TestMutateEdge:
             },
         )
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
     def test_REQ_d00010_A_edge_unknown_action(self, client):
@@ -682,7 +668,7 @@ class TestMutateAssertionDelete:
             "/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-Z", "confirm": True}
         )
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
     def test_REQ_d00010_A_delete_assertion_missing_id(self, client):
         resp = client.post("/api/mutate/assertion/delete", json={})
@@ -703,7 +689,7 @@ class TestMutateRequirementDelete:
             "/api/mutate/requirement/delete", json={"node_id": "REQ-z99999", "confirm": True}
         )
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
     def test_REQ_d00010_A_delete_requirement_missing_id(self, client):
         resp = client.post("/api/mutate/requirement/delete", json={})
@@ -721,7 +707,7 @@ class TestMutateUndo:
         """Undo with no mutations returns error."""
         resp = client.post("/api/mutate/undo")
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
 
     def test_REQ_d00010_A_undo_after_mutation(self, client):
@@ -734,7 +720,7 @@ class TestMutateUndo:
         # Undo it
         resp = client.post("/api/mutate/undo")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
 
 
@@ -750,7 +736,7 @@ class TestPersistenceEndpoints:
         """POST /api/save with no pending mutations returns success."""
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["saved_count"] == 0
 
@@ -758,14 +744,14 @@ class TestPersistenceEndpoints:
         """POST /api/revert attempts graph rebuild."""
         resp = client.post("/api/revert")
         # May succeed or fail depending on config; either way returns JSON
-        data = resp.get_json()
+        data = resp.json()
         assert "success" in data
 
     def test_REQ_d00010_A_reload_returns_result(self, client):
         """POST /api/reload attempts graph rebuild."""
         resp = client.post("/api/reload")
         # May succeed or fail depending on config; either way returns JSON
-        data = resp.get_json()
+        data = resp.json()
         assert "success" in data
 
 
@@ -780,43 +766,43 @@ class TestGetFileContent:
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
         graph = TraceGraph(repo_root=tmp_path)
-        app = create_app(repo_root=tmp_path, graph=graph, config={})
-        app.config["TESTING"] = True
+        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        app = create_app(state, mount_mcp=False)
 
         py_file = tmp_path / "example.py"
         py_file.write_text("def foo():\n    return 42\n")
 
-        with app.test_client() as c:
-            resp = c.get("/api/file-content?path=example.py")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert "highlighted_lines" in data
-            assert "language" in data
-            assert "lines" in data
-            assert data["language"] == "python"
-            # highlighted_lines should contain Pygments spans
-            assert any("<span" in line for line in data["highlighted_lines"])
-            # plain lines should be raw text
-            assert data["lines"][0] == "def foo():"
+        c = TestClient(app)
+        resp = c.get("/api/file-content?path=example.py")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "highlighted_lines" in data
+        assert "language" in data
+        assert "lines" in data
+        assert data["language"] == "python"
+        # highlighted_lines should contain Pygments spans
+        assert any("<span" in line for line in data["highlighted_lines"])
+        # plain lines should be raw text
+        assert data["lines"][0] == "def foo():"
 
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
         graph = TraceGraph(repo_root=tmp_path)
-        app = create_app(repo_root=tmp_path, graph=graph, config={})
-        app.config["TESTING"] = True
+        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        app = create_app(state, mount_mcp=False)
 
         md_file = tmp_path / "README.md"
         md_file.write_text("# Hello\n\nWorld\n")
 
-        with app.test_client() as c:
-            resp = c.get("/api/file-content?path=README.md")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert "has_pending_mutations" in data
-            assert "pending_mutation_count" in data
-            assert "affected_nodes" in data
-            assert "mtime" in data
-            assert data["has_pending_mutations"] is False
+        c = TestClient(app)
+        resp = c.get("/api/file-content?path=README.md")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "has_pending_mutations" in data
+        assert "pending_mutation_count" in data
+        assert "affected_nodes" in data
+        assert "mtime" in data
+        assert data["has_pending_mutations"] is False
 
     def test_REQ_p00006_A_file_content_missing_path(self, client):
         """Missing path parameter returns 400."""
@@ -862,14 +848,15 @@ class TestGetFileContent:
         graph._index[node.id] = node
         graph._roots.append(node)
 
-        app = create_app(repo_root=main_repo, graph=graph, config=config)
+        state = AppState(graph=graph, repo_root=main_repo, config=config)
+        app = create_app(state, mount_mcp=False)
 
-        with app.test_client() as c:
-            # Request using absolute path (as _relative_source_path returns for out-of-repo files)
-            resp = c.get(f"/api/file-content?path={spec_file}")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["lines"][0] == "# REQ-A-p00001: Test Requirement"
+        c = TestClient(app)
+        # Request using absolute path (as _relative_source_path returns for out-of-repo files)
+        resp = c.get(f"/api/file-content?path={spec_file}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["lines"][0] == "# REQ-A-p00001: Test Requirement"
 
     def test_REQ_p00006_A_file_content_rejects_arbitrary_absolute_path(self, tmp_path):
         """Absolute paths outside repo root and allowed dirs are rejected."""
@@ -885,11 +872,12 @@ class TestGetFileContent:
 
         try:
             graph = TraceGraph(repo_root=main_repo)
-            app = create_app(repo_root=main_repo, graph=graph, config={})
+            state = AppState(graph=graph, repo_root=main_repo, config={})
+            app = create_app(state, mount_mcp=False)
 
-            with app.test_client() as c:
-                resp = c.get(f"/api/file-content?path={outside_path}")
-                assert resp.status_code == 403
+            c = TestClient(app)
+            resp = c.get(f"/api/file-content?path={outside_path}")
+            assert resp.status_code == 403
         finally:
             Path(outside_path).unlink(missing_ok=True)
 
@@ -934,7 +922,7 @@ class TestGetNode:
         """Fetch a requirement node, verify kind and properties."""
         resp = client.get("/api/node/REQ-p00001")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["id"] == "REQ-p00001"
         assert data["kind"] == "requirement"
         assert data["properties"]["level"] == "PRD"
@@ -944,14 +932,14 @@ class TestGetNode:
         """Verify 404 for a non-existent node ID."""
         resp = client.get("/api/node/NONEXISTENT-ID")
         assert resp.status_code == 404
-        data = resp.get_json()
+        data = resp.json()
         assert "error" in data
 
     def test_REQ_d00010_A_node_assertion(self, client):
         """Fetch an assertion node, verify kind and label property."""
         resp = client.get("/api/node/REQ-p00001-A")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["id"] == "REQ-p00001-A"
         assert data["kind"] == "assertion"
         assert data["properties"]["label"] == "A"
@@ -960,7 +948,7 @@ class TestGetNode:
         """Verify all common envelope fields are present in node response."""
         resp = client.get("/api/node/REQ-p00001")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         expected_keys = {
             "id",
             "kind",
@@ -984,7 +972,7 @@ class TestGetNode:
 
         resp = client.get("/api/node/JNY-Login-01")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["id"] == "JNY-Login-01"
         assert data["kind"] == "journey"
         assert data["properties"]["actor"] == "End User"
@@ -1003,7 +991,7 @@ class TestApiQuery:
         """Filter by kind=requirement returns only requirement nodes."""
         resp = client.get("/api/query?kind=requirement")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["count"] >= 1
         for result in data["results"]:
             assert result["kind"] == "requirement"
@@ -1012,7 +1000,7 @@ class TestApiQuery:
         """Filter by kind=requirement&level=PRD returns only PRD requirements."""
         resp = client.get("/api/query?kind=requirement&level=PRD")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["count"] >= 1
         for result in data["results"]:
             assert result["kind"] == "requirement"
@@ -1022,7 +1010,7 @@ class TestApiQuery:
         """Non-existent level filter returns empty results."""
         resp = client.get("/api/query?kind=requirement&level=NONEXISTENT")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["count"] == 0
         assert data["results"] == []
 
@@ -1030,14 +1018,14 @@ class TestApiQuery:
         """Limit parameter restricts result count."""
         resp = client.get("/api/query?kind=requirement&limit=1")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert len(data["results"]) <= 1
 
     def test_REQ_d00010_A_query_no_params(self, client):
         """No query params returns all nodes in the graph."""
         resp = client.get("/api/query")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         # Graph has at least 4 nodes: 2 requirements + 2 assertions
         assert data["count"] >= 4
 
@@ -1058,7 +1046,7 @@ class TestTreeDataJourneys:
 
         resp = client.get("/api/tree-data")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
 
         journey_rows = [r for r in data if r.get("id") == "JNY-Browse-01"]
         assert len(journey_rows) == 1
@@ -1100,7 +1088,7 @@ class TestGitStatus:
         with patch("elspais.utilities.git.git_status_summary", return_value=mock_result):
             resp = client.get("/api/git/status")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["branch"] == "feature-x"
         assert data["is_main"] is False
         assert data["dirty_spec_files"] == ["spec/prd.md"]
@@ -1114,8 +1102,8 @@ class TestGitStatus:
         config = {
             "scanning": {"spec": {"directories": ["requirements"]}},
         }
-        application = create_app(repo_root=Path("/test/repo"), graph=sample_graph, config=config)
-        application.config["TESTING"] = True
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config=config)
+        application = create_app(state, mount_mcp=False)
 
         mock_result = {
             "branch": "main",
@@ -1125,8 +1113,8 @@ class TestGitStatus:
             "fast_forward_possible": False,
         }
         with patch("elspais.utilities.git.git_status_summary", return_value=mock_result) as m:
-            with application.test_client() as c:
-                c.get("/api/git/status")
+            c = TestClient(application)
+            c.get("/api/git/status")
             m.assert_called_once()
             _, kwargs = m.call_args
             assert kwargs.get("spec_dir") == "requirements"
@@ -1143,7 +1131,7 @@ class TestGitBranch:
         with patch("elspais.utilities.git.create_and_switch_branch", return_value=mock_result):
             resp = client.post("/api/git/branch", json={"name": "feature-new"})
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["branch"] == "feature-new"
 
@@ -1151,7 +1139,7 @@ class TestGitBranch:
         """POST /api/git/branch with empty name returns 400."""
         resp = client.post("/api/git/branch", json={"name": ""})
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
         assert "required" in data["error"]
 
@@ -1168,7 +1156,7 @@ class TestGitBranch:
         with patch("elspais.utilities.git.create_and_switch_branch", return_value=mock_result):
             resp = client.post("/api/git/branch", json={"name": "existing"})
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
 
 
@@ -1183,7 +1171,7 @@ class TestGitPush:
         with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
             resp = client.post("/api/git/push", json={"message": "Update specs"})
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert "files_committed" in data
 
@@ -1191,7 +1179,7 @@ class TestGitPush:
         """POST /api/git/push with empty message returns 400."""
         resp = client.post("/api/git/push", json={"message": ""})
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
         assert "required" in data["error"]
 
@@ -1209,7 +1197,7 @@ class TestGitPush:
         with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
             resp = client.post("/api/git/push", json={"message": "Bad push"})
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
         assert "Refusing" in data["error"]
 
@@ -1221,7 +1209,7 @@ class TestGitPush:
         with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
             resp = client.post("/api/git/push", json={"message": "No changes"})
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
 
 
@@ -1236,7 +1224,7 @@ class TestGitPull:
         with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert "message" in data
 
@@ -1248,7 +1236,7 @@ class TestGitPull:
         with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is False
         assert "error" in data
 
@@ -1263,7 +1251,7 @@ class TestGitPull:
         with patch("elspais.utilities.git.sync_branch", return_value=mock_result):
             resp = client.post("/api/git/pull")
         assert resp.status_code == 400
-        data = resp.get_json()
+        data = resp.json()
         assert "fast-forward" in data["error"]
 
 
@@ -1381,7 +1369,7 @@ A. The second system SHALL work.
 
 
 def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
-    """Build a Flask app backed by real spec files on disk.
+    """Build a Starlette app backed by real spec files on disk.
 
     Returns (app, graph, spec_file) so tests can manipulate the graph directly.
     """
@@ -1470,14 +1458,14 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     graph._roots = [prd]
     graph._index = index
 
-    application = create_app(repo_root=tmp_path, graph=graph, config={})
-    application.config["TESTING"] = True
+    state = AppState(graph=graph, repo_root=tmp_path, config={})
+    application = create_app(state, mount_mcp=False)
     return application, graph, spec_file
 
 
 @pytest.fixture
 def disk_app(tmp_path):
-    """Create a Flask app backed by real spec files on disk."""
+    """Create a Starlette app backed by real spec files on disk."""
     app, _graph, spec_file = _make_disk_app(tmp_path)
     return app, spec_file
 
@@ -1490,15 +1478,15 @@ def disk_app_with_graph(tmp_path):
 
 @pytest.fixture
 def disk_app_two_reqs(tmp_path):
-    """Flask app backed by a spec file with two requirements."""
+    """Starlette app backed by a spec file with two requirements."""
     return _make_disk_app(tmp_path, spec_content=DISK_SPEC_TWO_REQS, two_reqs=True)
 
 
 @pytest.fixture
 def disk_client(disk_app):
-    """Create Flask test client backed by real files."""
+    """Create Starlette test client backed by real files."""
     app, _ = disk_app
-    return app.test_client()
+    return TestClient(app)
 
 
 class TestMutateSaveRoundTrip:
@@ -1508,7 +1496,7 @@ class TestMutateSaveRoundTrip:
     def test_add_refines_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add REFINES) -> POST /api/save -> file has Refines."""
         app, graph, spec_file = disk_app_with_graph
-        client = app.test_client()
+        client = TestClient(app)
 
         # Add a second PRD node directly on the graph (same Python object)
         str(spec_file.relative_to(graph.repo_root))
@@ -1531,11 +1519,11 @@ class TestMutateSaveRoundTrip:
             },
         )
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True, f"Save failed: {data}"
 
         content = spec_file.read_text(encoding="utf-8")
@@ -1546,7 +1534,7 @@ class TestMutateSaveRoundTrip:
     def test_change_status_and_save(self, disk_app):
         """POST /api/mutate/status -> POST /api/save -> file has new status."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/status",
@@ -1556,7 +1544,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Deprecated" in content
@@ -1565,7 +1553,7 @@ class TestMutateSaveRoundTrip:
     def test_update_title_and_save(self, disk_app):
         """POST /api/mutate/title -> POST /api/save -> file has new title."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/title",
@@ -1575,7 +1563,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "## REQ-t00001: Updated Title" in content
@@ -1584,7 +1572,7 @@ class TestMutateSaveRoundTrip:
     def test_update_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion -> POST /api/save -> file has new text."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/assertion",
@@ -1597,7 +1585,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something NEW." in content
@@ -1607,7 +1595,7 @@ class TestMutateSaveRoundTrip:
     def test_add_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/add -> POST /api/save -> file has new assertion."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/assertion/add",
@@ -1621,7 +1609,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "C. The system SHALL do a third thing." in content
@@ -1630,7 +1618,7 @@ class TestMutateSaveRoundTrip:
     def test_add_implements_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add IMPLEMENTS) -> POST /api/save -> file updated."""
         app, graph, spec_file = disk_app_with_graph
-        client = app.test_client()
+        client = TestClient(app)
 
         # Add a second PRD target directly on the graph
         str(spec_file.relative_to(graph.repo_root))
@@ -1656,7 +1644,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-p00001" in content
@@ -1666,7 +1654,7 @@ class TestMutateSaveRoundTrip:
     def test_delete_edge_and_save(self, disk_app):
         """POST /api/mutate/edge (delete) -> POST /api/save -> reference removed."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/edge",
@@ -1680,7 +1668,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         # After deleting the only implements target, the field value should be empty
@@ -1690,7 +1678,7 @@ class TestMutateSaveRoundTrip:
     def test_change_edge_kind_and_save(self, disk_app):
         """POST /api/mutate/edge (change_kind) -> POST /api/save -> Implements->Refines."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/edge",
@@ -1705,7 +1693,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Refines**: REQ-p00001" in content
@@ -1715,18 +1703,18 @@ class TestMutateSaveRoundTrip:
     def test_delete_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/delete -> POST /api/save -> assertion removed."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/assertion/delete",
             json={"assertion_id": "REQ-t00001-B", "confirm": True},
         )
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something." in content
@@ -1736,18 +1724,18 @@ class TestMutateSaveRoundTrip:
     def test_delete_requirement_and_save(self, disk_app_two_reqs):
         """POST /api/mutate/requirement/delete -> POST /api/save -> req removed from file."""
         app, graph, spec_file = disk_app_two_reqs
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/requirement/delete",
             json={"node_id": "REQ-t00002", "confirm": True},
         )
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-t00001" in content
@@ -1759,7 +1747,7 @@ class TestMutateSaveRoundTrip:
     def test_multiple_mutations_then_save(self, disk_app):
         """Multiple mutations followed by a single save all persist correctly."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         # Mutation 1: Change status
         resp = client.post(
@@ -1788,7 +1776,7 @@ class TestMutateSaveRoundTrip:
         # Single save
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["saved_count"] >= 1  # render-save counts files, not mutations
 
@@ -1803,7 +1791,7 @@ class TestMutateSaveRoundTrip:
     def test_undo_then_save_persists_remaining(self, disk_app):
         """Mutate twice, undo one, save -> only first mutation persists."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         # Mutation 1: Change status
         resp = client.post(
@@ -1822,12 +1810,12 @@ class TestMutateSaveRoundTrip:
         # Undo mutation 2
         resp = client.post("/api/mutate/undo")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         # Save — only status change should persist
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Draft" in content
@@ -1838,12 +1826,12 @@ class TestMutateSaveRoundTrip:
     def test_save_with_no_mutations_succeeds(self, disk_app):
         """POST /api/save with no pending mutations succeeds with count 0."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
         original_content = spec_file.read_text(encoding="utf-8")
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["saved_count"] == 0
 
@@ -1854,11 +1842,11 @@ class TestMutateSaveRoundTrip:
     def test_dirty_reflects_mutation_state(self, disk_app):
         """GET /api/dirty tracks pending mutation count."""
         app, _ = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         # Initially clean
         resp = client.get("/api/dirty")
-        assert resp.get_json()["dirty"] is False
+        assert resp.json()["dirty"] is False
 
         # Mutate
         client.post(
@@ -1866,20 +1854,20 @@ class TestMutateSaveRoundTrip:
             json={"node_id": "REQ-t00001", "new_status": "Draft"},
         )
         resp = client.get("/api/dirty")
-        assert resp.get_json()["dirty"] is True
+        assert resp.json()["dirty"] is True
 
         # Save clears dirty state
         resp = client.post("/api/save")
         assert resp.status_code == 200
         resp = client.get("/api/dirty")
-        data = resp.get_json()
+        data = resp.json()
         assert data["dirty"] is False, "Save should clear the dirty flag"
 
     # Implements: REQ-d00134-F
     def test_add_assertion_then_delete_it_then_save(self, disk_app):
         """Add assertion, then delete it, then save -> file unchanged."""
         app, spec_file = disk_app
-        client = app.test_client()
+        client = TestClient(app)
 
         # Add assertion C
         resp = client.post(
@@ -1913,7 +1901,7 @@ class TestMutateSaveRoundTrip:
     def test_change_edge_kind_then_add_edge_then_save(self, disk_app_with_graph):
         """Change IMPLEMENTS->REFINES, add new IMPLEMENTS, save -> both persisted."""
         app, graph, spec_file = disk_app_with_graph
-        client = app.test_client()
+        client = TestClient(app)
 
         # Add a second PRD target
         str(spec_file.relative_to(graph.repo_root))
@@ -1952,7 +1940,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Refines**: REQ-p00001" in content
@@ -1962,7 +1950,7 @@ class TestMutateSaveRoundTrip:
     def test_mutations_across_two_reqs_then_save(self, disk_app_two_reqs):
         """Mutate two different requirements, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
-        client = app.test_client()
+        client = TestClient(app)
 
         # Mutate first req
         resp = client.post(
@@ -1980,7 +1968,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["success"] is True
         assert data["saved_count"] >= 1  # render-save counts files, not mutations
 
@@ -2009,7 +1997,7 @@ class TestMutateSaveRoundTrip:
     def test_add_assertion_to_two_reqs_then_save(self, disk_app_two_reqs):
         """Add assertions to different reqs, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
-        client = app.test_client()
+        client = TestClient(app)
 
         resp = client.post(
             "/api/mutate/assertion/add",
@@ -2033,7 +2021,7 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post("/api/save")
         assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert resp.json()["success"] is True
 
         content = spec_file.read_text(encoding="utf-8")
         assert "C. New assertion for first req." in content
@@ -2147,7 +2135,7 @@ class TestMutateValidation:
 
 
 def _make_freshness_app(tmp_path, spec_subdir="spec"):
-    """Build a Flask app with real spec files for freshness testing.
+    """Build a Starlette app with real spec files for freshness testing.
 
     Returns (app, graph, spec_dir) so tests can manipulate files and state.
     """
@@ -2200,23 +2188,23 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
     }
 
     config = {"scanning": {"spec": {"directories": [spec_subdir]}}}
-    app = create_app(repo_root=tmp_path, graph=graph, config=config)
-    app.config["TESTING"] = True
+    state = AppState(graph=graph, repo_root=tmp_path, config=config)
+    app = create_app(state, mount_mcp=False)
 
     return app, graph, spec_dir
 
 
 @pytest.fixture
 def freshness_app(tmp_path):
-    """Create a Flask app backed by real spec files for freshness tests."""
+    """Create a Starlette app backed by real spec files for freshness tests."""
     return _make_freshness_app(tmp_path)
 
 
 @pytest.fixture
 def freshness_client(freshness_app):
-    """Create Flask test client for freshness tests."""
+    """Create Starlette test client for freshness tests."""
     app, _graph, _spec_dir = freshness_app
-    return app.test_client()
+    return TestClient(app)
 
 
 class TestCheckFreshness:
@@ -2226,7 +2214,7 @@ class TestCheckFreshness:
         """When no spec files have changed since build, stale=False."""
         resp = freshness_client.get("/api/check-freshness")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["stale"] is False
         assert data["has_pending_mutations"] is False
         assert data["stale_files"] == []
@@ -2237,7 +2225,7 @@ class TestCheckFreshness:
         import time
 
         app, _graph, spec_dir = _make_freshness_app(tmp_path)
-        client = app.test_client()
+        client = TestClient(app)
 
         # Wait briefly then touch the spec file so its mtime > build_time.
         # Use os.utime to set mtime well into the future to avoid race conditions.
@@ -2247,7 +2235,7 @@ class TestCheckFreshness:
 
         resp = client.get("/api/check-freshness")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["stale"] is True
         assert len(data["stale_files"]) > 0
         # The stale file list should contain the spec file (relative or absolute)
@@ -2257,7 +2245,7 @@ class TestCheckFreshness:
     def test_REQ_p00006_A_check_freshness_pending_mutations(self, tmp_path):
         """When graph has pending mutations, has_pending_mutations=True."""
         app, _graph, _spec_dir = _make_freshness_app(tmp_path)
-        client = app.test_client()
+        client = TestClient(app)
 
         # Perform a mutation so the graph has pending changes
         client.post(
@@ -2267,5 +2255,5 @@ class TestCheckFreshness:
 
         resp = client.get("/api/check-freshness")
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["has_pending_mutations"] is True
