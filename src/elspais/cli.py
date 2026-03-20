@@ -30,6 +30,7 @@ from elspais.commands import (
     link_suggest,
     pdf_cmd,
     rules_cmd,
+    search_cmd,
     summary,
     trace,
     viewer,
@@ -73,6 +74,7 @@ from elspais.commands.args import (
     RulesArgs,
     RulesListArgs,
     RulesShowArgs,
+    SearchArgs,
     SummaryArgs,
     TraceArgs,
     UncoveredArgs,
@@ -130,6 +132,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         SummaryArgs: "summary",
         ChangedArgs: "changed",
         AnalysisArgs: "analysis",
+        SearchArgs: "search",
         VersionArgs: "version",
         InitArgs: "init",
         ExampleArgs: "example",
@@ -381,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
             return changed.run(args)
         elif args.command == "analysis":
             return analysis_cmd.run(args)
+        elif args.command == "search":
+            return search_cmd.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":
@@ -515,14 +520,24 @@ def mcp_command(args: argparse.Namespace) -> int:
         if hasattr(args, "spec_dir") and args.spec_dir:
             working_dir = args.spec_dir.parent
 
-        print("Starting elspais MCP server...")
-        print(f"Working directory: {working_dir}")
-        print(f"Transport: {args.transport}")
+        port = getattr(args, "port", 8000)
+        ttl = getattr(args, "ttl", 0)
+        daemon_json = getattr(args, "_daemon_json", None)
+
+        print("Starting elspais MCP server...", file=sys.stderr)
+        print(f"Working directory: {working_dir}", file=sys.stderr)
+        print(f"Transport: {args.transport}", file=sys.stderr)
 
         try:
-            run_server(working_dir=working_dir, transport=args.transport)
+            run_server(
+                working_dir=working_dir,
+                transport=args.transport,
+                port=port,
+                ttl_minutes=ttl,
+                daemon_json=daemon_json,
+            )
         except KeyboardInterrupt:
-            print("\nServer stopped.")
+            print("\nServer stopped.", file=sys.stderr)
         return 0
     else:
         print("Usage: elspais mcp {serve|install|uninstall}")

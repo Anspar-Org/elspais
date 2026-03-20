@@ -1,6 +1,6 @@
 # Known Issues
 
-[ ] feature: search 'search terms string' : invokes the 'search' api. takes a string. 
+[x] feature: cli search 'search terms string' : invokes the 'search' api. takes a string.
 
 [ ] chore: general code review. file sizes, duped code, workarounds, sloppiness, etc.
 

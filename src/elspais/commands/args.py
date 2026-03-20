@@ -309,6 +309,35 @@ class AnalysisArgs:
 
 
 # ---------------------------------------------------------------------------
+# Search command
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class SearchArgs:
+    """Search requirements by keyword."""
+
+    query: tyro.conf.Positional[str] = ""
+    """Search terms (supports AND, OR, "phrases", -exclude, =exact)."""
+
+    field: Literal["all", "id", "title", "body", "keywords"] = "all"
+    """Which fields to search."""
+
+    regex: bool = False
+    """Treat query as a regular expression."""
+
+    limit: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 50
+    """Maximum number of results."""
+
+    format: Literal["text", "json"] = "text"
+    """Output format."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+    no_daemon: bool = False
+    """Skip daemon, rebuild graph locally."""
+
+
+# ---------------------------------------------------------------------------
 # Version command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -676,6 +705,12 @@ class McpServeArgs:
     transport: Literal["stdio", "sse", "streamable-http"] = "stdio"
     """Transport type."""
 
+    port: int = 8000
+    """Port for HTTP transports (0 = auto-assign)."""
+
+    ttl: int = 0
+    """Auto-exit after N minutes of inactivity (0 = run forever)."""
+
 
 @dataclasses.dataclass
 class McpInstallArgs:
@@ -810,6 +845,7 @@ Command = (
     | Annotated[SummaryArgs, tyro.conf.subcommand("summary")]
     | Annotated[ChangedArgs, tyro.conf.subcommand("changed")]
     | Annotated[AnalysisArgs, tyro.conf.subcommand("analysis")]
+    | Annotated[SearchArgs, tyro.conf.subcommand("search")]
     | Annotated[VersionArgs, tyro.conf.subcommand("version")]
     | Annotated[InitArgs, tyro.conf.subcommand("init")]
     | Annotated[ExampleArgs, tyro.conf.subcommand("example")]
@@ -868,6 +904,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "failing": "Gaps & Issues",
     "broken": "Gaps & Issues",
     "unlinked": "Gaps & Issues",
+    "search": "Reports",
     "analysis": "Authoring",
     "fix": "Authoring",
     "edit": "Authoring",
