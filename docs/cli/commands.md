@@ -93,6 +93,12 @@ Search requirements by keyword, with ranked results.
 results (~0.1s). Auto-starts a daemon on first use if neither is running.
 Use `--no-daemon` to force a local graph build (~2-4s).
 
+**Daemon config** (in `.elspais.toml`):
+
+    cli_ttl = 30     # auto-start daemon, exit after 30 min idle (default)
+    cli_ttl = 0      # never auto-launch (manual start only)
+    cli_ttl = -1     # auto-start daemon, never timeout
+
 ## viewer
 
 Interactive traceability viewer (live server or static HTML). The viewer
@@ -220,12 +226,10 @@ Edit requirements in-place.
 
 **Batch JSON Format:**
 
-```json
-[
-  {"req_id": "REQ-d00001", "status": "Draft"},
-  {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
-]
-```
+    [
+      {"req_id": "REQ-d00001", "status": "Draft"},
+      {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
+    ]
 
 ## config
 

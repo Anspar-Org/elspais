@@ -195,6 +195,10 @@ class ElspaisConfig(_StrictModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     stats: str | None = Field(default=None, description="File path for MCP tool usage statistics")
+    cli_ttl: int = Field(
+        default=30,
+        description="CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",
+    )
     # Implements: REQ-d00208-C
     model_config = ConfigDict(
         extra="forbid",

@@ -28,6 +28,12 @@ version = 3
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
 stats = ""
 
+# CLI daemon auto-start TTL (minutes).
+#   >0: auto-start daemon, exit after N minutes idle (default: 30)
+#    0: never auto-launch daemon from CLI (manual start only)
+#   <0: auto-start daemon that never times out
+cli_ttl = 30
+
 #──────────────────────────────────────────────────────────────────────────────
 # PROJECT
 #──────────────────────────────────────────────────────────────────────────────
