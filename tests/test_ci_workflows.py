@@ -86,7 +86,7 @@ class TestCISelfValidate:
 
     def test_REQ_o00066_C_runs_elspais_health(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["self-validate"])
-        assert "elspais health" in run_text
+        assert "elspais checks" in run_text
 
     def test_REQ_o00066_C_generates_traceability(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["self-validate"])

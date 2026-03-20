@@ -22,7 +22,7 @@ import tyro
 # Health command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class HealthArgs:
+class ChecksArgs:
     """Check repository and configuration health."""
 
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
@@ -45,21 +45,6 @@ class HealthArgs:
 
     include_passing_details: bool = False
     """Show full details for passing checks."""
-
-    uncovered: bool = False
-    """List requirements without code coverage."""
-
-    untested: bool = False
-    """List requirements without test coverage."""
-
-    unvalidated: bool = False
-    """List requirements without UAT (journey) coverage."""
-
-    untraced: bool = False
-    """List all traceability gaps (uncovered + untested + unvalidated + failing)."""
-
-    failing: bool = False
-    """List requirements with failing test or UAT results."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -454,7 +439,7 @@ DOCS_TOPICS = Literal[
     "git",
     "config",
     "commands",
-    "health",
+    "checks",
     "mcp",
     "all",
 ]
@@ -711,7 +696,7 @@ class CompletionArgs:
 # Top-level command union — each entry becomes a subcommand
 # ---------------------------------------------------------------------------
 Command = (
-    Annotated[HealthArgs, tyro.conf.subcommand("health")]
+    Annotated[ChecksArgs, tyro.conf.subcommand("checks")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
     | Annotated[ViewerArgs, tyro.conf.subcommand("viewer")]

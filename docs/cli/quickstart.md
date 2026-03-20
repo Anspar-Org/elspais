@@ -29,7 +29,7 @@ B. The system SHALL lock accounts after 5 failed login attempts.
 
 ## 3. Validate and Update Hashes
 
-  $ elspais health       # Check format, links, hierarchy
+  $ elspais checks       # Check format, links, hierarchy
   $ elspais fix          # Fix hashes and formatting
 
 ## 4. Create Implementing Requirements

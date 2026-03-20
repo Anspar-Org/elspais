@@ -37,6 +37,7 @@ from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
     ChangedArgs,
+    ChecksArgs,
     CompletionArgs,
     CompletionInstallArgs,
     CompletionUninstallArgs,
@@ -56,7 +57,6 @@ from elspais.commands.args import (
     FixArgs,
     GlobalArgs,
     GraphArgs,
-    HealthArgs,
     InitArgs,
     InstallArgs,
     LinkArgs,
@@ -106,7 +106,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
 
     # Determine the command name and nested action for dispatch
     _CMD_MAP: dict[type, str] = {
-        HealthArgs: "health",
+        ChecksArgs: "checks",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
         ViewerArgs: "viewer",
@@ -335,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         # Dispatch to command handlers
-        if args.command == "health":
+        if args.command == "checks":
             return health.run(args)
         elif args.command == "doctor":
             return doctor.run(args)

@@ -2160,13 +2160,13 @@ def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
         scope = ""
 
     if not already_verbose:
-        print(f"Run 'elspais -v health{scope}' for details,")
+        print(f"Run 'elspais -v checks{scope}' for details,")
         print(
-            f" or 'elspais health{scope} --format json -o health.json' for machine-readable output."
+            f" or 'elspais checks{scope} --format json -o health.json' for machine-readable output."
         )
     else:
         print(
-            f"Run 'elspais health{scope} --format json -o health.json' for machine-readable output."
+            f"Run 'elspais checks{scope} --format json -o health.json' for machine-readable output."
         )
 
 

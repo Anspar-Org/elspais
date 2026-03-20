@@ -67,21 +67,21 @@ class TestPassingDetailFlagsCLI:
         """The --include-passing-details flag is accepted by the health subcommand parser."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health", "--include-passing-details"])
+        args = parse_args(["checks", "--include-passing-details"])
         assert args.include_passing_details is True
 
     def test_REQ_d00085_E_no_include_passing_details_flag_accepted(self) -> None:
         """The --no-include-passing-details flag is accepted (this is the default)."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health", "--no-include-passing-details"])
+        args = parse_args(["checks", "--no-include-passing-details"])
         assert args.include_passing_details is False
 
     def test_REQ_d00085_E_default_skips_passing_details(self) -> None:
         """Without either flag, passing details are skipped by default."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health"])
+        args = parse_args(["checks"])
         # Default behavior: skip passing details
         assert args.include_passing_details is False
 

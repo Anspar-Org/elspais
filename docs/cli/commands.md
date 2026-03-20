@@ -11,15 +11,15 @@ These options work with all commands:
   `--config PATH`    Path to configuration file
   `--spec-dir PATH`  Override spec directory
 
-## health
+## checks
 
 Run health checks across configuration, spec files, code, and tests.
 
-  $ elspais health                     # Run all checks
-  $ elspais health --spec              # Spec file checks
-  $ elspais health --code              # Code reference checks
-  $ elspais health --tests             # Test mapping checks
-  $ elspais health --format json       # JSON output
+  $ elspais checks                     # Run all checks
+  $ elspais checks --spec              # Spec file checks
+  $ elspais checks --code              # Code reference checks
+  $ elspais checks --tests             # Test mapping checks
+  $ elspais checks --format json       # JSON output
 
 To auto-fix issues, use: `elspais fix`
 

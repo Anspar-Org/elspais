@@ -14,6 +14,7 @@ from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
     ChangedArgs,
+    ChecksArgs,
     Command,
     CompletionArgs,
     ConfigArgs,
@@ -26,7 +27,6 @@ from elspais.commands.args import (
     FixArgs,
     GlobalArgs,
     GraphArgs,
-    HealthArgs,
     InitArgs,
     InstallArgs,
     InstallLocalArgs,
@@ -64,7 +64,7 @@ class TestCliArgsDataclasses:
                 base_types.add(arg)
 
         expected = {
-            HealthArgs,
+            ChecksArgs,
             DoctorArgs,
             TraceArgs,
             ViewerArgs,
@@ -92,8 +92,8 @@ class TestCliArgsDataclasses:
         assert len(args) == 23
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
-        """HealthArgs defaults are correct."""
-        h = HealthArgs()
+        """ChecksArgs defaults are correct."""
+        h = ChecksArgs()
         assert h.spec_only is False
         assert h.code_only is False
         assert h.tests_only is False
@@ -104,12 +104,12 @@ class TestCliArgsDataclasses:
         assert h.output is None
 
     def test_REQ_p00001_A_tyro_parses_health(self) -> None:
-        """Tyro parses 'health --format json' into HealthArgs."""
+        """Tyro parses 'health --format json' into ChecksArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["health", "--format", "json"],
+            args=["checks", "--format", "json"],
         )
-        assert isinstance(result.command, HealthArgs)
+        assert isinstance(result.command, ChecksArgs)
         assert result.command.format == "json"
 
     def test_REQ_p00001_A_tyro_parses_config_show(self) -> None:
@@ -176,10 +176,10 @@ class TestCliArgsDataclasses:
         """Verbose flag passes through on GlobalArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["--verbose", "health"],
+            args=["--verbose", "checks"],
         )
         assert result.verbose is True
-        assert isinstance(result.command, HealthArgs)
+        assert isinstance(result.command, ChecksArgs)
 
     def test_REQ_p00001_A_tyro_parses_install_local(self) -> None:
         """Tyro parses 'install' subcommand."""
@@ -202,7 +202,7 @@ class TestCliArgsDataclasses:
     def test_REQ_p00001_A_all_args_classes_are_dataclasses(self) -> None:
         """Every *Args class exported from args.py is a proper dataclass."""
         args_classes = [
-            HealthArgs,
+            ChecksArgs,
             DoctorArgs,
             TraceArgs,
             ViewerArgs,

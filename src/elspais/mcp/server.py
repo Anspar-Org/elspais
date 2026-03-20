@@ -4150,7 +4150,7 @@ The graph is the single source of truth - all tools read directly from it.
 
 ### Help & Documentation
 - `docs(topic)` - Browse docs by topic name, or search all help surfaces with a phrase
-  - Exact topic name (e.g., "health") returns full content
+  - Exact topic name (e.g., "checks") returns full content
   - Search phrase (e.g., "coverage gap") returns matching sections across all help
 - `faq(topic)` - Quick Q&A on common topics (linking, coverage, mutations, assertions, health)
 - `agent_instructions()` - Project-specific authoring rules and conventions
@@ -4731,7 +4731,7 @@ def create_server(
         health checks, configuration, assertions, etc.
 
         Args:
-            topic: Exact topic name (e.g., "health") returns full content.
+            topic: Exact topic name (e.g., "checks") returns full content.
                    Any other string searches all docs for matching lines
                    and returns excerpts with context.
                    If empty, returns the list of available topics.

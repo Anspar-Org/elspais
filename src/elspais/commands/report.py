@@ -14,11 +14,11 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-COMPOSABLE_SECTIONS = ("health", "summary", "trace", "changed")
+COMPOSABLE_SECTIONS = ("checks", "summary", "trace", "changed")
 
 # Implements: REQ-d00085-E
 FORMAT_SUPPORT = {
-    "health": {"text", "markdown", "json", "junit", "sarif"},
+    "checks": {"text", "markdown", "json", "junit", "sarif"},
     "summary": {"text", "markdown", "json", "csv"},
     "trace": {"text", "markdown", "json", "csv"},
     "changed": {"text", "json"},
@@ -74,7 +74,7 @@ def run(
     # Build graph once for sections that need it
     graph = None
     config = None
-    graph_sections = {"health", "summary", "trace"}
+    graph_sections = {"checks", "summary", "trace"}
     if set(sections) & graph_sections:
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
@@ -124,7 +124,7 @@ def _render_section(
     args: argparse.Namespace,
 ) -> tuple[str, int]:
     """Dispatch to the appropriate section renderer."""
-    if name == "health":
+    if name == "checks":
         from elspais.commands.health import render_section
 
         return render_section(graph, config, args)

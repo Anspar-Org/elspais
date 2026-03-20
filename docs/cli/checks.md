@@ -1,17 +1,17 @@
-# Health Check Command
+# Checks Command
 
-The `elspais health` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
+The `elspais checks` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
 
 ## Quick Start
 
 ```bash
-# Run all health checks
-elspais health
+# Run all checks
+elspais checks
 
 # Check specific category only
-elspais health --spec      # Spec file checks
-elspais health --code      # Code reference checks
-elspais health --tests     # Test mapping checks
+elspais checks --spec      # Spec file checks
+elspais checks --code      # Code reference checks
+elspais checks --tests     # Test mapping checks
 ```
 
 ## Check Categories
@@ -87,7 +87,7 @@ JNY-Deploy-02,skip
 | `journey_id` | Yes | The journey ID (e.g., `JNY-Onboard-01`) |
 | `status` | Yes | `pass`/`passed`, `fail`/`failed`, or `skip`/`skipped` |
 
-The file is a standard CSV with a header row. When present, `elspais health`
+The file is a standard CSV with a header row. When present, `elspais checks`
 reports pass/fail/skip counts and flags failing journeys.
 
 **Configuration:**
@@ -184,13 +184,13 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 
 ```yaml
 - name: Run health checks (JUnit)
-  run: elspais health --format junit -o health-results.xml
+  run: elspais checks --format junit -o health-results.xml
 
 - name: Publish test results
   uses: dorny/test-reporter@v1
   if: always()
   with:
-    name: elspais health
+    name: elspais checks
     path: health-results.xml
     reporter: java-junit
 ```
@@ -267,7 +267,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 
 ```yaml
 - name: Run health checks (SARIF)
-  run: elspais health --format sarif -o health-results.sarif
+  run: elspais checks --format sarif -o health-results.sarif
   continue-on-error: true
 
 - name: Upload SARIF
@@ -280,36 +280,13 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 
 ## Command Options
 
-Run `elspais health --help` for the full list of flags.  Options are
-defined in `commands/args.py:HealthArgs` — that dataclass is the single
+Run `elspais checks --help` for the full list of flags.  Options are
+defined in `commands/args.py:ChecksArgs` — that dataclass is the single
 source of truth for flag names and descriptions.
-
-## Coverage Gap Reporting
-
-Use the gap flags to identify specific requirements that need attention:
-
-```bash
-# Show all traceability gaps
-elspais health --untraced
-
-# Just show what needs tests
-elspais health --untested
-
-# Check for failures
-elspais health --failing
-
-# Combine flags
-elspais health --uncovered --untested
-```
-
-Each flag appends a section after the health report listing the affected
-requirements with their IDs and titles. Sections print "none" when there
-are no gaps. Only Active requirements are included by default (controlled
-by `--status`).
 
 ## Passing Check Detail Control
 
-By default, `elspais health` suppresses verbose detail for passing checks (`--skip-passing-details`). Use `--include-passing-details` to include them. The two flags are mutually exclusive.
+By default, `elspais checks` suppresses verbose detail for passing checks (`--skip-passing-details`). Use `--include-passing-details` to include them. The two flags are mutually exclusive.
 
 The effect varies by output format:
 
@@ -345,7 +322,7 @@ Only advisory checks (e.g., cross-repo paths in committed config) use warning se
 
 ```bash
 # Fail pipeline if health checks fail
-elspais health || exit 1
+elspais checks || exit 1
 ```
 
 ### Quick Config Validation
@@ -359,14 +336,14 @@ elspais doctor
 
 ```bash
 # Verbose output for debugging
-elspais -v health --spec
+elspais -v checks --spec
 ```
 
 ### JSON Processing
 
 ```bash
 # Get failed checks in CI
-elspais health --format json | jq '.checks | map(select(.passed == false))'
+elspais checks --format json | jq '.checks | map(select(.passed == false))'
 ```
 
 ## Troubleshooting
@@ -380,7 +357,7 @@ This usually means:
 
 Run with verbose to see details:
 ```bash
-elspais -v health --spec
+elspais -v checks --spec
 ```
 
 ### "Unresolved Implements references"
