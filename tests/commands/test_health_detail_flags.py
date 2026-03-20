@@ -89,14 +89,16 @@ class TestPassingDetailFlagsCLI:
 class TestTextFormatPassingDetails:
     """Validates REQ-d00085-E: text format respects passing-detail flags."""
 
-    def test_REQ_d00085_E_text_include_passing_details_shows_details(self) -> None:
-        """Text format with --include-passing-details shows details for passing checks."""
+    def test_REQ_d00085_E_text_include_passing_details_no_details(self) -> None:
+        """Text format checklist does not render details (intentionally dropped)."""
         report = _make_passing_report()
         args = _make_args(format="text", verbose=True, include_passing_details=True)
         output = _format_report(report, args)
-        # With include-passing-details, passing check details should be visible
-        assert "total_refs" in output
-        assert "resolved" in output
+        # Text checklist intentionally omits check.details — only name+message
+        assert "total_refs" not in output
+        # But the check name and message should still appear
+        assert "valid_references" in output
+        assert "All 12 references resolved" in output
 
     def test_REQ_d00085_E_text_skip_passing_details_hides_details(self) -> None:
         """Text format with default --skip-passing-details hides details for passing checks."""

@@ -2019,9 +2019,6 @@ def _print_gap_listing(
 
 def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     """Format the health report as a string."""
-    import io
-    from contextlib import redirect_stdout
-
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
@@ -2037,17 +2034,10 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     elif fmt == "sarif":
         return _render_sarif(report)
     else:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            if quiet:
-                _print_quiet_report(report)
-            else:
-                _print_text_report(
-                    report,
-                    verbose=verbose,
-                    include_passing_details=include_passing,
-                )
-        return buf.getvalue().rstrip("\n")
+        if quiet:
+            return _build_report_data(report, verbose=verbose).summary_line
+        data = _build_report_data(report, verbose=verbose)
+        return _render_text(data)
 
 
 def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
@@ -2212,120 +2202,32 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
     )
 
 
+def _render_text(data: _ReportData) -> str:
+    """Render _ReportData as plain text checklist."""
+    lines: list[str] = []
+    for section in data.sections:
+        lines.append(f"\n{section.icon} {section.name} ({section.stats})")
+        lines.append("-" * 40)
+        for check in section.checks:
+            lines.append(f"  {check.icon} {check.name}: {check.message}")
+
+    lines.append("")
+    lines.append("=" * 40)
+    lines.append(data.summary_line)
+    if data.hint:
+        lines.append(data.hint)
+    lines.append("=" * 40)
+    return "\n".join(lines)
+
+
 def _print_text_report(
     report: HealthReport,
     verbose: bool = False,
     include_passing_details: bool = False,
 ) -> None:
-    """Print human-readable health report."""
-    categories = ["config", "spec", "code", "tests", "uat"]
-
-    for category in categories:
-        checks = list(report.iter_by_category(category))
-        if not checks:
-            continue
-
-        # Category header
-        skipped = sum(1 for c in checks if c.severity == "info")
-        passed = sum(1 for c in checks if c.passed and c.severity != "info")
-        total = len(checks) - skipped
-        has_errors = any(not c.passed and c.severity == "error" for c in checks)
-        if passed == total:
-            status = "✓"
-        elif has_errors:
-            status = "✗"
-        else:
-            status = "⚠"
-        failed = sum(1 for c in checks if not c.passed and c.severity in ("error", "warning"))
-        parts = [f"{passed} passed", f"{failed} failed"]
-        if skipped:
-            parts.append(f"{skipped} skipped")
-        print(f"\n{status} {category.upper()} ({', '.join(parts)})")
-        print("-" * 40)
-
-        for check in checks:
-            if check.severity == "info":
-                icon = "~"
-            elif check.passed:
-                icon = "✓"
-            elif check.severity == "warning":
-                icon = "⚠"
-            else:
-                icon = "✗"
-
-            print(f"  {icon} {check.name}: {check.message}")
-
-            # Show details in verbose mode (skip passing unless include flag set)
-            show_details = verbose and check.details
-            if show_details and check.passed and not include_passing_details:
-                show_details = False
-            if show_details:
-                for key, value in check.details.items():
-                    if isinstance(value, list) and len(value) > 3:
-                        print(f"      {key}: {value[:3]} ... ({len(value)} total)")
-                    else:
-                        print(f"      {key}: {value}")
-
-    # Summary
-    print()
-    print("=" * 40)
-    _print_summary_line(report)
-    if not report.is_healthy:
-        _print_detail_hint(report, verbose)
-    print("=" * 40)
-
-
-def _print_summary_line(report: HealthReport) -> None:
-    """Print a single summary line."""
-    counted = len(report.checks) - report.skipped
-    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
-    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
-        if report.skipped:
-            print(f"HEALTHY: {counted}/{counted} checks passed{skip_suffix}")
-        else:
-            print(f"HEALTHY: {counted}/{counted} checks passed")
-    elif report.failed == 0 and report.warnings == 0:
-        print(f"{report.passed}/{counted} checks passed{skip_suffix}")
-    elif report.failed == 0:
-        print(f"{report.passed}/{counted} checks passed, {report.warnings} warnings{skip_suffix}")
-    else:
-        print(f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}")
-
-
-def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
-    """Print a hint about how to get more details on failures."""
-    # Identify which categories have failures
-    failed_categories = set()
-    for check in report.checks:
-        if not check.passed and check.severity in ("error", "warning"):
-            failed_categories.add(check.category)
-
-    if not failed_categories:
-        return
-
-    # Build a targeted command hint
-    category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
-    if len(failed_categories) == 1:
-        cat = next(iter(failed_categories))
-        flag = category_flags.get(cat, "")
-        scope = f" {flag}" if flag else ""
-    else:
-        scope = ""
-
-    if not already_verbose:
-        print(f"Run 'elspais -v checks{scope}' for details,")
-        print(
-            f" or 'elspais checks{scope} --format json -o health.json' for machine-readable output."
-        )
-    else:
-        print(
-            f"Run 'elspais checks{scope} --format json -o health.json' for machine-readable output."
-        )
-
-
-def _print_quiet_report(report: HealthReport) -> None:
-    """Print summary line only (for -q/--quiet)."""
-    _print_summary_line(report)
+    """Print human-readable health report (legacy wrapper)."""
+    data = _build_report_data(report, verbose=verbose)
+    print(_render_text(data))
 
 
 # Implements: REQ-d00085-E

@@ -240,3 +240,55 @@ class TestBuildHint:
         )
         hint = _build_hint(report, already_verbose=False)
         assert hint is None
+
+
+class TestRenderText:
+    """Tests for _render_text plain-text renderer."""
+
+    def test_REQ_d00085_category_header_format(self) -> None:
+        """Category header includes icon, name, and stats."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_text(data)
+        assert "\u2717 SPEC (1 passed, 1 failed)" in output
+        assert "-" * 40 in output
+
+    def test_REQ_d00085_check_line_format(self) -> None:
+        """Check lines are indented with icon, name, and message."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_text(data)
+        assert "  \u2713 spec.format: all valid" in output
+        assert "  \u2717 spec.refs: 2 broken references" in output
+
+    def test_REQ_d00085_summary_block(self) -> None:
+        """Summary block has separator and status."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_text(data)
+        assert "=" * 40 in output
+        assert "UNHEALTHY" in output
+
+    def test_REQ_d00085_hint_shown_when_unhealthy(self) -> None:
+        """Hint appears in output when report is unhealthy and not verbose."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report, verbose=False)
+        output = _render_text(data)
+        assert "elspais -v checks" in output
+
+    def test_REQ_d00085_info_check_tilde(self) -> None:
+        """Info-severity checks render with tilde icon."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report)
+        output = _render_text(data)
+        assert "  ~ code.coverage: info only" in output
