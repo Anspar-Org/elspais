@@ -1819,12 +1819,71 @@ def render_section(
 # =============================================================================
 
 
+def _report_from_dict(data: dict[str, Any]) -> HealthReport:
+    """Reconstruct a HealthReport from a to_dict() JSON dict."""
+    report = HealthReport()
+    for c in data.get("checks", []):
+        findings = [
+            HealthFinding(
+                message=f.get("message", ""),
+                file_path=f.get("file_path"),
+                line=f.get("line"),
+                node_id=f.get("node_id"),
+                related=f.get("related", []),
+                repo=f.get("repo"),
+                retired=f.get("retired", False),
+            )
+            for f in c.get("findings", [])
+        ]
+        report.add(
+            HealthCheck(
+                name=c["name"],
+                passed=c["passed"],
+                message=c["message"],
+                category=c["category"],
+                severity=c.get("severity", "error"),
+                details=c.get("details", {}),
+                findings=findings,
+            )
+        )
+    return report
+
+
+def _try_daemon_checks(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Try to get health check results from a running daemon/viewer."""
+    from elspais.commands._daemon_client import try_daemon_or_start
+
+    params: dict[str, str] = {}
+    if getattr(args, "spec_only", False):
+        params["spec_only"] = "true"
+    if getattr(args, "code_only", False):
+        params["code_only"] = "true"
+    if getattr(args, "tests_only", False):
+        params["tests_only"] = "true"
+    if getattr(args, "lenient", False):
+        params["lenient"] = "true"
+    status_filter = getattr(args, "status", None)
+    if status_filter:
+        params["status"] = ",".join(status_filter)
+
+    return try_daemon_or_start("/api/run/checks", params)
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
     Performs comprehensive health checks on the elspais configuration
-    and repository structure.
+    and repository structure. Tries a running daemon/viewer first for
+    fast results, falls back to local graph build.
     """
+    # Daemon-first path: try running server for pre-computed results
+    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
+    spec_dir = getattr(args, "spec_dir", None)
+    daemon_result = _try_daemon_checks(args) if not spec_dir else None
+    if daemon_result is not None:
+        report = _report_from_dict(daemon_result)
+        return _output_report(report, args)
+
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
 

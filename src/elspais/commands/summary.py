@@ -41,27 +41,40 @@ def render_section(
 
 
 def run(args: argparse.Namespace) -> int:
-    """Run the coverage command."""
-    from elspais.graph.factory import build_graph
+    """Run the coverage command.
 
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-
-    from elspais.config import get_config
-
-    raw_config = get_config(config_path)
-
-    graph = build_graph(
-        config=raw_config,
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
-
+    Tries a running daemon/viewer first for fast results,
+    falls back to local graph build.
+    """
     fmt = getattr(args, "format", "text") or "text"
+    data = None
 
-    data = _collect_coverage(graph, config=raw_config)
+    # Daemon-first path
+    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
+    spec_dir = getattr(args, "spec_dir", None)
+    if not spec_dir:
+        from elspais.commands._daemon_client import try_daemon_or_start
+
+        data = try_daemon_or_start("/api/run/summary")
+
+    # Fallback: local graph build
+    if data is None:
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        spec_dir = getattr(args, "spec_dir", None)
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+
+        raw_config = get_config(config_path)
+        graph = build_graph(
+            config=raw_config,
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        data = _collect_coverage(graph, config=raw_config)
+
     content = _render(data, fmt)
     sys.stdout.write(content)
 

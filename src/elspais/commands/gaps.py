@@ -195,31 +195,72 @@ _GAP_TYPE_MAP: dict[str, str | None] = {
 }
 
 
+def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
+    """Reconstruct GapData from a JSON dict returned by the daemon."""
+    gd = GapData()
+    for item in data.get("uncovered", []):
+        gd.uncovered.append(tuple(item))  # type: ignore[arg-type]
+    for item in data.get("untested", []):
+        gd.untested.append(tuple(item))  # type: ignore[arg-type]
+    for item in data.get("unvalidated", []):
+        gd.unvalidated.append(tuple(item))  # type: ignore[arg-type]
+    for item in data.get("failing", []):
+        gd.failing.append(tuple(item))  # type: ignore[arg-type]
+    return gd
+
+
 def run(args: argparse.Namespace) -> int:
     """Run a standalone gap listing command.
 
-    Builds the graph and renders the requested gap types.
+    Tries a running daemon/viewer first for fast results,
+    falls back to local graph build.
     """
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
-
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-    start_path = Path.cwd()
-
-    config = get_config(config_path, start_path=start_path)
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
-
     command = getattr(args, "command", "gaps")
     gap_type = _GAP_TYPE_MAP.get(command)
     gap_types: list[str] | None = [gap_type] if gap_type else None
+    fmt = getattr(args, "format", "text")
 
-    output, exit_code = render_section(graph, config, args, gap_types=gap_types)
+    # Daemon-first path
+    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
+    spec_dir = getattr(args, "spec_dir", None)
+    daemon_result = None
+    if not spec_dir:
+        from elspais.commands._daemon_client import try_daemon_or_start
+
+        params: dict[str, str] = {}
+        if gap_type:
+            params["type"] = gap_type
+        daemon_result = try_daemon_or_start("/api/run/gaps", params)
+
+    if daemon_result is not None:
+        if fmt == "json":
+            output = json.dumps(daemon_result, indent=2)
+        else:
+            data = _gap_data_from_dict(daemon_result)
+            types_to_render = gap_types or _ALL_GAP_TYPES
+            if fmt == "markdown":
+                sections = [render_gap_markdown(gt, data) for gt in types_to_render]
+                output = "\n\n".join(sections)
+            else:
+                sections = [render_gap_text(gt, data) for gt in types_to_render]
+                output = "\n\n".join(sections)
+    else:
+        # Fallback: local graph build
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        spec_dir = getattr(args, "spec_dir", None)
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+        start_path = Path.cwd()
+
+        config = get_config(config_path, start_path=start_path)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        output, _ = render_section(graph, config, args, gap_types=gap_types)
 
     output_file = getattr(args, "output", None)
     if output_file:
@@ -227,4 +268,4 @@ def run(args: argparse.Namespace) -> int:
     else:
         print(output)
 
-    return exit_code
+    return 0

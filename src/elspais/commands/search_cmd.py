@@ -36,7 +36,17 @@ def run(args: argparse.Namespace) -> int:
     results = None
 
     if not no_daemon:
-        results = _try_fast_search(query, field, use_regex, limit)
+        from elspais.commands._daemon_client import try_daemon_or_start
+
+        results = try_daemon_or_start(
+            "/api/search",
+            {
+                "q": query,
+                "field": field,
+                "regex": "true" if use_regex else "false",
+                "limit": str(limit),
+            },
+        )
 
     # Fallback: local graph build
     if results is None:

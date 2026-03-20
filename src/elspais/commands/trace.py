@@ -471,6 +471,7 @@ def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
     Uses graph factory to build TraceGraph, then streams output in requested format.
+    Tries a running daemon/viewer first for JSON format.
     """
     # Implements: REQ-d00084-B+C
     # Parse --preset and apply independent detail flags
@@ -488,10 +489,41 @@ def run(args: argparse.Namespace) -> int:
         include_test_refs=getattr(args, "show_tests", False),
     )
 
+    fmt = getattr(args, "format", "markdown")
+
+    # Daemon-first path: for JSON format, try daemon directly
+    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
+    spec_dir = getattr(args, "spec_dir", None)
+    if fmt == "json" and not spec_dir:
+        from elspais.commands._daemon_client import try_daemon_or_start
+
+        daemon_result = try_daemon_or_start("/api/run/trace")
+        if daemon_result is not None:
+            # Filter/format nodes based on preset columns
+            nodes = []
+            for node_data in daemon_result:
+                node_dict: dict = {}
+                for col in preset.columns:
+                    if col == "file":
+                        node_dict["source"] = {
+                            "path": node_data.get("file"),
+                            "line": None,
+                        }
+                    else:
+                        node_dict[col] = node_data.get(col)
+                if preset.include_body:
+                    node_dict["body"] = node_data.get("body", "")
+                if preset.include_assertions:
+                    node_dict["assertions"] = node_data.get("assertions", [])
+                if preset.include_test_refs:
+                    node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
+                nodes.append(node_dict)
+            print(json.dumps(nodes, indent=2))
+            return 0
+
     # Build graph using factory
     from elspais.graph.factory import build_graph
 
-    spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     canonical_root = getattr(args, "canonical_root", None)
 
@@ -503,8 +535,6 @@ def run(args: argparse.Namespace) -> int:
 
     # Implements: REQ-d00084-A
     # Select formatter based on format
-    fmt = getattr(args, "format", "markdown")
-
     formatters = {
         "text": format_markdown,
         "markdown": format_markdown,

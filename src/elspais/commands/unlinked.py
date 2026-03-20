@@ -212,24 +212,82 @@ def render_section(
 # =============================================================================
 
 
+def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
+    """Reconstruct UnlinkedData from a JSON dict returned by the daemon."""
+    ud = UnlinkedData()
+    for fp, entries in data.get("tests", {}).get("by_file", {}).items():
+        for e in entries:
+            ud.tests.append(
+                UnlinkedEntry(
+                    node_id=e["id"],
+                    file=fp,
+                    line=e.get("line", 0),
+                    label=e.get("label", ""),
+                )
+            )
+    for fp, entries in data.get("code", {}).get("by_file", {}).items():
+        for e in entries:
+            ud.code.append(
+                UnlinkedEntry(
+                    node_id=e["id"],
+                    file=fp,
+                    line=e.get("line", 0),
+                    label=e.get("label", ""),
+                )
+            )
+    return ud
+
+
 def run(args: argparse.Namespace) -> int:
-    """Run a standalone unlinked-nodes listing."""
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
+    """Run a standalone unlinked-nodes listing.
 
+    Tries a running daemon/viewer first for fast results,
+    falls back to local graph build.
+    """
+    fmt = getattr(args, "format", "text")
+    verbose = getattr(args, "verbose", False)
+
+    # Daemon-first path
+    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-    start_path = Path.cwd()
+    daemon_result = None
+    if not spec_dir:
+        from elspais.commands._daemon_client import try_daemon_or_start
 
-    config = get_config(config_path, start_path=start_path)
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
+        daemon_result = try_daemon_or_start("/api/run/unlinked")
 
-    output, exit_code = render_section(graph, config, args)
+    if daemon_result is not None:
+        if fmt == "json":
+            output = json.dumps(daemon_result, indent=2)
+            total = daemon_result.get("tests", {}).get("count", 0) + daemon_result.get(
+                "code", {}
+            ).get("count", 0)
+            exit_code = 1 if total else 0
+        else:
+            data = _unlinked_data_from_dict(daemon_result)
+            total = len(data.tests) + len(data.code)
+            if fmt == "markdown":
+                output = render_unlinked_markdown(data, verbose=verbose)
+            else:
+                output = render_unlinked_text(data, verbose=verbose)
+            exit_code = 1 if total else 0
+    else:
+        # Fallback: local graph build
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        spec_dir = getattr(args, "spec_dir", None)
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+        start_path = Path.cwd()
+
+        config = get_config(config_path, start_path=start_path)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        output, exit_code = render_section(graph, config, args)
 
     output_file = getattr(args, "output", None)
     if output_file:
