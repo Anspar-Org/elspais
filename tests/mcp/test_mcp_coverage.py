@@ -1,3 +1,4 @@
+# Verifies: REQ-o00064-A+B+C+D+E
 # Validates REQ-o00064-A, REQ-o00064-B, REQ-o00064-C, REQ-o00064-D, REQ-o00064-E
 # Validates REQ-d00066-A, REQ-d00066-B, REQ-d00066-C, REQ-d00066-D
 # Validates REQ-d00066-E, REQ-d00066-F, REQ-d00066-G
@@ -154,8 +155,8 @@ class TestGetTestCoverage:
 
         result = _get_test_coverage(coverage_graph, "REQ-p00001")
 
-        assert len(result["result_nodes"]) == 1
-        assert result["result_nodes"][0]["status"] == "passed"
+        assert len(result["test_nodes"][0]["results"]) == 1
+        assert result["test_nodes"][0]["results"][0]["status"] == "passed"
 
     def test_REQ_d00066_C_identifies_coverage_gaps(self, coverage_graph):
         """REQ-d00066-C: SHALL identify assertion coverage gaps."""

@@ -1,6 +1,7 @@
 # Implements: REQ-p00050-A, REQ-p00050-D, REQ-p00061-B, REQ-p00061-C
 # Implements: REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 # Implements: REQ-d00071-A, REQ-d00071-B, REQ-d00071-C, REQ-d00071-D
+# Implements: REQ-d00216-A+B+C+D+E+F
 """Graph Builder - Constructs TraceGraph from parsed content.
 
 This module provides the builder pattern for constructing a complete

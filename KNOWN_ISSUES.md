@@ -1,5 +1,7 @@
 # Known Issues
 
+[ ] feature: search 'search terms string' : invokes the 'search' api. takes a string. 
+
 [ ] chore: general code review. file sizes, duped code, workarounds, sloppiness, etc.
 
 [x] Bug: Elspais should check the ENV var for ELSPAIS_VERSION and error if the current install is not compatible
@@ -80,6 +82,10 @@
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
 - The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.
 
+[ ] Naming: `coverage_pct` in `RollupMetrics` is misleading — it measures assertion *reference* coverage (code + test + child REQ rollup), not traditional code coverage. Consider renaming to `referenced_pct` or similar to avoid confusion with line-level code coverage.
+
+[ ] Feature: `code_tested` metric — traditional code-test coverage (which lines of code are executed during tests). Distinct from the current code-requirement traceability (`# Implements:` references). Will require test runner integration to collect line-level execution data.
+
 [ ] Chore: start using Changelog in REQs
 
 [ ] Wishlist **Drag-and-drop reordering** in the UI (render_order mutation) - prospective only
@@ -101,3 +107,5 @@
 - If there a conflicts on the pull, just show an error and don't change anything.
 - obviously refresh the GUI after loading a new branch.
 - warn if unsaved in-memory edits will be lost
+
+[ ] chore: Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.

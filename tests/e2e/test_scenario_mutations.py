@@ -1,3 +1,4 @@
+# Implements: REQ-d00134-A+B+C+D+E+F
 # Validates REQ-d00134-A, REQ-d00134-B, REQ-d00134-C, REQ-d00134-D
 # Validates REQ-d00134-E, REQ-d00134-F
 """E2E mutation round-trip scenario via MCP subprocess.

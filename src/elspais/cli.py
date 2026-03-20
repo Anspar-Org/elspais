@@ -1,4 +1,5 @@
 # Implements: REQ-p00001-A
+# Implements: REQ-d00214-A+B+C+D+E+F+G
 """
 elspais.cli - Command-line interface.
 

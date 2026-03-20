@@ -2928,7 +2928,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         req_id: The requirement ID to get coverage for.
 
     Returns:
-        Dict with success, test_nodes, result_nodes, covered/uncovered assertions,
+        Dict with success, test_nodes, covered/uncovered assertions,
         and coverage statistics.
     """
     node = graph.find_by_id(req_id)
@@ -2950,7 +2950,6 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # Deduplicated test serialization via shared iterator
     seen_test_ids: set[str] = set()
     test_nodes: list[dict[str, Any]] = []
-    result_nodes: list[dict[str, Any]] = []
     covered_assertion_ids: set[str] = set()
 
     for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
@@ -2963,11 +2962,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             continue
         seen_test_ids.add(test_node.id)
 
-        info = _serialize_test_info(test_node, graph)
-        test_nodes.append(info)
-        # Flatten results for MCP contract compatibility
-        for r in info["results"]:
-            result_nodes.append({**r, "test_id": info["id"]})
+        test_nodes.append(_serialize_test_info(test_node, graph))
 
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
@@ -3011,7 +3006,6 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "success": True,
         "req_id": req_id,
         "test_nodes": test_nodes,
-        "result_nodes": result_nodes,
         "covered_assertions": covered_assertions,
         "uncovered_assertions": uncovered_assertions,
         "total_assertions": total,
@@ -4290,7 +4284,7 @@ The graph is the single source of truth - all tools read directly from it.
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
-  - Returns test_nodes, result_nodes, covered/uncovered assertions
+  - Returns test_nodes (with nested results), covered/uncovered assertions
   - Includes coverage percentage calculation
 - `get_uncovered_assertions(req_id=None)` - Find assertions with no test coverage
   - When req_id is None, scans all requirements

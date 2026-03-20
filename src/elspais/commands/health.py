@@ -1,3 +1,6 @@
+# Implements: REQ-d00080-A+B+C+E
+# Implements: REQ-d00218-A+B+C
+# Implements: REQ-d00219-A+B+C+D
 """
 elspais.commands.health - Diagnose configuration and repository health.
 

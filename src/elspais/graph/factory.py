@@ -438,6 +438,18 @@ def build_graph(
             )
             file_nodes[resolved] = fn
             builder.register_file_node(fn)
+        else:
+            # Multi-role: track additional file types on existing node (stored as
+            # string values for JSON serializability)
+            fn = file_nodes[resolved]
+            existing_types = fn.get_field("file_types")
+            if existing_types is None:
+                first = fn.get_field("file_type")
+                existing_types = [first.value if isinstance(first, FileType) else first]
+            type_val = file_type.value if isinstance(file_type, FileType) else file_type
+            if type_val not in existing_types:
+                existing_types.append(type_val)
+            fn.set_field("file_types", existing_types)
         return file_nodes[resolved]
 
     for spec_dir in spec_dirs:

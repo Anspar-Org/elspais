@@ -22,12 +22,19 @@ def _make_req(req_id: str, title: str, status: str = "Active") -> GraphNode:
 
 
 def _make_graph(*nodes: GraphNode) -> FederatedGraph:
-    """Wrap requirement nodes in a FederatedGraph for testing."""
+    """Wrap nodes in a FederatedGraph for testing.
+
+    REQUIREMENT nodes are added as roots; all nodes are indexed.
+    """
     tg = TraceGraph()
     for node in nodes:
         tg._index[node.id] = node
         if node.kind == NodeKind.REQUIREMENT:
             tg._roots.append(node)
+        # Index children reachable from this node (e.g. linked CODE nodes)
+        for child in node.iter_children():
+            if child.id not in tg._index:
+                tg._index[child.id] = child
     return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
 
 
@@ -63,10 +70,12 @@ class TestCollectGaps:
         assert len(data.failing) == 0
 
     def test_covered_req_not_in_uncovered(self) -> None:
-        """A requirement with coverage_pct > 0 is NOT in uncovered."""
+        """A requirement with a CODE child is NOT in uncovered."""
+        from elspais.graph import EdgeKind
+
         req = _make_req("REQ-p00001", "Covered")
-        metrics = RollupMetrics(total_assertions=1, covered_assertions=1, coverage_pct=100.0)
-        req.set_metric("rollup_metrics", metrics)
+        code = GraphNode(id="code:foo.py:10", kind=NodeKind.CODE, label="foo")
+        req.link(code, EdgeKind.IMPLEMENTS)
         graph = _make_graph(req)
 
         data = collect_gaps(graph, exclude_status=set())

@@ -63,6 +63,7 @@ skip_dirs = ["roadmap"]
 
 [scanning.code]
 directories = ["src", ".github/workflows"]
+file_patterns = ["tests/conftest.py", "tests/e2e/test_scenario_mutations.py"]
 
 [scanning.test]
 enabled = true

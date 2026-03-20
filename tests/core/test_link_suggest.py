@@ -1,5 +1,6 @@
 # Implements: REQ-o00065-A, REQ-o00065-B, REQ-o00065-C, REQ-o00065-F
 # Implements: REQ-d00072-A+B+C
+# Verifies: REQ-d00073-A+B+C+D+E
 """Tests for the link suggestion engine (link_suggest.py).
 
 Validates discover_assertions-based link suggestions for unlinked TEST nodes,

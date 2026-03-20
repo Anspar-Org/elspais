@@ -1,4 +1,5 @@
 # Verifies: REQ-p00002, REQ-p00060
+# Verifies: REQ-d00074-A+B+C+D
 """Additional e2e tests for comprehensive feature coverage.
 
 Tests edge cases, deeper config validation, additional MCP scenarios,

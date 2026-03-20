@@ -489,3 +489,71 @@ A. The system SHALL do A.
         assert (
             coverage_stats["no_coverage"] == 0
         ), "The requirement should NOT be in no_coverage since it has code implementing it"
+
+
+class TestMultiRoleFileScanning:
+    """Tests for files scanned as both CODE and TEST (dual-type)."""
+
+    def test_file_in_code_patterns_and_test_dirs_has_both_content_types(
+        self, tmp_path: Path
+    ) -> None:
+        """A file matched by scanning.code.file_patterns AND scanning.test.directories
+        produces one FILE node with both CODE and TEST content children and file_types set."""
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-multi-role"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+file_patterns = ["tests/test_dual.py"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+""",
+            encoding="utf-8",
+        )
+
+        _write_spec(tmp_path / "spec")
+
+        # Write a test file that also has # Implements: (code role)
+        test_file = tmp_path / "tests" / "test_dual.py"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(
+            "# Implements: REQ-p00001\n" "def test_REQ_p00001_something():\n" "    assert True\n",
+            encoding="utf-8",
+        )
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=True,
+        )
+
+        # Find the FILE node for test_dual.py
+        file_nodes = [n for n in graph.iter_roots(NodeKind.FILE) if "test_dual.py" in n.id]
+        assert (
+            len(file_nodes) == 1
+        ), f"Expected exactly 1 FILE node for test_dual.py, got {len(file_nodes)}"
+        file_node = file_nodes[0]
+
+        # Check file_types list includes both CODE and TEST (stored as string values)
+        file_types = file_node.get_field("file_types")
+        assert file_types is not None, "file_types field should be set for multi-role files"
+        assert "code" in file_types, f"Expected 'code' in file_types, got {file_types}"
+        assert "test" in file_types, f"Expected 'test' in file_types, got {file_types}"
+
+        # Check both CODE and TEST content children exist
+        child_kinds = {child.kind for child in file_node.iter_children()}
+        assert (
+            NodeKind.CODE in child_kinds
+        ), f"Expected CODE child from # Implements:, got kinds: {child_kinds}"
+        assert (
+            NodeKind.TEST in child_kinds
+        ), f"Expected TEST child from test function, got kinds: {child_kinds}"

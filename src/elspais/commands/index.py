@@ -1,4 +1,5 @@
 # Implements: REQ-d00052-G
+# Implements: REQ-d00217-A+B+C+D
 """
 elspais.commands.index - INDEX.md management command.
 

@@ -6,6 +6,7 @@
 # Implements: REQ-d00051-E, REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 # Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
+# Implements: REQ-d00215-A+B+C+D+E
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.

@@ -1,3 +1,4 @@
+# Implements: REQ-d00213-A+B+C+D+E+F
 """
 elspais.utilities.version_check - Check for updates and detect install method.
 

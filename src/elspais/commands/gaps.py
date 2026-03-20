@@ -24,6 +24,23 @@ class GapData:
     failing: list[tuple[str, str, str]] = field(default_factory=list)  # (req_id, title, source)
 
 
+def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[str]:
+    """Return set of requirement IDs that have at least one CODE reference."""
+    covered: set[str] = set()
+    for node in graph.nodes_by_kind(NodeKind.CODE):
+        for parent in node.iter_parents():
+            if parent.kind == NodeKind.REQUIREMENT and parent.id not in excluded_ids:
+                covered.add(parent.id)
+            elif parent.kind == NodeKind.ASSERTION:
+                for grandparent in parent.iter_parents():
+                    if (
+                        grandparent.kind == NodeKind.REQUIREMENT
+                        and grandparent.id not in excluded_ids
+                    ):
+                        covered.add(grandparent.id)
+    return covered
+
+
 def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
     """Single-pass collection of coverage gaps from the graph.
 
@@ -36,6 +53,13 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
     """
     data = GapData()
 
+    excluded_ids: set[str] = set()
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            excluded_ids.add(node.id)
+
+    code_covered = _reqs_with_code_refs(graph, excluded_ids)
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node.status in exclude_status:
             continue
@@ -44,8 +68,8 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
         title = node.get_label() or ""
         metrics = node.get_metric("rollup_metrics")
 
-        # Uncovered: no coverage at all
-        if metrics is None or metrics.coverage_pct <= 0:
+        # Uncovered: no code references
+        if req_id not in code_covered:
             data.uncovered.append((req_id, title))
 
         # Untested: no direct test coverage
