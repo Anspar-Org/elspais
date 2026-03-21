@@ -39,6 +39,32 @@ function showToast(message, type) {
 }
 
 // =====================================================================
+// Error Modal
+// =====================================================================
+
+function showErrorModal(title, message) {
+    var old = document.getElementById('error-modal-overlay');
+    if (old) old.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'error-modal-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title" style="color:var(--danger-color,#ef4444);">' + escapeHtml(title || 'Error') + '</div>' +
+            '<pre class="error-modal-body">' + escapeHtml(message || 'An unknown error occurred.') + '</pre>' +
+            '<div class="modal-actions">' +
+                '<button class="btn" id="error-modal-dismiss">Dismiss</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('error-modal-dismiss').onclick = function() { overlay.remove(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', function onEsc(e) {
+        if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onEsc); }
+    });
+}
+
+// =====================================================================
 // Loading Overlay
 // =====================================================================
 
@@ -183,7 +209,7 @@ async function doGitSync() {
         showToast(result.message || 'Synced', 'success');
         refreshBranchStatus();
     } else {
-        showToast((result && result.error) || 'Sync failed', 'error');
+        showErrorModal('Sync failed', (result && result.error) || 'Unknown error');
         refreshBranchStatus();
     }
 }
@@ -619,10 +645,8 @@ function showBranchPickerModal() {
                     });
                 } else {
                     hideLoadingOverlay();
-                    errorEl.textContent = (result && result.error) || 'Failed to rewind';
-                    errorEl.classList.remove('hidden');
-                    rewindBtn.disabled = false;
-                    rewindBtn.textContent = 'Rewind to this checkpoint';
+                    closeModal();
+                    showErrorModal('Rewind failed', (result && result.error) || 'Unknown error');
                 }
             });
         });
@@ -693,8 +717,8 @@ function showBranchPickerModal() {
                     });
                 } else {
                     hideLoadingOverlay();
-                    errorEl.textContent = (result && result.error) || 'Failed to switch branch';
-                    errorEl.classList.remove('hidden');
+                    closeModal();
+                    showErrorModal('Failed to switch branch', (result && result.error) || 'Unknown error');
                     // Re-enable items
                     items.forEach(function(item) {
                         item.style.pointerEvents = '';
@@ -1205,7 +1229,7 @@ function showCheckpointModal() {
                 refreshDirtyCount();
                 _openCheckpointModal();
             } else {
-                showToast('Save failed: ' + ((saveResult && saveResult.error) || 'unknown'), 'error');
+                showErrorModal('Save failed', (saveResult && saveResult.error) || 'Unknown error');
             }
         });
         return;
@@ -1320,8 +1344,8 @@ function _openCheckpointModal() {
                     refreshBranchStatus();
                     refreshDirtyCount();
                 } else {
-                    errorEl.textContent = (result && result.error) || 'Checkpoint failed';
-                    errorEl.classList.remove('hidden');
+                    overlay.remove();
+                    showErrorModal('Checkpoint failed', (result && result.error) || 'Unknown error');
                     confirmBtn.disabled = false;
                     confirmBtn.textContent = 'Checkpoint';
                 }
@@ -1447,7 +1471,7 @@ function initShareSlider() {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
                     refreshBranchStatus();
                 } else {
-                    showToast((result && result.error) || 'Push failed', 'error');
+                    showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                 }
             });
         }
@@ -1481,7 +1505,7 @@ function initShareSlider() {
                         showToast('Pushed to origin/' + (result.branch || ''), 'success');
                         refreshBranchStatus();
                     } else {
-                        showToast((result && result.error) || 'Push failed', 'error');
+                        showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                     }
                 });
             }, 1000);
@@ -1551,7 +1575,7 @@ async function refreshFromDisk() {
         await refreshDirtyCount();
         dismissStaleBanner();
     } else {
-        showToast((result && result.error) || 'Refresh failed', 'error');
+        showErrorModal('Refresh failed', (result && result.error) || 'Unknown error');
     }
 }
 
