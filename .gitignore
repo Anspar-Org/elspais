@@ -65,6 +65,7 @@ venv.bak/
 .idea/
 .vscode/
 *.swp
+.superpowers/
 *.swo
 *~
 
