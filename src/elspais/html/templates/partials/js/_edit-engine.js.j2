@@ -93,7 +93,11 @@ async function refreshBranchStatus() {
     var warningEl = document.getElementById('branch-warning');
     if (!dot || !nameEl) return data;
     editState.isMain = !!data.is_main;
-    if (data.branch) {
+    if (data.is_detached && data.originating_branch) {
+        nameEl.textContent = data.originating_branch + ' (<<' + (data.commits_behind_head || '?') + ')';
+        dot.classList.add('orange');
+        nameEl.parentElement.title = 'Viewing historical checkpoint — click to switch branch';
+    } else if (data.branch) {
         nameEl.textContent = data.branch;
         nameEl.parentElement.title = 'Click to switch branch';
     } else {
@@ -102,6 +106,7 @@ async function refreshBranchStatus() {
     }
     dot.className = 'branch-status-dot';
     if (data.is_main) { dot.classList.add('red'); }
+    else if (data.is_detached) { dot.classList.add('orange'); }
     else if (data.local_ahead > 0) { dot.classList.add('blue'); }
     else { dot.classList.add('green'); }
     // Sync button: visible when remote has diverged OR main has moved ahead
@@ -112,14 +117,32 @@ async function refreshBranchStatus() {
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.main_diverged);
     }
-    // Push button: enabled when not on main AND there is something to push
-    // (committed changes ahead of remote, dirty spec files on disk, or in-memory mutations)
-    var pushBtn = document.getElementById('btn-push');
-    if (pushBtn) {
-        var hasPushable = data.local_ahead > 0
-            || (data.dirty_spec_files && data.dirty_spec_files.length > 0)
-            || (typeof editState !== 'undefined' && editState.mutationCount > 0);
-        pushBtn.disabled = data.is_main || !hasPushable;
+    // Checkpoint button: enabled when uncommitted files exist
+    var checkpointBtn = document.getElementById('btn-checkpoint');
+    if (checkpointBtn) {
+        var uncommittedCount = data.uncommitted_file_count || 0;
+        checkpointBtn.disabled = uncommittedCount === 0 || data.is_detached;
+        var uncommittedBadge = document.getElementById('uncommitted-badge');
+        if (uncommittedBadge) {
+            if (uncommittedCount > 0) {
+                uncommittedBadge.textContent = uncommittedCount + ' file' + (uncommittedCount > 1 ? 's' : '');
+                uncommittedBadge.classList.remove('hidden');
+            } else {
+                uncommittedBadge.classList.add('hidden');
+            }
+        }
+    }
+    // Share button: enabled when unpushed commits exist
+    var shareBtn = document.getElementById('btn-share');
+    if (shareBtn) {
+        shareBtn.disabled = data.is_main || !(data.local_ahead > 0) || data.is_detached;
+    }
+    // Detached state: grey all edit buttons
+    if (data.is_detached) {
+        ['btn-undo', 'btn-save', 'btn-checkpoint', 'btn-share'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
     }
     return data;
 }
@@ -666,19 +689,6 @@ async function doSave() {
     }
 }
 
-async function doRevert() {
-    if (!confirm('Revert all unsaved changes? This cannot be undone.')) return;
-    const result = await mutate('/api/revert', {});
-    if (result && result.success) {
-        showToast('All changes reverted', 'success');
-        await refreshAllOpenCards();
-        loadTreeData();
-        refreshFileViewer();
-    }
-    if (result && result.message) {
-        showToast(result.message, 'info');
-    }
-}
 
 async function doUndo() {
     const result = await mutate('/api/mutate/undo', {});
@@ -953,111 +963,135 @@ function onAddRelationship(nodeId, btn) {
 // Search functions moved to _search.js.j2 (shared by both modes)
 
 // =====================================================================
-// Push Modal (REQ-p00004-E)
+// Checkpoint Modal
 // =====================================================================
 
-function showPushModal() {
-    var pushBtn = document.getElementById('btn-push');
-    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Loading...'; }
+function showCheckpointModal() {
+    // Guard: prompt to save if unsaved mutations
+    if (editState.mutationCount > 0) {
+        if (!confirm('You have ' + editState.mutationCount + ' unsaved changes. Save before checkpointing?')) {
+            return;
+        }
+        apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
+            if (saveResult && saveResult.success !== false) {
+                refreshDirtyCount();
+                _openCheckpointModal();
+            } else {
+                showToast('Save failed: ' + ((saveResult && saveResult.error) || 'unknown'), 'error');
+            }
+        });
+        return;
+    }
+    _openCheckpointModal();
+}
+
+function _openCheckpointModal() {
+    var checkpointBtn = document.getElementById('btn-checkpoint');
+    if (checkpointBtn) { checkpointBtn.disabled = true; checkpointBtn.textContent = 'Loading...'; }
+
     apiFetch('/api/git/status').then(function(data) {
-        if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push'; }
-        if (!data || data.is_main) return;
+        if (checkpointBtn) { checkpointBtn.disabled = false; checkpointBtn.textContent = 'Checkpoint'; }
+        if (!data) return;
         var files = data.dirty_spec_files || [];
-        // Remove existing modal
+        if (files.length === 0) {
+            showToast('No uncommitted spec files', 'info');
+            return;
+        }
+
         var old = document.getElementById('branch-modal-overlay');
         if (old) old.remove();
 
-        var fileListHtml = files.length > 0
-            ? files.map(function(f) { return '<div class="modal-file">' + escapeHtml(f) + '</div>'; }).join('')
-            : '<div class="modal-file muted">No modified spec files</div>';
+        var fileListHtml = files.map(function(f) {
+            return '<div class="modal-file">' + escapeHtml(f) + '</div>';
+        }).join('');
 
         var overlay = document.createElement('div');
         overlay.id = 'branch-modal-overlay';
         overlay.className = 'modal-overlay visible';
         overlay.innerHTML =
             '<div class="modal-dialog">' +
-                '<div class="modal-title">Commit &amp; Push</div>' +
-                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch) + '</strong></div>' +
+                '<div class="modal-title">Checkpoint</div>' +
+                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch || '(detached)') + '</strong></div>' +
                 '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
                 '<div class="modal-file-list">' + fileListHtml + '</div>' +
                 '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
-                '<input type="text" class="modal-input" id="push-message-input" placeholder="Commit message" autocomplete="off">' +
-                '<div class="modal-error hidden" id="push-modal-error"></div>' +
+                '<textarea class="modal-input" id="checkpoint-message-input" rows="4" placeholder="Describe this checkpoint..." style="resize:vertical;font-family:monospace;font-size:12px;"></textarea>' +
+                '<div class="modal-error hidden" id="checkpoint-modal-error"></div>' +
                 '<div class="modal-actions">' +
-                    '<button class="btn btn-primary" id="push-modal-confirm"' + (files.length === 0 ? ' disabled' : '') + '>Push</button>' +
-                    '<button class="btn" id="push-modal-cancel">Cancel</button>' +
+                    '<button class="btn btn-warning" id="checkpoint-modal-confirm" disabled>Checkpoint</button>' +
+                    '<button class="btn" id="checkpoint-modal-cancel">Cancel</button>' +
                 '</div>' +
             '</div>';
         document.body.appendChild(overlay);
 
-        var input = document.getElementById('push-message-input');
-        var errorEl = document.getElementById('push-modal-error');
-        input.focus();
+        var textarea = document.getElementById('checkpoint-message-input');
+        var confirmBtn = document.getElementById('checkpoint-modal-confirm');
+        var errorEl = document.getElementById('checkpoint-modal-error');
 
-        function doPush() {
-            errorEl.textContent = '';
-            errorEl.classList.add('hidden');
-            var msg = input.value.trim();
-            if (!msg) {
-                errorEl.textContent = 'Commit message is required';
-                errorEl.classList.remove('hidden');
-                return;
+        // Auto-generate commit message from server
+        apiFetch('/api/git/commit-message').then(function(msgData) {
+            if (msgData && msgData.message) {
+                textarea.value = msgData.message;
+            } else {
+                textarea.value = files.join('\n');
             }
-            var confirmBtn = document.getElementById('push-modal-confirm');
+            confirmBtn.disabled = textarea.value.trim() === '';
+        });
+
+        textarea.addEventListener('input', function() {
+            confirmBtn.disabled = textarea.value.trim() === '';
+        });
+        textarea.focus();
+
+        function doCheckpoint() {
+            var msg = textarea.value.trim();
+            if (!msg) return;
             confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Pushing...';
-            // Save mutations first, then push
-            apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
-                if (saveResult && saveResult.success === false) {
-                    errorEl.textContent = 'Save failed: ' + (saveResult.error || 'unknown');
-                    errorEl.classList.remove('hidden');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
-                    return;
-                }
-                return apiFetch('/api/git/push', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: msg})
-                });
+            confirmBtn.textContent = 'Committing...';
+            apiFetch('/api/git/commit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: msg})
             }).then(function(result) {
-                if (!result) {
-                    errorEl.textContent = 'Push failed — no response from server';
-                    errorEl.classList.remove('hidden');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
-                    return;
-                }
-                if (result.success) {
+                if (result && result.success) {
                     overlay.remove();
-                    var toast = 'Pushed ' + (result.files_committed || []).length + ' file(s)';
-                    if (result.push_error) {
-                        toast += ' (commit OK, push failed: ' + result.push_error + ')';
-                        showToast(toast, 'warning');
-                    } else {
-                        showToast(toast, 'success');
-                    }
+                    showToast('Checkpoint created', 'success');
                     refreshBranchStatus();
                     refreshDirtyCount();
                 } else {
-                    errorEl.textContent = result.error || 'Push failed';
+                    errorEl.textContent = (result && result.error) || 'Checkpoint failed';
                     errorEl.classList.remove('hidden');
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
+                    confirmBtn.textContent = 'Checkpoint';
                 }
             });
         }
 
-        document.getElementById('push-modal-confirm').onclick = doPush;
-        document.getElementById('push-modal-cancel').onclick = function() { overlay.remove(); };
-        overlay.addEventListener('click', function(e) {
-            if (e.target === overlay) overlay.remove();
-        });
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') doPush();
+        confirmBtn.onclick = doCheckpoint;
+        document.getElementById('checkpoint-modal-cancel').onclick = function() { overlay.remove(); };
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+        textarea.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') overlay.remove();
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doCheckpoint();
         });
     });
+}
+
+// =====================================================================
+// Share (placeholder — replaced by slide-to-share in Task 12)
+// =====================================================================
+
+function doShareClick() {
+    if (confirm('Push local commits to remote?')) {
+        apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+            if (result && result.success) {
+                showToast('Pushed to origin/' + (result.branch || ''), 'success');
+                refreshBranchStatus();
+            } else {
+                showToast((result && result.error) || 'Push failed', 'error');
+            }
+        });
+    }
 }
 
 // =====================================================================
@@ -1068,8 +1102,8 @@ window.addEventListener('beforeunload', function(e) {
     var dirtyBadge = document.getElementById('unsaved-badge');
     var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
                        parseInt(dirtyBadge.textContent, 10) > 0;
-    var dot = document.getElementById('branch-status-dot');
-    var hasUncommitted = dot && dot.classList.contains('blue');
+    var uncommittedBadge = document.getElementById('uncommitted-badge');
+    var hasUncommitted = uncommittedBadge && !uncommittedBadge.classList.contains('hidden');
     if (hasMutations || hasUncommitted) {
         e.preventDefault();
         e.returnValue = '';

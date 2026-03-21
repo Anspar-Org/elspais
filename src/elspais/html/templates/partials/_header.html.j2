@@ -57,20 +57,16 @@
             <span class="unsaved-badge hidden" id="unsaved-badge">0</span>
         </button>
 
-        <button class="btn btn-danger" id="btn-revert" onclick="doRevert()" disabled title="Revert all unsaved changes"
-                data-help="Discard ALL pending in-memory mutations and reload the graph from disk. This cannot be undone.">
-            Revert
+        <button class="btn btn-warning edit-only" id="btn-checkpoint" onclick="showCheckpointModal()" disabled
+                title="Commit spec changes as a local checkpoint"
+                data-help="Create a local git checkpoint (commit) of your spec file changes. This is rewindable — you can always go back.">
+            Checkpoint
+            <span class="uncommitted-badge hidden" id="uncommitted-badge">0</span>
         </button>
 
-        <button class="btn btn-success edit-only" id="btn-push" onclick="showPushModal()" disabled
-                title="Commit and push spec changes">
-            Push
-        </button>
-
-        <button class="btn" id="btn-refresh-disk" onclick="refreshFromDisk()"
-                title="Reload graph from disk"
-                data-help="Reload the requirement graph from spec files on disk. Use after editing spec files externally.">
-            Refresh
+        <button class="btn btn-success edit-only" id="btn-share" onclick="doShareClick()" disabled
+                title="Push local commits to remote">
+            Share
         </button>
 
         {% endif %}

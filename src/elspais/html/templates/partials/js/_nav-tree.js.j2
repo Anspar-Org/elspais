@@ -99,26 +99,16 @@ async function refreshDirtyCount() {
     editState.mutationCount = data.mutation_count || 0;
     const badge = document.getElementById('unsaved-badge');
     const btnSave = document.getElementById('btn-save');
-    const btnRevert = document.getElementById('btn-revert');
     const btnUndo = document.getElementById('btn-undo');
     if (editState.mutationCount > 0) {
         badge.textContent = editState.mutationCount;
         badge.classList.remove('hidden');
         btnSave.disabled = false;
-        btnRevert.disabled = false;
         btnUndo.disabled = false;
     } else {
         badge.classList.add('hidden');
         btnSave.disabled = true;
-        btnRevert.disabled = true;
         btnUndo.disabled = true;
-    }
-    // Update push button: in-memory mutations are pushable (save + commit + push)
-    var pushBtn = document.getElementById('btn-push');
-    if (pushBtn && !editState.isMain) {
-        if (editState.mutationCount > 0) {
-            pushBtn.disabled = false;
-        }
     }
 }
 
