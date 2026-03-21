@@ -1430,9 +1430,10 @@ def suggest_branch_name(repo_root: Path, base_name: str) -> str:
 def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
     """Generate a commit message summarising dirty spec file changes.
 
-    Scans each dirty spec file for requirement headers matching the pattern
-    ``# REQ-<id> <title>`` and returns a multi-line string with one
-    ``REQ-ID Title`` entry per matching header.
+    Uses ``git diff`` to find changed lines, then identifies which
+    requirement sections were affected.  For tracked files the diff
+    shows exactly which requirement blocks changed.  For untracked
+    (new) files, all requirements in the file are listed.
 
     Args:
         repo_root: Path to repository root.
@@ -1445,17 +1446,72 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
     import re as _re
 
     modified, untracked = get_modified_files(repo_root)
-    all_dirty = modified | untracked
     prefix = f"{spec_dir}/"
-    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+    dirty_tracked = sorted(f for f in modified if f.startswith(prefix))
+    dirty_untracked = sorted(f for f in untracked if f.startswith(prefix))
 
-    if not dirty_spec:
+    if not dirty_tracked and not dirty_untracked:
         return ""
 
     _header_re = _re.compile(r"^#\s+(REQ-\S+)\s+(.*)")
-    lines: list[str] = []
+    env = _clean_git_env()
+    results: list[str] = []
+    seen: set[str] = set()
 
-    for rel_path in dirty_spec:
+    # For tracked files: use git diff to find changed line numbers,
+    # then walk the file to find which requirement section each changed
+    # line belongs to.
+    for rel_path in dirty_tracked:
+        try:
+            diff_out = subprocess.run(
+                ["git", "diff", "--unified=0", "--", rel_path],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+
+        # Parse @@ hunks to get changed line numbers in the new file
+        changed_lines: set[int] = set()
+        for hunk_line in diff_out.stdout.splitlines():
+            if hunk_line.startswith("@@"):
+                # Format: @@ -old,count +new,count @@
+                parts = hunk_line.split("+")
+                if len(parts) >= 2:
+                    range_str = parts[1].split("@@")[0].strip()
+                    if "," in range_str:
+                        start, count = range_str.split(",", 1)
+                        start, count = int(start), int(count)
+                    else:
+                        start, count = int(range_str), 1
+                    for ln in range(start, start + count):
+                        changed_lines.add(ln)
+
+        if not changed_lines:
+            continue
+
+        # Walk the file; track current requirement header
+        abs_path = repo_root / rel_path
+        try:
+            file_lines = abs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+
+        current_req: tuple[str, str] | None = None
+        for i, line in enumerate(file_lines, 1):
+            m = _header_re.match(line)
+            if m:
+                current_req = (m.group(1), m.group(2).strip())
+            if i in changed_lines and current_req:
+                req_id, title = current_req
+                if req_id not in seen:
+                    seen.add(req_id)
+                    results.append(f"{req_id} {title}")
+
+    # For untracked (new) files: list all requirements
+    for rel_path in dirty_untracked:
         abs_path = repo_root / rel_path
         try:
             content = abs_path.read_text(encoding="utf-8", errors="replace")
@@ -1465,9 +1521,34 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
             m = _header_re.match(line)
             if m:
                 req_id, title = m.group(1), m.group(2).strip()
-                lines.append(f"{req_id} {title}")
+                if req_id not in seen:
+                    seen.add(req_id)
+                    results.append(f"{req_id} {title}")
 
-    return "\n".join(lines)
+    body = "\n".join(results)
+    if not body:
+        return ""
+
+    # Attempt to carry forward the ticket prefix from the last commit
+    # (e.g. "[CUR-1082]") so the message passes commit-msg hooks.
+    try:
+        last = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if last.returncode == 0:
+            last_msg = last.stdout.strip()
+            bracket_end = last_msg.find("]")
+            if last_msg.startswith("[") and bracket_end > 0:
+                prefix = last_msg[: bracket_end + 1]
+                return f"{prefix} checkpoint: {body}"
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    return body
 
 
 __all__ = [

@@ -26,9 +26,9 @@ B. The tool SHALL generate traceability matrices showing requirement relationshi
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
-D. This edit SHALL be reverted, eventually.
+D. [DEPRECATED]
 
-*End* *Requirements Management Tool* | **Hash**: 3cddd08e
+*End* *Requirements Management Tool* | **Hash**: d94ef7d7
 ---
 
 # REQ-p00002: Requirements Validation
