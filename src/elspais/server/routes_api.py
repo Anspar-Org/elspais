@@ -804,7 +804,12 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
 
 
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:
-    """POST /api/mutate/move-to-file - Move node to a different file."""
+    """POST /api/mutate/move-to-file - Move node to a different file.
+
+    If the target file does not exist yet, validates the path against scanning
+    config, creates the empty file on disk, rebuilds the graph, then performs
+    the move mutation.
+    """
     state = _st(request)
     data = await request.json()
     node_id = data.get("node_id", "")
@@ -814,9 +819,132 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and target_file_id required"},
             status_code=400,
         )
+
+    # Check if the target file exists on disk; if not, create it
+    if target_file_id.startswith("file:"):
+        relative_path = target_file_id[5:]  # strip "file:" prefix
+    else:
+        relative_path = target_file_id
+
+    target_path = Path(state.repo_root) / relative_path
+    if not target_path.exists():
+        # Validate path against scanning config
+        error = _validate_new_spec_path(relative_path, state.config)
+        if error:
+            return JSONResponse(
+                {"success": False, "error": error},
+                status_code=400,
+            )
+        # Create the empty file and parent directories
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text("", encoding="utf-8")
+        # Create a FILE node in the graph (empty files aren't picked up by rebuild)
+        _register_new_file_node(state, target_file_id, relative_path, target_path)
+
     result = _mutate_move_node_to_file(state.graph, node_id, target_file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
+
+
+def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:
+    """Validate that a new file path is under a configured spec directory.
+
+    Returns an error message string if invalid, or None if valid.
+    """
+    import fnmatch as _fnmatch
+    from pathlib import PurePosixPath
+
+    from elspais.config import get_ignore_config
+    from elspais.config.schema import ElspaisConfig
+
+    typed_config = ElspaisConfig.model_validate(config)
+    spec_cfg = typed_config.scanning.spec
+    spec_dirs = list(spec_cfg.directories)
+    file_patterns = list(spec_cfg.file_patterns)
+    skip_dirs = list(spec_cfg.skip_dirs)
+    skip_files = list(spec_cfg.skip_files)
+
+    parts = PurePosixPath(relative_path).parts
+    if not parts:
+        return "Path is empty"
+
+    # Check that path starts with a configured spec directory
+    under_spec_dir = False
+    for spec_dir in spec_dirs:
+        spec_parts = PurePosixPath(spec_dir).parts
+        if parts[: len(spec_parts)] == spec_parts:
+            under_spec_dir = True
+            break
+    if not under_spec_dir:
+        return f"Path '{relative_path}' is not under any configured spec directory ({spec_dirs})"
+
+    # Check filename matches file_patterns
+    filename = parts[-1]
+    matches_pattern = any(_fnmatch.fnmatch(filename, pat) for pat in file_patterns)
+    if not matches_pattern:
+        return f"Filename '{filename}' does not match any spec file pattern ({file_patterns})"
+
+    # Check skip_dirs
+    for part in parts[:-1]:
+        if any(_fnmatch.fnmatch(part, pat) for pat in skip_dirs):
+            return f"Path contains skipped directory '{part}'"
+
+    # Check skip_files
+    if any(_fnmatch.fnmatch(filename, pat) for pat in skip_files):
+        return f"Filename '{filename}' matches a skip pattern"
+
+    # Check IgnoreConfig
+    ignore_cfg = get_ignore_config(config)
+    if ignore_cfg.should_ignore(relative_path, scope="spec"):
+        return f"Path '{relative_path}' is ignored by ignore configuration"
+
+    return None
+
+
+def _register_new_file_node(
+    state: Any,
+    file_id: str,
+    relative_path: str,
+    absolute_path: Path,
+) -> None:
+    """Create and register a FILE node for a newly-created empty spec file.
+
+    Inserts the node directly into the graph's index and the federated
+    ownership map so that ``move_node_to_file`` can find it without a
+    full rebuild (which would skip empty files anyway).
+    """
+    from elspais.graph import GraphNode
+    from elspais.graph.GraphNode import FileType
+
+    node = GraphNode(
+        id=file_id,
+        kind=NodeKind.FILE,
+        label=absolute_path.name,
+    )
+    node._content = {
+        "file_type": FileType.SPEC,
+        "absolute_path": str(absolute_path.resolve()),
+        "relative_path": relative_path,
+        "repo": None,
+        "git_branch": None,
+        "git_commit": None,
+    }
+
+    # Register in the sub-graph that owns the node being moved
+    # For a single-repo setup this is the root repo's TraceGraph.
+    # We register in the root repo since new spec files belong there.
+    from elspais.graph.federated import FederatedGraph
+
+    graph = state.graph
+    if isinstance(graph, FederatedGraph):
+        root_repo = graph._root_repo
+        entry = graph._repos[root_repo]
+        if entry.graph is not None:
+            entry.graph._index[file_id] = node
+        graph._ownership[file_id] = root_repo
+    else:
+        # Direct TraceGraph (shouldn't happen with current server, but safe)
+        graph._index[file_id] = node
 
 
 async def api_mutate_rename_file(request: Request) -> JSONResponse:

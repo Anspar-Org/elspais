@@ -2679,3 +2679,155 @@ class TestSpecFiles:
         assert resp.status_code == 200
         data = resp.json()
         assert data["files"] == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Move-to-New-File Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_full_disk_app(tmp_path):
+    """Build a Starlette app using AppState.from_config with real spec files.
+
+    Returns (app, state, spec_file) so tests can inspect state and files.
+    The app has a proper rebuild cycle so new files can be discovered.
+    """
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    spec_file = spec_dir / "main.md"
+    spec_file.write_text(
+        "## REQ-p00001: Product Requirement\n"
+        "\n"
+        "**Level**: PRD | **Status**: Active\n"
+        "\n"
+        "## Assertions\n"
+        "\n"
+        "A. The system SHALL exist.\n"
+        "\n"
+        "*End* *Product Requirement* | **Hash**: 00000000\n"
+        "---\n"
+        "\n"
+        "## REQ-t00001: Test Requirement\n"
+        "\n"
+        "**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001\n"
+        "\n"
+        "## Assertions\n"
+        "\n"
+        "A. The system SHALL do something.\n"
+        "\n"
+        "*End* *Test Requirement* | **Hash**: abcd1234\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    # Minimal config — defaults are fine (spec dirs = ["spec"], patterns = ["*.md"])
+    toml_file = tmp_path / ".elspais.toml"
+    toml_file.write_text(
+        "version = 3\n"
+        '[project]\nname = "test-project"\n'
+        '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
+        '[levels.dev]\nrank = 3\nletter = "t"\nimplements = ["dev", "prd"]\n',
+        encoding="utf-8",
+    )
+
+    state = AppState.from_config(repo_root=tmp_path)
+    app = create_app(state, mount_mcp=False)
+    return app, state, spec_file
+
+
+@pytest.fixture
+def full_disk_app(tmp_path):
+    """Starlette app backed by real spec files with full graph build."""
+    return _make_full_disk_app(tmp_path)
+
+
+class TestMoveToNewFile:
+    """Tests for moving a node to a newly-created file via the API."""
+
+    # Implements: REQ-d00010
+    def test_move_to_new_file_creates_and_moves(self, full_disk_app):
+        """POST /api/mutate/move-to-file with non-existent target creates file and moves."""
+        app, state, _spec_file = full_disk_app
+        client = TestClient(app)
+
+        # The new file should not exist yet
+        new_file = state.repo_root / "spec" / "new-reqs.md"
+        assert not new_file.exists()
+
+        resp = client.post(
+            "/api/mutate/move-to-file",
+            json={
+                "node_id": "REQ-t00001",
+                "target_file_id": "file:spec/new-reqs.md",
+            },
+        )
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["success"] is True
+
+        # The new file should now exist on disk
+        assert new_file.exists()
+
+        # The graph should have a FILE node for the new file
+        new_file_node = state.graph.find_by_id("file:spec/new-reqs.md")
+        assert new_file_node is not None
+
+    # Implements: REQ-d00010
+    def test_move_to_new_file_rejects_invalid_path(self, full_disk_app):
+        """POST /api/mutate/move-to-file rejects target outside configured spec dirs."""
+        app, state, _spec_file = full_disk_app
+        client = TestClient(app)
+
+        resp = client.post(
+            "/api/mutate/move-to-file",
+            json={
+                "node_id": "REQ-t00001",
+                "target_file_id": "file:random/not-a-spec.md",
+            },
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "not under" in data["error"] or "not valid" in data["error"].lower()
+
+        # File should NOT have been created
+        assert not (state.repo_root / "random" / "not-a-spec.md").exists()
+
+    # Implements: REQ-d00010
+    def test_move_to_existing_file_still_works(self, full_disk_app):
+        """POST /api/mutate/move-to-file with existing target file works as before."""
+        app, state, _spec_file = full_disk_app
+        client = TestClient(app)
+
+        # Create a second spec file on disk and rebuild so the graph knows about it
+        other_file = state.repo_root / "spec" / "other.md"
+        other_file.write_text(
+            "## REQ-p00002: Another Requirement\n"
+            "\n"
+            "**Level**: PRD | **Status**: Active\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The other system SHALL exist.\n"
+            "\n"
+            "*End* *Another Requirement* | **Hash**: 11111111\n"
+            "---\n",
+            encoding="utf-8",
+        )
+        state._rebuild()
+
+        # The target file already exists in the graph
+        target_node = state.graph.find_by_id("file:spec/other.md")
+        assert target_node is not None
+
+        resp = client.post(
+            "/api/mutate/move-to-file",
+            json={
+                "node_id": "REQ-t00001",
+                "target_file_id": "file:spec/other.md",
+            },
+        )
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["success"] is True
