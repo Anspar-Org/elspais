@@ -46,6 +46,23 @@ def _st(request: Request) -> Any:
     return request.app.state.app_state
 
 
+def _get_result_status(test_or_jny_node: Any) -> str | None:
+    """Get aggregate result status from a TEST or USER_JOURNEY node's RESULT children."""
+    statuses: list[str] = []
+    for child in test_or_jny_node.iter_children():
+        if child.kind == NodeKind.RESULT:
+            s = (child.get_field("status", "") or "").lower()
+            if s:
+                statuses.append(s)
+    if not statuses:
+        return None
+    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
+        return "failed"
+    if all(s in ("passed", "pass", "success") for s in statuses):
+        return "passed"
+    return "mixed"
+
+
 def _compute_link_data(
     node: Any,
 ) -> tuple[dict[str, dict[str, bool]], dict[str, list[dict[str, str]]]]:
@@ -120,13 +137,17 @@ def _compute_link_data(
             # REQ-level link (no assertion targets)
             if target.id not in r_seen[dim]:
                 r_seen[dim].add(target.id)
-                r_links[dim].append(
-                    {
-                        "id": target.id,
-                        "title": target.get_label() or target.id,
-                        "kind": target.kind.value,
-                    }
-                )
+                entry: dict[str, Any] = {
+                    "id": target.id,
+                    "title": target.get_label() or target.id,
+                    "kind": target.kind.value,
+                }
+                # For TEST/JNY nodes, include result status
+                if tk in (NodeKind.TEST, NodeKind.USER_JOURNEY):
+                    result_status = _get_result_status(target)
+                    if result_status:
+                        entry["result_status"] = result_status
+                r_links[dim].append(entry)
 
     # Phase 2: check assertion-level outgoing edges from ASSERTION nodes
     for child in node.iter_children():

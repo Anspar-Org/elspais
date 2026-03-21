@@ -160,9 +160,9 @@ function buildCardHtml(nodeId, data, collapsed) {
             {key: 'implemented', linkKey: 'implemented', label: 'IMPLEMENTED'},
             {key: null, linkKey: 'refined', label: 'REFINED'},
             {key: 'tested', linkKey: 'tested', label: 'TESTED'},
-            {key: 'verified', linkKey: null, label: 'VERIFIED'},
+            {key: 'verified', linkKey: 'tested', label: 'VERIFIED'},
             {key: 'uat_coverage', linkKey: 'validated', label: 'VALIDATED'},
-            {key: 'uat_verified', linkKey: null, label: 'ACCEPTED'}
+            {key: 'uat_verified', linkKey: 'validated', label: 'ACCEPTED'}
         ];
         headerDims.forEach(function(d) {
             var dim = d.key ? data.coverage_dimensions[d.key] : null;
@@ -978,17 +978,26 @@ function toggleReqLevelLinks(badge, reqId, dimKey) {
     var html = '';
     for (var i = 0; i < links.length; i++) {
         var link = links[i];
+        // Result status icon for TEST/JNY nodes
+        var statusIcon = '';
+        if (link.result_status === 'passed') statusIcon = '&#x2705; ';
+        else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
+        else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
+
+        var statusClass = '';
+        if (link.result_status === 'failed') statusClass = ' test-failed';
+        else if (link.result_status === 'passed') statusClass = ' test-passed';
+
         if (link.kind === 'journey') {
-            // Journey links open the journey card
-            html += '<div class="assertion-test-item">';
-            html += '<span class="assertion-test-icon">&#x1F4D6;</span>';
+            html += '<div class="assertion-test-item' + statusClass + '">';
+            html += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                 escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
             html += '</div>';
         } else {
-            // REQ/CODE/TEST links open the card
-            html += '<div class="assertion-test-item">';
-            html += '<span class="assertion-test-icon">' + (link.kind === 'requirement' ? '&#x1F4CB;' : '&#x1F4C4;') + '</span>';
+            var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
+            html += '<div class="assertion-test-item' + statusClass + '">';
+            html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                 escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
             html += '</div>';
