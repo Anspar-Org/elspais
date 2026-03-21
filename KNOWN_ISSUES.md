@@ -25,6 +25,8 @@
 - Also added: Checkpoint button (local commit), slide-to-share push widget, removed Revert/Refresh buttons
 - Pipeline: Edit -> Undo/Save -> Checkpoint -> Share
 
+[ ] UX (medium): Viewer. Ambiguous direct/indirect coverage indicators (badge colors) in hierarchy view and cards vs. checks report output. The same color can mean different things depending on context.
+
 [ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
 [x] Chore: review specs, docs, help, init for accuracy
