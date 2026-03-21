@@ -19,10 +19,11 @@
 - infrastructure/ (although that will eventually be a code/ dir, with filetypes .tf, .tfvars, .yaml, .sh, etc.
 - we could also, perhaps optionally, process all of those files as well.
 
-[ ] Feature (high): Viewer. Add the ability to select a different commit on the current branch
-- as part of the 'select branch' modal
-- this is like a 'rewind' for the user - or an 'undo save'
-- there are many ways this could be complicated, but let's keep it simple: if they check out the non-HEAD of a branch, then any future commits will be a force and non merge with the intermediate commits
+[x] Feature (high): Viewer. Add the ability to select a different commit on the current branch
+- Implemented: two-panel branch picker (branches left, commit history right) with rewind-to-checkpoint
+- Rewinding enters read-only mode; enabling edit mode creates a new branch (e.g., feat-auth-v2)
+- Also added: Checkpoint button (local commit), slide-to-share push widget, removed Revert/Refresh buttons
+- Pipeline: Edit -> Undo/Save -> Checkpoint -> Share
 
 [ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
