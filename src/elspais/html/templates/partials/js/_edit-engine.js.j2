@@ -64,13 +64,15 @@ function _deactivateEditMode() {
 
 function toggleEditMode() {
     if (editState.enabled) {
-        // Turning OFF — always allowed
         _deactivateEditMode();
         return;
     }
-    // Turning ON — check if on main first
     refreshBranchStatus().then(function(data) {
-        if (data && data.is_main) {
+        if (!data) return;
+        if (data.is_detached) {
+            // Rewound state — need to create a branch first
+            showBranchFromDetachedModal(data);
+        } else if (data.is_main) {
             showBranchModal('You are on the main branch. Create a working branch before editing.', function() {
                 _activateEditMode();
             });
@@ -272,6 +274,78 @@ function showBranchModal(reason, callback) {
 
     overlay.addEventListener('click', function(e) {
         if (e.target === overlay) closeModal();
+    });
+}
+
+// =====================================================================
+// Branch From Detached Modal (REQ-p00004-D)
+// =====================================================================
+
+function showBranchFromDetachedModal(statusData) {
+    var baseName = statusData.originating_branch || 'branch';
+    apiFetch('/api/git/suggest-branch-name?base=' + encodeURIComponent(baseName)).then(function(data) {
+        var suggestedName = (data && data.name) || (baseName + '-v2');
+        _showBranchFromDetachedDialog(suggestedName);
+    });
+}
+
+function _showBranchFromDetachedDialog(suggestedName) {
+    var old = document.getElementById('branch-modal-overlay');
+    if (old) old.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'branch-modal-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title">Create Branch From Checkpoint</div>' +
+            '<p style="font-size:0.9em;margin-bottom:12px;">You are viewing a historical checkpoint. To edit, a new branch will be created from this point.</p>' +
+            '<label class="modal-label">Branch name:</label>' +
+            '<input type="text" class="modal-input" id="detached-branch-input" value="' + escapeHtml(suggestedName) + '">' +
+            '<div class="modal-error hidden" id="detached-branch-error"></div>' +
+            '<div class="modal-actions">' +
+                '<button class="btn btn-primary" id="detached-branch-confirm">Create &amp; Edit</button>' +
+                '<button class="btn" id="detached-branch-cancel">Cancel</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    var input = document.getElementById('detached-branch-input');
+    input.focus();
+    input.select();
+
+    function doCreate() {
+        var name = input.value.trim();
+        if (!name) return;
+        var confirmBtn = document.getElementById('detached-branch-confirm');
+        var errorEl = document.getElementById('detached-branch-error');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Creating...';
+        apiFetch('/api/git/branch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        }).then(function(result) {
+            if (result && result.success) {
+                overlay.remove();
+                showToast('Branch ' + name + ' created', 'success');
+                refreshBranchStatus();
+                _activateEditMode();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Failed to create branch';
+                errorEl.classList.remove('hidden');
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Create & Edit';
+            }
+        });
+    }
+
+    document.getElementById('detached-branch-confirm').onclick = doCreate;
+    document.getElementById('detached-branch-cancel').onclick = function() { overlay.remove(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doCreate();
+        if (e.key === 'Escape') overlay.remove();
     });
 }
 
