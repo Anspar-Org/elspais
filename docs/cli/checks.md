@@ -41,6 +41,38 @@ Configuration checks always run as part of the full health check. For focused co
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes |
+| `spec.no_assertions` | Requirements with no assertions (not testable); default severity: warning |
+
+#### `spec.no_assertions` — Not Testable Requirements
+
+The `spec.no_assertions` check flags requirements that have no assertions defined.
+A requirement with no assertions cannot be covered by automated tests or UAT, making
+it untraceable at the assertion level.
+
+- **Default severity**: warning (does not cause a non-zero exit by itself)
+- **Always on**: this check runs unconditionally, unlike `require_assertions` (which
+  is opt-in and produces an error when enabled)
+- **Gaps report**: requirements flagged by this check appear in `elspais gaps` with
+  the label `NOT TESTABLE (no assertions)` under the `no_assertions` gap type
+
+**Configuration** — adjust severity via `[rules.format]` in `.elspais.toml`:
+
+```toml
+[rules.format]
+no_assertions_severity = "info"   # or "warning" (default) or "error"
+```
+
+**Comparison with `require_assertions`:**
+
+| | `spec.no_assertions` | `require_assertions = true` |
+|---|---|---|
+| Always runs | Yes | No (opt-in) |
+| Default severity | warning | error |
+| Purpose | Surface untestable REQs for review | Enforce assertions as a hard rule |
+
+Use `require_assertions = true` when you want assertions to be mandatory for all
+requirements. Use `no_assertions_severity` to tune the visibility of the advisory
+check that is always present.
 
 ### Code Reference Checks (`--code`)
 

@@ -246,6 +246,11 @@ require_status = true
 # Require ## Assertions section in requirements
 require_assertions = true
 
+# Severity for the always-on spec.no_assertions health check
+# (flags requirements with zero assertions as not testable)
+# Values: "info" | "warning" (default) | "error"
+no_assertions_severity = "warning"
+
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 # content_rules = []               # Additional content validation rules

@@ -1,9 +1,21 @@
 # Known Issues
 
+[x] feature: move file dialog
+- show list of existing spec/ files
+- with "new file" button
+- Implemented: modal dialog with radio buttons for existing spec files + "New file" option; new GET /api/spec-files endpoint returns SPEC-type FILE nodes; new filenames validated against scanning config
+
+[x] feature: add to checks: REQs with no Assertions should be flagged.
+- warning (default) or info level (configurable).
+- Add these to gaps report.
+- clasify as "not_testable"
+- Implemented: spec.no_assertions health check (always-on, default warning); no_assertions gap type in gaps report labeled "NOT TESTABLE (no assertions)"; configurable via [rules.format] no_assertions_severity
+
+---
+
 [ ] feature: viewer: edit assertions-> must give a 'reason' iff CHANGELOG is enforced and status=active
 - Shows CHANGELOG section of the card. 'Reason' field in the newest entry is editable.
 - Cannot save to disk without reason
-
 
 [ ] chore (major): general code review. file sizes, duped code, workarounds, sloppiness, etc.
 
@@ -25,7 +37,7 @@
 - Also added: Checkpoint button (local commit), slide-to-share push widget, removed Revert/Refresh buttons
 - Pipeline: Edit -> Undo/Save -> Checkpoint -> Share
 
-[ ] UX (medium): Viewer. Ambiguous direct/indirect coverage indicators (badge colors) in hierarchy view and cards vs. checks report output. The same color can mean different things depending on context.
+[ ] UX (medium): Viewer vs checks report coverage disagreement. The checks report can show 100% CODE and 100% TEST coverage, yet the viewer shows many assertions without Implements:/Verifies: references (unimplemented/unvalidated). The two surfaces use different definitions of "coverage" — checks measures at the requirement level (any reference to the REQ counts), while the viewer exposes assertion-level gaps. Badge colors in the hierarchy view don't surface this distinction. Fix: checks should report both direct (assertion-level) and indirect (rollup) coverage metrics.
 
 [ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
