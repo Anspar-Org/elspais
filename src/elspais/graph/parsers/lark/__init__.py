@@ -296,8 +296,12 @@ class FileDispatcher:
                 text = str(token)
                 # Check if it's a verifies-type comment at file level
                 if "verifies" in text.lower():
+                    # Include multi-assertion separator (+) in pattern
+                    multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")
                     for ref_match in _re.finditer(
-                        rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+", text, _re.IGNORECASE
+                        rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
+                        text,
+                        _re.IGNORECASE,
                     ):
                         ref = self._resolver.normalize_ref(ref_match.group(0))
                         if ref not in file_default_verifies:

@@ -351,10 +351,11 @@ class ReferenceTransformer:
     # ------------------------------------------------------------------
 
     def _extract_ids(self, text: str) -> list[str]:
-        """Extract requirement IDs from a reference line."""
+        """Extract requirement IDs from a reference line (including multi-assertion syntax)."""
         prefix = self.resolver.config.namespace
+        multi_sep = re.escape(self.resolver.config.assertions.multi_separator or "+")
         pattern = re.compile(
-            rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+",
+            rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
             re.IGNORECASE,
         )
         refs = []
