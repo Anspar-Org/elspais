@@ -576,7 +576,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
     # --- local branches ---
     try:
         local_out = subprocess.run(
-            ["git", "branch", "--list", "--no-color"],
+            ["git", "branch", "--list", "--sort=-committerdate", "--no-color"],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -603,7 +603,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
     # --- remote branches ---
     try:
         remote_out = subprocess.run(
-            ["git", "branch", "-r", "--list", "--no-color"],
+            ["git", "branch", "-r", "--list", "--sort=-committerdate", "--no-color"],
             cwd=repo_root,
             env=env,
             capture_output=True,

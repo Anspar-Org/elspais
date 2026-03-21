@@ -39,6 +39,25 @@ function showToast(message, type) {
 }
 
 // =====================================================================
+// Loading Overlay
+// =====================================================================
+
+function showLoadingOverlay(message) {
+    var existing = document.getElementById('loading-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'loading-overlay';
+    overlay.className = 'loading-overlay';
+    overlay.innerHTML = '<div class="loading-message">' + escapeHtml(message || 'Loading...') + '</div>';
+    document.body.appendChild(overlay);
+}
+
+function hideLoadingOverlay() {
+    var el = document.getElementById('loading-overlay');
+    if (el) el.remove();
+}
+
+// =====================================================================
 // Edit Mode
 // =====================================================================
 
@@ -146,6 +165,7 @@ async function refreshBranchStatus() {
             if (el) el.disabled = true;
         });
     }
+    editState.lastBranchStatus = data;
     return data;
 }
 
@@ -371,14 +391,15 @@ function loadBranchHistory(branch, container) {
             row.className = 'history-row' + (i === 0 ? ' head' : '');
             row.dataset.hash = c.hash;
 
-            var textSpan = document.createElement('span');
-            textSpan.textContent = (i === 0 ? 'HEAD  ' : c.hash + '  ') + c.message;
-            row.appendChild(textSpan);
-
             var dateSpan = document.createElement('span');
             dateSpan.className = 'history-date';
             dateSpan.textContent = c.date;
             row.appendChild(dateSpan);
+
+            var textSpan = document.createElement('span');
+            textSpan.className = 'history-text';
+            textSpan.textContent = (i === 0 ? 'HEAD' : c.hash) + '  ' + c.message;
+            row.appendChild(textSpan);
 
             if (i > 0) {
                 row.addEventListener('click', function() {
@@ -413,6 +434,12 @@ function showBranchPickerModal() {
         var localBranches = data.local || [];
         var remoteBranches = data.remote || [];
         var currentBranch = data.current || null;
+        // In detached HEAD (after rewind), use the originating branch for highlighting
+        var isRewound = false;
+        if (currentBranch === null && editState.lastBranchStatus && editState.lastBranchStatus.originating_branch) {
+            currentBranch = editState.lastBranchStatus.originating_branch;
+            isRewound = true;
+        }
 
         // Remove existing modal
         var old = document.getElementById('branch-modal-overlay');
@@ -492,7 +519,7 @@ function showBranchPickerModal() {
                     if (branch === currentBranch) {
                         var tag = document.createElement('span');
                         tag.className = 'branch-current-tag';
-                        tag.textContent = '(current)';
+                        tag.textContent = isRewound ? '(rewound)' : '(current)';
                         item.appendChild(tag);
                         item.addEventListener('click', function() {
                             loadBranchHistory(branch, rightPanel);
@@ -567,6 +594,7 @@ function showBranchPickerModal() {
             if (!hash || !branch) return;
             rewindBtn.disabled = true;
             rewindBtn.textContent = 'Rewinding...';
+            showLoadingOverlay('Rewinding...');
             apiFetch('/api/git/checkout-commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -574,6 +602,7 @@ function showBranchPickerModal() {
             }).then(function(result) {
                 if (result && result.success) {
                     apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                        hideLoadingOverlay();
                         closeModal();
                         showToast('Rewound to ' + hash, 'success');
                         refreshBranchStatus();
@@ -584,6 +613,7 @@ function showBranchPickerModal() {
                         dismissStaleBanner();
                     });
                 } else {
+                    hideLoadingOverlay();
                     errorEl.textContent = (result && result.error) || 'Failed to rewind';
                     errorEl.classList.remove('hidden');
                     rewindBtn.disabled = false;
@@ -637,6 +667,7 @@ function showBranchPickerModal() {
                 }
             });
 
+            showLoadingOverlay('Switching branch...');
             apiFetch('/api/git/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -646,6 +677,7 @@ function showBranchPickerModal() {
                     closeModal();
                     // Reload graph from disk after branch switch
                     apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                        hideLoadingOverlay();
                         showToast('Switched to branch: ' + (result.branch || branch), 'success');
                         refreshBranchStatus();
                         refreshAllOpenCards();
@@ -655,6 +687,7 @@ function showBranchPickerModal() {
                         dismissStaleBanner();
                     });
                 } else {
+                    hideLoadingOverlay();
                     errorEl.textContent = (result && result.error) || 'Failed to switch branch';
                     errorEl.classList.remove('hidden');
                     // Re-enable items
@@ -663,6 +696,7 @@ function showBranchPickerModal() {
                         item.style.opacity = '';
                     });
                     buildList(filterInput.value);
+                    refreshBranchStatus();
                 }
             });
         }
@@ -865,7 +899,9 @@ async function refreshAllOpenCards() {
 // =====================================================================
 
 async function doSave() {
+    showLoadingOverlay('Saving...');
     const result = await mutate('/api/save', {});
+    hideLoadingOverlay();
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         refreshFileViewer();
@@ -1235,11 +1271,13 @@ function _openCheckpointModal() {
             if (!msg) return;
             confirmBtn.disabled = true;
             confirmBtn.textContent = 'Committing...';
+            showLoadingOverlay('Creating checkpoint...');
             apiFetch('/api/git/commit', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({message: msg})
             }).then(function(result) {
+                hideLoadingOverlay();
                 if (result && result.success) {
                     overlay.remove();
                     showToast('Checkpoint created', 'success');
