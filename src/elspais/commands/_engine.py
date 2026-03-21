@@ -28,6 +28,8 @@ def call(
     params: dict[str, str],
     compute_fn: Callable[[Any, dict[str, Any], dict[str, str]], dict],
     skip_daemon: bool = False,
+    config_path: str | None = None,
+    canonical_root: str | None = None,
 ) -> dict:
     """Run a command via daemon or locally, returning the same dict shape.
 
@@ -36,6 +38,8 @@ def call(
         params: Query parameters as string dict.
         compute_fn: Function(graph, config, params) -> dict for local path.
         skip_daemon: If True, skip daemon entirely (e.g., custom spec_dir).
+        config_path: Explicit config file path (local fallback only).
+        canonical_root: Canonical repo root for worktree support (local only).
 
     Returns:
         Result dict from daemon HTTP response or local compute_fn.
@@ -46,7 +50,7 @@ def call(
             return result
 
     # Local fallback: build graph (cached) and compute
-    graph, config = _ensure_local_graph()
+    graph, config = _ensure_local_graph(config_path=config_path, canonical_root=canonical_root)
     return compute_fn(graph, config, params)
 
 
@@ -92,17 +96,29 @@ def get_graph() -> Any:
     return graph
 
 
-def _ensure_local_graph() -> tuple[Any, dict[str, Any]]:
+def _ensure_local_graph(
+    config_path: str | None = None,
+    canonical_root: str | None = None,
+) -> tuple[Any, dict[str, Any]]:
     """Build or return the cached local graph and config."""
     global _local_graph, _local_config
-    if _local_graph is not None and _local_config is not None:
+    # Use cache only when no explicit overrides are given
+    if (
+        _local_graph is not None
+        and _local_config is not None
+        and config_path is None
+        and canonical_root is None
+    ):
         return _local_graph, _local_config
+
+    from pathlib import Path
 
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
 
-    config = get_config()
-    graph = build_graph(config=config)
+    config = get_config(config_path)
+    cr = Path(canonical_root) if canonical_root else None
+    graph = build_graph(config=config, canonical_root=cr)
     _local_graph = graph
     _local_config = config
     return graph, config

@@ -563,7 +563,13 @@ def run(args: argparse.Namespace) -> int:
         else:
             return _render_table_from_graph(graph, fmt, preset)
     else:
-        data = _engine.call("/api/run/trace", {}, compute_trace)
+        data = _engine.call(
+            "/api/run/trace",
+            {},
+            compute_trace,
+            config_path=getattr(args, "config", None),
+            canonical_root=getattr(args, "canonical_root", None),
+        )
 
         # Implements: REQ-d00084-A
         if fmt == "json":

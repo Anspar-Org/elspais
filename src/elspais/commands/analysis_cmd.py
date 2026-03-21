@@ -167,7 +167,13 @@ def run(args: argparse.Namespace) -> int:
             print("Error: --weights must be numeric values")
             return 1
 
-    data = engine_call("/api/run/analysis", params, compute_analysis)
+    data = engine_call(
+        "/api/run/analysis",
+        params,
+        compute_analysis,
+        config_path=getattr(args, "config", None),
+        canonical_root=getattr(args, "canonical_root", None),
+    )
     report = _report_from_dict(data)
 
     if output_format == "json":

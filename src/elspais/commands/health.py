@@ -1995,7 +1995,13 @@ def run(args: argparse.Namespace) -> int:
         # preserving the original error-handling for config/graph failures.
         data = _run_local_checks(args, params)
     else:
-        data = _engine.call("/api/run/checks", params, compute_checks)
+        data = _engine.call(
+            "/api/run/checks",
+            params,
+            compute_checks,
+            config_path=getattr(args, "config", None),
+            canonical_root=getattr(args, "canonical_root", None),
+        )
 
     # The dict already has the correct "healthy" flag (lenient-aware).
     # Use it for exit code; reconstruct report only for rendering.
