@@ -270,3 +270,84 @@ body.edit-mode .status-badge-wrapper {
     white-space: nowrap;
     margin-left: 12px;
 }
+
+/* --- Slide-to-Share Widget --- */
+
+.share-track {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    background: var(--bg-secondary, #1a1a2e);
+    border-radius: 18px;
+    padding: 3px;
+    min-width: 220px;
+    position: relative;
+    border: 1px solid var(--border-color, #333);
+    user-select: none;
+    touch-action: none;
+}
+.share-handle {
+    width: 70px;
+    height: 30px;
+    background: var(--success-color, #2a6);
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: grab;
+    z-index: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    position: absolute;
+    left: 3px;
+    transition: left 0.15s ease-out;
+}
+.share-handle.dragging {
+    cursor: grabbing;
+    transition: none;
+}
+.share-handle.sharing {
+    background: var(--primary-color, #47f);
+    cursor: default;
+}
+.share-fill {
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    bottom: 3px;
+    width: 0;
+    background: linear-gradient(90deg, rgba(var(--accent-rgb,42,170,102),0.2), rgba(var(--accent-rgb,42,170,102),0.1));
+    border-radius: 15px;
+    transition: width 0.15s ease-out;
+}
+.share-fill.dragging {
+    transition: none;
+}
+.share-destination {
+    position: absolute;
+    right: 12px;
+    font-size: 11px;
+    color: var(--text-secondary, #666);
+}
+
+/* --- Hold-to-Share Keyboard Alternative --- */
+
+.btn.hold-progress {
+    position: relative;
+    overflow: hidden;
+}
+.btn.hold-progress::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    background: var(--primary-color, #47f);
+    animation: hold-fill 1s linear forwards;
+}
+@keyframes hold-fill {
+    from { width: 0; }
+    to { width: 100%; }
+}

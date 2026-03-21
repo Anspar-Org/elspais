@@ -1265,21 +1265,162 @@ function _openCheckpointModal() {
 }
 
 // =====================================================================
-// Share (placeholder — replaced by slide-to-share in Task 12)
+// Slide-to-Share Widget
 // =====================================================================
 
-function doShareClick() {
-    if (confirm('Push local commits to remote?')) {
-        apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
-            if (result && result.success) {
-                showToast('Pushed to origin/' + (result.branch || ''), 'success');
-                refreshBranchStatus();
+function initShareSlider() {
+    var shareBtn = document.getElementById('btn-share');
+    if (!shareBtn) return;
+
+    shareBtn.onclick = function(e) {
+        if (shareBtn.disabled) return;
+        e.stopPropagation();
+
+        // Replace button with track
+        var track = document.createElement('div');
+        track.className = 'share-track';
+        track.id = 'share-track';
+
+        var fill = document.createElement('div');
+        fill.className = 'share-fill';
+        track.appendChild(fill);
+
+        var handle = document.createElement('div');
+        handle.className = 'share-handle';
+        handle.textContent = 'Share \u2192';
+        track.appendChild(handle);
+
+        var dest = document.createElement('div');
+        dest.className = 'share-destination';
+        dest.textContent = 'origin';
+        track.appendChild(dest);
+
+        shareBtn.style.display = 'none';
+        shareBtn.parentNode.insertBefore(track, shareBtn.nextSibling);
+
+        var trackWidth = track.offsetWidth;
+        var handleWidth = handle.offsetWidth;
+        var maxLeft = trackWidth - handleWidth - 6;
+        var threshold = maxLeft * 0.9;
+        var dragging = false;
+        var startX = 0;
+        var currentLeft = 0;
+
+        var collapseTimeout = setTimeout(collapseTrack, 3000);
+
+        function onStart(clientX) {
+            dragging = true;
+            startX = clientX - currentLeft;
+            handle.classList.add('dragging');
+            fill.classList.add('dragging');
+            clearTimeout(collapseTimeout);
+        }
+        function onMove(clientX) {
+            if (!dragging) return;
+            var newLeft = Math.max(0, Math.min(clientX - startX, maxLeft));
+            currentLeft = newLeft;
+            handle.style.left = (3 + newLeft) + 'px';
+            fill.style.width = newLeft + 'px';
+        }
+        function onEnd() {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+            fill.classList.remove('dragging');
+            if (currentLeft >= threshold) {
+                handle.style.left = (3 + maxLeft) + 'px';
+                fill.style.width = maxLeft + 'px';
+                handle.textContent = 'Sharing...';
+                handle.classList.add('sharing');
+                doPush();
             } else {
-                showToast((result && result.error) || 'Push failed', 'error');
+                currentLeft = 0;
+                handle.style.left = '3px';
+                fill.style.width = '0';
+                collapseTimeout = setTimeout(collapseTrack, 3000);
             }
-        });
-    }
+        }
+
+        // Mouse events
+        handle.addEventListener('mousedown', function(e) { e.preventDefault(); onStart(e.clientX); });
+        var onMM = function(e) {
+            if (!document.getElementById('share-track')) { document.removeEventListener('mousemove', onMM); return; }
+            onMove(e.clientX);
+        };
+        var onMU = function() {
+            if (!document.getElementById('share-track')) { document.removeEventListener('mouseup', onMU); return; }
+            onEnd();
+        };
+        document.addEventListener('mousemove', onMM);
+        document.addEventListener('mouseup', onMU);
+
+        // Touch events
+        handle.addEventListener('touchstart', function(e) { e.preventDefault(); onStart(e.touches[0].clientX); });
+        handle.addEventListener('touchmove', function(e) { e.preventDefault(); onMove(e.touches[0].clientX); });
+        handle.addEventListener('touchend', onEnd);
+
+        function collapseTrack() {
+            if (track.parentNode) track.remove();
+            shareBtn.style.display = '';
+            document.removeEventListener('mousemove', onMM);
+            document.removeEventListener('mouseup', onMU);
+        }
+
+        function doPush() {
+            apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+                collapseTrack();
+                if (result && result.success) {
+                    showToast('Pushed to origin/' + (result.branch || ''), 'success');
+                    refreshBranchStatus();
+                } else {
+                    showToast((result && result.error) || 'Push failed', 'error');
+                }
+            });
+        }
+
+        // Click outside to collapse
+        var onOutside = function(evt) {
+            if (!document.getElementById('share-track')) { document.removeEventListener('click', onOutside); return; }
+            if (!track.contains(evt.target)) {
+                collapseTrack();
+                document.removeEventListener('click', onOutside);
+            }
+        };
+        setTimeout(function() { document.addEventListener('click', onOutside); }, 0);
+    };
 }
+
+// Keyboard alternative: hold Enter for 1s on Share button
+(function() {
+    var shareBtn = document.getElementById('btn-share');
+    if (!shareBtn) return;
+    var holdTimer = null;
+    shareBtn.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !holdTimer && !shareBtn.disabled) {
+            e.preventDefault();
+            shareBtn.classList.add('hold-progress');
+            holdTimer = setTimeout(function() {
+                shareBtn.classList.remove('hold-progress');
+                holdTimer = null;
+                apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+                    if (result && result.success) {
+                        showToast('Pushed to origin/' + (result.branch || ''), 'success');
+                        refreshBranchStatus();
+                    } else {
+                        showToast((result && result.error) || 'Push failed', 'error');
+                    }
+                });
+            }, 1000);
+        }
+    });
+    shareBtn.addEventListener('keyup', function(e) {
+        if (e.key === 'Enter' && holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            shareBtn.classList.remove('hold-progress');
+        }
+    });
+})();
 
 // =====================================================================
 // Unsaved Changes Warning (REQ-p00004-E)
@@ -1307,6 +1448,7 @@ refreshBranchStatus().then(function(data) {
     }
 });
 setInterval(refreshBranchStatus, 60000);
+initShareSlider();
 
 // =====================================================================
 // Refresh from Disk (REQ-p00006-A)
