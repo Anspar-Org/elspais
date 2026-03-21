@@ -666,6 +666,16 @@ body.edit-mode .card-parent-kind.view-only {
     align-items: flex-start;
 }
 
+@keyframes flash-bg {
+    0% { background: var(--impl-yes-border, #0d6efd); }
+    100% { background: transparent; }
+}
+
+.flash-highlight {
+    animation: flash-bg 1.5s ease-out;
+    border-radius: 4px;
+}
+
 .assertion-badges-area {
     display: flex;
     flex-wrap: wrap;

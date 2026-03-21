@@ -152,33 +152,40 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
-    // Coverage dimension badges (above metadata) — clickable to expand REQ-level links
+    // Coverage dimension badges (above metadata)
+    // Only shown when data exists; always clickable to expand links + flash assertions
     if (data.coverage_dimensions) {
         var rLinks = data.req_level_links || {};
+        var aLinksAll = data.assertion_links || {};
         html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
         var headerDims = [
-            {key: 'implemented', linkKey: 'implemented', label: 'IMPLEMENTED'},
-            {key: null, linkKey: 'refined', label: 'REFINED'},
-            {key: 'tested', linkKey: 'tested', label: 'TESTED'},
-            {key: 'verified', linkKey: 'verified', label: 'VERIFIED'},
-            {key: 'uat_coverage', linkKey: 'validated', label: 'VALIDATED'},
-            {key: 'uat_verified', linkKey: 'accepted', label: 'ACCEPTED'}
+            {key: 'implemented', linkKey: 'implemented', assertLinkKey: 'implemented', label: 'IMPLEMENTED'},
+            {key: null, linkKey: 'refined', assertLinkKey: 'refined', label: 'REFINED'},
+            {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
+            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
+            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'VALIDATED'},
+            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'ACCEPTED'}
         ];
         headerDims.forEach(function(d) {
             var dim = d.key ? data.coverage_dimensions[d.key] : null;
             var hasReqLinks = d.linkKey && rLinks[d.linkKey] && rLinks[d.linkKey].length > 0;
+            // Check if any assertion has direct links for this dimension
+            var hasAssertionLinks = false;
+            for (var lbl in aLinksAll) {
+                if (aLinksAll[lbl][d.assertLinkKey]) { hasAssertionLinks = true; break; }
+            }
+            var hasData = (dim && dim.color) || hasReqLinks || hasAssertionLinks;
+            if (!hasData) return; // hide badge if no data
             var colorClass = dim && dim.color ? ' active val-' + dim.color : '';
-            var clickableClass = hasReqLinks ? ' card-dim-badge' : '';
-            var opacityStyle = (!dim || !dim.color) ? 'opacity:0.4;' : '';
-            var clickAttr = hasReqLinks
-                ? ' onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\')"'
-                : '';
-            // Tooltip: color = rolled-up coverage status; click = REQ-level links
             var tipParts = [];
             if (dim && dim.status_tip) tipParts.push(dim.status_tip);
-            if (hasReqLinks) tipParts.push('Click to show ' + rLinks[d.linkKey].length + ' link(s)');
+            if (hasReqLinks) tipParts.push(rLinks[d.linkKey].length + ' REQ-level link(s)');
+            if (hasAssertionLinks) tipParts.push('Click to highlight assertions');
             var tip = tipParts.length > 0 ? tipParts.join(' \u2014 ') : d.label;
-            html += '<span class="status-badge' + colorClass + clickableClass + '" title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;' + opacityStyle + '"' + clickAttr + '>' + d.label + '</span>';
+            html += '<span class="status-badge' + colorClass + ' card-dim-badge" ' +
+                'title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;" ' +
+                'onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\', \'' + d.assertLinkKey + '\')">' +
+                d.label + '</span>';
         });
         html += '</div>';
         // Expandable link panels (one per header dimension, hidden by default)
@@ -950,9 +957,13 @@ function updateAllAcceptedButtons(reqId, data) {
 // REQ-Level Link Expansion (header badge click)
 // =====================================================================
 
-function toggleReqLevelLinks(badge, reqId, dimKey) {
+function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var panelId = 'req-links-' + reqId + '-' + dimKey;
     var panel = document.getElementById(panelId);
+
+    // Always flash assertions that have direct links for this dimension
+    _flashAssertions(reqId, assertLinkKey || dimKey);
+
     if (!panel) return;
 
     if (panel.style.display !== 'none') {
@@ -963,16 +974,12 @@ function toggleReqLevelLinks(badge, reqId, dimKey) {
     // Find the card data from editState
     var cardState = editState.openCards.get(reqId);
     if (!cardState || !cardState.data || !cardState.data.req_level_links) {
-        panel.innerHTML = '<div style="font-style:italic;color:var(--secondary-text);">No data</div>';
-        panel.style.display = 'block';
-        return;
+        return; // no panel to show, flash was enough
     }
 
     var links = cardState.data.req_level_links[dimKey] || [];
     if (links.length === 0) {
-        panel.innerHTML = '<div style="font-style:italic;color:var(--secondary-text);">No REQ-level links</div>';
-        panel.style.display = 'block';
-        return;
+        return; // no REQ-level links, flash was enough
     }
 
     var html = '';
@@ -1010,4 +1017,35 @@ function toggleReqLevelLinks(badge, reqId, dimKey) {
     }
     panel.innerHTML = html;
     panel.style.display = 'block';
+}
+
+function _flashAssertions(reqId, assertLinkKey) {
+    // Find card data to get assertion_links
+    var cardState = editState.openCards.get(reqId);
+    if (!cardState || !cardState.data || !cardState.data.assertion_links) return;
+
+    var aLinks = cardState.data.assertion_links;
+    // Find the card DOM element
+    var card = document.querySelector('.req-card[data-node-id="' + reqId + '"]');
+    if (!card) return;
+
+    for (var label in aLinks) {
+        if (!aLinks[label][assertLinkKey]) continue;
+        // Find the assertion wrapper with this label
+        var wrappers = card.querySelectorAll('.card-assertion-wrapper');
+        for (var i = 0; i < wrappers.length; i++) {
+            var assertionDiv = wrappers[i].querySelector('.card-assertion');
+            if (!assertionDiv) continue;
+            var labelEl = assertionDiv.querySelector('.card-assertion-label');
+            if (labelEl && labelEl.textContent.trim() === label) {
+                // Flash it
+                wrappers[i].classList.add('flash-highlight');
+                (function(el) {
+                    setTimeout(function() { el.classList.remove('flash-highlight'); }, 1500);
+                })(wrappers[i]);
+                // Scroll into view
+                wrappers[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+    }
 }
