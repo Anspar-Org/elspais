@@ -315,9 +315,9 @@ function buildCardHtml(nodeId, data, collapsed) {
                 {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented'},
                 {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionCode', tip: 'Refines references', linkKey: 'refined'},
                 {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
-                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionTests', tip: 'Test results', linkKey: 'tested'},
+                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested'},
                 {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
-                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUat', tip: 'Journey results', linkKey: 'validated'}
+                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated'}
             ];
             var anyBadge = false;
             dimDefs.forEach(function(dim) {
@@ -344,7 +344,9 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-results-panel" id="assertion-results-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-uat-panel" id="assertion-uat-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-uat-results-panel" id="assertion-uat-results-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '</div>';
         });
         html += '</div>';
@@ -654,8 +656,9 @@ async function toggleAssertionTests(btn, reqId, label) {
             return;
         }
         assertionTestsCache[reqId] = data;
-        // Update ALL validation buttons for this requirement
-        updateAllValidationButtons(reqId, data);
+        // Update ALL tested/verified buttons for this requirement
+        updateAllTestedButtons(reqId, data);
+        updateAllVerifiedButtons(reqId, data);
     }
 
     renderAssertionTests(panel, reqId, label, assertionTestsCache[reqId]);
@@ -706,6 +709,93 @@ function renderAssertionTests(panel, reqId, label, data) {
             html += ' <a class="assertion-result-file-link" href="#" onclick="event.preventDefault(); showSource(\'' +
                 escapeHtml(t.results[0].file) + '\', ' + (t.results[0].line || 0) +
                 ')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+// =====================================================================
+// Assertion Results — Test Result Files (VER badge)
+// =====================================================================
+
+async function toggleAssertionResults(btn, reqId, label) {
+    var panelId = 'assertion-results-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch test data if not cached (results come from the same endpoint)
+    if (!assertionTestsCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/test-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load results data</div>';
+            return;
+        }
+        assertionTestsCache[reqId] = data;
+        updateAllTestedButtons(reqId, data);
+        updateAllVerifiedButtons(reqId, data);
+    }
+
+    renderAssertionResults(panel, reqId, label, assertionTestsCache[reqId]);
+}
+
+function renderAssertionResults(panel, reqId, label, data) {
+    var assertionData = data.assertion_tests[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    // Collect all results across all tests
+    var resultItems = [];
+    var tests = assertionData.tests;
+    for (var i = 0; i < tests.length; i++) {
+        var t = tests[i];
+        if (t.results && t.results.length > 0) {
+            for (var j = 0; j < t.results.length; j++) {
+                resultItems.push({ result: t.results[j], testLabel: t.label || t.id });
+            }
+        }
+    }
+
+    if (resultItems.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No test results for this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var k = 0; k < resultItems.length; k++) {
+        var r = resultItems[k].result;
+        var tLabel = resultItems[k].testLabel;
+        var status = (r.status || '').toLowerCase();
+        var statusIcon = '';
+        var statusClass = '';
+        if (status === 'passed' || status === 'pass' || status === 'success') {
+            statusIcon = '&#x2705;'; statusClass = 'test-passed';
+        } else if (status === 'failed' || status === 'fail' || status === 'failure' || status === 'error') {
+            statusIcon = '&#x274C;'; statusClass = 'test-failed';
+        } else {
+            statusIcon = '&#x2753;'; statusClass = '';
+        }
+
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (r.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(r.file) + '\', ' + (r.line || 0) + ')">' +
+                escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
+        } else {
+            html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
         }
         html += '</div>';
     }
@@ -951,6 +1041,92 @@ function updateAllAcceptedButtons(reqId, data) {
         btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
         btn.classList.add(_classifyTestState(assertionData.journeys));
     }
+}
+
+// =====================================================================
+// Assertion UAT Results — Journey Result Files (ACC badge)
+// =====================================================================
+
+async function toggleAssertionUatResults(btn, reqId, label) {
+    var panelId = 'assertion-uat-results-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    if (!assertionUatCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/uat-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load UAT results</div>';
+            return;
+        }
+        assertionUatCache[reqId] = data;
+        updateAllValidatedButtons(reqId, data);
+        updateAllAcceptedButtons(reqId, data);
+    }
+
+    renderAssertionUatResults(panel, reqId, label, assertionUatCache[reqId]);
+}
+
+function renderAssertionUatResults(panel, reqId, label, data) {
+    var assertionData = data.assertion_journeys[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var resultItems = [];
+    var journeys = assertionData.journeys;
+    for (var i = 0; i < journeys.length; i++) {
+        var j = journeys[i];
+        if (j.results && j.results.length > 0) {
+            for (var k = 0; k < j.results.length; k++) {
+                resultItems.push({ result: j.results[k], jnyLabel: j.label || j.id, jnyId: j.id });
+            }
+        }
+    }
+
+    if (resultItems.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No journey results for this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var r = 0; r < resultItems.length; r++) {
+        var res = resultItems[r].result;
+        var jLabel = resultItems[r].jnyLabel;
+        var status = (res.status || '').toLowerCase();
+        var statusIcon = '', statusClass = '';
+        if (status === 'passed' || status === 'pass' || status === 'success') {
+            statusIcon = '&#x2705;'; statusClass = 'test-passed';
+        } else if (status === 'failed' || status === 'fail' || status === 'failure' || status === 'error') {
+            statusIcon = '&#x274C;'; statusClass = 'test-failed';
+        } else {
+            statusIcon = '&#x2753;';
+        }
+
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (res.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(res.file) + '\', ' + (res.line || 0) + ')">' +
+                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+        } else {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeHtml(resultItems[r].jnyId) + '\')">' +
+                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
 }
 
 // =====================================================================
