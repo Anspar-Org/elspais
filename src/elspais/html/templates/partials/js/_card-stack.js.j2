@@ -301,6 +301,7 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
                 escapeHtml(text) + '</span>';
             // 6 dimension badges — only shown when direct assertion-level links exist
+            html += '<span class="assertion-badges-area">';
             var badgeMode = editState.assertionBadgeMode || 'abbrev';
             var aLinks = data.assertion_links ? data.assertion_links[label] : null;
             var dimDefs = [
@@ -326,8 +327,9 @@ function buildCardHtml(nodeId, data, collapsed) {
                     btnLabel + '</button>';
             });
             if (!anyBadge) {
-                html += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="margin-left:auto;font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+                html += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
             }
+            html += '</span>'; // close .assertion-badges-area
             html += '<button class="assertion-delete-btn edit-only" ' +
                 'title="Deprecate assertion" ' +
                 'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +

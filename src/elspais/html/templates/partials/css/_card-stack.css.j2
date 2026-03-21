@@ -666,7 +666,17 @@ body.edit-mode .card-parent-kind.view-only {
     align-items: flex-start;
 }
 
-/* All 5 assertion dimension buttons share base styles */
+.assertion-badges-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-left: auto;
+    max-width: 30%;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+/* All assertion dimension buttons share base styles */
 .assertion-implemented-btn,
 .assertion-refined-btn,
 .assertion-tested-btn,
@@ -689,7 +699,7 @@ body.edit-mode .card-parent-kind.view-only {
     margin-left: 4px;
 }
 
-.assertion-implemented-btn { margin-left: auto; }
+/* margin-left on badges area handles right-alignment */
 
 .assertion-implemented-btn:hover,
 .assertion-refined-btn:hover,
