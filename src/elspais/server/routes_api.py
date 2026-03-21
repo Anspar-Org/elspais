@@ -46,6 +46,110 @@ def _st(request: Request) -> Any:
     return request.app.state.app_state
 
 
+def _compute_link_data(
+    node: Any,
+) -> tuple[dict[str, dict[str, bool]], dict[str, list[dict[str, str]]]]:
+    """Compute per-assertion direct link flags and REQ-level link lists.
+
+    Returns:
+        (assertion_links, req_level_links) where:
+        - assertion_links: {label: {implemented: bool, tested: bool, verified: bool,
+          validated: bool, accepted: bool, refined: bool}}
+        - req_level_links: {dimension: [{id, title, kind}...]}
+    """
+    from elspais.graph.relations import EdgeKind
+
+    # Collect assertion labels
+    assertion_labels: list[str] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            if label:
+                assertion_labels.append(label)
+
+    # Per-assertion: track which dimensions have direct assertion-level links
+    # Initialize all to False
+    a_links: dict[str, dict[str, bool]] = {}
+    for label in assertion_labels:
+        a_links[label] = {
+            "implemented": False,
+            "tested": False,
+            "validated": False,
+            "refined": False,
+        }
+
+    # REQ-level links: edges from this REQ WITHOUT assertion_targets
+    # (or edges to child REQs)
+    r_links: dict[str, list[dict[str, str]]] = {
+        "implemented": [],
+        "tested": [],
+        "validated": [],
+        "refined": [],
+    }
+    r_seen: dict[str, set[str]] = {k: set() for k in r_links}
+
+    # Map edge kind + target kind to dimension
+    for edge in node.iter_outgoing_edges():
+        target = edge.target
+        tk = target.kind
+
+        dim = None
+        if edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.CODE:
+            dim = "implemented"
+        elif edge.kind == EdgeKind.VERIFIES and tk == NodeKind.TEST:
+            dim = "tested"
+        elif edge.kind == EdgeKind.VALIDATES and tk == NodeKind.USER_JOURNEY:
+            dim = "validated"
+        elif edge.kind == EdgeKind.REFINES and tk in (
+            NodeKind.REQUIREMENT,
+            NodeKind.CODE,
+        ):
+            dim = "refined"
+        elif edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.REQUIREMENT:
+            dim = "implemented"
+
+        if dim is None:
+            continue
+
+        if edge.assertion_targets:
+            # Direct assertion-level link
+            for label in edge.assertion_targets:
+                if label in a_links:
+                    a_links[label][dim] = True
+        else:
+            # REQ-level link (no assertion targets)
+            if target.id not in r_seen[dim]:
+                r_seen[dim].add(target.id)
+                r_links[dim].append(
+                    {
+                        "id": target.id,
+                        "title": target.get_label() or target.id,
+                        "kind": target.kind.value,
+                    }
+                )
+
+    # Phase 2: check assertion-level outgoing edges from ASSERTION nodes
+    for child in node.iter_children():
+        if child.kind != NodeKind.ASSERTION:
+            continue
+        label = child.get_field("label", "")
+        if not label or label not in a_links:
+            continue
+        for edge in child.iter_outgoing_edges():
+            target = edge.target
+            tk = target.kind
+            if edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.CODE:
+                a_links[label]["implemented"] = True
+            elif edge.kind == EdgeKind.VERIFIES and tk == NodeKind.TEST:
+                a_links[label]["tested"] = True
+            elif edge.kind == EdgeKind.VALIDATES and tk == NodeKind.USER_JOURNEY:
+                a_links[label]["validated"] = True
+            elif edge.kind == EdgeKind.REFINES:
+                a_links[label]["refined"] = True
+
+    return a_links, r_links
+
+
 # ─────────────────────────────────────────────────────────────────
 # Read-only GET endpoints
 # ─────────────────────────────────────────────────────────────────
@@ -154,6 +258,9 @@ async def api_node(request: Request) -> JSONResponse:
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
                 }
             result["coverage_dimensions"] = dims
+
+            # Per-assertion direct link flags + REQ-level links
+            result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
 
     return JSONResponse(result)
 

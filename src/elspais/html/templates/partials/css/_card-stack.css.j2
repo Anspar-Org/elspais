@@ -154,6 +154,12 @@
     margin-bottom: 4px;
 }
 
+.card-dim-badge {
+    outline: 1.5px solid var(--impl-yes-border, #0d6efd);
+    outline-offset: 1px;
+    cursor: pointer;
+}
+
 .card-meta {
     display: flex;
     gap: 12px;
@@ -662,6 +668,7 @@ body.edit-mode .card-parent-kind.view-only {
 
 /* All 5 assertion dimension buttons share base styles */
 .assertion-implemented-btn,
+.assertion-refined-btn,
 .assertion-tested-btn,
 .assertion-verified-btn,
 .assertion-validated-btn,
@@ -685,6 +692,7 @@ body.edit-mode .card-parent-kind.view-only {
 .assertion-implemented-btn { margin-left: auto; }
 
 .assertion-implemented-btn:hover,
+.assertion-refined-btn:hover,
 .assertion-tested-btn:hover,
 .assertion-verified-btn:hover,
 .assertion-validated-btn:hover,
@@ -775,6 +783,7 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 .assertion-implemented-btn.active,
+.assertion-refined-btn.active,
 .assertion-tested-btn.active,
 .assertion-verified-btn.active,
 .assertion-validated-btn.active,

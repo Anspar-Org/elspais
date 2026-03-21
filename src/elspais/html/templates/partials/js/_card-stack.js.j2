@@ -152,25 +152,34 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
-    // Coverage dimension badges (above metadata)
+    // Coverage dimension badges (above metadata) — clickable to expand REQ-level links
     if (data.coverage_dimensions) {
+        var rLinks = data.req_level_links || {};
         html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
-        var dims = [
-            {key: 'implemented', label: 'IMPLEMENTED', tip: 'Assertions with Implements references in CODE'},
-            {key: 'tested', label: 'TESTED', tip: 'Assertions referenced by TEST nodes'},
-            {key: 'verified', label: 'VERIFIED', tip: 'Assertions with passing test results'},
-            {key: 'uat_coverage', label: 'VALIDATED', tip: 'Assertions referenced by Journey Validates'},
-            {key: 'uat_verified', label: 'ACCEPTED', tip: 'Assertions with passing Journey results'}
+        var headerDims = [
+            {key: 'implemented', linkKey: 'implemented', label: 'IMPLEMENTED', tip: 'Assertions with Implements references in CODE'},
+            {key: null, linkKey: 'refined', label: 'REFINED', tip: 'Refines references'},
+            {key: 'tested', linkKey: 'tested', label: 'TESTED', tip: 'Assertions referenced by TEST nodes'},
+            {key: 'verified', linkKey: null, label: 'VERIFIED', tip: 'Assertions with passing test results'},
+            {key: 'uat_coverage', linkKey: 'validated', label: 'VALIDATED', tip: 'Assertions referenced by Journey Validates'},
+            {key: 'uat_verified', linkKey: null, label: 'ACCEPTED', tip: 'Assertions with passing Journey results'}
         ];
-        dims.forEach(function(d) {
-            var dim = data.coverage_dimensions[d.key];
-            if (dim && dim.color) {
-                html += '<span class="status-badge active val-' + dim.color + '" title="' + escapeHtml(d.tip) + '" style="font-size:0.6rem;padding:1px 5px;">' + d.label + '</span>';
-            } else {
-                html += '<span class="status-badge" title="' + escapeHtml(d.tip) + '" style="font-size:0.6rem;padding:1px 5px;opacity:0.4;">' + d.label + '</span>';
-            }
+        headerDims.forEach(function(d) {
+            var dim = d.key ? data.coverage_dimensions[d.key] : null;
+            var hasReqLinks = d.linkKey && rLinks[d.linkKey] && rLinks[d.linkKey].length > 0;
+            var colorClass = dim && dim.color ? ' active val-' + dim.color : '';
+            var clickableClass = hasReqLinks ? ' card-dim-badge' : '';
+            var opacityStyle = (!dim || !dim.color) ? 'opacity:0.4;' : '';
+            var clickAttr = hasReqLinks
+                ? ' onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\')"'
+                : '';
+            html += '<span class="status-badge' + colorClass + clickableClass + '" title="' + escapeHtml(d.tip) + '" style="font-size:0.6rem;padding:1px 5px;' + opacityStyle + '"' + clickAttr + '>' + d.label + '</span>';
         });
         html += '</div>';
+        // Expandable REQ-level link panels (one per dimension, hidden by default)
+        ['implemented', 'refined', 'tested', 'validated'].forEach(function(dimKey) {
+            html += '<div class="req-level-links-panel" id="req-links-' + nodeId + '-' + dimKey + '" style="display:none;margin:0 12px;padding:6px 10px;background:var(--assertion-code-panel-bg);border-radius:4px;border-left:3px solid var(--impl-yes-border);font-size:0.78rem;"></div>';
+        });
     }
 
     // Metadata section
@@ -286,16 +295,22 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
                 'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
                 escapeHtml(text) + '</span>';
-            // 5 dimension badges with display-mode support
+            // 6 dimension badges — only shown when direct assertion-level links exist
             var badgeMode = editState.assertionBadgeMode || 'abbrev';
+            var aLinks = data.assertion_links ? data.assertion_links[label] : null;
             var dimDefs = [
-                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation'},
-                {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage'},
-                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionTests', tip: 'Test results'},
-                {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage'},
-                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUat', tip: 'Journey results'}
+                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented'},
+                {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionCode', tip: 'Refines references', linkKey: 'refined'},
+                {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
+                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionTests', tip: 'Test results', linkKey: 'tested'},
+                {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
+                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUat', tip: 'Journey results', linkKey: 'validated'}
             ];
+            var anyBadge = false;
             dimDefs.forEach(function(dim) {
+                // Only show badge if direct assertion-level links exist for this dimension
+                if (aLinks && !aLinks[dim.linkKey]) return;
+                anyBadge = true;
                 var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
                 var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
                 html += '<button class="' + dim.cls + '" ' +
@@ -305,6 +320,9 @@ function buildCardHtml(nodeId, data, collapsed) {
                     btnStyle + '>' +
                     btnLabel + '</button>';
             });
+            if (!anyBadge) {
+                html += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="margin-left:auto;font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+            }
             html += '<button class="assertion-delete-btn edit-only" ' +
                 'title="Deprecate assertion" ' +
                 'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
@@ -887,12 +905,9 @@ function renderAssertionUat(panel, reqId, label, data) {
         var jLabel = escapeHtml(j.label || j.id);
         html += '<div class="assertion-test-item ' + statusClass + '">';
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
-        if (j.file) {
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(j.file) + '\', ' + (j.line || 0) + ')">' + jLabel + '</a>';
-        } else {
-            html += '<span class="assertion-test-link">' + jLabel + '</span>';
-        }
+        // Journey links open the journey card instead of showing source
+        html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            escapeHtml(j.id) + '\')">' + jLabel + '</a>';
         html += '</div>';
     }
     panel.innerHTML = html;
@@ -922,4 +937,56 @@ function updateAllAcceptedButtons(reqId, data) {
         btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
         btn.classList.add(_classifyTestState(assertionData.journeys));
     }
+}
+
+// =====================================================================
+// REQ-Level Link Expansion (header badge click)
+// =====================================================================
+
+function toggleReqLevelLinks(badge, reqId, dimKey) {
+    var panelId = 'req-links-' + reqId + '-' + dimKey;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+
+    // Find the card data from editState
+    var cardState = editState.openCards.get(reqId);
+    if (!cardState || !cardState.data || !cardState.data.req_level_links) {
+        panel.innerHTML = '<div style="font-style:italic;color:var(--secondary-text);">No data</div>';
+        panel.style.display = 'block';
+        return;
+    }
+
+    var links = cardState.data.req_level_links[dimKey] || [];
+    if (links.length === 0) {
+        panel.innerHTML = '<div style="font-style:italic;color:var(--secondary-text);">No REQ-level links</div>';
+        panel.style.display = 'block';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < links.length; i++) {
+        var link = links[i];
+        if (link.kind === 'journey') {
+            // Journey links open the journey card
+            html += '<div class="assertion-test-item">';
+            html += '<span class="assertion-test-icon">&#x1F4D6;</span>';
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            html += '</div>';
+        } else {
+            // REQ/CODE/TEST links open the card
+            html += '<div class="assertion-test-item">';
+            html += '<span class="assertion-test-icon">' + (link.kind === 'requirement' ? '&#x1F4CB;' : '&#x1F4C4;') + '</span>';
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            html += '</div>';
+        }
+    }
+    panel.innerHTML = html;
+    panel.style.display = 'block';
 }
