@@ -8,7 +8,7 @@
 
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
-| REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 3cddd08e |
+| REQ-p00001 | Requirements Management Tool                     | prd-core.md     | d94ef7d7 |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | e8f0e4eb |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | b935bd53 |
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | f8ff5509 |
@@ -50,7 +50,7 @@
 | REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | 97c0f6fc |
 | REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | a3575fcc |
 | REQ-d00054 | Annotation Pipeline Pattern                                   | dev-graph-core.md       | 0256df47 |
-| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 86ea9541 |
+| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 0073a9c3 |
 | REQ-d00060 | Graph Status Tool Implementation                              | dev-mcp-tools.md        | 4e2277cc |
 | REQ-d00061 | Requirement Search Tool Implementation                        | dev-mcp-tools.md        | 0183195b |
 | REQ-d00062 | Requirement Detail Tool Implementation                        | dev-mcp-tools.md        | 51985ec1 |
@@ -60,8 +60,8 @@
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 6ac6b51f |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | 7044d63d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | c9d5ad87 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 114709f5 |
-| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | d483becb |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | de2433a2 |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 3e5b1766 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | 46d2a3e2 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | c927fae8 |
 | REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 44fd54e9 |

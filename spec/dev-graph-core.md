@@ -120,7 +120,7 @@ E. Custom metrics MAY be added by specific annotators without modifying TraceNod
 
 Using metrics dict as the extension point enables adding new annotations without modifying the core TraceNode dataclass.
 
-*End* *Node Metrics as Extension Point* | **Hash**: 86ea9541
+*End* *Node Metrics as Extension Point* | **Hash**: 0073a9c3
 ---
 
 ## REQ-d00069: Indirect Coverage Source
@@ -157,7 +157,7 @@ K. The system SHALL report coverage gaps on template instance nodes through the 
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no assertion suffix) currently contribute zero assertion coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict traceability, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-*End* *Indirect Coverage Source* | **Hash**: 114709f5
+*End* *Indirect Coverage Source* | **Hash**: de2433a2
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -182,7 +182,7 @@ E. The `has_failures` warning indicator SHALL display regardless of toggle state
 
 Users need both a strict traceability view (only assertion-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: d483becb
+*End* *Indirect Coverage Toggle Display* | **Hash**: 3e5b1766
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
