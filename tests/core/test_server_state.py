@@ -186,3 +186,37 @@ class TestAppState:
 
         state = AppState.from_config(repo_root=tmp_path)
         assert tmp_path in state.allowed_roots
+
+
+class TestAppStateDetached:
+    """REQ-d00010: Detached HEAD tracking in AppState."""
+
+    def test_initially_not_detached(self, tmp_path):
+        """New AppState starts with detached state cleared."""
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=tmp_path)
+        assert state.is_detached is False
+        assert state.originating_branch is None
+        assert state.originating_head is None
+
+    def test_enter_detached_sets_fields(self, tmp_path):
+        """enter_detached() records branch and commit, sets is_detached."""
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=tmp_path)
+        state.enter_detached("main", "abc1234")
+        assert state.is_detached is True
+        assert state.originating_branch == "main"
+        assert state.originating_head == "abc1234"
+
+    def test_leave_detached_clears_fields(self, tmp_path):
+        """leave_detached() resets all three detached-state fields."""
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=tmp_path)
+        state.enter_detached("feature/foo", "deadbeef")
+        state.leave_detached()
+        assert state.is_detached is False
+        assert state.originating_branch is None
+        assert state.originating_head is None

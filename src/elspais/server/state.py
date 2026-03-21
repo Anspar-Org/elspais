@@ -58,6 +58,22 @@ class AppState:
         self._mcp_state: dict[str, Any] | None = None  # set by link_mcp_state
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
+        # Detached HEAD tracking (for rewind)
+        self.is_detached: bool = False
+        self.originating_branch: str | None = None
+        self.originating_head: str | None = None
+
+    def enter_detached(self, branch: str, head_commit: str) -> None:
+        """Record that we've rewound from a branch tip."""
+        self.is_detached = True
+        self.originating_branch = branch
+        self.originating_head = head_commit
+
+    def leave_detached(self) -> None:
+        """Clear detached state (back on a branch tip)."""
+        self.is_detached = False
+        self.originating_branch = None
+        self.originating_head = None
 
     @classmethod
     def from_config(
