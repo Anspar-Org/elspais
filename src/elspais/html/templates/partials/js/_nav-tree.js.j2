@@ -306,22 +306,26 @@ function renderNavTree() {
         const levelClass = row.level ? row.level.toLowerCase() : '';
         const shortId = row.id.replace('REQ-', '');
 
-        // Coverage icon
-        var covIcon = '';
-        if (row.coverage === 'full') {
-            covIcon = '<span class="coverage-icon full" title="Full coverage">&#x25CF;</span>';
-        } else if (row.coverage === 'partial') {
-            covIcon = '<span class="coverage-icon partial" title="Partial coverage">&#x25D0;</span>';
-        } else {
-            covIcon = '<span class="coverage-icon none" title="No coverage">&#x25CB;</span>';
-        }
-
-        // Status badge (with optional validation color + tooltip for Active status)
+        // Status badge — color driven by coverage mode selector
         var statusBadge = '';
         if (row.status) {
             var statusLower = row.status.toLowerCase();
-            var valClass = row.validation_color ? ' val-' + row.validation_color : '';
-            var tipAttr = row.validation_tip ? ' data-tip="' + escapeHtml(row.validation_tip) + '"' : '';
+            // Pick color/tip based on coverage mode
+            var covColorMap = {
+                'all': 'validation_color', 'impl': 'impl_color',
+                'tested': 'tested_color', 'verified': 'verified_color',
+                'uat_cov': 'uat_cov_color', 'uat_ver': 'uat_ver_color'
+            };
+            var covTipMap = {
+                'all': 'validation_tip', 'impl': 'impl_tip',
+                'tested': 'tested_tip', 'verified': 'verified_tip',
+                'uat_cov': 'uat_cov_tip', 'uat_ver': 'uat_ver_tip'
+            };
+            var covMode = editState.coverageMode || 'all';
+            var valColor = row[covColorMap[covMode] || 'validation_color'] || '';
+            var valTip = row[covTipMap[covMode] || 'validation_tip'] || '';
+            var valClass = valColor ? ' val-' + valColor : '';
+            var tipAttr = valTip ? ' data-tip="' + escapeHtml(valTip) + '"' : '';
             statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + ' style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
             if (row.is_changed) statusBadge += '<span class="change-indicator">&#x25C6;</span>';
             statusBadge += '</span>';
@@ -336,7 +340,6 @@ function renderNavTree() {
             indents.join('') +
             '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
             toggleIcon + '</button>' +
-            covIcon +
             (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
             '<span class="nav-tree-id">' + shortId + '</span>' +
             '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
@@ -563,4 +566,9 @@ function expandAllTreeNodes() {
     editState.collapsedTreeNodes.clear();
     renderNavTree();
     saveState();
+}
+
+function setCoverageMode(mode) {
+    editState.coverageMode = mode;
+    renderNavTree();
 }

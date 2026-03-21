@@ -401,8 +401,16 @@ class TestGetImplementationStatus:
     # Implements: REQ-d00051-E
     def test_full_coverage(self):
         """Returns Full when coverage is 100%."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("referenced_pct", 100)
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            ),
+        )
 
         status = get_implementation_status(node)
 
@@ -411,8 +419,16 @@ class TestGetImplementationStatus:
     # Implements: REQ-d00051-E
     def test_partial_coverage(self):
         """Returns Partial when coverage is between 0 and 100."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("referenced_pct", 50)
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=1, indirect=1),
+            ),
+        )
 
         status = get_implementation_status(node)
 
@@ -422,7 +438,6 @@ class TestGetImplementationStatus:
     def test_unimplemented(self):
         """Returns Unimplemented when coverage is 0."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("referenced_pct", 0)
 
         status = get_implementation_status(node)
 
@@ -443,8 +458,16 @@ class TestGetImplementationStatus:
     # Implements: REQ-d00051-E
     def test_boundary_99_is_partial(self):
         """Coverage of 99% is still Partial, not Full."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("referenced_pct", 99)
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=100,
+                implemented=CoverageDimension(total=100, direct=99, indirect=99),
+            ),
+        )
 
         status = get_implementation_status(node)
 
@@ -453,8 +476,16 @@ class TestGetImplementationStatus:
     # Implements: REQ-d00051-E
     def test_boundary_1_is_partial(self):
         """Coverage of 1% is Partial, not Unimplemented."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("referenced_pct", 1)
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=100,
+                implemented=CoverageDimension(total=100, direct=1, indirect=1),
+            ),
+        )
 
         status = get_implementation_status(node)
 

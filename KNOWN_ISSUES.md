@@ -1,5 +1,16 @@
 # Known Issues
 
+[ ] tweak: In Viewer Card: Add Refined badge to Assertion lines
+- only shown if there is a direct assertion-level 'refines' linking to it
+- Only show badges for which there are direct assertion-level links
+- clicking any of these expands the list of links below the Assertion (like for implemented and tested)
+- for journey 'validates' links in that expanded list, instead of linking to the file, link to the Journey card.
+- since Assertions no longer have badges unless there are direct links to them, we need a place to put REQ-level links
+-- Make the links above the metadata clickable: the expand to show the REQ-level links. 
+-- if no REQ-level link, then not clickable.
+-- The colors are still computed as they are currently- by using the REQ-level rolled up stat. 
+
+
 [x] feature: move file dialog
 - show list of existing spec/ files
 - with "new file" button

@@ -152,6 +152,27 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
+    // Coverage dimension badges (above metadata)
+    if (data.coverage_dimensions) {
+        html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
+        var dims = [
+            {key: 'implemented', label: 'IMPLEMENTED', tip: 'Assertions with Implements references in CODE'},
+            {key: 'tested', label: 'TESTED', tip: 'Assertions referenced by TEST nodes'},
+            {key: 'verified', label: 'VERIFIED', tip: 'Assertions with passing test results'},
+            {key: 'uat_coverage', label: 'VALIDATED', tip: 'Assertions referenced by Journey Validates'},
+            {key: 'uat_verified', label: 'ACCEPTED', tip: 'Assertions with passing Journey results'}
+        ];
+        dims.forEach(function(d) {
+            var dim = data.coverage_dimensions[d.key];
+            if (dim && dim.color) {
+                html += '<span class="status-badge active val-' + dim.color + '" title="' + escapeHtml(d.tip) + '" style="font-size:0.6rem;padding:1px 5px;">' + d.label + '</span>';
+            } else {
+                html += '<span class="status-badge" title="' + escapeHtml(d.tip) + '" style="font-size:0.6rem;padding:1px 5px;opacity:0.4;">' + d.label + '</span>';
+            }
+        });
+        html += '</div>';
+    }
+
     // Metadata section
     html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
     html += '<div class="card-meta">';
@@ -265,14 +286,25 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
                 'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
                 escapeHtml(text) + '</span>';
-            html += '<button class="assertion-implemented-btn" ' +
-                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-                'onclick="event.stopPropagation(); toggleAssertionCode(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
-                'Implemented</button>';
-            html += '<button class="assertion-validation-btn" ' +
-                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-                'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
-                'Validation</button>';
+            // 5 dimension badges with display-mode support
+            var badgeMode = editState.assertionBadgeMode || 'abbrev';
+            var dimDefs = [
+                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation'},
+                {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage'},
+                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionTests', tip: 'Test results'},
+                {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage'},
+                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUat', tip: 'Journey results'}
+            ];
+            dimDefs.forEach(function(dim) {
+                var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
+                var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
+                html += '<button class="' + dim.cls + '" ' +
+                    'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
+                    'title="' + dim.tip + '" ' +
+                    'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')"' +
+                    btnStyle + '>' +
+                    btnLabel + '</button>';
+            });
             html += '<button class="assertion-delete-btn edit-only" ' +
                 'title="Deprecate assertion" ' +
                 'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
@@ -280,6 +312,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-uat-panel" id="assertion-uat-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '</div>';
         });
         html += '</div>';
@@ -521,8 +554,11 @@ async function prefetchCoverage(nodeId) {
     var codeData = assertionCodeCache[nodeId]
         ? Promise.resolve(assertionCodeCache[nodeId])
         : apiFetch('/api/code-coverage/' + encodeURIComponent(nodeId));
+    var uatData = assertionUatCache[nodeId]
+        ? Promise.resolve(assertionUatCache[nodeId])
+        : apiFetch('/api/uat-coverage/' + encodeURIComponent(nodeId));
 
-    var results = await Promise.all([testData, codeData]);
+    var results = await Promise.all([testData, codeData, uatData]);
 
     if (results[0] && results[0].success) {
         assertionTestsCache[nodeId] = results[0];
@@ -530,17 +566,30 @@ async function prefetchCoverage(nodeId) {
     if (results[1] && results[1].success) {
         assertionCodeCache[nodeId] = results[1];
     }
-    // Re-apply all cached colors (covers this card + any others in the DOM)
+    if (results[2] && results[2].success) {
+        assertionUatCache[nodeId] = results[2];
+    }
     recolorCachedButtons();
 }
 
 function recolorCachedButtons() {
     for (var reqId in assertionTestsCache) {
-        updateAllValidationButtons(reqId, assertionTestsCache[reqId]);
+        updateAllTestedButtons(reqId, assertionTestsCache[reqId]);
+        updateAllVerifiedButtons(reqId, assertionTestsCache[reqId]);
     }
     for (var reqId in assertionCodeCache) {
         updateAllImplementedButtons(reqId, assertionCodeCache[reqId]);
     }
+    for (var reqId in assertionUatCache) {
+        updateAllValidatedButtons(reqId, assertionUatCache[reqId]);
+        updateAllAcceptedButtons(reqId, assertionUatCache[reqId]);
+    }
+}
+
+function setAssertionBadgeMode(mode) {
+    editState.assertionBadgeMode = mode;
+    renderCardStack();
+    recolorCachedButtons();
 }
 
 // =====================================================================
@@ -631,48 +680,50 @@ function renderAssertionTests(panel, reqId, label, data) {
     panel.innerHTML = html;
 }
 
-function updateAllValidationButtons(reqId, data) {
-    var buttons = document.querySelectorAll('.assertion-validation-btn[data-req-id="' + reqId + '"]');
+// Shared helper: classify test/journey coverage into a state class
+function _classifyTestState(items) {
+    // items = array of test/journey objects with .results arrays
+    // Returns: 'validation-pass', 'validation-partial', 'validation-fail', or 'validation-unknown'
+    if (items.length === 0) return 'validation-fail';
+    var allResults = [];
+    for (var j = 0; j < items.length; j++) {
+        if (items[j].results) {
+            for (var k = 0; k < items[j].results.length; k++) {
+                allResults.push(items[j].results[k].status);
+            }
+        }
+    }
+    if (allResults.length === 0) return 'validation-pass'; // exists but no results = covered
+    var allPassed = allResults.every(function(s) { return s === 'passed'; });
+    var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
+    if (allPassed) return 'validation-pass';
+    if (anyFailed) return 'validation-partial';
+    return 'validation-pass'; // unknown statuses (skipped) = covered
+}
+
+function updateAllTestedButtons(reqId, data) {
+    // TESTED: do tests exist for this assertion? (yes/no, same CSS as implemented)
+    var buttons = document.querySelectorAll('.assertion-tested-btn[data-req-id="' + reqId + '"]');
     for (var i = 0; i < buttons.length; i++) {
         var btn = buttons[i];
         var label = btn.dataset.label;
         var assertionData = data.assertion_tests[label];
         if (!assertionData) continue;
+        btn.classList.remove('implemented-yes', 'implemented-no');
+        btn.classList.add(assertionData.tests.length > 0 ? 'implemented-yes' : 'implemented-no');
+    }
+}
 
-        // Remove previous state classes
+function updateAllVerifiedButtons(reqId, data) {
+    // VERIFIED: do test results pass? (pass/partial/fail)
+    var buttons = document.querySelectorAll('.assertion-verified-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_tests[label];
+        if (!assertionData) continue;
         btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
-
-        var tests = assertionData.tests;
-        if (tests.length === 0) {
-            btn.classList.add('validation-fail');
-            continue;
-        }
-
-        // Collect all results across all tests for this assertion
-        var allResults = [];
-        for (var j = 0; j < tests.length; j++) {
-            if (tests[j].results) {
-                for (var k = 0; k < tests[j].results.length; k++) {
-                    allResults.push(tests[j].results[k].status);
-                }
-            }
-        }
-
-        if (allResults.length === 0) {
-            // Tests exist but no results loaded — tests ARE coverage
-            btn.classList.add('validation-pass');
-        } else {
-            var allPassed = allResults.every(function(s) { return s === 'passed'; });
-            var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
-            if (allPassed) {
-                btn.classList.add('validation-pass');
-            } else if (anyFailed) {
-                btn.classList.add('validation-partial');
-            } else {
-                // Unknown statuses (skipped, etc.) — still covered
-                btn.classList.add('validation-pass');
-            }
-        }
+        btn.classList.add(_classifyTestState(assertionData.tests));
     }
 }
 
@@ -763,5 +814,112 @@ function updateAllImplementedButtons(reqId, data) {
         } else {
             btn.classList.add('implemented-no');
         }
+    }
+}
+
+// =====================================================================
+// Assertion UAT — Journey Coverage Buttons (Validated + Accepted)
+// =====================================================================
+
+var assertionUatCache = {};
+
+async function toggleAssertionUat(btn, reqId, label) {
+    var panelId = 'assertion-uat-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    // Toggle visibility
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch data if not cached
+    if (!assertionUatCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/uat-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load UAT data</div>';
+            return;
+        }
+        assertionUatCache[reqId] = data;
+        updateAllValidatedButtons(reqId, data);
+        updateAllAcceptedButtons(reqId, data);
+    }
+
+    renderAssertionUat(panel, reqId, label, assertionUatCache[reqId]);
+}
+
+function renderAssertionUat(panel, reqId, label, data) {
+    var assertionData = data.assertion_journeys[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var journeys = assertionData.journeys;
+    if (journeys.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No journeys validate this assertion</div>';
+        return;
+    }
+
+    // Reuse the same rendering as tests (journeys have same structure)
+    var html = '';
+    for (var i = 0; i < journeys.length; i++) {
+        var j = journeys[i];
+        var statusIcon = '';
+        var statusClass = '';
+        var hasResults = j.results && j.results.length > 0;
+        if (hasResults) {
+            var allPassed = j.results.every(function(r) { return r.status === 'passed'; });
+            var anyFailed = j.results.some(function(r) { return r.status === 'failed' || r.status === 'failure' || r.status === 'error'; });
+            if (allPassed) { statusIcon = '&#x2705;'; statusClass = 'test-passed'; }
+            else if (anyFailed) { statusIcon = '&#x274C;'; statusClass = 'test-failed'; }
+            else { statusIcon = '&#x2753;'; statusClass = ''; }
+        } else {
+            statusIcon = '&#x2796;'; statusClass = 'test-no-result';
+        }
+
+        var jLabel = escapeHtml(j.label || j.id);
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (j.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(j.file) + '\', ' + (j.line || 0) + ')">' + jLabel + '</a>';
+        } else {
+            html += '<span class="assertion-test-link">' + jLabel + '</span>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function updateAllValidatedButtons(reqId, data) {
+    // VALIDATED: do journeys exist for this assertion? (yes/no)
+    var buttons = document.querySelectorAll('.assertion-validated-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_journeys[label];
+        if (!assertionData) continue;
+        btn.classList.remove('implemented-yes', 'implemented-no');
+        btn.classList.add(assertionData.journeys.length > 0 ? 'implemented-yes' : 'implemented-no');
+    }
+}
+
+function updateAllAcceptedButtons(reqId, data) {
+    // ACCEPTED: do journey results pass? (pass/partial/fail)
+    var buttons = document.querySelectorAll('.assertion-accepted-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_journeys[label];
+        if (!assertionData) continue;
+        btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
+        btn.classList.add(_classifyTestState(assertionData.journeys));
     }
 }

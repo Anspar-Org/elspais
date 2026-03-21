@@ -55,12 +55,15 @@ def _set_rollup(
     has_failures: bool = False,
 ) -> None:
     """Attach a RollupMetrics to a node."""
+    from elspais.graph.metrics import CoverageDimension
+
     rm = RollupMetrics(
         total_assertions=total,
-        covered_assertions=covered,
-        direct_tested=tested,
-        validated=validated,
-        has_failures=has_failures,
+        implemented=CoverageDimension(total=total, direct=covered, indirect=covered),
+        tested=CoverageDimension(total=total, direct=tested, indirect=tested),
+        verified=CoverageDimension(
+            total=total, direct=validated, indirect=validated, has_failures=has_failures
+        ),
     )
     node.set_metric("rollup_metrics", rm)
 

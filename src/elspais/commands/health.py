@@ -1570,11 +1570,11 @@ def check_test_coverage(
         metrics = node.get_metric("rollup_metrics")
         if metrics is None:
             continue
-        if metrics.direct_tested > 0:
+        if metrics.tested.direct > 0:
             test_covered += 1
-        if metrics.uat_covered > 0:
+        if metrics.uat_coverage.indirect > 0:
             uat_covered += 1
-        if metrics.referenced_pct > 0:
+        if metrics.implemented.indirect_pct > 0:
             overall_covered += 1
 
     test_pct = (test_covered / req_count * 100) if req_count > 0 else 0
@@ -1628,7 +1628,7 @@ def check_uat_coverage(
             continue
         req_count += 1
         metrics = node.get_metric("rollup_metrics")
-        if metrics is not None and metrics.uat_covered > 0:
+        if metrics is not None and metrics.uat_coverage.indirect > 0:
             uat_covered += 1
 
     uat_pct = (uat_covered / req_count * 100) if req_count > 0 else 0

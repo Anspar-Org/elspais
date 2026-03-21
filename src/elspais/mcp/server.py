@@ -1289,9 +1289,9 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     metrics = node.get_metric("rollup_metrics")
     if metrics is not None:
         metrics_data = {
-            "referenced_pct": metrics.referenced_pct,
+            "referenced_pct": metrics.implemented.indirect_pct,
             "total_assertions": metrics.total_assertions,
-            "covered_assertions": metrics.covered_assertions,
+            "covered_assertions": metrics.implemented.indirect,
         }
 
     # Source location
@@ -3000,7 +3000,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
     # Read uat_validated_pct from rollup_metrics if available
     rollup = node.get_metric("rollup_metrics")
-    uat_validated_pct = rollup.uat_validated_pct if rollup is not None else 0.0
+    uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
 
     return {
         "success": True,
@@ -3075,6 +3075,67 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "success": True,
         "req_id": req_id,
         "assertion_tests": assertion_tests,
+        "total_assertions": total,
+        "covered_count": covered_count,
+        "referenced_pct": round(referenced_pct, 1),
+    }
+
+
+def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
+    """Build per-assertion UAT (journey) coverage map for a requirement.
+
+    Returns a structure mapping each assertion label to its USER_JOURNEY nodes
+    and their results, enabling the UI to show Validated/Accepted buttons.
+
+    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    and ``_serialize_test_info`` for the unified serializer (JNY nodes have
+    similar structure to TEST nodes with RESULT children).
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion journey lists, coverage stats.
+    """
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    # Collect assertions
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    # Per-assertion buckets
+    assertion_journeys: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_journeys[label] = {"assertion_id": aid, "journeys": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+        info = _serialize_test_info(jny_node, graph)
+        for label in labels:
+            if label not in assertion_journeys:
+                continue
+            if jny_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(jny_node.id)
+            assertion_journeys[label]["journeys"].append(info)
+
+    total = len(assertions)
+    covered_count = sum(1 for label in assertion_journeys if assertion_journeys[label]["journeys"])
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_journeys": assertion_journeys,
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),

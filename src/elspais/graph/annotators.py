@@ -416,10 +416,11 @@ def get_implementation_status(node: GraphNode) -> str:
         'Partial': referenced_pct > 0
         'Unimplemented': referenced_pct == 0
     """
-    referenced_pct = node.get_metric("referenced_pct", 0)
-    if referenced_pct >= 100:
+    rollup = node.get_metric("rollup_metrics")
+    pct = rollup.implemented.indirect_pct if rollup else 0
+    if pct >= 100:
         return "Full"
-    elif referenced_pct > 0:
+    elif pct > 0:
         return "Partial"
     else:
         return "Unimplemented"
@@ -453,11 +454,12 @@ def count_by_coverage(
             continue
 
         counts["total"] += 1
-        referenced_pct = node.get_metric("referenced_pct", 0)
+        rollup = node.get_metric("rollup_metrics")
+        pct = rollup.implemented.indirect_pct if rollup else 0
 
-        if referenced_pct >= 100:
+        if pct >= 100:
             counts["full_coverage"] += 1
-        elif referenced_pct > 0:
+        elif pct > 0:
             counts["partial_coverage"] += 1
         else:
             counts["no_coverage"] += 1
@@ -648,7 +650,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         metrics.total_assertions = len(assertion_labels)
 
         # Track TEST-specific metrics
-        tested_labels: set[str] = set()  # Assertions with TEST coverage
+        tested_labels: set[str] = set()  # Assertions with targeted TEST coverage
+        tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
 
@@ -665,6 +668,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
             metrics.add_contribution(c)
             if c.source_type == CoverageSource.DIRECT:
                 tested_labels.add(c.assertion_label)
+            elif c.source_type == CoverageSource.INDIRECT:
+                tested_indirect_labels.add(c.assertion_label)
 
         # Implements: REQ-d00069-A
         # Compute JNY (VALIDATES) UAT coverage contributions via shared helper
@@ -809,7 +814,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Implements: REQ-d00069-A
         # Process JNY children to find RESULT nodes (UAT)
-        uat_validated_labels: set[str] = set()
+        uat_validated_direct_labels: set[str] = set()
+        uat_validated_indirect_labels: set[str] = set()
         uat_has_failures = False
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
             for result in jny_node.iter_children():
@@ -819,31 +825,32 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                         if assertion_targets:
                             for label in assertion_targets:
                                 if label in assertion_labels:
-                                    uat_validated_labels.add(label)
+                                    uat_validated_direct_labels.add(label)
                         else:
                             for label in assertion_labels:
-                                uat_validated_labels.add(label)
+                                uat_validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         uat_has_failures = True
 
-        # Set test-specific metrics before finalize
-        metrics.direct_tested = len(tested_labels)
-        metrics.validated = len(validated_labels)
-        metrics.validated_with_indirect = len(validated_labels | validated_indirect_labels)
-        metrics.has_failures = has_failures
-        metrics.uat_has_failures = uat_has_failures
-
-        # Finalize metrics (computes aggregate coverage counts)
+        # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
 
-        # Set UAT validated count (needs finalize to have run for total_assertions)
-        metrics.uat_validated = len(uat_validated_labels)
-        if metrics.total_assertions > 0:
-            metrics.uat_validated_pct = (metrics.uat_validated / metrics.total_assertions) * 100
+        uat_validated_all = uat_validated_direct_labels | uat_validated_indirect_labels
+
+        # Populate the tested, verified, and uat_verified dimensions
+        metrics.populate_test_dimensions(
+            tested_direct=len(tested_labels),
+            tested_indirect=len(tested_labels | tested_indirect_labels),
+            verified_direct=len(validated_labels),
+            verified_indirect=len(validated_labels | validated_indirect_labels),
+            verified_failures=has_failures,
+            uat_verified_direct=len(uat_validated_direct_labels),
+            uat_verified_indirect=len(uat_validated_all),
+            uat_verified_failures=uat_has_failures,
+        )
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
-        node.set_metric("referenced_pct", metrics.referenced_pct)
 
 
 # =============================================================================

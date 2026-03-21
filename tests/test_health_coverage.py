@@ -13,7 +13,7 @@ from elspais.commands.health import (
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
-from elspais.graph.metrics import RollupMetrics
+from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
 # =============================================================================
 # Helpers
@@ -68,7 +68,10 @@ class TestCheckTestCoverage:
     def test_req_with_direct_tested_counted(self):
         """Requirement with direct_tested > 0 is counted as test-covered."""
         req = _make_req("REQ-d00001")
-        metrics = RollupMetrics(total_assertions=2, direct_tested=1)
+        metrics = RollupMetrics(
+            total_assertions=2,
+            tested=CoverageDimension(total=2, direct=1, indirect=1),
+        )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
@@ -80,9 +83,12 @@ class TestCheckTestCoverage:
 
     # Implements: REQ-d00218-A
     def test_req_without_direct_tested_not_counted(self):
-        """Requirement with direct_tested == 0 is not test-covered."""
+        """Requirement with tested.direct == 0 is not test-covered."""
         req = _make_req("REQ-d00001")
-        metrics = RollupMetrics(total_assertions=2, direct_tested=0)
+        metrics = RollupMetrics(
+            total_assertions=2,
+            tested=CoverageDimension(total=2, direct=0, indirect=0),
+        )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
@@ -92,32 +98,37 @@ class TestCheckTestCoverage:
 
     # Implements: REQ-d00218-B
     def test_test_coverage_separate_from_code_coverage(self):
-        """Test coverage uses direct_tested, not direct_covered (which includes CODE)."""
+        """Test coverage uses tested.direct, not implemented.direct (which includes CODE)."""
         req = _make_req("REQ-d00001")
-        # direct_covered includes CODE refs; direct_tested is TEST-only
+        # implemented.direct includes CODE refs; tested.direct is TEST-only
         metrics = RollupMetrics(
             total_assertions=3,
-            direct_covered=2,
-            direct_tested=0,
-            referenced_pct=66.7,
+            implemented=CoverageDimension(total=3, direct=2, indirect=2),
+            tested=CoverageDimension(total=3, direct=0, indirect=0),
         )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        # Test coverage should be 0 even though direct_covered is 2
+        # Test coverage should be 0 even though implemented.direct is 2
         assert result.details["requirements_with_tests"] == 0
 
     # Implements: REQ-d00218-C
     def test_excluded_statuses_filter_requirements(self):
         """Requirements with excluded status are not counted."""
         active_req = _make_req("REQ-d00001", status="Active")
-        active_metrics = RollupMetrics(total_assertions=1, direct_tested=1)
+        active_metrics = RollupMetrics(
+            total_assertions=1,
+            tested=CoverageDimension(total=1, direct=1, indirect=1),
+        )
         active_req.set_metric("rollup_metrics", active_metrics)
 
         deprecated_req = _make_req("REQ-d00002", status="Deprecated")
-        dep_metrics = RollupMetrics(total_assertions=1, direct_tested=0)
+        dep_metrics = RollupMetrics(
+            total_assertions=1,
+            tested=CoverageDimension(total=1, direct=0, indirect=0),
+        )
         deprecated_req.set_metric("rollup_metrics", dep_metrics)
 
         graph = _make_graph(active_req, deprecated_req)
@@ -136,11 +147,17 @@ class TestCheckTestCoverage:
         """
         parent = _make_req("REQ-p00001", level="prd")
         # Simulate rollup: parent gets credit from child's test coverage
-        parent_metrics = RollupMetrics(total_assertions=1, direct_tested=1)
+        parent_metrics = RollupMetrics(
+            total_assertions=1,
+            tested=CoverageDimension(total=1, direct=1, indirect=1),
+        )
         parent.set_metric("rollup_metrics", parent_metrics)
 
         child = _make_req("REQ-d00001", level="dev")
-        child_metrics = RollupMetrics(total_assertions=1, direct_tested=1)
+        child_metrics = RollupMetrics(
+            total_assertions=1,
+            tested=CoverageDimension(total=1, direct=1, indirect=1),
+        )
         child.set_metric("rollup_metrics", child_metrics)
 
         graph = _make_graph(parent, child)
@@ -165,13 +182,31 @@ class TestCheckTestCoverage:
     def test_multiple_reqs_mixed_coverage(self):
         """Mix of covered and uncovered requirements reports correctly."""
         req1 = _make_req("REQ-d00001")
-        req1.set_metric("rollup_metrics", RollupMetrics(total_assertions=2, direct_tested=2))
+        req1.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                tested=CoverageDimension(total=2, direct=2, indirect=2),
+            ),
+        )
 
         req2 = _make_req("REQ-d00002")
-        req2.set_metric("rollup_metrics", RollupMetrics(total_assertions=1, direct_tested=0))
+        req2.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                tested=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
 
         req3 = _make_req("REQ-d00003")
-        req3.set_metric("rollup_metrics", RollupMetrics(total_assertions=3, direct_tested=1))
+        req3.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=3,
+                tested=CoverageDimension(total=3, direct=1, indirect=1),
+            ),
+        )
 
         graph = _make_graph(req1, req2, req3)
         result = check_test_coverage(graph, exclude_status=set())
@@ -211,7 +246,10 @@ class TestCheckUatCoverage:
     def test_req_with_uat_covered_counted(self):
         """Requirement with uat_covered > 0 is counted."""
         req = _make_req("REQ-d00001")
-        metrics = RollupMetrics(total_assertions=2, uat_covered=1)
+        metrics = RollupMetrics(
+            total_assertions=2,
+            uat_coverage=CoverageDimension(total=2, direct=1, indirect=1),
+        )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
@@ -222,9 +260,12 @@ class TestCheckUatCoverage:
 
     # Implements: REQ-d00219-A
     def test_req_without_uat_covered_not_counted(self):
-        """Requirement with uat_covered == 0 is not counted."""
+        """Requirement with uat_coverage.indirect == 0 is not counted."""
         req = _make_req("REQ-d00001")
-        metrics = RollupMetrics(total_assertions=2, uat_covered=0)
+        metrics = RollupMetrics(
+            total_assertions=2,
+            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+        )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
@@ -236,10 +277,20 @@ class TestCheckUatCoverage:
     def test_excluded_statuses_filter(self):
         """UAT coverage excludes requirements with excluded status."""
         active = _make_req("REQ-d00001", status="Active")
-        active.set_metric("rollup_metrics", RollupMetrics(uat_covered=1))
+        active.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
 
         rejected = _make_req("REQ-d00002", status="Rejected")
-        rejected.set_metric("rollup_metrics", RollupMetrics(uat_covered=1))
+        rejected.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
 
         graph = _make_graph(active, rejected)
         result = check_uat_coverage(graph, exclude_status={"Rejected"})
@@ -448,10 +499,20 @@ class TestRunUatChecks:
     def test_passes_exclude_status_to_coverage(self):
         """run_uat_checks forwards exclude_status to check_uat_coverage."""
         req_active = _make_req("REQ-d00001", status="Active")
-        req_active.set_metric("rollup_metrics", RollupMetrics(uat_covered=1))
+        req_active.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
 
         req_deprecated = _make_req("REQ-d00002", status="Deprecated")
-        req_deprecated.set_metric("rollup_metrics", RollupMetrics(uat_covered=1))
+        req_deprecated.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
 
         graph = _make_graph(req_active, req_deprecated)
         checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config={})

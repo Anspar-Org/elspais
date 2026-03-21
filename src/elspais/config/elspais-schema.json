@@ -233,6 +233,62 @@
       "title": "ComponentConfig",
       "type": "object"
     },
+    "CoverageConfig": {
+      "additionalProperties": false,
+      "description": "Coverage severity configuration for all 5 dimensions.",
+      "properties": {
+        "implemented": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "tested": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "verified": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "uat_coverage": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "uat_verified": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        }
+      },
+      "title": "CoverageConfig",
+      "type": "object"
+    },
+    "CoverageSeverityConfig": {
+      "additionalProperties": false,
+      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'.",
+      "properties": {
+        "full_direct": {
+          "default": "ok",
+          "title": "Full Direct",
+          "type": "string"
+        },
+        "full_indirect": {
+          "default": "info",
+          "title": "Full Indirect",
+          "type": "string"
+        },
+        "partial": {
+          "default": "warning",
+          "title": "Partial",
+          "type": "string"
+        },
+        "none": {
+          "default": "error",
+          "title": "None",
+          "type": "string"
+        },
+        "failing": {
+          "default": "error",
+          "title": "Failing",
+          "type": "string"
+        }
+      },
+      "title": "CoverageSeverityConfig",
+      "type": "object"
+    },
     "DocsScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -644,6 +700,9 @@
         },
         "format": {
           "$ref": "#/$defs/FormatConfig"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageConfig"
         },
         "content_rules": {
           "anyOf": [

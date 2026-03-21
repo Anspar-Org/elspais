@@ -54,6 +54,7 @@ from elspais.server.routes_api import (
     api_status,
     api_test_coverage,
     api_tree_data,
+    api_uat_coverage,
 )
 from elspais.server.routes_git import (
     api_git_branch,
@@ -126,6 +127,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/search", api_search),
         Route("/api/test-coverage/{req_id:path}", api_test_coverage),
         Route("/api/code-coverage/{req_id:path}", api_code_coverage),
+        Route("/api/uat-coverage/{req_id:path}", api_uat_coverage),
         Route("/api/tree-data", api_tree_data),
         Route("/api/file-content", api_file_content),
         Route("/api/spec-files", api_spec_files),

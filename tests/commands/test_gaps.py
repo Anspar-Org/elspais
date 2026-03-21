@@ -83,9 +83,14 @@ class TestCollectGaps:
         assert "REQ-p00001" not in ids
 
     def test_tested_req_not_in_untested(self) -> None:
-        """A requirement with direct_tested > 0 is NOT in untested."""
+        """A requirement with tested.direct > 0 is NOT in untested."""
+        from elspais.graph.metrics import CoverageDimension
+
         req = _make_req("REQ-p00001", "Tested")
-        metrics = RollupMetrics(total_assertions=1, direct_tested=1)
+        metrics = RollupMetrics(
+            total_assertions=1,
+            tested=CoverageDimension(total=1, direct=1, indirect=1),
+        )
         req.set_metric("rollup_metrics", metrics)
         graph = _make_graph(req)
 
@@ -94,9 +99,14 @@ class TestCollectGaps:
         assert "REQ-p00001" not in ids
 
     def test_failing_test_collected(self) -> None:
-        """A requirement with has_failures=True appears in failing with source 'test'."""
+        """A requirement with verified.has_failures=True appears in failing with source 'test'."""
+        from elspais.graph.metrics import CoverageDimension
+
         req = _make_req("REQ-p00001", "Failing")
-        metrics = RollupMetrics(total_assertions=1, has_failures=True)
+        metrics = RollupMetrics(
+            total_assertions=1,
+            verified=CoverageDimension(total=1, has_failures=True),
+        )
         req.set_metric("rollup_metrics", metrics)
         graph = _make_graph(req)
 
@@ -104,9 +114,14 @@ class TestCollectGaps:
         assert any(item[0] == "REQ-p00001" and item[2] == "test" for item in data.failing)
 
     def test_failing_uat_collected(self) -> None:
-        """A requirement with uat_has_failures=True appears in failing with source 'uat'."""
+        """uat_verified.has_failures=True appears in failing with source 'uat'."""
+        from elspais.graph.metrics import CoverageDimension
+
         req = _make_req("REQ-p00001", "UAT Failing")
-        metrics = RollupMetrics(total_assertions=1, uat_has_failures=True)
+        metrics = RollupMetrics(
+            total_assertions=1,
+            uat_verified=CoverageDimension(total=1, has_failures=True),
+        )
         req.set_metric("rollup_metrics", metrics)
         graph = _make_graph(req)
 

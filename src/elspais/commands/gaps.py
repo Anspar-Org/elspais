@@ -75,11 +75,11 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
             data.uncovered.append((req_id, title))
 
         # Untested: no direct test coverage
-        if metrics is None or metrics.direct_tested <= 0:
+        if metrics is None or metrics.tested.direct <= 0:
             data.untested.append((req_id, title))
 
         # Unvalidated: no UAT coverage
-        if metrics is None or metrics.uat_covered <= 0:
+        if metrics is None or metrics.uat_coverage.indirect <= 0:
             data.unvalidated.append((req_id, title))
 
         # No assertions: not testable
@@ -92,9 +92,9 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
 
         # Failing: test or UAT failures
         if metrics is not None:
-            if metrics.has_failures:
+            if metrics.verified.has_failures:
                 data.failing.append((req_id, title, "test"))
-            if metrics.uat_has_failures:
+            if metrics.uat_verified.has_failures:
                 data.failing.append((req_id, title, "uat"))
 
     return data

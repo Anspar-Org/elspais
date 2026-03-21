@@ -1151,17 +1151,29 @@ class TestGetProjectSummary:
     def test_coverage_with_annotated_nodes(self, sample_graph):
         """Coverage stats work with annotated coverage metrics."""
         pytest.importorskip("mcp")
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.mcp.server import _get_project_summary
 
         # Annotate some nodes with coverage
         prd_node = sample_graph.find_by_id("REQ-p00001")
-        prd_node.set_metric("referenced_pct", 100)
+        prd_node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            ),
+        )
 
         ops_node = sample_graph.find_by_id("REQ-o00001")
-        ops_node.set_metric("referenced_pct", 50)
+        ops_node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=1, indirect=1),
+            ),
+        )
 
-        dev_node = sample_graph.find_by_id("REQ-d00001")
-        dev_node.set_metric("referenced_pct", 0)
+        # DEV node has no rollup_metrics → zero coverage
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 

@@ -337,8 +337,9 @@ A. The system SHALL perform action X.
         req_node = graph.find_by_id("REQ-p00001")
         assert req_node is not None, "REQ-p00001 should exist in the graph"
 
-        referenced_pct = req_node.get_metric("referenced_pct")
-        assert referenced_pct is not None, "referenced_pct metric should be set after build_graph()"
+        rollup = req_node.get_metric("rollup_metrics")
+        assert rollup is not None, "rollup_metrics should be set after build_graph()"
+        referenced_pct = rollup.implemented.indirect_pct
         assert (
             referenced_pct == 100.0
         ), f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
@@ -411,8 +412,8 @@ B. The system SHALL do B.
         assert rollup is not None, "rollup_metrics should be set after build_graph()"
         assert isinstance(rollup, RollupMetrics), f"Expected RollupMetrics, got {type(rollup)}"
         assert rollup.total_assertions == 2
-        assert rollup.covered_assertions == 1
-        assert rollup.referenced_pct == 50.0
+        assert rollup.implemented.indirect == 1
+        assert rollup.implemented.indirect_pct == 50.0
 
     def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
         self, tmp_path: Path

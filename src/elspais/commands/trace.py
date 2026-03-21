@@ -143,9 +143,9 @@ def _get_node_data(node, graph: FederatedGraph) -> dict:
     # Coverage columns from RollupMetrics
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
-    impl_count = rollup.covered_assertions if rollup else 0
-    val_count = rollup.direct_tested if rollup else 0
-    pass_count = rollup.validated if rollup else 0
+    impl_count = rollup.implemented.indirect if rollup else 0
+    val_count = rollup.tested.direct if rollup else 0
+    pass_count = rollup.verified.direct if rollup else 0
 
     def _fmt_coverage(num: int, total: int) -> str:
         if total == 0:

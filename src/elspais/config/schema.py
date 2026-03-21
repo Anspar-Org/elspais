@@ -58,9 +58,37 @@ class FormatConfig(_StrictModel):
     no_assertions_severity: str | None = None
 
 
+class CoverageSeverityConfig(_StrictModel):
+    """Severity mapping for a single coverage dimension's tier states.
+
+    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'.
+    """
+
+    full_direct: str = "ok"
+    full_indirect: str = "info"
+    partial: str = "warning"
+    none: str = "error"
+    failing: str = "error"
+
+
+def _uat_severity() -> CoverageSeverityConfig:
+    return CoverageSeverityConfig(none="info", partial="info")
+
+
+class CoverageConfig(_StrictModel):
+    """Coverage severity configuration for all 5 dimensions."""
+
+    implemented: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    tested: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    verified: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+    uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+
+
 class RulesConfig(_StrictModel):
     hierarchy: HierarchyConfig = Field(default_factory=HierarchyConfig)
     format: FormatConfig = Field(default_factory=FormatConfig)
+    coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     content_rules: list[str] | None = None
 
 

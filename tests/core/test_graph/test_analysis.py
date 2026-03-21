@@ -40,10 +40,21 @@ def _add_node(
     is_root=False,
 ):
     """Create a node, register it in graph, optionally mark as root."""
+    from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
     node = GraphNode(id=node_id, kind=kind, label=label or node_id)
     node._content = {"level": level, "status": status}
     if referenced_pct is not None:
-        node.set_metric("referenced_pct", referenced_pct)
+        # Use indirect to represent the old referenced_pct semantic
+        total = 100  # use 100 so pct math works out
+        indirect = int(referenced_pct)  # count = pct when total=100
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=total,
+                implemented=CoverageDimension(total=total, direct=indirect, indirect=indirect),
+            ),
+        )
     graph._index[node_id] = node
     if is_root:
         graph._roots.append(node)

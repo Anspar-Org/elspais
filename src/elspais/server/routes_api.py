@@ -18,6 +18,7 @@ from elspais.graph import NodeKind
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_test_map,
+    _get_assertion_uat_map,
     _get_graph_status,
     _get_hierarchy,
     _get_mutation_log,
@@ -124,11 +125,36 @@ async def api_requirement(request: Request) -> JSONResponse:
 
 async def api_node(request: Request) -> JSONResponse:
     """GET /api/node/{node_id} - Full details for any node kind."""
+    from elspais.html.generator import DIMENSION_KEYS, DIMENSION_TIPS, compute_coverage_tiers
+
     state = _st(request)
     node_id = request.path_params["node_id"]
     result = _get_node(state.graph, node_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
+
+    # Enrich requirement nodes with per-dimension coverage data
+    if result.get("kind") == "requirement":
+        node = state.graph.find_by_id(node_id)
+        if node is not None:
+            tiers = compute_coverage_tiers(node, state.config)
+            prefix_map = {
+                "implemented": "impl",
+                "tested": "tested",
+                "verified": "verified",
+                "uat_coverage": "uat_cov",
+                "uat_verified": "uat_ver",
+            }
+            dims: dict[str, dict[str, str]] = {}
+            for dim_key in DIMENSION_KEYS:
+                prefix = prefix_map[dim_key]
+                dims[dim_key] = {
+                    "color": tiers.get(f"{prefix}_color", ""),
+                    "tip": DIMENSION_TIPS.get(dim_key, ""),
+                    "status_tip": tiers.get(f"{prefix}_tip", ""),
+                }
+            result["coverage_dimensions"] = dims
+
     return JSONResponse(result)
 
 
@@ -184,6 +210,16 @@ async def api_test_coverage(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def api_uat_coverage(request: Request) -> JSONResponse:
+    """GET /api/uat-coverage/{req_id} - Per-assertion UAT (journey) coverage map."""
+    state = _st(request)
+    req_id = request.path_params["req_id"]
+    result = _get_assertion_uat_map(state.graph, req_id)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
 async def api_code_coverage(request: Request) -> JSONResponse:
     """GET /api/code-coverage/{req_id} - Per-assertion code implementation map."""
     state = _st(request)
@@ -198,7 +234,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
     """GET /api/tree-data - Build tree data for nav panel."""
     import re
 
-    from elspais.html.generator import compute_validation_color
+    from elspais.html.generator import compute_coverage_tiers
 
     state = _st(request)
     g = state.graph
@@ -247,7 +283,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         coverage = node.get_field("coverage", "none")
         is_changed = bool(node.get_field("is_changed", False))
         is_uncommitted = bool(node.get_field("is_uncommitted", False))
-        val_color, val_tip = compute_validation_color(node)
+        tiers = compute_coverage_tiers(node, state.config)
 
         rows.append(
             {
@@ -271,8 +307,18 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "repo_prefix": _get_repo_prefix(node),
                 "source_file": node.get_field("source_file", ""),
                 "source_line": node.get_field("source_line", 0),
-                "validation_color": val_color,
-                "validation_tip": val_tip,
+                "validation_color": tiers.get("combined_color", ""),
+                "validation_tip": tiers.get("combined_tip", ""),
+                "impl_color": tiers.get("impl_color", ""),
+                "impl_tip": tiers.get("impl_tip", ""),
+                "tested_color": tiers.get("tested_color", ""),
+                "tested_tip": tiers.get("tested_tip", ""),
+                "verified_color": tiers.get("verified_color", ""),
+                "verified_tip": tiers.get("verified_tip", ""),
+                "uat_cov_color": tiers.get("uat_cov_color", ""),
+                "uat_cov_tip": tiers.get("uat_cov_tip", ""),
+                "uat_ver_color": tiers.get("uat_ver_color", ""),
+                "uat_ver_tip": tiers.get("uat_ver_tip", ""),
             }
         )
 

@@ -77,6 +77,14 @@ body {
             <span class="nav-tab-spacer"></span>
             <button class="nav-tree-action" onclick="expandAllTreeNodes()" title="Expand all">&#9660;</button>
             <button class="nav-tree-action" onclick="collapseAllTreeNodes()" title="Collapse all">&#9654;</button>
+            <select class="nav-tree-action" id="coverage-mode" onchange="setCoverageMode(this.value)" title="Coverage indicator mode" style="font-size:0.7rem;padding:1px 2px;">
+                <option value="all">Cov: All</option>
+                <option value="impl">Cov: Impl</option>
+                <option value="tested">Cov: Tested</option>
+                <option value="verified">Cov: Verified</option>
+                <option value="uat_cov">Cov: Validated</option>
+                <option value="uat_ver">Cov: Accepted</option>
+            </select>
         </div>
         <div class="nav-tree-container" id="nav-tree-container">
             <div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">Loading tree...</div>
@@ -90,6 +98,11 @@ body {
     <div class="card-stack-panel" id="card-stack-panel">
         <div class="card-stack-header">
             <span id="card-stack-count">No cards open</span>
+            <select id="assertion-badge-mode" onchange="setAssertionBadgeMode(this.value)" title="Assertion badge display mode" style="font-size:0.7rem;padding:1px 2px;">
+                <option value="full">Badges: Full</option>
+                <option value="abbrev" selected>Badges: Abbrev</option>
+                <option value="dots">Badges: Dots</option>
+            </select>
             <button class="btn" onclick="closeAllCards()" style="padding:3px 8px;font-size:0.75rem;">Close All</button>
         </div>
         <div class="card-stack-body" id="card-stack-body">
@@ -184,7 +197,9 @@ const editState = {
     fontSize: 14,
     theme: 'system',
     toolbarHidden: false,
-    isMain: false
+    isMain: false,
+    coverageMode: 'all',
+    assertionBadgeMode: 'abbrev'
 };
 // Apply theme early to prevent flash of wrong theme
 (function() {

@@ -121,9 +121,9 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
                 passing = 0
             else:
                 total = rollup.total_assertions
-                implemented = rollup.covered_assertions
-                validated = rollup.direct_tested
-                passing = rollup.validated
+                implemented = rollup.implemented.indirect
+                validated = rollup.tested.direct
+                passing = rollup.verified.direct
 
             if implemented > 0:
                 level_totals["with_code_refs"] += 1
