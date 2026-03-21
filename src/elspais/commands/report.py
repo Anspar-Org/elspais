@@ -23,6 +23,7 @@ COMPOSABLE_SECTIONS = (
     "untested",
     "unvalidated",
     "failing",
+    "no_assertions",
     "gaps",
     "broken",
     "unlinked",
@@ -38,6 +39,7 @@ FORMAT_SUPPORT = {
     "untested": {"text", "markdown", "json"},
     "unvalidated": {"text", "markdown", "json"},
     "failing": {"text", "markdown", "json"},
+    "no_assertions": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
     "broken": {"text", "markdown", "json"},
     "unlinked": {"text", "markdown", "json"},
@@ -52,6 +54,7 @@ EXIT_BIT: dict[str, int] = {
     "untested": 16,
     "unvalidated": 16,
     "failing": 16,
+    "no_assertions": 16,
     "gaps": 16,
     "broken": 32,
     "unlinked": 64,
@@ -115,6 +118,7 @@ def run(
         "untested",
         "unvalidated",
         "failing",
+        "no_assertions",
         "gaps",
         "broken",
         "unlinked",
@@ -177,7 +181,7 @@ def _render_section(
         return render_section(graph, args)
     elif name == "changed":
         return _render_changed(args)
-    elif name in ("uncovered", "untested", "unvalidated", "failing"):
+    elif name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
         from elspais.commands.gaps import render_section as gap_render
 
         return gap_render(graph, config, args, gap_types=[name])

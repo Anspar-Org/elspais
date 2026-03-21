@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
+from elspais.graph.relations import EdgeKind
 
 
 @dataclass
@@ -22,6 +23,7 @@ class GapData:
     untested: list[tuple[str, str]] = field(default_factory=list)  # (req_id, title)
     unvalidated: list[tuple[str, str]] = field(default_factory=list)  # (req_id, title)
     failing: list[tuple[str, str, str]] = field(default_factory=list)  # (req_id, title, source)
+    no_assertions: list[tuple[str, str]] = field(default_factory=list)  # (req_id, title)
 
 
 def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[str]:
@@ -80,6 +82,14 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
         if metrics is None or metrics.uat_covered <= 0:
             data.unvalidated.append((req_id, title))
 
+        # No assertions: not testable
+        has_assertion = any(
+            child.kind == NodeKind.ASSERTION
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        )
+        if not has_assertion:
+            data.no_assertions.append((req_id, title))
+
         # Failing: test or UAT failures
         if metrics is not None:
             if metrics.has_failures:
@@ -99,6 +109,7 @@ _LABELS = {
     "untested": "UNTESTED (no test coverage)",
     "unvalidated": "UNVALIDATED (no UAT coverage)",
     "failing": "FAILING",
+    "no_assertions": "NOT TESTABLE (no assertions)",
 }
 
 
@@ -142,7 +153,7 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
 # Composable section
 # =============================================================================
 
-_ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing"]
+_ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing", "no_assertions"]
 
 
 def render_section(
@@ -192,6 +203,7 @@ _GAP_TYPE_MAP: dict[str, str | None] = {
     "untested": "untested",
     "unvalidated": "unvalidated",
     "failing": "failing",
+    "no_assertions": "no_assertions",
 }
 
 
@@ -206,6 +218,8 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
         gd.unvalidated.append(tuple(item))  # type: ignore[arg-type]
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]
+    for item in data.get("no_assertions", []):
+        gd.no_assertions.append(tuple(item))  # type: ignore[arg-type]
     return gd
 
 

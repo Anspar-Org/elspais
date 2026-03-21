@@ -113,6 +113,22 @@ class TestCollectGaps:
         data = collect_gaps(graph, exclude_status=set())
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
 
+    def test_collect_gaps_includes_no_assertions(self) -> None:
+        # Implements: REQ-d00204
+        """A REQ with no ASSERTION children appears in no_assertions."""
+        from elspais.graph import EdgeKind
+
+        req_no_assert = _make_req("REQ-p00001", "No Assertions")
+        req_with_assert = _make_req("REQ-p00002", "Has Assertions")
+        assertion = GraphNode(id="REQ-p00002-A", kind=NodeKind.ASSERTION, label="Assertion A")
+        req_with_assert.link(assertion, EdgeKind.STRUCTURES)
+        graph = _make_graph(req_no_assert, req_with_assert)
+
+        data = collect_gaps(graph, exclude_status=set())
+        ids = {item[0] for item in data.no_assertions}
+        assert "REQ-p00001" in ids
+        assert "REQ-p00002" not in ids
+
 
 # ---- Rendering tests ----
 
@@ -149,6 +165,15 @@ class TestRenderGapText:
         data = GapData(unvalidated=[("REQ-p00004", "Payment")])
         output = render_gap_text("unvalidated", data)
         assert "UNVALIDATED (no UAT coverage)" in output
+
+    def test_no_assertions_section(self) -> None:
+        # Implements: REQ-d00204
+        """no_assertions gap type renders with NOT TESTABLE label."""
+        data = GapData(no_assertions=[("REQ-p00005", "No Asserts")])
+        output = render_gap_text("no_assertions", data)
+        assert "NOT TESTABLE (no assertions)" in output
+        assert "(1)" in output
+        assert "REQ-p00005" in output
 
     def test_sorted_output(self) -> None:
         data = GapData(uncovered=[("REQ-p00002", "B"), ("REQ-p00001", "A")])
@@ -249,13 +274,13 @@ class TestGapComposability:
     def test_gap_sections_registered(self) -> None:
         from elspais.commands.report import COMPOSABLE_SECTIONS
 
-        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+        for name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions", "gaps"):
             assert name in COMPOSABLE_SECTIONS
 
     def test_gap_format_support(self) -> None:
         from elspais.commands.report import FORMAT_SUPPORT
 
-        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+        for name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions", "gaps"):
             assert "text" in FORMAT_SUPPORT[name]
             assert "markdown" in FORMAT_SUPPORT[name]
             assert "json" in FORMAT_SUPPORT[name]
