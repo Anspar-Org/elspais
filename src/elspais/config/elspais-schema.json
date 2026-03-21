@@ -358,6 +358,18 @@
           ],
           "default": null,
           "title": "Status Roles"
+        },
+        "no_assertions_severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Assertions Severity"
         }
       },
       "title": "FormatConfig",

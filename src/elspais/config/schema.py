@@ -55,6 +55,7 @@ class FormatConfig(_StrictModel):
     require_rationale: bool | None = None
     allowed_statuses: list[str] | None = None
     status_roles: dict[str, list[str] | str] | None = None
+    no_assertions_severity: str | None = None
 
 
 class RulesConfig(_StrictModel):

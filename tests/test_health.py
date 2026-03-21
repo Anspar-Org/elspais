@@ -303,6 +303,9 @@ leading_zeros = true
 
 [scanning.spec]
 directories = ["spec"]
+
+[rules.format]
+no_assertions_severity = "info"
 """
         )
 

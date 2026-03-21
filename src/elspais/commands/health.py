@@ -750,6 +750,51 @@ def check_spec_format_rules(
     )
 
 
+# Implements: REQ-d00204
+def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Flag requirements that have zero assertions (not testable)."""
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    severity = "warning"
+    typed = _validate_config(config)
+    if typed.rules.format.no_assertions_severity in ("info", "warning", "error"):
+        severity = typed.rules.format.no_assertions_severity
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        has_assertion = any(
+            child.kind == NodeKind.ASSERTION
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        )
+        if not has_assertion:
+            fn = node.file_node()
+            findings.append(
+                HealthFinding(
+                    message=f"{node.id}: No assertions — not testable",
+                    node_id=node.id,
+                    file_path=fn.get_field("relative_path") if fn else None,
+                    line=node.get_field("parse_line"),
+                )
+            )
+
+    if findings:
+        return HealthCheck(
+            name="spec.no_assertions",
+            passed=False,
+            message=f"{len(findings)} requirement(s) have no assertions (not testable)",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.no_assertions",
+        passed=True,
+        message="All requirements have at least one assertion",
+        category="spec",
+    )
+
+
 # Implements: REQ-p00004
 def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
     """Flag Satisfies-linked requirements for review when their template has a stale hash.
@@ -1194,6 +1239,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_format_rules(repo_graph, repo_config, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_no_assertions(repo_graph, repo_config),
                 entry.name,
             )
         )
