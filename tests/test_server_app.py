@@ -1164,53 +1164,64 @@ class TestGitPush:
     """Validates REQ-d00010-A, REQ-p00004-E: POST /api/git/push."""
 
     def test_REQ_p00004_E_git_push_success(self, client):
-        """POST /api/git/push with valid message returns success."""
-        from unittest.mock import patch
+        """POST /api/git/push pushes the current branch and returns success."""
+        from unittest.mock import MagicMock, patch
 
-        mock_result = {"success": True, "files_committed": ["spec/prd.md"]}
-        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
-            resp = client.post("/api/git/push", json={"message": "Update specs"})
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = ""
+        mock_proc.stderr = ""
+        with (
+            patch("elspais.utilities.git.get_current_branch", return_value="feature-branch"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            resp = client.post("/api/git/push")
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
-        assert "files_committed" in data
+        assert data["branch"] == "feature-branch"
 
-    def test_REQ_p00004_E_git_push_empty_message_returns_400(self, client):
-        """POST /api/git/push with empty message returns 400."""
-        resp = client.post("/api/git/push", json={"message": ""})
+    def test_REQ_p00004_E_git_push_detached_head_returns_400(self, client):
+        """POST /api/git/push in detached HEAD returns 400."""
+        from unittest.mock import patch
+
+        with patch("elspais.utilities.git.get_current_branch", return_value=None):
+            resp = client.post("/api/git/push")
         assert resp.status_code == 400
         data = resp.json()
         assert data["success"] is False
-        assert "required" in data["error"]
+        assert "detached" in data["error"].lower()
 
-    def test_REQ_p00004_E_git_push_on_main_refused(self, client):
-        """POST /api/git/push on main branch returns 200 with error in JSON.
+    def test_REQ_p00004_E_git_push_remote_error_returns_400(self, client):
+        """POST /api/git/push with git push failure returns 400."""
+        from unittest.mock import MagicMock, patch
 
-        The endpoint always returns 200 so the modal JS can display errors inline.
-        """
-        from unittest.mock import patch
-
-        mock_result = {
-            "success": False,
-            "error": "Refusing to commit on protected branch 'main'",
-        }
-        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
-            resp = client.post("/api/git/push", json={"message": "Bad push"})
-        assert resp.status_code == 200
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.stderr = "error: failed to push some refs"
+        with (
+            patch("elspais.utilities.git.get_current_branch", return_value="feature-branch"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            resp = client.post("/api/git/push")
+        assert resp.status_code == 400
         data = resp.json()
         assert data["success"] is False
-        assert "Refusing" in data["error"]
+        assert "failed" in data["error"].lower()
 
-    def test_REQ_p00004_E_git_push_generic_error(self, client):
-        """POST /api/git/push with generic error returns 200 with error in JSON."""
+    def test_REQ_p00004_E_git_push_git_not_found_returns_500(self, client):
+        """POST /api/git/push when git binary is missing returns 500."""
         from unittest.mock import patch
 
-        mock_result = {"success": False, "error": "Nothing to commit — no dirty spec files"}
-        with patch("elspais.utilities.git.commit_and_push_spec_files", return_value=mock_result):
-            resp = client.post("/api/git/push", json={"message": "No changes"})
-        assert resp.status_code == 200
+        with (
+            patch("elspais.utilities.git.get_current_branch", return_value="feature-branch"),
+            patch("subprocess.run", side_effect=FileNotFoundError),
+        ):
+            resp = client.post("/api/git/push")
+        assert resp.status_code == 500
         data = resp.json()
         assert data["success"] is False
+        assert "git not found" in data["error"]
 
 
 class TestGitPull:
@@ -2257,3 +2268,269 @@ class TestCheckFreshness:
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_pending_mutations"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New Git Checkpoint / Commit History / Detached HEAD Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGitCommits:
+    """Validates GET /api/git/commits - list commit history."""
+
+    def test_git_commits_returns_list(self, client):
+        """GET /api/git/commits returns commit list from list_commits."""
+        from unittest.mock import patch
+
+        mock_commits = [
+            {"hash": "abc1234", "message": "first", "author": "Alice", "date": "2026-01-01"},
+            {"hash": "def5678", "message": "second", "author": "Bob", "date": "2026-01-02"},
+        ]
+        with patch("elspais.utilities.git.list_commits", return_value=mock_commits):
+            resp = client.get("/api/git/commits?branch=main&limit=10")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 2
+        assert data[0]["hash"] == "abc1234"
+
+
+class TestGitCommit:
+    """Validates POST /api/git/commit - checkpoint commit."""
+
+    def test_git_commit_creates_checkpoint(self, client):
+        """POST /api/git/commit with message commits spec files."""
+        from unittest.mock import patch
+
+        mock_result = {"success": True, "files_committed": ["spec/prd.md"]}
+        with patch("elspais.utilities.git.commit_spec_files", return_value=mock_result):
+            resp = client.post("/api/git/commit", json={"message": "checkpoint: update PRD"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "files_committed" in data
+
+    def test_git_commit_empty_message_returns_400(self, client):
+        """POST /api/git/commit with empty message returns 400."""
+        resp = client.post("/api/git/commit", json={"message": ""})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "required" in data["error"]
+
+    def test_git_commit_failure_returns_400(self, client):
+        """POST /api/git/commit when commit fails returns 400."""
+        from unittest.mock import patch
+
+        mock_result = {"success": False, "error": "Nothing to commit"}
+        with patch("elspais.utilities.git.commit_spec_files", return_value=mock_result):
+            resp = client.post("/api/git/commit", json={"message": "no changes"})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+
+
+class TestGitCheckoutCommit:
+    """Validates POST /api/git/checkout-commit - rewind to a commit."""
+
+    def test_git_checkout_commit_success(self, client):
+        """POST /api/git/checkout-commit with valid hash returns success."""
+        from unittest.mock import patch
+
+        mock_result = {"success": True}
+        with (
+            patch("elspais.utilities.git.checkout_commit", return_value=mock_result),
+            patch("elspais.utilities.git.get_current_branch", return_value="main"),
+            patch("elspais.utilities.git.get_current_commit", return_value="HEAD123"),
+        ):
+            resp = client.post(
+                "/api/git/checkout-commit", json={"hash": "abc1234", "branch": "main"}
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+
+    def test_git_checkout_commit_sets_detached_state(self, sample_graph):
+        """POST /api/git/checkout-commit sets AppState.is_detached=True on success."""
+        from unittest.mock import patch
+
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        app = create_app(state, mount_mcp=False)
+        client = TestClient(app)
+
+        assert state.is_detached is False
+
+        mock_result = {"success": True}
+        with (
+            patch("elspais.utilities.git.checkout_commit", return_value=mock_result),
+            patch("elspais.utilities.git.get_current_branch", return_value="main"),
+            patch("elspais.utilities.git.get_current_commit", return_value="HEAD123"),
+        ):
+            resp = client.post(
+                "/api/git/checkout-commit", json={"hash": "abc1234", "branch": "main"}
+            )
+
+        assert resp.status_code == 200
+        assert state.is_detached is True
+        assert state.originating_branch == "main"
+        assert state.originating_head == "HEAD123"
+
+    def test_git_checkout_commit_fallback_branch(self, sample_graph):
+        """When branch not in body, falls back to get_current_branch."""
+        from unittest.mock import patch
+
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        app = create_app(state, mount_mcp=False)
+        client = TestClient(app)
+
+        mock_result = {"success": True}
+        with (
+            patch("elspais.utilities.git.checkout_commit", return_value=mock_result),
+            patch("elspais.utilities.git.get_current_branch", return_value="detected-branch"),
+            patch("elspais.utilities.git.get_current_commit", return_value="HEAD456"),
+        ):
+            resp = client.post("/api/git/checkout-commit", json={"hash": "def5678"})
+
+        assert resp.status_code == 200
+        assert state.originating_branch == "detected-branch"
+
+    def test_git_checkout_commit_empty_hash_returns_400(self, client):
+        """POST /api/git/checkout-commit with empty hash returns 400."""
+        resp = client.post("/api/git/checkout-commit", json={"hash": ""})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "required" in data["error"]
+
+    def test_git_checkout_commit_failure_returns_400(self, client):
+        """POST /api/git/checkout-commit when checkout fails returns 400."""
+        from unittest.mock import patch
+
+        mock_result = {"success": False, "error": "unknown revision"}
+        with (
+            patch("elspais.utilities.git.checkout_commit", return_value=mock_result),
+            patch("elspais.utilities.git.get_current_branch", return_value="main"),
+            patch("elspais.utilities.git.get_current_commit", return_value="HEAD123"),
+        ):
+            resp = client.post("/api/git/checkout-commit", json={"hash": "badref"})
+        assert resp.status_code == 400
+
+
+class TestGitStatusDetached:
+    """Validates GET /api/git/status augmented detached fields."""
+
+    def test_git_status_returns_detached_fields(self, sample_graph):
+        """GET /api/git/status includes is_detached, originating_branch, etc."""
+        from unittest.mock import patch
+
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state.enter_detached(branch="main", head_commit="deadbeef")
+        app = create_app(state, mount_mcp=False)
+        client = TestClient(app)
+
+        mock_status = {
+            "branch": None,
+            "is_main": False,
+            "dirty_spec_files": ["spec/prd.md"],
+            "remote_diverged": False,
+            "fast_forward_possible": False,
+        }
+        with (
+            patch("elspais.utilities.git.git_status_summary", return_value=mock_status),
+            patch("elspais.utilities.git.get_current_commit", return_value="abc1234"),
+        ):
+            resp = client.get("/api/git/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_detached"] is True
+        assert data["originating_branch"] == "main"
+        assert data["originating_head"] == "deadbeef"
+        assert data["detached_commit"] == "abc1234"
+        assert "commits_behind_head" in data
+        assert data["uncommitted_file_count"] == 1
+
+    def test_git_status_not_detached_returns_null_fields(self, client):
+        """GET /api/git/status when not detached returns null detached fields."""
+        mock_status = {
+            "branch": "feature",
+            "is_main": False,
+            "dirty_spec_files": [],
+            "remote_diverged": False,
+            "fast_forward_possible": True,
+        }
+        from unittest.mock import patch
+
+        with patch("elspais.utilities.git.git_status_summary", return_value=mock_status):
+            resp = client.get("/api/git/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_detached"] is False
+        assert data["detached_commit"] is None
+        assert data["commits_behind_head"] == 0
+        assert data["uncommitted_file_count"] == 0
+
+
+class TestDetachedGuardMiddleware:
+    """Validates middleware blocks mutations in detached HEAD mode."""
+
+    def test_mutate_blocked_when_detached(self, sample_graph):
+        """POST /api/mutate/title returns 409 when in detached HEAD mode."""
+        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state.enter_detached(branch="main", head_commit="deadbeef")
+        app = create_app(state, mount_mcp=False)
+        client = TestClient(app)
+
+        resp = client.post(
+            "/api/mutate/title", json={"node_id": "REQ-p00001", "new_title": "Changed"}
+        )
+        assert resp.status_code == 409
+        data = resp.json()
+        assert data["success"] is False
+        assert "detached" in data["error"].lower()
+
+    def test_mutate_allowed_when_not_detached(self, client):
+        """POST /api/mutate/title succeeds (or fails gracefully) when not detached."""
+        # When not detached the middleware should pass through
+        resp = client.post(
+            "/api/mutate/title", json={"node_id": "REQ-p00001", "new_title": "New Title"}
+        )
+        # Should NOT be 409 (the actual result depends on graph state)
+        assert resp.status_code != 409
+
+
+class TestGitCommitMessage:
+    """Validates GET /api/git/commit-message."""
+
+    def test_git_commit_message_returns_auto_message(self, client):
+        """GET /api/git/commit-message returns auto-generated message."""
+        from unittest.mock import patch
+
+        with patch(
+            "elspais.utilities.git.generate_checkpoint_message",
+            return_value="checkpoint: update 3 spec files",
+        ):
+            resp = client.get("/api/git/commit-message")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data
+        assert data["message"] == "checkpoint: update 3 spec files"
+
+
+class TestGitSuggestBranchName:
+    """Validates GET /api/git/suggest-branch-name."""
+
+    def test_git_suggest_branch_name_returns_name(self, client):
+        """GET /api/git/suggest-branch-name returns a non-colliding name."""
+        from unittest.mock import patch
+
+        with patch(
+            "elspais.utilities.git.suggest_branch_name",
+            return_value="review-2026-03-20",
+        ):
+            resp = client.get("/api/git/suggest-branch-name?base=review")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "name" in data
+        assert data["name"] == "review-2026-03-20"

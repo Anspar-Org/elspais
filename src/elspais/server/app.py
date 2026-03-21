@@ -14,6 +14,8 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from elspais.server.middleware import AutoRefreshMiddleware, NoCacheMiddleware
@@ -56,12 +58,41 @@ from elspais.server.routes_git import (
     api_git_branch,
     api_git_branches,
     api_git_checkout,
+    api_git_checkout_commit,
+    api_git_commit,
+    api_git_commit_message,
+    api_git_commits,
     api_git_pull,
     api_git_push,
     api_git_status,
+    api_git_suggest_branch_name,
 )
 from elspais.server.routes_ui import _extract_viewer_config, index
 from elspais.server.state import AppState
+
+
+class DetachedGuardMiddleware:
+    """Block mutation endpoints when in detached HEAD (read-only) mode."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/api/mutate/"):
+            request = Request(scope, receive)
+            state = request.app.state.app_state
+            if state.is_detached:
+                response = JSONResponse(
+                    {
+                        "success": False,
+                        "error": "Read-only: in detached HEAD mode. Switch to a branch to edit.",
+                    },
+                    status_code=409,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
 
 # Re-export for backward compatibility (used by tests/core/test_viewer_config.py)
 __all__ = ["create_app", "_extract_viewer_config"]
@@ -133,6 +164,11 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/git/pull", api_git_pull, methods=["POST"]),
         Route("/api/git/branches", api_git_branches),
         Route("/api/git/checkout", api_git_checkout, methods=["POST"]),
+        Route("/api/git/commits", api_git_commits),
+        Route("/api/git/commit", api_git_commit, methods=["POST"]),
+        Route("/api/git/checkout-commit", api_git_checkout_commit, methods=["POST"]),
+        Route("/api/git/commit-message", api_git_commit_message),
+        Route("/api/git/suggest-branch-name", api_git_suggest_branch_name),
     ]
 
     # Mount MCP sub-app at /mcp
@@ -163,6 +199,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         ),
         Middleware(NoCacheMiddleware),
         Middleware(AutoRefreshMiddleware),
+        Middleware(DetachedGuardMiddleware),
     ]
 
     app = Starlette(routes=routes, middleware=middleware)
