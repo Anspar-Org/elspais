@@ -95,21 +95,34 @@ def _compute_link_data(
             "refined": False,
         }
 
-    # REQ-level links: edges from this REQ WITHOUT assertion_targets
-    # (or edges to child REQs)
-    r_links: dict[str, list[dict[str, str]]] = {
+    # Header-level links: separate lists per header badge dimension.
+    # For implemented/refined: only REQ-level (no assertion_targets) links.
+    # For tested/verified/validated/accepted: ALL tests/journeys (REQ-level
+    # and assertion-targeted) since the header represents the whole REQ.
+    r_links: dict[str, list[dict[str, Any]]] = {
         "implemented": [],
-        "tested": [],
-        "validated": [],
         "refined": [],
+        "tested": [],
+        "verified": [],
+        "validated": [],
+        "accepted": [],
     }
     r_seen: dict[str, set[str]] = {k: set() for k in r_links}
 
-    # Map edge kind + target kind to dimension
-    for edge in node.iter_outgoing_edges():
-        target = edge.target
-        tk = target.kind
+    def _add_link(dim: str, target: Any, **extra: Any) -> None:
+        if target.id in r_seen[dim]:
+            return
+        r_seen[dim].add(target.id)
+        entry: dict[str, Any] = {
+            "id": target.id,
+            "title": target.get_label() or target.id,
+            "kind": target.kind.value,
+        }
+        entry.update(extra)
+        r_links[dim].append(entry)
 
+    def _process_edge(edge: Any, target: Any, tk: Any) -> str | None:
+        """Process one outgoing edge, return the assertion_links dim or None."""
         dim = None
         if edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.CODE:
             dim = "implemented"
@@ -126,30 +139,56 @@ def _compute_link_data(
             dim = "implemented"
 
         if dim is None:
-            continue
+            return None
 
+        # Assertion-level link flags
         if edge.assertion_targets:
-            # Direct assertion-level link
             for label in edge.assertion_targets:
                 if label in a_links:
                     a_links[label][dim] = True
-        else:
-            # REQ-level link (no assertion targets)
-            if target.id not in r_seen[dim]:
-                r_seen[dim].add(target.id)
-                entry: dict[str, Any] = {
-                    "id": target.id,
-                    "title": target.get_label() or target.id,
-                    "kind": target.kind.value,
-                }
-                # For TEST/JNY nodes, include result status
-                if tk in (NodeKind.TEST, NodeKind.USER_JOURNEY):
-                    result_status = _get_result_status(target)
-                    if result_status:
-                        entry["result_status"] = result_status
-                r_links[dim].append(entry)
 
-    # Phase 2: check assertion-level outgoing edges from ASSERTION nodes
+        # Header-level links
+        if dim in ("implemented", "refined"):
+            # Only include REQ-level (no assertion_targets) for these
+            if not edge.assertion_targets:
+                _add_link(dim, target)
+        elif dim == "tested":
+            # All tests go into "tested" (test files) and "verified" (results)
+            file_node = target.file_node()
+            file_path = file_node.get_field("relative_path") if file_node else None
+            _add_link("tested", target, file=file_path, line=target.get_field("parse_line", 0))
+            result_status = _get_result_status(target)
+            if result_status:
+                # Find result file info
+                result_file = None
+                for rc in target.iter_children():
+                    if rc.kind == NodeKind.RESULT:
+                        rf = rc.file_node()
+                        if rf:
+                            result_file = rf.get_field("relative_path")
+                            break
+                _add_link(
+                    "verified",
+                    target,
+                    result_status=result_status,
+                    file=result_file,
+                    line=0,
+                )
+        elif dim == "validated":
+            # All journeys go into "validated" (journey files) and "accepted" (results)
+            _add_link("validated", target)
+            result_status = _get_result_status(target)
+            if result_status:
+                _add_link("accepted", target, result_status=result_status)
+
+        return dim
+
+    # Phase 1: REQ-level outgoing edges
+    for edge in node.iter_outgoing_edges():
+        target = edge.target
+        _process_edge(edge, target, target.kind)
+
+    # Phase 2: assertion-level outgoing edges (also feeds header links)
     for child in node.iter_children():
         if child.kind != NodeKind.ASSERTION:
             continue
@@ -158,6 +197,7 @@ def _compute_link_data(
             continue
         for edge in child.iter_outgoing_edges():
             target = edge.target
+            # Update assertion link flags
             tk = target.kind
             if edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.CODE:
                 a_links[label]["implemented"] = True
@@ -167,6 +207,8 @@ def _compute_link_data(
                 a_links[label]["validated"] = True
             elif edge.kind == EdgeKind.REFINES:
                 a_links[label]["refined"] = True
+            # Also add to header-level links (for tested/verified/validated/accepted)
+            _process_edge(edge, target, tk)
 
     return a_links, r_links
 

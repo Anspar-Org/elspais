@@ -160,9 +160,9 @@ function buildCardHtml(nodeId, data, collapsed) {
             {key: 'implemented', linkKey: 'implemented', label: 'IMPLEMENTED'},
             {key: null, linkKey: 'refined', label: 'REFINED'},
             {key: 'tested', linkKey: 'tested', label: 'TESTED'},
-            {key: 'verified', linkKey: 'tested', label: 'VERIFIED'},
+            {key: 'verified', linkKey: 'verified', label: 'VERIFIED'},
             {key: 'uat_coverage', linkKey: 'validated', label: 'VALIDATED'},
-            {key: 'uat_verified', linkKey: 'validated', label: 'ACCEPTED'}
+            {key: 'uat_verified', linkKey: 'accepted', label: 'ACCEPTED'}
         ];
         headerDims.forEach(function(d) {
             var dim = d.key ? data.coverage_dimensions[d.key] : null;
@@ -176,13 +176,13 @@ function buildCardHtml(nodeId, data, collapsed) {
             // Tooltip: color = rolled-up coverage status; click = REQ-level links
             var tipParts = [];
             if (dim && dim.status_tip) tipParts.push(dim.status_tip);
-            if (hasReqLinks) tipParts.push('Click to show ' + rLinks[d.linkKey].length + ' REQ-level link(s)');
+            if (hasReqLinks) tipParts.push('Click to show ' + rLinks[d.linkKey].length + ' link(s)');
             var tip = tipParts.length > 0 ? tipParts.join(' \u2014 ') : d.label;
             html += '<span class="status-badge' + colorClass + clickableClass + '" title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;' + opacityStyle + '"' + clickAttr + '>' + d.label + '</span>';
         });
         html += '</div>';
-        // Expandable REQ-level link panels (one per dimension, hidden by default)
-        ['implemented', 'refined', 'tested', 'validated'].forEach(function(dimKey) {
+        // Expandable link panels (one per header dimension, hidden by default)
+        ['implemented', 'refined', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
             html += '<div class="req-level-links-panel" id="req-links-' + nodeId + '-' + dimKey + '" style="display:none;margin:0 12px;padding:6px 10px;background:var(--assertion-code-panel-bg);border-radius:4px;border-left:3px solid var(--impl-yes-border);font-size:0.78rem;"></div>';
         });
     }
@@ -998,8 +998,13 @@ function toggleReqLevelLinks(badge, reqId, dimKey) {
             var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
             html += '<div class="assertion-test-item' + statusClass + '">';
             html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
-                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            if (link.file) {
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                    escapeHtml(link.file) + '\', ' + (link.line || 0) + ')">' + escapeHtml(link.title) + '</a>';
+            } else {
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                    escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            }
             html += '</div>';
         }
     }
