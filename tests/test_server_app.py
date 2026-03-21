@@ -2795,6 +2795,23 @@ class TestMoveToNewFile:
         assert not (state.repo_root / "random" / "not-a-spec.md").exists()
 
     # Implements: REQ-d00010
+    def test_move_to_new_file_rejects_path_traversal(self, full_disk_app):
+        """Path traversal attempts are rejected."""
+        app, state, _spec_file = full_disk_app
+        client = TestClient(app)
+
+        resp = client.post(
+            "/api/mutate/move-to-file",
+            json={
+                "node_id": "REQ-t00001",
+                "target_file_id": "file:spec/../../etc/passwd.md",
+            },
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "Invalid path" in data["error"] or "escapes" in data["error"]
+
+    # Implements: REQ-d00010
     def test_move_to_existing_file_still_works(self, full_disk_app):
         """POST /api/mutate/move-to-file with existing target file works as before."""
         app, state, _spec_file = full_disk_app

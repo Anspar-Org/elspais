@@ -826,7 +826,20 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     else:
         relative_path = target_file_id
 
+    # Reject path traversal and absolute paths
+    if ".." in relative_path.split("/") or relative_path.startswith("/"):
+        return JSONResponse(
+            {"success": False, "error": "Invalid path: must not contain '..' or be absolute"},
+            status_code=400,
+        )
+
     target_path = Path(state.repo_root) / relative_path
+    if not target_path.resolve().is_relative_to(Path(state.repo_root).resolve()):
+        return JSONResponse(
+            {"success": False, "error": "Path escapes repository root"},
+            status_code=400,
+        )
+
     if not target_path.exists():
         # Validate path against scanning config
         error = _validate_new_spec_path(relative_path, state.config)
@@ -941,10 +954,12 @@ def _register_new_file_node(
         entry = graph._repos[root_repo]
         if entry.graph is not None:
             entry.graph._index[file_id] = node
+            entry.graph._roots.append(node)
         graph._ownership[file_id] = root_repo
     else:
         # Direct TraceGraph (shouldn't happen with current server, but safe)
         graph._index[file_id] = node
+        graph._roots.append(node)
 
 
 async def api_mutate_rename_file(request: Request) -> JSONResponse:
