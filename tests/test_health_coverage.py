@@ -99,7 +99,7 @@ class TestCheckTestCoverage:
             total_assertions=3,
             direct_covered=2,
             direct_tested=0,
-            coverage_pct=66.7,
+            referenced_pct=66.7,
         )
         req.set_metric("rollup_metrics", metrics)
 

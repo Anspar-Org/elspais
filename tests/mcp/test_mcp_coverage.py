@@ -177,7 +177,7 @@ class TestGetTestCoverage:
         # 1 of 3 assertions covered = 33.3%
         assert result["total_assertions"] == 3
         assert result["covered_count"] == 1
-        assert 33 <= result["coverage_pct"] <= 34
+        assert 33 <= result["referenced_pct"] <= 34
 
     def test_REQ_d00066_E_handles_no_test_coverage(self, coverage_graph):
         """REQ-d00066-E: SHALL handle requirements with no test coverage gracefully."""
@@ -187,7 +187,7 @@ class TestGetTestCoverage:
 
         assert result["success"] is True
         assert result["test_nodes"] == []
-        assert result["coverage_pct"] == 0
+        assert result["referenced_pct"] == 0
         assert result["uncovered_assertions"] == ["REQ-p00002-A"]
 
 

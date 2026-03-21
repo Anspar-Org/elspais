@@ -874,7 +874,7 @@ def collect_gaps(
         title = node.get_label() or ""
         metrics = node.get_metric("rollup_metrics")
 
-        has_code = metrics is not None and metrics.coverage_pct > 0
+        has_code = metrics is not None and metrics.referenced_pct > 0
         if not has_code:
             data.uncovered.append((rid, title))
 

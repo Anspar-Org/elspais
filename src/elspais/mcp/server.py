@@ -1289,7 +1289,7 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     metrics = node.get_metric("rollup_metrics")
     if metrics is not None:
         metrics_data = {
-            "coverage_pct": metrics.coverage_pct,
+            "referenced_pct": metrics.referenced_pct,
             "total_assertions": metrics.total_assertions,
             "covered_assertions": metrics.covered_assertions,
         }
@@ -2969,7 +2969,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     # UAT coverage via JNY Validates edges
     seen_jny_ids: set[str] = set()
@@ -2996,7 +2996,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         )
 
     uat_covered_count = len(covered_uat_assertion_ids)
-    uat_coverage_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
+    uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
     # Read uat_validated_pct from rollup_metrics if available
     rollup = node.get_metric("rollup_metrics")
@@ -3010,12 +3010,12 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "uncovered_assertions": uncovered_assertions,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
         "uat": {
             "jny_nodes": jny_nodes,
             "covered_assertions": sorted(covered_uat_assertion_ids),
             "covered_count": uat_covered_count,
-            "coverage_pct": round(uat_coverage_pct, 1),
+            "referenced_pct": round(uat_referenced_pct, 1),
             "validated_pct": round(uat_validated_pct, 1),
         },
     }
@@ -3069,7 +3069,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     total = len(assertions)
     covered_count = sum(1 for label in assertion_tests if assertion_tests[label]["tests"])
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     return {
         "success": True,
@@ -3077,7 +3077,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "assertion_tests": assertion_tests,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
     }
 
 
@@ -3129,7 +3129,7 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     total = len(assertions)
     covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     return {
         "success": True,
@@ -3137,7 +3137,7 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "assertion_code": assertion_code,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
     }
 
 

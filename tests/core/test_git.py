@@ -21,10 +21,13 @@ import pytest
 from elspais.utilities.git import (
     GitChangeInfo,
     MovedRequirement,
+    checkout_commit,
     commit_and_push_spec_files,
+    commit_spec_files,
     create_and_switch_branch,
     detect_moved_requirements,
     filter_spec_files,
+    generate_checkpoint_message,
     get_author_info,
     get_changed_vs_branch,
     get_git_changes,
@@ -33,6 +36,8 @@ from elspais.utilities.git import (
     get_req_locations_from_graph,
     git_status_summary,
     list_branches,
+    list_commits,
+    suggest_branch_name,
     sync_branch,
     temporary_worktree,
 )
@@ -1437,3 +1442,376 @@ class TestCheckoutBranch:
             check=True,
         )
         assert head.stdout.strip() == "feature/remote-test"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests for checkpoint and history utilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _init_git_repo_with_commit(tmp_path: Path, spec: bool = True) -> None:
+    """Init a fresh git repo with one commit (and optional spec dir)."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    if spec:
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Initial Requirement\n")
+    (tmp_path / "README.md").write_text("init\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+
+
+class TestListCommits:
+    """Tests for list_commits().
+
+    Validates: checkpoint and history feature — list commits in reverse order.
+    """
+
+    # Implements: REQ-p00004-E
+    def test_returns_commits_in_reverse_order(self, tmp_path):
+        """Returns commits newest-first."""
+        _init_git_repo_with_commit(tmp_path)
+        # Add a second commit
+        (tmp_path / "README.md").write_text("second\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "second commit"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        commits = list_commits(tmp_path)
+
+        assert len(commits) == 2
+        assert commits[0]["message"] == "second commit"
+        assert commits[1]["message"] == "init"
+
+    # Implements: REQ-p00004-E
+    def test_respects_limit(self, tmp_path):
+        """Returns at most 'limit' commits."""
+        _init_git_repo_with_commit(tmp_path)
+        for i in range(5):
+            (tmp_path / "README.md").write_text(f"v{i}\n")
+            subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"commit {i}"],
+                cwd=tmp_path,
+                capture_output=True,
+                check=True,
+            )
+
+        commits = list_commits(tmp_path, limit=3)
+
+        assert len(commits) == 3
+
+    # Implements: REQ-p00004-E
+    def test_empty_repo_returns_empty_list(self, tmp_path):
+        """Returns [] on a repo with no commits."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+
+        commits = list_commits(tmp_path)
+
+        assert commits == []
+
+    # Implements: REQ-p00004-E
+    def test_commit_dict_has_required_keys(self, tmp_path):
+        """Each commit dict has hash, message, date, author."""
+        _init_git_repo_with_commit(tmp_path)
+
+        commits = list_commits(tmp_path)
+
+        assert len(commits) == 1
+        commit = commits[0]
+        assert set(commit.keys()) == {"hash", "message", "date", "author"}
+        assert len(commit["hash"]) == 40  # Full SHA-1
+        assert commit["message"] == "init"
+        assert commit["author"] == "Test User"
+
+
+class TestCheckoutCommit:
+    """Tests for checkout_commit().
+
+    Validates: checkpoint and history feature — detach HEAD at a specific commit.
+    """
+
+    # Implements: REQ-p00004-E
+    def test_detaches_head_at_commit(self, tmp_path):
+        """Checking out a valid hash enters detached HEAD state."""
+        _init_git_repo_with_commit(tmp_path)
+        commits = list_commits(tmp_path)
+        commit_hash = commits[0]["hash"]
+
+        result = checkout_commit(tmp_path, commit_hash)
+
+        assert result["success"] is True
+        # Confirm detached HEAD
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert head.stdout.strip() == commit_hash
+        # Verify detached HEAD
+        abbrev = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert abbrev.stdout.strip() == "HEAD", "Expected detached HEAD state"
+
+    # Implements: REQ-p00004-E
+    def test_invalid_hash_returns_error(self, tmp_path):
+        """An invalid commit hash returns success=False with an error."""
+        _init_git_repo_with_commit(tmp_path)
+
+        result = checkout_commit(tmp_path, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+        assert result["success"] is False
+        assert "error" in result
+
+
+class TestCommitSpecFiles:
+    """Tests for commit_spec_files().
+
+    Validates: checkpoint feature — local commit without push; refuses on main.
+    """
+
+    # Implements: REQ-p00004-E
+    def test_commits_dirty_spec_files(self, tmp_path):
+        """Commits modified spec files on a feature branch."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        # Modify spec file
+        (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Updated\n")
+
+        result = commit_spec_files(tmp_path, "checkpoint: update spec")
+
+        assert result["success"] is True
+        assert "spec/prd.md" in result["files_committed"]
+        # Confirm commit exists
+        log = list_commits(tmp_path, limit=1)
+        assert log[0]["message"] == "checkpoint: update spec"
+
+    # Implements: REQ-p00004-E
+    def test_refuses_on_main_branch(self, tmp_path):
+        """Refuses to commit on the main branch."""
+        _init_git_repo_with_commit(tmp_path)
+        # On main, dirty spec file
+        (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Dirty\n")
+
+        result = commit_spec_files(tmp_path, "should not commit")
+
+        assert result["success"] is False
+        assert "protected" in result["error"].lower()
+
+    # Implements: REQ-p00004-E
+    def test_refuses_on_master_branch(self, tmp_path):
+        """Refuses to commit on the master branch."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "master"], cwd=tmp_path, capture_output=True, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Init\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
+        )
+        # Dirty spec
+        (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Dirty\n")
+
+        result = commit_spec_files(tmp_path, "should not commit")
+
+        assert result["success"] is False
+        assert "protected" in result["error"].lower()
+
+    # Implements: REQ-p00004-E
+    def test_nothing_to_commit_returns_error(self, tmp_path):
+        """Returns error when no dirty spec files exist."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        # No changes made
+
+        result = commit_spec_files(tmp_path, "empty commit")
+
+        assert result["success"] is False
+        assert "nothing" in result["error"].lower()
+
+    # Implements: REQ-p00004-E
+    def test_commits_untracked_spec_files(self, tmp_path):
+        """Commits untracked (new) spec files on a feature branch."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        # Create new untracked spec file
+        (tmp_path / "spec" / "ops.md").write_text("# REQ-o00001 New Ops Req\n")
+
+        result = commit_spec_files(tmp_path, "add ops spec")
+
+        assert result["success"] is True
+        assert "spec/ops.md" in result["files_committed"]
+
+
+class TestSuggestBranchName:
+    """Tests for suggest_branch_name().
+
+    Validates: checkpoint feature — non-colliding branch name suggestion.
+    """
+
+    # Implements: REQ-p00004-D
+    def test_returns_base_when_no_collision(self, tmp_path):
+        """Returns the base name when it doesn't exist as a local branch."""
+        _init_git_repo_with_commit(tmp_path)
+
+        name = suggest_branch_name(tmp_path, "feature/new-thing")
+
+        assert name == "feature/new-thing"
+
+    # Implements: REQ-p00004-D
+    def test_appends_v2_when_base_exists(self, tmp_path):
+        """Appends -v2 when the base name already exists."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/my-branch"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+
+        name = suggest_branch_name(tmp_path, "feature/my-branch")
+
+        assert name == "feature/my-branch-v2"
+
+    # Implements: REQ-p00004-D
+    def test_increments_past_existing_versioned_branches(self, tmp_path):
+        """Increments to -v3 when both base and -v2 exist."""
+        _init_git_repo_with_commit(tmp_path)
+        for branch in ("feature/my-branch", "feature/my-branch-v2"):
+            subprocess.run(
+                ["git", "checkout", "-b", branch],
+                cwd=tmp_path,
+                capture_output=True,
+                check=True,
+            )
+        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+
+        name = suggest_branch_name(tmp_path, "feature/my-branch")
+
+        assert name == "feature/my-branch-v3"
+
+
+class TestGenerateCheckpointMessage:
+    """Tests for generate_checkpoint_message().
+
+    Validates: checkpoint feature — generate commit message from dirty spec files.
+    """
+
+    # Implements: REQ-p00004-E
+    def test_generates_message_from_dirty_files(self, tmp_path):
+        """Extracts requirement headers from dirty spec files."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        # Modify spec with a new requirement
+        (tmp_path / "spec" / "prd.md").write_text(
+            "# REQ-p00001 My First Requirement\n\nSome body text.\n"
+        )
+
+        msg = generate_checkpoint_message(tmp_path)
+
+        assert "REQ-p00001" in msg
+        assert "My First Requirement" in msg
+
+    # Implements: REQ-p00004-E
+    def test_returns_empty_when_no_changes(self, tmp_path):
+        """Returns empty string when no dirty spec files exist."""
+        _init_git_repo_with_commit(tmp_path)
+
+        msg = generate_checkpoint_message(tmp_path)
+
+        assert msg == ""
+
+    # Implements: REQ-p00004-E
+    def test_includes_multiple_requirements(self, tmp_path):
+        """Includes all requirement headers found across dirty files."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        (tmp_path / "spec" / "prd.md").write_text(
+            "# REQ-p00001 First Req\n\n# REQ-p00002 Second Req\n"
+        )
+
+        msg = generate_checkpoint_message(tmp_path)
+
+        lines = msg.strip().splitlines()
+        assert any("REQ-p00001" in ln for ln in lines)
+        assert any("REQ-p00002" in ln for ln in lines)
+
+    # Implements: REQ-p00004-E
+    def test_ignores_non_spec_files(self, tmp_path):
+        """Only scans files under spec_dir."""
+        _init_git_repo_with_commit(tmp_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        # Dirty non-spec file with a REQ header (should be ignored)
+        (tmp_path / "README.md").write_text("# REQ-p99999 Should Not Appear\n")
+
+        msg = generate_checkpoint_message(tmp_path)
+
+        assert "REQ-p99999" not in msg

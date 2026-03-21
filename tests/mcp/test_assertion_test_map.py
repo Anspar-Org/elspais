@@ -221,7 +221,7 @@ class TestGetAssertionTestMap:
         assert result["assertion_tests"] == {}
         assert result["total_assertions"] == 0
         assert result["covered_count"] == 0
-        assert result["coverage_pct"] == 0.0
+        assert result["referenced_pct"] == 0.0
 
     def test_REQ_d00066_C_assertions_with_no_tests(self, assertion_map_graph):
         """REQ-d00066-C: SHALL return empty test lists for assertions with no coverage."""
@@ -235,7 +235,7 @@ class TestGetAssertionTestMap:
         assert result["assertion_tests"]["A"]["assertion_id"] == "REQ-p00002-A"
         assert result["assertion_tests"]["A"]["tests"] == []
         assert result["covered_count"] == 0
-        assert result["coverage_pct"] == 0.0
+        assert result["referenced_pct"] == 0.0
 
     def test_REQ_d00066_D_pattern1_targeted_assertion_coverage(self, assertion_map_graph):
         """REQ-d00066-D: Pattern 1 - REQ->TEST with assertion_targets."""
@@ -304,7 +304,7 @@ class TestGetAssertionTestMap:
         # All 3 assertions (A, B, C) have at least one test via indirect coverage
         assert result["total_assertions"] == 3
         assert result["covered_count"] == 3
-        assert result["coverage_pct"] == 100.0
+        assert result["referenced_pct"] == 100.0
 
     def test_REQ_d00066_B_coverage_stats_partial(self, assertion_map_graph):
         """REQ-d00066-B: SHALL compute correct partial coverage when some assertions lack tests."""
@@ -314,7 +314,7 @@ class TestGetAssertionTestMap:
 
         assert result["total_assertions"] == 1
         assert result["covered_count"] == 0
-        assert result["coverage_pct"] == 0.0
+        assert result["referenced_pct"] == 0.0
 
     def test_REQ_d00066_C_deduplication_same_test_via_both_patterns(self, assertion_map_graph):
         """REQ-d00066-C: SHALL deduplicate when same test reached via multiple patterns."""
@@ -363,7 +363,7 @@ class TestGetAssertionTestMap:
         assert isinstance(result["assertion_tests"], dict)
         assert isinstance(result["total_assertions"], int)
         assert isinstance(result["covered_count"], int)
-        assert isinstance(result["coverage_pct"], float)
+        assert isinstance(result["referenced_pct"], float)
 
     def test_REQ_d00066_F_non_requirement_node_returns_error(self, assertion_map_graph):
         """REQ-d00066-F: SHALL return error when node exists but is not a requirement."""

@@ -34,10 +34,10 @@ class TestUATRollupMetrics:
         m = RollupMetrics()
         assert m.uat_inferred_covered == 0
 
-    def test_rollup_metrics_has_uat_coverage_pct_REQ_d00069_A(self):
-        """RollupMetrics has uat_coverage_pct field defaulting to 0.0."""
+    def test_rollup_metrics_has_uat_referenced_pct_REQ_d00069_A(self):
+        """RollupMetrics has uat_referenced_pct field defaulting to 0.0."""
         m = RollupMetrics()
-        assert m.uat_coverage_pct == 0.0
+        assert m.uat_referenced_pct == 0.0
 
     def test_rollup_metrics_has_uat_validated_REQ_d00069_A(self):
         """RollupMetrics has uat_validated field defaulting to 0."""
@@ -75,13 +75,13 @@ class TestUATFinalizeComputation:
         assert m.uat_covered == 2
         assert m.uat_direct_covered == 1
         assert m.uat_inferred_covered == 1
-        assert round(m.uat_coverage_pct, 1) == round(2 / 3 * 100, 1)
+        assert round(m.uat_referenced_pct, 1) == round(2 / 3 * 100, 1)
 
     def test_finalize_uat_pct_zero_when_no_assertions_REQ_d00069_A(self):
-        """finalize() sets uat_coverage_pct=0.0 when total_assertions==0."""
+        """finalize() sets uat_referenced_pct=0.0 when total_assertions==0."""
         m = RollupMetrics(total_assertions=0)
         m.finalize()
-        assert m.uat_coverage_pct == 0.0
+        assert m.uat_referenced_pct == 0.0
         assert m.uat_validated_pct == 0.0
 
     def test_finalize_uat_does_not_affect_test_coverage_REQ_d00069_A(self):

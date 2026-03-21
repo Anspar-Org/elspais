@@ -1240,6 +1240,180 @@ def _git_config(key: str) -> str:
         return ""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Checkpoint and History Utilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def list_commits(
+    repo_root: Path,
+    branch: str = "HEAD",
+    limit: int = 20,
+) -> list[dict[str, str]]:
+    """List commits in reverse chronological order.
+
+    Args:
+        repo_root: Path to repository root.
+        branch: Branch or ref to list commits for (default: ``"HEAD"``).
+        limit: Maximum number of commits to return (default: 20).
+
+    Returns:
+        List of dicts with ``hash``, ``message``, ``date``, and ``author`` keys,
+        in reverse chronological order.  Returns ``[]`` on error or empty repo.
+    """
+    # Unit separator (ASCII 31) as field delimiter — safe against special chars
+    fmt = "%H%x1f%s%x1f%ci%x1f%an"
+    try:
+        result = subprocess.run(
+            ["git", "log", f"-{limit}", f"--format={fmt}", branch],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    commits: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\x1f")
+        if len(parts) != 4:
+            continue
+        commits.append(
+            {
+                "hash": parts[0],
+                "message": parts[1],
+                "date": parts[2],
+                "author": parts[3],
+            }
+        )
+    return commits
+
+
+def checkout_commit(repo_root: Path, commit_hash: str) -> dict[str, Any]:
+    """Check out a specific commit by hash, entering detached HEAD state.
+
+    Args:
+        repo_root: Path to repository root.
+        commit_hash: Full or abbreviated commit hash.
+
+    Returns:
+        ``{"success": True}`` on success, or ``{"success": False, "error": "..."}``
+        on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "checkout", "--detach", commit_hash],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "").strip()
+        return {"success": False, "error": err}
+
+    return {"success": True}
+
+
+def commit_spec_files(
+    repo_root: Path,
+    message: str,
+    spec_dir: str = "spec",
+    main_branches: tuple[str, ...] = ("main", "master"),
+) -> dict[str, Any]:
+    """Stage and commit dirty spec files locally without pushing.
+
+    Thin wrapper around ``commit_and_push_spec_files`` with ``push=False``.
+    """
+    return commit_and_push_spec_files(
+        repo_root,
+        message,
+        spec_dir=spec_dir,
+        push=False,
+        main_branches=main_branches,
+    )
+
+
+def suggest_branch_name(repo_root: Path, base_name: str) -> str:
+    """Suggest a branch name that does not collide with existing local branches.
+
+    If ``base_name`` is not already a local branch, returns it as-is.
+    Otherwise appends ``-v2``, ``-v3``, etc. until a free name is found.
+
+    Args:
+        repo_root: Path to repository root.
+        base_name: Desired base branch name.
+
+    Returns:
+        A branch name that does not exist locally.
+    """
+    branches_info = list_branches(repo_root)
+    existing = set(branches_info.get("local", [])) | set(branches_info.get("remote", []))
+
+    if base_name not in existing:
+        return base_name
+
+    counter = 2
+    while True:
+        candidate = f"{base_name}-v{counter}"
+        if candidate not in existing:
+            return candidate
+        counter += 1
+
+
+def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
+    """Generate a commit message summarising dirty spec file changes.
+
+    Scans each dirty spec file for requirement headers matching the pattern
+    ``# REQ-<id> <title>`` and returns a multi-line string with one
+    ``REQ-ID Title`` entry per matching header.
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root (default: ``"spec"``).
+
+    Returns:
+        Multi-line string (one ``REQ-ID Title`` per line), or empty string
+        if no dirty spec files or no requirement headers found.
+    """
+    import re as _re
+
+    modified, untracked = get_modified_files(repo_root)
+    all_dirty = modified | untracked
+    prefix = f"{spec_dir}/"
+    dirty_spec = sorted(f for f in all_dirty if f.startswith(prefix))
+
+    if not dirty_spec:
+        return ""
+
+    _header_re = _re.compile(r"^#\s+(REQ-\S+)\s+(.*)")
+    lines: list[str] = []
+
+    for rel_path in dirty_spec:
+        abs_path = repo_root / rel_path
+        try:
+            content = abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in content.splitlines():
+            m = _header_re.match(line)
+            if m:
+                req_id, title = m.group(1), m.group(2).strip()
+                lines.append(f"{req_id} {title}")
+
+    return "\n".join(lines)
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -1266,6 +1440,12 @@ __all__ = [
     "list_safety_branches",
     "restore_from_safety_branch",
     "delete_safety_branch",
+    # Checkpoint and history utilities
+    "list_commits",
+    "checkout_commit",
+    "commit_spec_files",
+    "suggest_branch_name",
+    "generate_checkpoint_message",
     # Author identity
     "get_author_info",
 ]

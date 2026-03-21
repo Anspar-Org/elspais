@@ -1498,7 +1498,7 @@ def check_test_coverage(
     distinct coverage dimensions:
     - test: assertions verified by TEST nodes (direct_tested, includes rollup)
     - uat: assertions validated by USER_JOURNEY nodes (uat_covered)
-    - overall: combined coverage_pct (test + code + rollup, excludes INDIRECT)
+    - overall: combined referenced_pct (test + code + rollup, excludes INDIRECT)
     """
     from elspais.graph import NodeKind
 
@@ -1523,7 +1523,7 @@ def check_test_coverage(
             test_covered += 1
         if metrics.uat_covered > 0:
             uat_covered += 1
-        if metrics.coverage_pct > 0:
+        if metrics.referenced_pct > 0:
             overall_covered += 1
 
     test_pct = (test_covered / req_count * 100) if req_count > 0 else 0

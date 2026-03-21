@@ -1,8 +1,54 @@
 # Known Issues
 
-[x] feature: cli search 'search terms string' : invokes the 'search' api. takes a string.
+[ ] feature: viewer: edit assertions-> must give a 'reason' iff CHANGELOG is enforced and status=active
+- Shows CHANGELOG section of the card. 'Reason' field in the newest entry is editable.
+- Cannot save to disk without reason
 
-[ ] chore: general code review. file sizes, duped code, workarounds, sloppiness, etc.
+
+[ ] chore (major): general code review. file sizes, duped code, workarounds, sloppiness, etc.
+
+[ ] Feature (low): Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
+- Use multi-select dropdown, then render the reference using the configured settings, e.g. REQ-p12345-A+B+C+X
+
+[ ] Feature (major): change ID of a Requirement
+- All references are updated, creating a complete list of graph mutation operations to do so
+- The list of before / after IDs are written/appended to a file (`elspais-renumbering-<before-hash>.csv`)
+- This file is intended to allow updating references in non-graph locations, such as:
+- docs/
+- database/ (although this will eventually be a code/ dir, with filetypes .sql
+- infrastructure/ (although that will eventually be a code/ dir, with filetypes .tf, .tfvars, .yaml, .sh, etc.
+- we could also, perhaps optionally, process all of those files as well.
+
+[ ] Feature (high): Viewer. Add the ability to select a different commit on the current branch
+- as part of the 'select branch' modal
+- this is like a 'rewind' for the user - or an 'undo save'
+- there are many ways this could be complicated, but let's keep it simple: if they check out the non-HEAD of a branch, then any future commits will be a force and non merge with the intermediate commits
+
+[ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
+
+[x] Chore: review specs, docs, help, init for accuracy
+
+[x] Naming (minor): `coverage_pct` in `RollupMetrics` was misleading — it measured assertion *reference* coverage, not traditional code coverage. Renamed to `referenced_pct` (also `indirect_referenced_pct`, `uat_referenced_pct`).
+
+[ ] Feature (medium): `code_tested` metric 
+— traditional code-test coverage (which lines of code are executed during tests). 
+- Distinct from the current code-requirement traceability (`# Implements:` references). 
+- Will require test runner integration to collect line-level execution data.
+- Can we also map lines tested to Requirements, through the TEST->line coverage link? 
+
+[ ] Chore (low): start using Changelog in REQs after v 1.0.0
+
+[ ] Wishlist **Drag-and-drop reordering** in the UI (render_order mutation) - prospective only
+
+[ ] Wishlist: **Assertion reordering** with automatic label recomputation and reference updating
+- Also handle Assertion deletion re-numbering (when state is 'prospective'), or marking 'deprecated' (active states)
+- Don't allow editing of state = retired REQs
+
+[ ] chore (med): Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.
+
+---
+
+[x] feature: cli search 'search terms string' : invokes the 'search' api. takes a string.
 
 [x] Bug: Elspais should check the ENV var for ELSPAIS_VERSION and error if the current install is not compatible
 
@@ -21,14 +67,12 @@
 - formal schema for REQUIREMENTS
 - formal schema for USER-JOURNEYS (the PQ of PQ/EQ/IQ system)
 
-
-[ ] Bug: Fix get_requirement() MCP/API call to NOT return a uselessly large result. 
+[x] Bug: Fix get_requirement() MCP/API call to NOT return a uselessly large result.
 - LLMs confidently say "give me everything", but that's not what they really need.
-- Lets define a better set of MCP endpoints that return practical info. 
-- There is use-case for just hiearchy info (REQs and ASSERTION and refines: and implements:), 
+- Lets define a better set of MCP endpoints that return practical info.
+- There is use-case for just hiearchy info (REQs and ASSERTION and refines: and implements:),
 - ...and for details (like the original text and all the Structure Nodes)
 - but there is rarely a use-case for "all the tests and code and results"
-
 
 [x] Feature: Change the current auto-publish-on-merge-to-main.
 - Implemented: add the `publish` label to a PR before merging to trigger release + PyPI + Homebrew publish.
@@ -52,48 +96,6 @@
 
 [x] Feature: Health. If not HEALTHY, show the command to get a detailed list of errors: e.g. --code -o filename.json, or whatever is appropriate
 
-[ ] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
-- Use multi-select dropdown, then render the reference using the configured settings, e.g. REQ-p12345-A+B+C+X
-
-[ ] Feature: change ID of a Requirement
-- All references are updated, creating a complete list of graph mutation operations to do so
-- The list of before / after IDs are written/appended to a file (`elspais-renumbering-<before-hash>.csv`)
-- This file is intended to allow updating references in non-graph locations, such as:
-- docs/
-- database/ (although this will eventually be a code/ dir, with filetypes .sql
-- infrastructure/ (although that will eventually be a code/ dir, with filetypes .tf, .tfvars, .yaml, .sh, etc.
-- we could also, perhaps optionally, process all of those files as well.
-
----
-
-[ ] Feature: Add the ability to select a different commit on the current branch
-- as part of the 'select branch' modal
-- this is like a 'rewind' for the user - or an 'undo save'
-- there are many ways this could be complicated, but let's keep it simple: if they check out the non-HEAD of a branch, then any future commits will be a force and non merge with the intermediate commits
-
-[ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
-
-[ ] Chore: review specs, docs, help, init for accuracy
-
----
-
-[x] Major Project: In elspais repo, udpdate spec file naming convention
-- Rename spec/ files more sensibly  and consistently
-- Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
-- The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.
-
-[ ] Naming: `coverage_pct` in `RollupMetrics` is misleading — it measures assertion *reference* coverage (code + test + child REQ rollup), not traditional code coverage. Consider renaming to `referenced_pct` or similar to avoid confusion with line-level code coverage.
-
-[ ] Feature: `code_tested` metric — traditional code-test coverage (which lines of code are executed during tests). Distinct from the current code-requirement traceability (`# Implements:` references). Will require test runner integration to collect line-level execution data.
-
-[ ] Chore: start using Changelog in REQs
-
-[ ] Wishlist **Drag-and-drop reordering** in the UI (render_order mutation) - prospective only
-
-[ ] Wishlist: **Assertion reordering** with automatic label recomputation and reference updating
-- Also handle Assertion deletion re-numbering (when state is 'prospective'), or marking 'deprecated' (active states)
-- Don't allow editing of state = retired REQs
-
 [x] Bug: Viewer does not display the Tree with items sorted by ID.
 - e.g. p00001 should be above p00002, etc.
 
@@ -108,4 +110,7 @@
 - obviously refresh the GUI after loading a new branch.
 - warn if unsaved in-memory edits will be lost
 
-[ ] chore: Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.
+[x] Major Project: In elspais repo, udpdate spec file naming convention
+- Rename spec/ files more sensibly  and consistently
+- Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
+- The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.

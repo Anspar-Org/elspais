@@ -268,16 +268,16 @@ directories = ["does_not_exist"]
 
 
 class TestBuildGraphCoverageAnnotation:
-    """Validates REQ-d00055-D: build_graph() annotates coverage_pct on requirement nodes.
+    """Validates REQ-d00055-D: build_graph() annotates referenced_pct on requirement nodes.
 
     Validates REQ-o00061-B: get_project_summary() returns non-zero coverage when
     requirements have implementing code, because build_graph() now runs annotate_coverage().
     """
 
-    def test_REQ_d00055_D_build_graph_sets_coverage_pct_metric(self, tmp_path: Path) -> None:
-        """After build_graph(), requirement nodes have coverage_pct metric set.
+    def test_REQ_d00055_D_build_graph_sets_referenced_pct_metric(self, tmp_path: Path) -> None:
+        """After build_graph(), requirement nodes have referenced_pct metric set.
 
-        When a code file implements a requirement's assertion, the coverage_pct
+        When a code file implements a requirement's assertion, the referenced_pct
         metric should reflect that coverage (not remain at 0).
         """
         config_file = tmp_path / ".elspais.toml"
@@ -337,11 +337,11 @@ A. The system SHALL perform action X.
         req_node = graph.find_by_id("REQ-p00001")
         assert req_node is not None, "REQ-p00001 should exist in the graph"
 
-        coverage_pct = req_node.get_metric("coverage_pct")
-        assert coverage_pct is not None, "coverage_pct metric should be set after build_graph()"
+        referenced_pct = req_node.get_metric("referenced_pct")
+        assert referenced_pct is not None, "referenced_pct metric should be set after build_graph()"
         assert (
-            coverage_pct == 100.0
-        ), f"Expected 100% coverage (1/1 assertion covered), got {coverage_pct}"
+            referenced_pct == 100.0
+        ), f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
 
     def test_REQ_d00055_D_build_graph_sets_rollup_metrics(self, tmp_path: Path) -> None:
         """After build_graph(), requirement nodes have rollup_metrics metric set.
@@ -412,7 +412,7 @@ B. The system SHALL do B.
         assert isinstance(rollup, RollupMetrics), f"Expected RollupMetrics, got {type(rollup)}"
         assert rollup.total_assertions == 2
         assert rollup.covered_assertions == 1
-        assert rollup.coverage_pct == 50.0
+        assert rollup.referenced_pct == 50.0
 
     def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
         self, tmp_path: Path

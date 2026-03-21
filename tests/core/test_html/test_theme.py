@@ -132,7 +132,7 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            coverage_pct=100.0,
+            referenced_pct=100.0,
             validated=2,
             has_failures=False,
         )
@@ -153,7 +153,7 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            coverage_pct=50.0,
+            referenced_pct=50.0,
             validated=1,
             has_failures=True,
         )
@@ -174,8 +174,8 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=3,
-            coverage_pct=33.0,
-            indirect_coverage_pct=33.0,
+            referenced_pct=33.0,
+            indirect_referenced_pct=33.0,
             validated=1,
             has_failures=False,
         )
@@ -196,8 +196,8 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            coverage_pct=0.0,
-            indirect_coverage_pct=100.0,
+            referenced_pct=0.0,
+            indirect_referenced_pct=100.0,
             validated=0,
             validated_with_indirect=2,
             has_failures=False,
@@ -219,8 +219,8 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            coverage_pct=0.0,
-            indirect_coverage_pct=0.0,
+            referenced_pct=0.0,
+            indirect_referenced_pct=0.0,
             validated=0,
             has_failures=False,
         )

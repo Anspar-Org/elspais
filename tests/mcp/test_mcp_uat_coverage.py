@@ -26,16 +26,16 @@ class TestGetTestCoverageUATSection:
         result = _get_test_coverage(graph, "REQ-p00001")
         assert result["success"] is True
         assert "uat" in result
-        assert "coverage_pct" in result["uat"]
+        assert "referenced_pct" in result["uat"]
         assert "validated_pct" in result["uat"]
 
-    def test_get_test_coverage_uat_coverage_pct_REQ_d00069_A(self):
-        """uat.coverage_pct reflects JNY Validates coverage (1/2 assertions = 50%)."""
+    def test_get_test_coverage_uat_referenced_pct_REQ_d00069_A(self):
+        """uat.referenced_pct reflects JNY Validates coverage (1/2 assertions = 50%)."""
         from elspais.mcp.server import _get_test_coverage
 
         graph = _make_uat_graph()
         result = _get_test_coverage(graph, "REQ-p00001")
-        assert result["uat"]["coverage_pct"] == 50.0
+        assert result["uat"]["referenced_pct"] == 50.0
 
     def test_get_test_coverage_uat_has_jny_nodes_REQ_d00069_A(self):
         """uat section includes jny_nodes list."""

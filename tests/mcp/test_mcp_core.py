@@ -1155,13 +1155,13 @@ class TestGetProjectSummary:
 
         # Annotate some nodes with coverage
         prd_node = sample_graph.find_by_id("REQ-p00001")
-        prd_node.set_metric("coverage_pct", 100)
+        prd_node.set_metric("referenced_pct", 100)
 
         ops_node = sample_graph.find_by_id("REQ-o00001")
-        ops_node.set_metric("coverage_pct", 50)
+        ops_node.set_metric("referenced_pct", 50)
 
         dev_node = sample_graph.find_by_id("REQ-d00001")
-        dev_node.set_metric("coverage_pct", 0)
+        dev_node.set_metric("referenced_pct", 0)
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 

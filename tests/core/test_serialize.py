@@ -135,12 +135,12 @@ class TestSerializeNode:
             label="Test",
         )
         # Use public API to set metrics
-        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("referenced_pct", 75.0)
         node.set_metric("total_tests", 5)
 
         result = serialize_node(node)
 
-        assert result["metrics"]["coverage_pct"] == 75.0
+        assert result["metrics"]["referenced_pct"] == 75.0
         assert result["metrics"]["total_tests"] == 5
 
     # Implements: REQ-d00064-B
@@ -318,7 +318,7 @@ class TestSerializeAdditionalCoverage:
 class TestSerializeMetricsFiltering:
     """Validates REQ-d00055-D: Serializer filters non-JSON-serializable metrics.
 
-    The serialize_node function must include scalar metrics like coverage_pct
+    The serialize_node function must include scalar metrics like referenced_pct
     but exclude complex objects like RollupMetrics that are not JSON-serializable.
     """
 
@@ -335,7 +335,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=2)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 50.0)
+        node.set_metric("referenced_pct", 50.0)
 
         result = serialize_node(node)
 
@@ -344,8 +344,8 @@ class TestSerializeMetricsFiltering:
             "rollup_metrics" not in result["metrics"]
         ), "RollupMetrics object should be filtered out of serialized metrics"
 
-    def test_REQ_d00055_D_coverage_pct_included_in_serialization(self):
-        """coverage_pct (float scalar) SHOULD appear in serialized output."""
+    def test_REQ_d00055_D_referenced_pct_included_in_serialization(self):
+        """referenced_pct (float scalar) SHOULD appear in serialized output."""
         from elspais.graph.metrics import RollupMetrics
 
         node = GraphNode(
@@ -356,7 +356,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=1)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("referenced_pct", 75.0)
         node.set_metric("is_uncommitted", True)
         node.set_metric("total_tests", 3)
 
@@ -364,8 +364,8 @@ class TestSerializeMetricsFiltering:
 
         assert "metrics" in result
         assert (
-            result["metrics"]["coverage_pct"] == 75.0
-        ), "coverage_pct should be preserved in serialized output"
+            result["metrics"]["referenced_pct"] == 75.0
+        ), "referenced_pct should be preserved in serialized output"
         assert (
             result["metrics"]["is_uncommitted"] is True
         ), "Boolean metrics should be preserved in serialized output"
@@ -387,7 +387,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=3)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 66.7)
+        node.set_metric("referenced_pct", 66.7)
         node.set_metric("some_label", "text_value")
 
         result = serialize_node(node)

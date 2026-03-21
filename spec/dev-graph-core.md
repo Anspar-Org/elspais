@@ -112,7 +112,7 @@ B. Annotators SHALL NOT modify node.children, node.parents, or other structural 
 
 C. Metrics keys SHALL use consistent naming (snake_case, descriptive names).
 
-D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files, coverage_pct.
+D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files, referenced_pct.
 
 E. Custom metrics MAY be added by specific annotators without modifying TraceNode class.
 
@@ -133,11 +133,11 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 A. `CoverageSource` enum SHALL include an `INDIRECT` value representing whole-requirement test coverage.
 
-B. `RollupMetrics` SHALL track `indirect_coverage_pct` as a separate percentage alongside strict `coverage_pct`.
+B. `RollupMetrics` SHALL track `indirect_referenced_pct` as a separate percentage alongside strict `referenced_pct`.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
-D. `RollupMetrics.finalize()` SHALL compute `indirect_coverage_pct` by including INDIRECT contributions alongside DIRECT, EXPLICIT, and INFERRED sources.
+D. `RollupMetrics.finalize()` SHALL compute `indirect_referenced_pct` by including INDIRECT contributions alongside DIRECT, EXPLICIT, and INFERRED sources.
 
 E. The coverage annotator SHALL emit INDIRECT contributions for all assertion labels when a TEST edge has empty `assertion_targets`.
 
@@ -168,7 +168,7 @@ The interactive trace view SHALL provide a toggle to switch between strict and i
 
 ## Assertions
 
-A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_coverage_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
+A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_referenced_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
 
 B. The template SHALL render a `data-coverage-indirect` attribute on each requirement row.
 

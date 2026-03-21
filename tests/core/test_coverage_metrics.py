@@ -43,7 +43,7 @@ class TestRollupMetrics:
         assert metrics.direct_covered == 1
         assert metrics.explicit_covered == 1
         assert metrics.inferred_covered == 0
-        assert metrics.coverage_pct == 50.0
+        assert metrics.referenced_pct == 50.0
 
     # Implements: REQ-d00069-D
     def test_finalize_handles_zero_assertions(self):
@@ -52,7 +52,7 @@ class TestRollupMetrics:
 
         metrics.finalize()
 
-        assert metrics.coverage_pct == 0.0
+        assert metrics.referenced_pct == 0.0
 
     # Implements: REQ-d00086-B
     def test_multiple_contributors_same_assertion(self):
@@ -93,7 +93,7 @@ class TestAnnotateCoverageDirect:
         assert metrics.total_assertions == 1
         assert metrics.covered_assertions == 1
         assert metrics.direct_covered == 1
-        assert metrics.coverage_pct == 100.0
+        assert metrics.referenced_pct == 100.0
 
     # Implements: REQ-d00086-B
     def test_direct_coverage_from_code(self):
@@ -114,7 +114,7 @@ class TestAnnotateCoverageDirect:
 
         assert metrics.total_assertions == 1
         assert metrics.direct_covered == 1
-        assert metrics.coverage_pct == 100.0
+        assert metrics.referenced_pct == 100.0
 
 
 class TestAnnotateCoverageExplicit:
@@ -150,7 +150,7 @@ class TestAnnotateCoverageExplicit:
         assert metrics.explicit_covered == 1
         assert metrics.direct_covered == 0
         assert metrics.inferred_covered == 0
-        assert metrics.coverage_pct == 50.0
+        assert metrics.referenced_pct == 50.0
 
         # Verify it's assertion B that's covered
         assert "B" in metrics.assertion_coverage
@@ -190,7 +190,7 @@ class TestAnnotateCoverageInferred:
         assert metrics.inferred_covered == 2
         assert metrics.explicit_covered == 0
         assert metrics.direct_covered == 0
-        assert metrics.coverage_pct == 100.0
+        assert metrics.referenced_pct == 100.0
 
 
 class TestAnnotateCoverageRefines:
@@ -222,7 +222,7 @@ class TestAnnotateCoverageRefines:
 
         assert metrics.total_assertions == 1
         assert metrics.covered_assertions == 0  # REFINES doesn't count
-        assert metrics.coverage_pct == 0.0
+        assert metrics.referenced_pct == 0.0
 
 
 class TestAnnotateCoverageMixed:
@@ -267,7 +267,7 @@ class TestAnnotateCoverageMixed:
         assert metrics.direct_covered == 2  # A (test), C (code)
         assert metrics.explicit_covered == 1  # B
         assert metrics.inferred_covered == 0  # D has none, no inferred
-        assert metrics.coverage_pct == 75.0
+        assert metrics.referenced_pct == 75.0
 
 
 class TestUserExample:
@@ -352,7 +352,7 @@ class TestUserExample:
         assert "D" not in metrics.assertion_coverage
 
         # Coverage percentage: 2/4 = 50%
-        assert metrics.coverage_pct == 50.0
+        assert metrics.referenced_pct == 50.0
 
 
 class TestNoAssertions:
@@ -376,15 +376,15 @@ class TestNoAssertions:
 
         assert metrics.total_assertions == 0
         assert metrics.covered_assertions == 0
-        assert metrics.coverage_pct == 0.0
+        assert metrics.referenced_pct == 0.0
 
 
 class TestCoveragePercentStored:
-    """Verify coverage_pct is stored in node metrics."""
+    """Verify referenced_pct is stored in node metrics."""
 
     # Implements: REQ-d00055-D
-    def test_coverage_pct_stored_in_metrics(self):
-        """coverage_pct is stored directly in node._metrics for convenience."""
+    def test_referenced_pct_stored_in_metrics(self):
+        """referenced_pct is stored directly in node._metrics for convenience."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -403,10 +403,10 @@ class TestCoveragePercentStored:
 
         # Both methods should give same value
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
-        coverage_pct = node.get_metric("coverage_pct")
+        referenced_pct = node.get_metric("referenced_pct")
 
-        assert coverage_pct == 50.0
-        assert rollup.coverage_pct == 50.0
+        assert referenced_pct == 50.0
+        assert rollup.referenced_pct == 50.0
 
 
 class TestTestSpecificMetrics:

@@ -402,7 +402,7 @@ class TestGetImplementationStatus:
     def test_full_coverage(self):
         """Returns Full when coverage is 100%."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("coverage_pct", 100)
+        node.set_metric("referenced_pct", 100)
 
         status = get_implementation_status(node)
 
@@ -412,7 +412,7 @@ class TestGetImplementationStatus:
     def test_partial_coverage(self):
         """Returns Partial when coverage is between 0 and 100."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("coverage_pct", 50)
+        node.set_metric("referenced_pct", 50)
 
         status = get_implementation_status(node)
 
@@ -422,7 +422,7 @@ class TestGetImplementationStatus:
     def test_unimplemented(self):
         """Returns Unimplemented when coverage is 0."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("coverage_pct", 0)
+        node.set_metric("referenced_pct", 0)
 
         status = get_implementation_status(node)
 
@@ -444,7 +444,7 @@ class TestGetImplementationStatus:
     def test_boundary_99_is_partial(self):
         """Coverage of 99% is still Partial, not Full."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("coverage_pct", 99)
+        node.set_metric("referenced_pct", 99)
 
         status = get_implementation_status(node)
 
@@ -454,7 +454,7 @@ class TestGetImplementationStatus:
     def test_boundary_1_is_partial(self):
         """Coverage of 1% is Partial, not Unimplemented."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric("coverage_pct", 1)
+        node.set_metric("referenced_pct", 1)
 
         status = get_implementation_status(node)
 

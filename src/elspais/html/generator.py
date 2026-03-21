@@ -130,11 +130,11 @@ def compute_validation_color(node: GraphNode) -> tuple[str, str]:
         return _val_tier("validation_tiers.failing")
 
     # Green: full direct coverage AND all assertions validated
-    if rollup.coverage_pct == 100 and rollup.validated >= n:
+    if rollup.referenced_pct == 100 and rollup.validated >= n:
         return _val_tier("validation_tiers.full-direct")
 
     # Yellow-green: full coverage with indirect AND all validated with indirect
-    if rollup.indirect_coverage_pct == 100 and rollup.validated_with_indirect >= n:
+    if rollup.indirect_referenced_pct == 100 and rollup.validated_with_indirect >= n:
         return _val_tier("validation_tiers.full-indirect")
 
     # Orange: anomalous test/code gaps
@@ -150,7 +150,7 @@ def compute_validation_color(node: GraphNode) -> tuple[str, str]:
             return _val_tier("validation_tiers.anomalous")
 
     # Yellow: some coverage exists, no failures
-    if rollup.coverage_pct > 0 or rollup.indirect_coverage_pct > 0:
+    if rollup.referenced_pct > 0 or rollup.indirect_referenced_pct > 0:
         return _val_tier("validation_tiers.partial")
 
     # Orange: assertions exist but zero coverage (anomalous)
@@ -438,17 +438,17 @@ class HTMLGenerator:
                 return (cov, cov, False)
 
             # Strict coverage (excludes INDIRECT)
-            if rollup.coverage_pct == 0:
+            if rollup.referenced_pct == 0:
                 strict = "none"
-            elif rollup.coverage_pct < 100:
+            elif rollup.referenced_pct < 100:
                 strict = "partial"
             else:
                 strict = "full"
 
             # Indirect coverage (includes INDIRECT)
-            if rollup.indirect_coverage_pct == 0:
+            if rollup.indirect_referenced_pct == 0:
                 indirect = "none"
-            elif rollup.indirect_coverage_pct < 100:
+            elif rollup.indirect_referenced_pct < 100:
                 indirect = "partial"
             else:
                 indirect = "full"

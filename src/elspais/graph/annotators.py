@@ -412,14 +412,14 @@ def get_implementation_status(node: GraphNode) -> str:
         node: The GraphNode to check.
 
     Returns:
-        'Full': coverage_pct >= 100
-        'Partial': coverage_pct > 0
-        'Unimplemented': coverage_pct == 0
+        'Full': referenced_pct >= 100
+        'Partial': referenced_pct > 0
+        'Unimplemented': referenced_pct == 0
     """
-    coverage_pct = node.get_metric("coverage_pct", 0)
-    if coverage_pct >= 100:
+    referenced_pct = node.get_metric("referenced_pct", 0)
+    if referenced_pct >= 100:
         return "Full"
-    elif coverage_pct > 0:
+    elif referenced_pct > 0:
         return "Partial"
     else:
         return "Unimplemented"
@@ -453,11 +453,11 @@ def count_by_coverage(
             continue
 
         counts["total"] += 1
-        coverage_pct = node.get_metric("coverage_pct", 0)
+        referenced_pct = node.get_metric("referenced_pct", 0)
 
-        if coverage_pct >= 100:
+        if referenced_pct >= 100:
             counts["full_coverage"] += 1
-        elif coverage_pct > 0:
+        elif referenced_pct > 0:
             counts["partial_coverage"] += 1
         else:
             counts["no_coverage"] += 1
@@ -603,7 +603,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
     This function traverses the graph once to compute RollupMetrics for
     each REQUIREMENT node. Metrics are stored in node._metrics as:
     - "rollup_metrics": The full RollupMetrics object
-    - "coverage_pct": Coverage percentage (for convenience)
+    - "referenced_pct": Coverage percentage (for convenience)
 
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
@@ -843,7 +843,7 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
-        node.set_metric("coverage_pct", metrics.coverage_pct)
+        node.set_metric("referenced_pct", metrics.referenced_pct)
 
 
 # =============================================================================

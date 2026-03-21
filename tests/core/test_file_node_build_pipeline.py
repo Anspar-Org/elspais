@@ -573,9 +573,9 @@ class TestExistingBehaviorUnaffected:
         assert req_node is not None
 
         # Coverage should still work
-        coverage_pct = req_node.get_metric("coverage_pct")
-        assert coverage_pct is not None, "coverage_pct should still be set"
-        assert coverage_pct == 100.0
+        referenced_pct = req_node.get_metric("referenced_pct")
+        assert referenced_pct is not None, "referenced_pct should still be set"
+        assert referenced_pct == 100.0
 
     def test_REQ_d00128_I_roots_unchanged(self, tmp_path: Path) -> None:
         """Graph roots are still REQUIREMENT nodes, not FILE nodes."""
