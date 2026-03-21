@@ -570,10 +570,7 @@ def run(args: argparse.Namespace) -> int:
             _render_json_from_data(data, preset)
         else:
             # For non-JSON formats we need the graph to stream through formatters.
-            # Re-use the cached local graph from the engine.
-            graph = _engine._local_graph
-            if graph is None:
-                graph, _ = _engine._ensure_local_graph()
+            graph = _engine.get_graph()
             return _render_table_from_graph(graph, fmt, preset)
 
     return 0

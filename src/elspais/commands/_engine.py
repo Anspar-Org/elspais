@@ -86,6 +86,12 @@ def _try_daemon(
         return None
 
 
+def get_graph() -> Any:
+    """Return the cached local graph, building it if necessary."""
+    graph, _ = _ensure_local_graph()
+    return graph
+
+
 def _ensure_local_graph() -> tuple[Any, dict[str, Any]]:
     """Build or return the cached local graph and config."""
     global _local_graph, _local_config

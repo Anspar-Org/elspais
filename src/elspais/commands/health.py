@@ -2097,15 +2097,6 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         return _render_text(data)
 
 
-def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
-    """Output the health report in the requested format."""
-    print(_format_report(report, args))
-
-    lenient = getattr(args, "lenient", False)
-    healthy = report.is_healthy_lenient if lenient else report.is_healthy
-    return 0 if healthy else 1
-
-
 # =============================================================================
 # Report Data Intermediate Representation
 # =============================================================================

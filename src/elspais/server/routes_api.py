@@ -171,7 +171,7 @@ async def api_search(request: Request) -> JSONResponse:
         "regex": request.query_params.get("regex", "false"),
         "limit": request.query_params.get("limit", "50"),
     }
-    return JSONResponse(compute_search(state.graph, {}, params))
+    return JSONResponse(compute_search(state.graph, state.config, params))
 
 
 async def api_test_coverage(request: Request) -> JSONResponse:
@@ -497,7 +497,7 @@ async def api_run_analysis(request: Request) -> JSONResponse:
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_analysis(state.graph, {}, params))
+    return JSONResponse(compute_analysis(state.graph, state.config, params))
 
 
 async def api_run_trace(request: Request) -> JSONResponse:

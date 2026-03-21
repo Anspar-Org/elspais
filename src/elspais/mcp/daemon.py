@@ -44,32 +44,6 @@ def get_cli_ttl(repo_root: Path | None = None) -> int:
 # ── Viewer detection (fast path) ─────────────────────────────────────────
 
 
-def search_via_viewer(
-    query: str,
-    field: str = "all",
-    regex: bool = False,
-    limit: int = 50,
-    port: int = _VIEWER_PORT,
-) -> list[dict] | None:
-    """Query a running viewer server's /api/search endpoint.
-
-    Returns results list, or None if the viewer is not running.
-    """
-    from urllib.parse import quote_plus
-
-    url = (
-        f"http://127.0.0.1:{port}/api/search"
-        f"?q={quote_plus(query)}&field={field}"
-        f"&regex={'true' if regex else 'false'}&limit={limit}"
-    )
-    try:
-        with urlopen(url, timeout=3) as resp:
-            data = json.loads(resp.read())
-            return data.get("results", []) if isinstance(data, dict) else data
-    except (URLError, OSError, json.JSONDecodeError, ValueError):
-        return None
-
-
 # ── Daemon lifecycle ─────────────────────────────────────────────────────
 
 
@@ -212,14 +186,3 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
         raise RuntimeError("Daemon auto-launch disabled (cli_ttl=0)")
 
     return start_daemon(repo_root, ttl_minutes=ttl_minutes)
-
-
-def search_via_daemon(
-    port: int,
-    query: str,
-    field: str = "all",
-    regex: bool = False,
-    limit: int = 50,
-) -> list[dict] | None:
-    """Query daemon via REST /api/search (same endpoint as viewer)."""
-    return search_via_viewer(query, field, regex, limit, port=port)
