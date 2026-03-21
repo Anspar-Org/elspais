@@ -1058,18 +1058,156 @@ function applyEdgeTargets(sourceId, targetId, btn) {
     });
 }
 
-function onMoveToFile(nodeId) {
-    var targetFile = prompt('Move ' + nodeId + ' to file ID (e.g. file:spec/other.md):');
-    if (!targetFile || !targetFile.trim()) return;
-
-    mutate('/api/mutate/move-to-file', {
-        node_id: nodeId,
-        target_file_id: targetFile.trim()
-    }).then(async function(result) {
-        if (result && result.success) {
-            await refreshAllOpenCards();
-            loadTreeData();
+function onMoveToFile(nodeId, currentPath) {
+    fetch('/api/spec-files').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.files || !data.files.length) {
+            showErrorModal('No Spec Files', 'No spec files found in the graph.');
+            return;
         }
+        _showMoveToFileModal(nodeId, data.files, currentPath || '');
+    }).catch(function(err) {
+        showErrorModal('Error', 'Failed to load spec files: ' + err.message);
+    });
+}
+
+function _showMoveToFileModal(nodeId, files, currentPath) {
+    var currentFileId = currentPath ? ('file:' + currentPath) : null;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+    overlay.id = 'move-file-modal-overlay';
+
+    var dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+    dialog.style.minWidth = '420px';
+
+    var title = document.createElement('div');
+    title.className = 'modal-title';
+    title.textContent = 'Move ' + nodeId + ' to file';
+
+    var listContainer = document.createElement('div');
+    listContainer.className = 'modal-file-list';
+    listContainer.style.maxHeight = '240px';
+
+    var selectedFileId = null;
+
+    files.forEach(function(f) {
+        if (f.id === currentFileId) return;
+        var item = document.createElement('label');
+        item.className = 'modal-file-checkbox';
+        var radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'move-target-file';
+        radio.value = f.id;
+        radio.addEventListener('change', function() {
+            selectedFileId = f.id;
+            newPathInput.style.display = 'none';
+        });
+        item.appendChild(radio);
+        item.appendChild(document.createTextNode(' ' + f.relative_path));
+        listContainer.appendChild(item);
+    });
+
+    // "New file" option
+    var newFileItem = document.createElement('label');
+    newFileItem.className = 'modal-file-checkbox';
+    newFileItem.style.borderTop = '1px solid var(--border-color, #ccc)';
+    newFileItem.style.marginTop = '4px';
+    newFileItem.style.paddingTop = '6px';
+    var newRadio = document.createElement('input');
+    newRadio.type = 'radio';
+    newRadio.name = 'move-target-file';
+    newRadio.value = '__new__';
+    newRadio.addEventListener('change', function() {
+        selectedFileId = '__new__';
+        newPathInput.style.display = 'block';
+        newPathInput.focus();
+    });
+    newFileItem.appendChild(newRadio);
+    newFileItem.appendChild(document.createTextNode(' + New file\u2026'));
+    listContainer.appendChild(newFileItem);
+
+    var newPathInput = document.createElement('input');
+    newPathInput.className = 'modal-input';
+    newPathInput.style.display = 'none';
+    newPathInput.style.marginTop = '8px';
+    var hint = (files.length > 0) ? files[0].relative_path.replace(/[^/]+$/, '') : '';
+    newPathInput.placeholder = hint + 'new-file.md';
+
+    var errorEl = document.createElement('div');
+    errorEl.className = 'modal-error';
+    errorEl.style.display = 'none';
+
+    var actions = document.createElement('div');
+    actions.className = 'modal-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancel';
+
+    var moveBtn = document.createElement('button');
+    moveBtn.className = 'btn btn-primary';
+    moveBtn.textContent = 'Move';
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(moveBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(listContainer);
+    dialog.appendChild(newPathInput);
+    dialog.appendChild(errorEl);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+        var el = document.getElementById('move-file-modal-overlay');
+        if (el) el.remove();
+    }
+
+    cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+
+    moveBtn.addEventListener('click', function() {
+        var targetId = selectedFileId;
+        if (!targetId) {
+            errorEl.textContent = 'Select a target file';
+            errorEl.style.display = 'block';
+            return;
+        }
+        if (targetId === '__new__') {
+            var newPath = newPathInput.value.trim();
+            if (!newPath) {
+                errorEl.textContent = 'Enter a file path';
+                errorEl.style.display = 'block';
+                return;
+            }
+            targetId = 'file:' + newPath;
+        }
+        moveBtn.disabled = true;
+        moveBtn.textContent = 'Moving\u2026';
+        mutate('/api/mutate/move-to-file', {
+            node_id: nodeId,
+            target_file_id: targetId
+        }).then(async function(result) {
+            if (result && result.success) {
+                closeModal();
+                await refreshAllOpenCards();
+                loadTreeData();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Move failed';
+                errorEl.style.display = 'block';
+                moveBtn.disabled = false;
+                moveBtn.textContent = 'Move';
+            }
+        }).catch(function(err) {
+            errorEl.textContent = err.message || 'Move failed';
+            errorEl.style.display = 'block';
+            moveBtn.disabled = false;
+            moveBtn.textContent = 'Move';
+        });
     });
 }
 

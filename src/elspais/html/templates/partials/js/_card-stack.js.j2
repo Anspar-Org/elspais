@@ -190,7 +190,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         html += ' <button class="card-move-file-btn edit-only" ' +
-            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" ' +
+            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeHtml(sourcePath) + '\')" ' +
             'title="Move to different file">Move</button>';
         html += '</div>';
     }
