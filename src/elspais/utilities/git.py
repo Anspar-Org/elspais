@@ -543,10 +543,14 @@ def git_status_summary(
         ):
             pass  # No remote or fetch failed — treat as not diverged
 
+    # All dirty files (not just spec) for checkpoint file picker
+    dirty_other = sorted(f for f in all_dirty if not f.startswith(prefix))
+
     return {
         "branch": branch,
         "is_main": is_main,
         "dirty_spec_files": dirty_spec,
+        "dirty_other_files": dirty_other,
         "local_ahead": local_ahead_count,
         "remote_diverged": remote_diverged,
         "fast_forward_possible": fast_forward_possible,
@@ -1330,18 +1334,70 @@ def commit_spec_files(
     message: str,
     spec_dir: str = "spec",
     main_branches: tuple[str, ...] = ("main", "master"),
+    files: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Stage and commit dirty spec files locally without pushing.
+    """Stage and commit files locally without pushing.
 
-    Thin wrapper around ``commit_and_push_spec_files`` with ``push=False``.
+    When *files* is ``None``, delegates to ``commit_and_push_spec_files``
+    with ``push=False`` (commits all dirty spec files).  When *files* is
+    an explicit list of repo-relative paths, stages and commits exactly
+    those files.
+
+    Args:
+        repo_root: Path to repository root.
+        message: Commit message.
+        spec_dir: Spec directory relative to repo root (used when *files* is None).
+        main_branches: Branch names considered protected.
+        files: Explicit list of repo-relative file paths to commit.
+            When provided, *spec_dir* is ignored.
     """
-    return commit_and_push_spec_files(
-        repo_root,
-        message,
-        spec_dir=spec_dir,
-        push=False,
-        main_branches=main_branches,
-    )
+    if files is None:
+        return commit_and_push_spec_files(
+            repo_root,
+            message,
+            spec_dir=spec_dir,
+            push=False,
+            main_branches=main_branches,
+        )
+
+    # Explicit file list provided
+    branch = get_current_branch(repo_root)
+    if branch in main_branches:
+        return {
+            "success": False,
+            "error": f"Refusing to commit on protected branch '{branch}'",
+        }
+    if not files:
+        return {"success": False, "error": "No files selected"}
+
+    env = _clean_git_env()
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + files,
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to stage files: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    try:
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Commit failed: {e.stderr}"}
+
+    return {"success": True, "files_committed": files}
 
 
 def suggest_branch_name(repo_root: Path, base_name: str) -> str:

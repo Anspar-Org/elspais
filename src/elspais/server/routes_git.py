@@ -51,7 +51,9 @@ async def api_git_status(request: Request) -> JSONResponse:
     else:
         result["detached_commit"] = None
         result["commits_behind_head"] = 0
-    result["uncommitted_file_count"] = len(result.get("dirty_spec_files", []))
+    result["uncommitted_file_count"] = len(result.get("dirty_spec_files", [])) + len(
+        result.get("dirty_other_files", [])
+    )
 
     return JSONResponse(result)
 
@@ -206,8 +208,9 @@ async def api_git_commit(request: Request) -> JSONResponse:
     message = data.get("message", "").strip()
     if not message:
         return JSONResponse({"success": False, "error": "commit message required"}, status_code=400)
+    files = data.get("files")  # explicit file list, or None for auto-discover
     spec_dir = state.config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
-    result = commit_spec_files(state.repo_root, message, spec_dir=spec_dir)
+    result = commit_spec_files(state.repo_root, message, spec_dir=spec_dir, files=files)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 

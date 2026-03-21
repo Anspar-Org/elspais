@@ -1220,18 +1220,31 @@ function _openCheckpointModal() {
     apiFetch('/api/git/status').then(function(data) {
         if (checkpointBtn) { checkpointBtn.disabled = false; checkpointBtn.textContent = 'Checkpoint'; }
         if (!data) return;
-        var files = data.dirty_spec_files || [];
-        if (files.length === 0) {
-            showToast('No uncommitted spec files', 'info');
+        var specFiles = data.dirty_spec_files || [];
+        var otherFiles = data.dirty_other_files || [];
+        var allFiles = specFiles.concat(otherFiles);
+        if (allFiles.length === 0) {
+            showToast('No uncommitted files', 'info');
             return;
         }
 
         var old = document.getElementById('branch-modal-overlay');
         if (old) old.remove();
 
-        var fileListHtml = files.map(function(f) {
-            return '<div class="modal-file">' + escapeHtml(f) + '</div>';
-        }).join('');
+        // Build file list with checkboxes — spec files pre-checked, others unchecked
+        var fileListHtml = '';
+        if (specFiles.length > 0) {
+            fileListHtml += '<div class="modal-file-group-label">Spec files</div>';
+            specFiles.forEach(function(f, i) {
+                fileListHtml += '<label class="modal-file-checkbox"><input type="checkbox" checked data-file="' + escapeHtml(f) + '" class="checkpoint-file-cb"> ' + escapeHtml(f) + '</label>';
+            });
+        }
+        if (otherFiles.length > 0) {
+            fileListHtml += '<div class="modal-file-group-label" style="margin-top:8px;">Other files</div>';
+            otherFiles.forEach(function(f) {
+                fileListHtml += '<label class="modal-file-checkbox"><input type="checkbox" data-file="' + escapeHtml(f) + '" class="checkpoint-file-cb"> ' + escapeHtml(f) + '</label>';
+            });
+        }
 
         var overlay = document.createElement('div');
         overlay.id = 'branch-modal-overlay';
@@ -1240,7 +1253,7 @@ function _openCheckpointModal() {
             '<div class="modal-dialog">' +
                 '<div class="modal-title">Checkpoint</div>' +
                 '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch || '(detached)') + '</strong></div>' +
-                '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
+                '<div class="modal-label" style="margin-top:12px">Files to include:</div>' +
                 '<div class="modal-file-list">' + fileListHtml + '</div>' +
                 '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
                 '<textarea class="modal-input" id="checkpoint-message-input" rows="4" placeholder="Describe this checkpoint..." style="resize:vertical;font-family:monospace;font-size:12px;"></textarea>' +
@@ -1256,31 +1269,49 @@ function _openCheckpointModal() {
         var confirmBtn = document.getElementById('checkpoint-modal-confirm');
         var errorEl = document.getElementById('checkpoint-modal-error');
 
+        function getSelectedFiles() {
+            var checked = [];
+            overlay.querySelectorAll('.checkpoint-file-cb:checked').forEach(function(cb) {
+                checked.push(cb.dataset.file);
+            });
+            return checked;
+        }
+
+        function updateConfirmState() {
+            var hasFiles = getSelectedFiles().length > 0;
+            var hasMsg = textarea.value.trim() !== '';
+            confirmBtn.disabled = !hasFiles || !hasMsg;
+        }
+
+        // Update confirm state when checkboxes change
+        overlay.querySelectorAll('.checkpoint-file-cb').forEach(function(cb) {
+            cb.addEventListener('change', updateConfirmState);
+        });
+
         // Auto-generate commit message from server
         apiFetch('/api/git/commit-message').then(function(msgData) {
             if (msgData && msgData.message) {
                 textarea.value = msgData.message;
             } else {
-                textarea.value = files.join('\n');
+                textarea.value = specFiles.join('\n');
             }
-            confirmBtn.disabled = textarea.value.trim() === '';
+            updateConfirmState();
         });
 
-        textarea.addEventListener('input', function() {
-            confirmBtn.disabled = textarea.value.trim() === '';
-        });
+        textarea.addEventListener('input', updateConfirmState);
         textarea.focus();
 
         function doCheckpoint() {
             var msg = textarea.value.trim();
-            if (!msg) return;
+            var selectedFiles = getSelectedFiles();
+            if (!msg || selectedFiles.length === 0) return;
             confirmBtn.disabled = true;
             confirmBtn.textContent = 'Committing...';
             showLoadingOverlay('Creating checkpoint...');
             apiFetch('/api/git/commit', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: msg})
+                body: JSON.stringify({message: msg, files: selectedFiles})
             }).then(function(result) {
                 hideLoadingOverlay();
                 if (result && result.success) {
