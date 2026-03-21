@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
 from elspais.server.state import AppState
@@ -2534,3 +2535,147 @@ class TestGitSuggestBranchName:
         data = resp.json()
         assert "name" in data
         assert data["name"] == "review-2026-03-20"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spec Files Endpoint Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSpecFiles:
+    """Validates GET /api/spec-files endpoint."""
+
+    # Implements: REQ-d00010
+
+    @pytest.fixture
+    def spec_files_graph(self):
+        """Graph with FILE nodes of various types."""
+        graph = TraceGraph(repo_root=Path("/test/repo"))
+
+        spec_file1 = GraphNode(
+            id="file:spec/requirements.md",
+            kind=NodeKind.FILE,
+            label="spec/requirements.md",
+        )
+        spec_file1._content = {
+            "file_type": FileType.SPEC,
+            "relative_path": "spec/requirements.md",
+            "absolute_path": "/test/repo/spec/requirements.md",
+            "repo": "",
+        }
+
+        spec_file2 = GraphNode(
+            id="file:spec/ops/ops-reqs.md",
+            kind=NodeKind.FILE,
+            label="spec/ops/ops-reqs.md",
+        )
+        spec_file2._content = {
+            "file_type": FileType.SPEC,
+            "relative_path": "spec/ops/ops-reqs.md",
+            "absolute_path": "/test/repo/spec/ops/ops-reqs.md",
+            "repo": "",
+        }
+
+        code_file = GraphNode(
+            id="file:src/main.py",
+            kind=NodeKind.FILE,
+            label="src/main.py",
+        )
+        code_file._content = {
+            "file_type": FileType.CODE,
+            "relative_path": "src/main.py",
+            "absolute_path": "/test/repo/src/main.py",
+            "repo": "",
+        }
+
+        test_file = GraphNode(
+            id="file:tests/test_main.py",
+            kind=NodeKind.FILE,
+            label="tests/test_main.py",
+        )
+        test_file._content = {
+            "file_type": FileType.TEST,
+            "relative_path": "tests/test_main.py",
+            "absolute_path": "/test/repo/tests/test_main.py",
+            "repo": "",
+        }
+
+        graph._roots = []
+        graph._index = {
+            "file:spec/requirements.md": spec_file1,
+            "file:spec/ops/ops-reqs.md": spec_file2,
+            "file:src/main.py": code_file,
+            "file:tests/test_main.py": test_file,
+        }
+        # Register FILE nodes in the kind index
+        graph._kind_index = {
+            NodeKind.FILE: [spec_file1, spec_file2, code_file, test_file],
+        }
+
+        return graph
+
+    @pytest.fixture
+    def spec_files_client(self, spec_files_graph):
+        state = AppState(graph=spec_files_graph, repo_root=Path("/test/repo"), config={})
+        app = create_app(state, mount_mcp=False)
+        return TestClient(app)
+
+    def test_spec_files_returns_spec_file_list(self, spec_files_client):
+        # Implements: REQ-d00010
+        """Endpoint returns only SPEC files, not CODE or TEST."""
+        resp = spec_files_client.get("/api/spec-files")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "files" in data
+        files = data["files"]
+        assert len(files) == 2
+        # All returned files should be SPEC type
+        for f in files:
+            assert f["file_type"] == "SPEC"
+        # Check IDs
+        ids = {f["id"] for f in files}
+        assert "file:spec/requirements.md" in ids
+        assert "file:spec/ops/ops-reqs.md" in ids
+        # CODE/TEST should not appear
+        assert "file:src/main.py" not in ids
+        assert "file:tests/test_main.py" not in ids
+
+    def test_spec_files_sorted_by_path(self, spec_files_client):
+        # Implements: REQ-d00010
+        """Results are sorted alphabetically by relative_path."""
+        resp = spec_files_client.get("/api/spec-files")
+        assert resp.status_code == 200
+        files = resp.json()["files"]
+        paths = [f["relative_path"] for f in files]
+        assert paths == sorted(paths)
+        # Verify specific order: ops/ops-reqs.md < requirements.md
+        assert paths[0] == "spec/ops/ops-reqs.md"
+        assert paths[1] == "spec/requirements.md"
+
+    def test_spec_files_empty_when_no_spec_files(self):
+        # Implements: REQ-d00010
+        """Returns empty list when no SPEC files exist."""
+        graph = TraceGraph(repo_root=Path("/test/repo"))
+        code_file = GraphNode(
+            id="file:src/main.py",
+            kind=NodeKind.FILE,
+            label="src/main.py",
+        )
+        code_file._content = {
+            "file_type": FileType.CODE,
+            "relative_path": "src/main.py",
+            "absolute_path": "/test/repo/src/main.py",
+            "repo": "",
+        }
+        graph._roots = []
+        graph._index = {"file:src/main.py": code_file}
+        graph._kind_index = {NodeKind.FILE: [code_file]}
+
+        state = AppState(graph=graph, repo_root=Path("/test/repo"), config={})
+        app = create_app(state, mount_mcp=False)
+        client = TestClient(app)
+
+        resp = client.get("/api/spec-files")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["files"] == []

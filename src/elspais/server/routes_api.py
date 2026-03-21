@@ -387,6 +387,25 @@ async def api_file_content(request: Request) -> JSONResponse:
     )
 
 
+async def api_spec_files(request: Request) -> JSONResponse:
+    """GET /api/spec-files - List SPEC-type FILE nodes."""
+    from elspais.graph.GraphNode import FileType
+
+    state = _st(request)
+    files = []
+    for node in state.graph.nodes_by_kind(NodeKind.FILE):
+        if node.get_field("file_type") == FileType.SPEC:
+            files.append(
+                {
+                    "id": node.id,
+                    "relative_path": node.get_field("relative_path"),
+                    "file_type": "SPEC",
+                }
+            )
+    files.sort(key=lambda f: f["relative_path"])
+    return JSONResponse({"files": files})
+
+
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
