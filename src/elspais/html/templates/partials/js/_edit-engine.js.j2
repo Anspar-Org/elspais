@@ -121,9 +121,14 @@ async function refreshBranchStatus() {
     } else if (data.branch) {
         nameEl.textContent = data.branch;
         nameEl.parentElement.title = 'Click to switch branch';
+    } else if (data.is_detached) {
+        // Detached HEAD without originating branch (e.g. worktree started detached)
+        var commitLabel = data.detached_commit || 'unknown';
+        nameEl.textContent = 'detached @ ' + commitLabel;
+        nameEl.parentElement.title = 'Detached HEAD — click to switch to a branch';
     } else {
-        nameEl.textContent = 'no branch selected';
-        nameEl.parentElement.title = 'No branch selected (detached HEAD) — click to choose one';
+        nameEl.textContent = 'no branch';
+        nameEl.parentElement.title = 'Not on a branch — click to choose one';
     }
     dot.className = 'branch-status-dot';
     if (data.is_main) { dot.classList.add('red'); }

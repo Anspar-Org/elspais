@@ -18,11 +18,15 @@ async def api_git_status(request: Request) -> JSONResponse:
     spec_dir = state.config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
     result = git_status_summary(state.repo_root, spec_dir=spec_dir)
 
-    # Augment with detached HEAD state fields
-    result["is_detached"] = state.is_detached
+    # Augment with detached HEAD state fields.
+    # Detect detached HEAD from git state (branch is None) even if AppState
+    # doesn't know about it (e.g. server started on a detached worktree).
+    git_detached = result.get("branch") is None
+    is_detached = state.is_detached or git_detached
+    result["is_detached"] = is_detached
     result["originating_branch"] = state.originating_branch
     result["originating_head"] = state.originating_head
-    if state.is_detached:
+    if is_detached:
         from elspais.utilities.git import get_current_commit
 
         result["detached_commit"] = get_current_commit(state.repo_root)
