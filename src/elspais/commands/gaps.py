@@ -223,58 +223,77 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     return gd
 
 
+def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
+    """Engine-compatible wrapper around collect_gaps.
+
+    Params:
+        type: Optional gap type filter (uncovered, untested, unvalidated, failing).
+        status: Optional comma-separated statuses to include.
+    """
+    import argparse as _argparse
+
+    from elspais.commands.health import _resolve_exclude_status
+
+    fake_args = _argparse.Namespace()
+    status_str = params.get("status", None)
+    fake_args.status = status_str.split(",") if status_str else None
+
+    exclude_status = _resolve_exclude_status(fake_args, config=config)
+    data = collect_gaps(graph, exclude_status)
+
+    gap_type = params.get("type", None)
+    if gap_type and gap_type in (
+        "uncovered",
+        "untested",
+        "unvalidated",
+        "failing",
+        "no_assertions",
+    ):
+        items = getattr(data, gap_type)
+        return {gap_type: [list(item) for item in items]}
+
+    result: dict[str, Any] = {}
+    for gt in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
+        result[gt] = [list(item) for item in getattr(data, gt)]
+    return result
+
+
 def run(args: argparse.Namespace) -> int:
     """Run a standalone gap listing command.
 
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
     """
+    from elspais.commands._engine import call as engine_call
+
     command = getattr(args, "command", "gaps")
     gap_type = _GAP_TYPE_MAP.get(command)
     gap_types: list[str] | None = [gap_type] if gap_type else None
     fmt = getattr(args, "format", "text")
-
-    # Daemon-first path
-    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    daemon_result = None
-    if not spec_dir:
-        from elspais.commands._daemon_client import try_daemon_or_start
 
-        params: dict[str, str] = {}
-        if gap_type:
-            params["type"] = gap_type
-        daemon_result = try_daemon_or_start("/api/run/gaps", params)
+    params: dict[str, str] = {}
+    if gap_type:
+        params["type"] = gap_type
 
-    if daemon_result is not None:
-        if fmt == "json":
-            output = json.dumps(daemon_result, indent=2)
-        else:
-            data = _gap_data_from_dict(daemon_result)
-            types_to_render = gap_types or _ALL_GAP_TYPES
-            if fmt == "markdown":
-                sections = [render_gap_markdown(gt, data) for gt in types_to_render]
-                output = "\n\n".join(sections)
-            else:
-                sections = [render_gap_text(gt, data) for gt in types_to_render]
-                output = "\n\n".join(sections)
+    data = engine_call(
+        "/api/run/gaps",
+        params,
+        compute_gaps,
+        skip_daemon=bool(spec_dir),
+    )
+
+    if fmt == "json":
+        output = json.dumps(data, indent=2)
     else:
-        # Fallback: local graph build
-        from elspais.config import get_config
-        from elspais.graph.factory import build_graph
-
-        spec_dir = getattr(args, "spec_dir", None)
-        config_path = getattr(args, "config", None)
-        canonical_root = getattr(args, "canonical_root", None)
-        start_path = Path.cwd()
-
-        config = get_config(config_path, start_path=start_path)
-        graph = build_graph(
-            spec_dirs=[spec_dir] if spec_dir else None,
-            config_path=config_path,
-            canonical_root=canonical_root,
-        )
-        output, _ = render_section(graph, config, args, gap_types=gap_types)
+        gap_data = _gap_data_from_dict(data)
+        types_to_render = gap_types or _ALL_GAP_TYPES
+        if fmt == "markdown":
+            sections = [render_gap_markdown(gt, gap_data) for gt in types_to_render]
+            output = "\n\n".join(sections)
+        else:
+            sections = [render_gap_text(gt, gap_data) for gt in types_to_render]
+            output = "\n\n".join(sections)
 
     output_file = getattr(args, "output", None)
     if output_file:

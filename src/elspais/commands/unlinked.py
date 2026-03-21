@@ -238,56 +238,61 @@ def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
     return ud
 
 
+def compute_unlinked(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
+    """Engine-compatible wrapper around collect_unlinked.
+
+    Returns the same dict shape as the API endpoint.
+    """
+    data = collect_unlinked(graph)
+    return {
+        "tests": {
+            "count": len(data.tests),
+            "by_file": {
+                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
+                for fp, entries in _by_file(data.tests).items()
+            },
+        },
+        "code": {
+            "count": len(data.code),
+            "by_file": {
+                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
+                for fp, entries in _by_file(data.code).items()
+            },
+        },
+    }
+
+
 def run(args: argparse.Namespace) -> int:
     """Run a standalone unlinked-nodes listing.
 
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
     """
+    from elspais.commands._engine import call as engine_call
+
     fmt = getattr(args, "format", "text")
     verbose = getattr(args, "verbose", False)
-
-    # Daemon-first path
-    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    daemon_result = None
-    if not spec_dir:
-        from elspais.commands._daemon_client import try_daemon_or_start
 
-        daemon_result = try_daemon_or_start("/api/run/unlinked")
+    data = engine_call(
+        "/api/run/unlinked",
+        {},
+        compute_unlinked,
+        skip_daemon=bool(spec_dir),
+    )
 
-    if daemon_result is not None:
-        if fmt == "json":
-            output = json.dumps(daemon_result, indent=2)
-            total = daemon_result.get("tests", {}).get("count", 0) + daemon_result.get(
-                "code", {}
-            ).get("count", 0)
-            exit_code = 1 if total else 0
-        else:
-            data = _unlinked_data_from_dict(daemon_result)
-            total = len(data.tests) + len(data.code)
-            if fmt == "markdown":
-                output = render_unlinked_markdown(data, verbose=verbose)
-            else:
-                output = render_unlinked_text(data, verbose=verbose)
-            exit_code = 1 if total else 0
+    if fmt == "json":
+        output = json.dumps(data, indent=2)
+        total = data.get("tests", {}).get("count", 0) + data.get("code", {}).get("count", 0)
+        exit_code = 1 if total else 0
     else:
-        # Fallback: local graph build
-        from elspais.config import get_config
-        from elspais.graph.factory import build_graph
-
-        spec_dir = getattr(args, "spec_dir", None)
-        config_path = getattr(args, "config", None)
-        canonical_root = getattr(args, "canonical_root", None)
-        start_path = Path.cwd()
-
-        config = get_config(config_path, start_path=start_path)
-        graph = build_graph(
-            spec_dirs=[spec_dir] if spec_dir else None,
-            config_path=config_path,
-            canonical_root=canonical_root,
-        )
-        output, exit_code = render_section(graph, config, args)
+        unlinked_data = _unlinked_data_from_dict(data)
+        total = len(unlinked_data.tests) + len(unlinked_data.code)
+        if fmt == "markdown":
+            output = render_unlinked_markdown(unlinked_data, verbose=verbose)
+        else:
+            output = render_unlinked_text(unlinked_data, verbose=verbose)
+        exit_code = 1 if total else 0
 
     output_file = getattr(args, "output", None)
     if output_file:

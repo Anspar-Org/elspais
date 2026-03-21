@@ -1870,6 +1870,72 @@ def render_section(
 # =============================================================================
 
 
+def compute_checks(
+    graph: FederatedGraph,
+    config: dict[str, Any],
+    params: dict[str, str],
+) -> dict[str, Any]:
+    """Compute health checks for engine.call.  Returns HealthReport.to_dict()."""
+    import argparse
+
+    spec_only = params.get("spec_only", "false") == "true"
+    code_only = params.get("code_only", "false") == "true"
+    tests_only = params.get("tests_only", "false") == "true"
+    lenient = params.get("lenient", "false") == "true"
+
+    report = HealthReport()
+    run_all = not any([spec_only, code_only, tests_only])
+
+    # Build a minimal args namespace for _resolve_exclude_status
+    fake_args = argparse.Namespace()
+    status_str = params.get("status", None)
+    fake_args.status = status_str.split(",") if status_str else None
+
+    exclude_status = _resolve_exclude_status(fake_args, config=config)
+
+    # Config checks
+    if run_all:
+        try:
+            from elspais.commands.doctor import run_config_checks as _run_config_checks
+            from elspais.config import find_git_root
+
+            repo_root = find_git_root() or Path.cwd()
+            config_path = repo_root / ".elspais.toml"
+            for check in _run_config_checks(
+                config_path if config_path.exists() else None,
+                config,
+                repo_root,
+            ):
+                report.add(check)
+        except Exception:
+            pass
+
+    # Spec checks
+    if run_all or spec_only:
+        from elspais.config import get_spec_directories
+
+        spec_dirs = get_spec_directories(None, config)
+        for check in run_spec_checks(graph, config, spec_dirs=spec_dirs):
+            report.add(check)
+
+    # Code checks
+    if run_all or code_only:
+        for check in run_code_checks(graph, exclude_status=exclude_status):
+            report.add(check)
+
+    # Test checks
+    if run_all or tests_only:
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    # UAT checks
+    if run_all or tests_only:
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    return report.to_dict(lenient=lenient)
+
+
 def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     """Reconstruct a HealthReport from a to_dict() JSON dict."""
     report = HealthReport()
@@ -1900,10 +1966,14 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
-def _try_daemon_checks(args: argparse.Namespace) -> dict[str, Any] | None:
-    """Try to get health check results from a running daemon/viewer."""
-    from elspais.commands._daemon_client import try_daemon_or_start
+def run(args: argparse.Namespace) -> int:
+    """Run the health command.
 
+    Uses engine.call for daemon-vs-local, then renders the report.
+    """
+    from elspais.commands import _engine
+
+    # Build params from args
     params: dict[str, str] = {}
     if getattr(args, "spec_only", False):
         params["spec_only"] = "true"
@@ -1917,60 +1987,53 @@ def _try_daemon_checks(args: argparse.Namespace) -> dict[str, Any] | None:
     if status_filter:
         params["status"] = ",".join(status_filter)
 
-    return try_daemon_or_start("/api/run/checks", params)
-
-
-def run(args: argparse.Namespace) -> int:
-    """Run the health command.
-
-    Performs comprehensive health checks on the elspais configuration
-    and repository structure. Tries a running daemon/viewer first for
-    fast results, falls back to local graph build.
-    """
-    # Daemon-first path: try running server for pre-computed results
-    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    daemon_result = _try_daemon_checks(args) if not spec_dir else None
-    if daemon_result is not None:
-        report = _report_from_dict(daemon_result)
-        return _output_report(report, args)
+    skip_daemon = bool(spec_dir)
 
+    if skip_daemon:
+        # Custom spec_dir: build graph directly with the requested dirs,
+        # preserving the original error-handling for config/graph failures.
+        data = _run_local_checks(args, params)
+    else:
+        data = _engine.call("/api/run/checks", params, compute_checks)
+
+    # The dict already has the correct "healthy" flag (lenient-aware).
+    # Use it for exit code; reconstruct report only for rendering.
+    healthy = data.get("healthy", False)
+    report = _report_from_dict(data)
+    print(_format_report(report, args))
+    return 0 if healthy else 1
+
+
+def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
+    """Build graph from args and run checks locally.
+
+    Handles spec_dir, config_path, canonical_root and graceful error recovery
+    for config-load and graph-build failures.
+    """
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
+    lenient = params.get("lenient", "false") == "true"
 
     report = HealthReport()
 
-    # Determine which checks to run
     run_all = not any(
         [
-            getattr(args, "spec_only", False),
-            getattr(args, "code_only", False),
-            getattr(args, "tests_only", False),
+            params.get("spec_only") == "true",
+            params.get("code_only") == "true",
+            params.get("tests_only") == "true",
         ]
     )
 
-    run_config = run_all
-    run_spec = run_all or getattr(args, "spec_only", False)
-    run_code = run_all or getattr(args, "code_only", False)
-    run_tests = run_all or getattr(args, "tests_only", False)
-
     # Config checks can run without building the graph
     config = None
-    if run_config:
+    if run_all:
         try:
-            from elspais.commands.doctor import run_config_checks as _run_config_checks
-
-            config_dict = get_config(
-                config_path,
-                start_path=start_path,
-            )
-            config = config_dict
-            for check in _run_config_checks(config_path, config, start_path):
-                report.add(check)
+            config = get_config(config_path, start_path=start_path)
         except Exception as e:
             report.add(
                 HealthCheck(
@@ -1980,64 +2043,34 @@ def run(args: argparse.Namespace) -> int:
                     category="config",
                 )
             )
-            # Can't continue without config
-            if not run_all:
-                return _output_report(report, args)
 
-    # Build graph for other checks
+    # Build graph
     graph = None
-    if run_spec or run_code or run_tests:
-        try:
-            canonical_root = getattr(args, "canonical_root", None)
-            graph = build_graph(
-                spec_dirs=[spec_dir] if spec_dir else None,
-                config_path=config_path,
-                canonical_root=canonical_root,
+    try:
+        canonical_root = getattr(args, "canonical_root", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        if config is None:
+            config = get_config(config_path, start_path=start_path)
+    except Exception as e:
+        report.add(
+            HealthCheck(
+                name="graph.build",
+                passed=False,
+                message=f"Failed to build graph: {e}",
+                category="spec",
             )
-            if config is None:
-                config_dict = get_config(
-                    config_path,
-                    start_path=start_path,
-                )
-                config = config_dict
-        except Exception as e:
-            report.add(
-                HealthCheck(
-                    name="graph.build",
-                    passed=False,
-                    message=f"Failed to build graph: {e}",
-                    category="spec",
-                )
-            )
-            return _output_report(report, args)
+        )
+        return report.to_dict(lenient=lenient)
 
-    # Spec checks
-    if run_spec and graph and config:
-        from elspais.config import get_spec_directories
+    if graph is not None and config is not None:
+        # Delegate to compute_checks for the actual check logic
+        return compute_checks(graph, config, params)
 
-        config_dict = config
-        resolved_spec_dirs = get_spec_directories(spec_dir, config_dict)
-        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
-            report.add(check)
-
-    # Code checks
-    raw_config = config if config else {}
-    exclude_status = _resolve_exclude_status(args, config=raw_config)
-    if run_code and graph:
-        for check in run_code_checks(graph, exclude_status=exclude_status):
-            report.add(check)
-
-    # Test checks
-    if run_tests and graph:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
-            report.add(check)
-
-    # UAT checks (always run when tests run)
-    if run_tests and graph:
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
-            report.add(check)
-
-    return _output_report(report, args)
+    return report.to_dict(lenient=lenient)
 
 
 def _format_report(report: HealthReport, args: argparse.Namespace) -> str:

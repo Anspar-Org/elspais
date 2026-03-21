@@ -1,12 +1,9 @@
-"""Shared daemon/viewer client for CLI commands.
+# Implements: REQ-d00010
+"""HTTP plumbing for talking to a running viewer or daemon.
 
-Provides try_daemon() which attempts to run a command via a running
-server's REST API, falling back to None if unavailable.
-
-Also provides try_daemon_or_start() which auto-starts a daemon if
-none is running (respects cli_ttl config: 0 = don't auto-start).
+Decision logic (when to use daemon vs local) lives in ``_engine.py``.
+This module only provides low-level HTTP helpers.
 """
-
 from __future__ import annotations
 
 import json
@@ -15,62 +12,6 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 _VIEWER_PORT = 5001
-
-
-def try_daemon(
-    endpoint: str,
-    params: dict | None = None,
-    method: str = "GET",
-) -> dict | list | None:
-    """Try to call a REST endpoint on a running viewer or daemon.
-
-    Args:
-        endpoint: REST path (e.g., "/api/run/checks")
-        params: Query params (GET) or JSON body (POST)
-        method: HTTP method
-
-    Returns:
-        Parsed JSON response, or None if no server is available.
-    """
-    # Try viewer first, then daemon
-    ports = [_VIEWER_PORT]
-    daemon_port = _get_daemon_port()
-    if daemon_port and daemon_port != _VIEWER_PORT:
-        ports.append(daemon_port)
-
-    for port in ports:
-        result = _try_port(port, endpoint, params, method)
-        if result is not None:
-            return result
-    return None
-
-
-def try_daemon_or_start(
-    endpoint: str,
-    params: dict | None = None,
-    method: str = "GET",
-) -> dict | list | None:
-    """Like try_daemon(), but auto-starts a daemon if none is running.
-
-    Respects cli_ttl config: 0 = don't auto-start, just try existing servers.
-    """
-    result = try_daemon(endpoint, params, method)
-    if result is not None:
-        return result
-
-    # Auto-start daemon
-    try:
-        from elspais.config import find_git_root
-        from elspais.mcp.daemon import ensure_daemon
-
-        repo_root = find_git_root()
-        if repo_root is None:
-            return None
-
-        port = ensure_daemon(repo_root)
-        return _try_port(port, endpoint, params, method)
-    except Exception:
-        return None
 
 
 def _get_daemon_port() -> int | None:

@@ -154,9 +154,8 @@ class TestViewerAPI:
         assert resp.ok, f"GET /api/search returned {resp.status}"
 
         data = resp.json()
-        assert isinstance(
-            data, list
-        ), f"Expected search to return a list, got {type(data).__name__}"
+        assert "results" in data, f"Expected 'results' key, got keys: {list(data.keys())}"
+        assert isinstance(data["results"], list)
 
 
 class TestViewerInteraction:

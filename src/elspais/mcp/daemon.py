@@ -64,7 +64,8 @@ def search_via_viewer(
     )
     try:
         with urlopen(url, timeout=3) as resp:
-            return json.loads(resp.read())
+            data = json.loads(resp.read())
+            return data.get("results", []) if isinstance(data, dict) else data
     except (URLError, OSError, json.JSONDecodeError, ValueError):
         return None
 
@@ -145,15 +146,30 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
             env={**os.environ, "_ELSPAIS_DAEMON_JSON": str(daemon_json)},
         )
 
-    # Poll for daemon.json (server writes it after binding)
+    # Poll for daemon.json, then verify HTTP readiness.
+    # daemon.json is written before uvicorn binds, so we must also check
+    # that the server actually responds to HTTP requests.
     deadline = time.time() + 15
+    port = None
     while time.time() < deadline:
         info = get_daemon_info(repo_root)
         if info and "port" in info:
-            return info["port"]
+            port = info["port"]
+            break
         time.sleep(0.2)
 
-    raise RuntimeError("Daemon failed to start (timed out waiting for daemon.json)")
+    if port is None:
+        raise RuntimeError("Daemon failed to start (timed out waiting for daemon.json)")
+
+    # Now poll until the server is actually responding
+    while time.time() < deadline:
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/api/check-freshness", timeout=2):
+                return port
+        except (URLError, OSError):
+            time.sleep(0.2)
+
+    raise RuntimeError("Daemon started but not responding to HTTP")
 
 
 def stop_daemon(repo_root: Path) -> bool:

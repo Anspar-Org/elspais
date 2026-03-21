@@ -272,29 +272,30 @@ class TestGetSearch:
         resp = client.get("/api/search?q=Security")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        assert data[0]["id"] == "REQ-p00001"
+        results = data["results"]
+        assert isinstance(results, list)
+        assert len(results) >= 1
+        assert results[0]["id"] == "REQ-p00001"
 
     def test_REQ_d00010_A_search_empty_query(self, client):
-        """Empty query returns empty list."""
+        """Empty query returns empty results."""
         resp = client.get("/api/search?q=")
         assert resp.status_code == 200
         data = resp.json()
-        assert data == []
+        assert data == {"results": []}
 
     def test_REQ_d00010_A_search_no_results(self, client):
-        """Non-matching query returns empty list."""
+        """Non-matching query returns empty results."""
         resp = client.get("/api/search?q=zzzznonexistent")
         assert resp.status_code == 200
         data = resp.json()
-        assert data == []
+        assert data == {"results": []}
 
     def test_REQ_d00010_A_search_with_field(self, client):
         """Search with field parameter narrows results."""
         resp = client.get("/api/search?q=REQ-p00001&field=id")
         data = resp.json()
-        assert len(data) >= 1
+        assert len(data["results"]) >= 1
 
     def test_REQ_d00061_E_search_with_limit(self, client):
         """Limit parameter restricts result count."""
@@ -302,7 +303,7 @@ class TestGetSearch:
         resp = client.get("/api/search?q=REQ&limit=1")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) <= 1
+        assert len(data["results"]) <= 1
 
     def test_REQ_d00061_E_search_default_limit(self):
         """Default limit is 50 when not specified — truncates beyond 50."""
@@ -330,15 +331,16 @@ class TestGetSearch:
         resp = big_client.get("/api/search?q=Searchable")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 50
+        assert len(data["results"]) == 50
 
     def test_REQ_d00061_C_search_with_regex(self, client):
         """Regex parameter enables regex matching."""
         resp = client.get("/api/search?q=REQ-p0000[0-9]&regex=true")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) >= 1
-        assert data[0]["id"] == "REQ-p00001"
+        results = data["results"]
+        assert len(results) >= 1
+        assert results[0]["id"] == "REQ-p00001"
 
     def test_REQ_d00061_C_search_regex_defaults_false(self, client):
         """Regex defaults to false - literal bracket chars don't match."""
@@ -346,7 +348,7 @@ class TestGetSearch:
         assert resp.status_code == 200
         data = resp.json()
         # Without regex, "[0-9]" is literal text that won't match any node
-        assert len(data) == 0
+        assert len(data["results"]) == 0
 
 
 class TestGetTestCoverage:

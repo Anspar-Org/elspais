@@ -36,7 +36,6 @@ from elspais.mcp.server import (
     _mutate_update_assertion,
     _mutate_update_title,
     _query_nodes,
-    _search,
     _undo_last_mutation,
 )
 
@@ -163,14 +162,16 @@ async def api_hierarchy(request: Request) -> JSONResponse:
 
 async def api_search(request: Request) -> JSONResponse:
     """GET /api/search?q=<query>&field=<field>&limit=<n>&regex=<bool>."""
+    from elspais.commands.search_cmd import compute_search
+
     state = _st(request)
-    query = request.query_params.get("q", "")
-    field = request.query_params.get("field", "all")
-    regex = request.query_params.get("regex", "false").lower() == "true"
-    limit = int(request.query_params.get("limit", "50"))
-    if not query:
-        return JSONResponse([])
-    return JSONResponse(_search(state.graph, query, field, regex=regex, limit=limit))
+    params = {
+        "q": request.query_params.get("q", ""),
+        "field": request.query_params.get("field", "all"),
+        "regex": request.query_params.get("regex", "false"),
+        "limit": request.query_params.get("limit", "50"),
+    }
+    return JSONResponse(compute_search(state.graph, {}, params))
 
 
 async def api_test_coverage(request: Request) -> JSONResponse:
@@ -455,202 +456,57 @@ async def api_check_freshness(request: Request) -> JSONResponse:
 
 async def api_run_checks(request: Request) -> JSONResponse:
     """GET /api/run/checks - Run health checks and return structured report."""
-    from elspais.commands.health import (
-        HealthReport,
-        _resolve_exclude_status,
-        run_code_checks,
-        run_spec_checks,
-        run_test_checks,
-        run_uat_checks,
-    )
+    from elspais.commands.health import compute_checks
 
     state = _st(request)
-    graph = state.graph
-    config = state.config
-    repo_root = state.repo_root
-
-    qp = request.query_params
-    spec_only = qp.get("spec_only", "false") == "true"
-    code_only = qp.get("code_only", "false") == "true"
-    tests_only = qp.get("tests_only", "false") == "true"
-    lenient = qp.get("lenient", "false") == "true"
-
-    report = HealthReport()
-
-    run_all = not any([spec_only, code_only, tests_only])
-
-    # Build a minimal args namespace for _resolve_exclude_status
-    import argparse
-
-    fake_args = argparse.Namespace()
-    status_str = qp.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
-
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
-
-    # Config checks
-    if run_all:
-        try:
-            from elspais.commands.doctor import run_config_checks as _run_config_checks
-
-            config_path = repo_root / ".elspais.toml"
-            for check in _run_config_checks(
-                config_path if config_path.exists() else None,
-                config,
-                repo_root,
-            ):
-                report.add(check)
-        except Exception:
-            pass
-
-    # Spec checks
-    if run_all or spec_only:
-        from elspais.config import get_spec_directories
-
-        spec_dirs = get_spec_directories(None, config)
-        for check in run_spec_checks(graph, config, spec_dirs=spec_dirs):
-            report.add(check)
-
-    # Code checks
-    if run_all or code_only:
-        for check in run_code_checks(graph, exclude_status=exclude_status):
-            report.add(check)
-
-    # Test checks
-    if run_all or tests_only:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=config):
-            report.add(check)
-
-    # UAT checks
-    if run_all or tests_only:
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
-            report.add(check)
-
-    return JSONResponse(report.to_dict(lenient=lenient))
+    params = dict(request.query_params)
+    result = compute_checks(state.graph, state.config, params)
+    return JSONResponse(result)
 
 
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
-    from elspais.commands.summary import _collect_coverage
+    from elspais.commands.summary import compute_summary
 
     state = _st(request)
-    data = _collect_coverage(state.graph, config=state.config)
-    return JSONResponse(data)
+    params = dict(request.query_params)
+    return JSONResponse(compute_summary(state.graph, state.config, params))
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
     """GET /api/run/gaps - Traceability coverage gaps."""
-    import argparse
-
-    from elspais.commands.gaps import collect_gaps
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.commands.gaps import compute_gaps
 
     state = _st(request)
-    qp = request.query_params
-    fake_args = argparse.Namespace()
-    status_str = qp.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
-
-    exclude_status = _resolve_exclude_status(fake_args, config=state.config)
-    data = collect_gaps(state.graph, exclude_status)
-
-    gap_type = qp.get("type", None)
-    if gap_type and gap_type in ("uncovered", "untested", "unvalidated", "failing"):
-        # Return single gap type
-        items = getattr(data, gap_type)
-        return JSONResponse({gap_type: [list(item) for item in items]})
-
-    # Return all gap types
-    result: dict[str, Any] = {}
-    for gt in ("uncovered", "untested", "unvalidated", "failing"):
-        result[gt] = [list(item) for item in getattr(data, gt)]
-    return JSONResponse(result)
+    params = dict(request.query_params)
+    return JSONResponse(compute_gaps(state.graph, state.config, params))
 
 
 async def api_run_unlinked(request: Request) -> JSONResponse:
     """GET /api/run/unlinked - Unlinked test and code nodes."""
-    from elspais.commands.unlinked import _by_file, collect_unlinked
+    from elspais.commands.unlinked import compute_unlinked
 
     state = _st(request)
-    data = collect_unlinked(state.graph)
-
-    result: dict[str, Any] = {
-        "tests": {
-            "count": len(data.tests),
-            "by_file": {
-                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                for fp, entries in _by_file(data.tests).items()
-            },
-        },
-        "code": {
-            "count": len(data.code),
-            "by_file": {
-                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                for fp, entries in _by_file(data.code).items()
-            },
-        },
-    }
-    return JSONResponse(result)
+    params = dict(request.query_params)
+    return JSONResponse(compute_unlinked(state.graph, state.config, params))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:
     """GET /api/run/analysis - Foundation analysis report."""
-    from dataclasses import asdict
-
-    from elspais.graph.analysis import NodeKind as NK
-    from elspais.graph.analysis import analyze_foundations
+    from elspais.commands.analysis_cmd import compute_analysis
 
     state = _st(request)
-    qp = request.query_params
-
-    include_kinds = {NK.REQUIREMENT, NK.ASSERTION}
-    if qp.get("include_code", "false") == "true":
-        include_kinds.add(NK.CODE)
-
-    top_n = int(qp.get("top", "10"))
-
-    weights_str = qp.get("weights", None)
-    weights = (0.3, 0.2, 0.2, 0.3)
-    if weights_str:
-        try:
-            parts = [float(x.strip()) for x in weights_str.split(",")]
-            if len(parts) in (3, 4):
-                weights = tuple(parts)
-        except ValueError:
-            pass
-
-    report = analyze_foundations(
-        state.graph,
-        include_kinds=include_kinds,
-        weights=weights,
-        top_n=top_n,
-    )
-
-    level_filter = qp.get("level", None)
-    if level_filter:
-        level_upper = level_filter.upper()
-        report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.level == level_upper]
-        report.top_foundations = [ns for ns in report.top_foundations if ns.level == level_upper]
-        report.actionable_leaves = [
-            ns for ns in report.actionable_leaves if ns.level == level_upper
-        ]
-
-    return JSONResponse(asdict(report))
+    params = dict(request.query_params)
+    return JSONResponse(compute_analysis(state.graph, {}, params))
 
 
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
-    from elspais.commands.trace import _get_node_data
+    from elspais.commands.trace import compute_trace
 
     state = _st(request)
-    graph = state.graph
-
-    nodes: list[dict] = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        data = _get_node_data(node, graph)
-        nodes.append(data)
-
-    return JSONResponse(nodes)
+    params = dict(request.query_params)
+    return JSONResponse(compute_trace(state.graph, state.config, params))
 
 
 # ─────────────────────────────────────────────────────────────────

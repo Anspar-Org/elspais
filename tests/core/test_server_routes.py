@@ -90,18 +90,19 @@ class TestSearchEndpoint:
     """REQ-d00010-A: /api/search returns filtered results."""
 
     def test_search_with_query(self, client: TestClient):
-        """GET /api/search?q=REQ returns a list."""
+        """GET /api/search?q=REQ returns results dict."""
         resp = client.get("/api/search?q=REQ")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
+        assert "results" in data
+        assert isinstance(data["results"], list)
 
     def test_search_empty_query(self, client: TestClient):
-        """GET /api/search?q= returns empty list."""
+        """GET /api/search?q= returns empty results."""
         resp = client.get("/api/search?q=")
         assert resp.status_code == 200
         data = resp.json()
-        assert data == []
+        assert data == {"results": []}
 
 
 class TestMutateEndpoint:

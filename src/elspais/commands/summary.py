@@ -40,40 +40,28 @@ def render_section(
     return content.rstrip("\n"), 0
 
 
+def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
+    """Engine-compatible wrapper around _collect_coverage."""
+    return _collect_coverage(graph, config=config)
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
     """
+    from elspais.commands._engine import call as engine_call
+
     fmt = getattr(args, "format", "text") or "text"
-    data = None
-
-    # Daemon-first path
-    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    if not spec_dir:
-        from elspais.commands._daemon_client import try_daemon_or_start
 
-        data = try_daemon_or_start("/api/run/summary")
-
-    # Fallback: local graph build
-    if data is None:
-        from elspais.config import get_config
-        from elspais.graph.factory import build_graph
-
-        spec_dir = getattr(args, "spec_dir", None)
-        config_path = getattr(args, "config", None)
-        canonical_root = getattr(args, "canonical_root", None)
-
-        raw_config = get_config(config_path)
-        graph = build_graph(
-            config=raw_config,
-            spec_dirs=[spec_dir] if spec_dir else None,
-            config_path=config_path,
-            canonical_root=canonical_root,
-        )
-        data = _collect_coverage(graph, config=raw_config)
+    data = engine_call(
+        "/api/run/summary",
+        {},
+        compute_summary,
+        skip_daemon=bool(spec_dir),
+    )
 
     content = _render(data, fmt)
     sys.stdout.write(content)

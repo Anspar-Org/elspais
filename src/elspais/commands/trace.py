@@ -90,6 +90,18 @@ REPORT_PRESETS = {
 DEFAULT_PRESET = "standard"
 
 
+def compute_trace(
+    graph: FederatedGraph,
+    config: dict,  # noqa: ARG001
+    params: dict[str, str],  # noqa: ARG001
+) -> dict:
+    """Compute trace data for engine.call.  Returns {"nodes": [...]}."""
+    nodes = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        nodes.append(_get_node_data(node, graph))
+    return {"nodes": nodes}
+
+
 def _get_node_data(node, graph: FederatedGraph) -> dict:
     """Extract data from a node for use in formatters."""
     from elspais.graph.metrics import RollupMetrics
@@ -467,12 +479,53 @@ def render_section(
     return "\n".join(lines), 0
 
 
+def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
+    """Render JSON output from compute_trace data dict."""
+    nodes = []
+    for node_data in data["nodes"]:
+        node_dict: dict = {}
+        for col in preset.columns:
+            if col == "file":
+                node_dict["source"] = {
+                    "path": node_data.get("file"),
+                    "line": None,
+                }
+            else:
+                node_dict[col] = node_data.get(col)
+        if preset.include_body:
+            node_dict["body"] = node_data.get("body", "")
+        if preset.include_assertions:
+            node_dict["assertions"] = node_data.get("assertions", [])
+        if preset.include_test_refs:
+            node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
+        nodes.append(node_dict)
+    print(json.dumps(nodes, indent=2))
+
+
+def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPreset) -> int:
+    """Render non-JSON formats using graph-based formatters. Returns exit code."""
+    formatters = {
+        "text": format_markdown,
+        "markdown": format_markdown,
+        "csv": format_csv,
+        "html": format_html,
+    }
+    formatter = formatters.get(fmt)
+    if not formatter:
+        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
+        return 1
+    for line in formatter(graph, preset):
+        print(line)
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
-    Uses graph factory to build TraceGraph, then streams output in requested format.
-    Tries a running daemon/viewer first for JSON format.
+    Uses engine.call for daemon-vs-local, then renders in the requested format.
     """
+    from elspais.commands import _engine
+
     # Implements: REQ-d00084-B+C
     # Parse --preset and apply independent detail flags
     preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
@@ -490,61 +543,38 @@ def run(args: argparse.Namespace) -> int:
     )
 
     fmt = getattr(args, "format", "markdown")
-
-    # Daemon-first path: for JSON format, try daemon directly
-    # Skip daemon when spec_dir is explicitly set (e.g. tests with custom dirs)
     spec_dir = getattr(args, "spec_dir", None)
-    if fmt == "json" and not spec_dir:
-        from elspais.commands._daemon_client import try_daemon_or_start
+    skip_daemon = bool(spec_dir)
 
-        daemon_result = try_daemon_or_start("/api/run/trace")
-        if daemon_result is not None:
-            # Filter/format nodes based on preset columns
-            nodes = []
-            for node_data in daemon_result:
-                node_dict: dict = {}
-                for col in preset.columns:
-                    if col == "file":
-                        node_dict["source"] = {
-                            "path": node_data.get("file"),
-                            "line": None,
-                        }
-                    else:
-                        node_dict[col] = node_data.get(col)
-                if preset.include_body:
-                    node_dict["body"] = node_data.get("body", "")
-                if preset.include_assertions:
-                    node_dict["assertions"] = node_data.get("assertions", [])
-                if preset.include_test_refs:
-                    node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
-                nodes.append(node_dict)
-            print(json.dumps(nodes, indent=2))
-            return 0
+    if skip_daemon:
+        # Custom spec_dir: build graph directly
+        from elspais.graph.factory import build_graph
 
-    # Build graph using factory
-    from elspais.graph.factory import build_graph
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        if fmt == "json":
+            data = compute_trace(graph, {}, {})
+            _render_json_from_data(data, preset)
+        else:
+            return _render_table_from_graph(graph, fmt, preset)
+    else:
+        data = _engine.call("/api/run/trace", {}, compute_trace)
 
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
-
-    # Implements: REQ-d00084-A
-    # Select formatter based on format
-    formatters = {
-        "text": format_markdown,
-        "markdown": format_markdown,
-        "csv": format_csv,
-        "html": format_html,
-        "json": format_json,
-    }
-
-    for line in formatters[fmt](graph, preset):
-        print(line)
+        # Implements: REQ-d00084-A
+        if fmt == "json":
+            _render_json_from_data(data, preset)
+        else:
+            # For non-JSON formats we need the graph to stream through formatters.
+            # Re-use the cached local graph from the engine.
+            graph = _engine._local_graph
+            if graph is None:
+                graph, _ = _engine._ensure_local_graph()
+            return _render_table_from_graph(graph, fmt, preset)
 
     return 0
 

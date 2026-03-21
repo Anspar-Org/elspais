@@ -2,12 +2,6 @@
 elspais.commands.search_cmd - Search requirements by keyword.
 
 Exposes the MCP search engine as a CLI subcommand.
-
-Fast-path priority:
-  1. Running viewer server (/api/search on port 5001) — ~10ms
-  2. Running MCP daemon — ~200ms
-  3. Auto-start MCP daemon, then query — ~4s first time, ~200ms after
-  4. Local graph build (--no-daemon fallback) — ~2-4s every time
 """
 
 from __future__ import annotations
@@ -16,12 +10,33 @@ import argparse
 import json
 import re
 import sys
+from typing import Any
 
 from elspais.graph import NodeKind
 
 
+def compute_search(graph: Any, config: dict[str, Any], params: dict[str, str]) -> dict:
+    """Pure compute function: search requirements on a graph.
+
+    Called by engine.call (local path) and by routes_api (server path).
+    Returns {"results": [...]}.
+    """
+    query = params.get("q", "")
+    field = params.get("field", "all")
+    use_regex = params.get("regex", "false").lower() == "true"
+    limit = int(params.get("limit", "50"))
+
+    if not query:
+        return {"results": []}
+
+    results = _search(graph, query, field=field, regex=use_regex, limit=limit)
+    return {"results": results}
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the search command."""
+    from elspais.commands._engine import call as engine_call
+
     query = getattr(args, "query", "") or ""
     if not query:
         print("Usage: elspais search 'search terms'", file=sys.stderr)
@@ -33,24 +48,21 @@ def run(args: argparse.Namespace) -> int:
     fmt = getattr(args, "format", "text")
     no_daemon = getattr(args, "no_daemon", False)
 
-    results = None
+    params: dict[str, str] = {
+        "q": query,
+        "field": field,
+        "regex": "true" if use_regex else "false",
+        "limit": str(limit),
+    }
 
-    if not no_daemon:
-        from elspais.commands._daemon_client import try_daemon_or_start
+    data = engine_call(
+        "/api/search",
+        params,
+        compute_search,
+        skip_daemon=no_daemon,
+    )
 
-        results = try_daemon_or_start(
-            "/api/search",
-            {
-                "q": query,
-                "field": field,
-                "regex": "true" if use_regex else "false",
-                "limit": str(limit),
-            },
-        )
-
-    # Fallback: local graph build
-    if results is None:
-        results = _local_search(args, query, field, use_regex, limit)
+    results = data.get("results", [])
 
     if not results:
         if not getattr(args, "quiet", False):
@@ -60,82 +72,6 @@ def run(args: argparse.Namespace) -> int:
     output = _render(results, fmt)
     sys.stdout.write(output)
     return 0
-
-
-def _try_fast_search(
-    query: str,
-    field: str,
-    regex: bool,
-    limit: int,
-) -> list[dict] | None:
-    """Try viewer server, then MCP daemon (both serve /api/search)."""
-    # 1. Try viewer port first (fastest — stdlib-only HTTP GET, ~10ms)
-    results = _try_http_search(query, field, regex, limit, port=5001)
-    if results is not None:
-        return results
-
-    # 2. Try daemon (auto-start if needed, ~43ms warm)
-    try:
-        from elspais.config import find_git_root
-        from elspais.mcp.daemon import ensure_daemon
-
-        repo_root = find_git_root()
-        if repo_root is None:
-            return None
-
-        port = ensure_daemon(repo_root)
-        return _try_http_search(query, field, regex, limit, port=port)
-    except Exception:
-        return None
-
-
-def _try_http_search(
-    query: str,
-    field: str,
-    regex: bool,
-    limit: int,
-    port: int = 5001,
-) -> list[dict] | None:
-    """Query /api/search on a running server — stdlib only, no mcp import."""
-    from urllib.error import URLError
-    from urllib.parse import quote_plus
-    from urllib.request import urlopen
-
-    url = (
-        f"http://127.0.0.1:{port}/api/search"
-        f"?q={quote_plus(query)}&field={field}"
-        f"&regex={'true' if regex else 'false'}&limit={limit}"
-    )
-    try:
-        with urlopen(url, timeout=2) as resp:
-            return json.loads(resp.read())
-    except (URLError, OSError, json.JSONDecodeError, ValueError):
-        return None
-
-
-def _local_search(
-    args: argparse.Namespace,
-    query: str,
-    field: str,
-    regex: bool,
-    limit: int,
-) -> list[dict]:
-    """Build graph locally and search (slow path)."""
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
-
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-
-    raw_config = get_config(config_path)
-    graph = build_graph(
-        config=raw_config,
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
-    return _search(graph, query, field=field, regex=regex, limit=limit)
 
 
 def _search(
