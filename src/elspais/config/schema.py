@@ -80,7 +80,9 @@ class CoverageConfig(_StrictModel):
 
     implemented: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
     tested: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
-    verified: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    verified: CoverageSeverityConfig = Field(
+        default_factory=lambda: CoverageSeverityConfig(none="warning")
+    )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
 

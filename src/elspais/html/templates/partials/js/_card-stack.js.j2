@@ -718,7 +718,7 @@ function _classifyTestState(items) {
             }
         }
     }
-    if (allResults.length === 0) return 'validation-pass'; // exists but no results = covered
+    if (allResults.length === 0) return 'validation-unknown'; // exists but no results = unknown
     var allPassed = allResults.every(function(s) { return s === 'passed'; });
     var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
     if (allPassed) return 'validation-pass';
