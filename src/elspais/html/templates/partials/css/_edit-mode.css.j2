@@ -224,3 +224,49 @@ body.edit-mode .status-badge-wrapper {
 .btn-success { background: #22c55e; color: #fff; border: none; }
 .btn-success:hover:not(:disabled) { background: #16a34a; }
 .btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Branch Picker: Two-Panel History Layout --- */
+
+.branch-picker-panels {
+    display: flex;
+    gap: 16px;
+    min-height: 300px;
+}
+.branch-picker-left {
+    flex: 1;
+    border-right: 1px solid var(--border-color, #333);
+    padding-right: 16px;
+    overflow-y: auto;
+    max-height: 400px;
+}
+.branch-picker-right {
+    flex: 1.5;
+    overflow-y: auto;
+    max-height: 400px;
+}
+.history-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 8px;
+    margin: 2px 0;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+}
+.history-row.head {
+    background: rgba(var(--accent-rgb, 42,170,102), 0.15);
+}
+.history-row:not(.head):hover {
+    background: rgba(255,255,255,0.05);
+    cursor: pointer;
+}
+.history-row.selected {
+    background: rgba(var(--accent-rgb, 42,170,102), 0.25);
+    outline: 1px solid var(--accent-color, #2a6);
+}
+.history-date {
+    color: var(--text-secondary, #888);
+    font-size: 11px;
+    white-space: nowrap;
+    margin-left: 12px;
+}
