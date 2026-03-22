@@ -914,11 +914,18 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
 
     result = _add_req(state.graph, req_id, title, level)
     if result.get("success") and file_id:
-        # Wire to file via move_node_to_file
+        # Wire CONTAINS edge directly (not via move_node_to_file which
+        # creates a separate undo entry). The add_requirement undo already
+        # unlinks all parents, so this is covered.
         try:
-            state.graph.move_node_to_file(req_id, file_id)
+            file_node = state.graph.find_by_id(file_id)
+            req_node = state.graph.find_by_id(req_id)
+            if file_node and req_node:
+                from elspais.graph.relations import EdgeKind
+
+                file_node.link(req_node, EdgeKind.CONTAINS)
         except (ValueError, KeyError):
-            pass  # Node created but file wiring failed — still usable
+            pass
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
