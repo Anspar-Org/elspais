@@ -1210,7 +1210,8 @@ function _flashAssertions(reqId, assertLinkKey) {
         return;
     }
 
-    var flashed = 0;
+    // Collect matching elements first
+    var targets = [];
     for (var label in aLinks) {
         if (!aLinks[label][assertLinkKey]) continue;
         var wrappers = card.querySelectorAll('.card-assertion-wrapper');
@@ -1219,17 +1220,26 @@ function _flashAssertions(reqId, assertLinkKey) {
             if (!assertionDiv) continue;
             var labelEl = assertionDiv.querySelector('.card-assertion-label');
             if (labelEl && labelEl.textContent.trim() === label) {
-                // Remove then re-add to restart animation if already flashing
-                wrappers[i].classList.remove('flash-highlight');
-                void wrappers[i].offsetWidth; // force reflow
-                wrappers[i].classList.add('flash-highlight');
-                flashed++;
-                (function(el) {
-                    setTimeout(function() { el.classList.remove('flash-highlight'); }, 1500);
-                })(wrappers[i]);
-                wrappers[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                targets.push(wrappers[i]);
             }
         }
     }
-    console.log('_flashAssertions:', reqId, assertLinkKey, 'flashed', flashed, 'of', Object.keys(aLinks).length);
+
+    if (targets.length > 0) {
+        targets[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Use inline style flash (same pattern as file-viewer line flash)
+    setTimeout(function() {
+        for (var j = 0; j < targets.length; j++) {
+            targets[j].style.transition = 'none';
+            targets[j].style.backgroundColor = 'rgba(13, 110, 253, 0.3)';
+        }
+        setTimeout(function() {
+            for (var j = 0; j < targets.length; j++) {
+                targets[j].style.transition = 'background-color 1s ease-out';
+                targets[j].style.backgroundColor = '';
+            }
+        }, 400);
+    }, 50);
 }
