@@ -2270,15 +2270,35 @@ function _showAddJourneyModal(files) {
 
     modal.appendChild(fileSection);
 
-    // Journey ID
+    // Journey ID — fixed JNY- prefix, editable descriptor and number
     var idSection = document.createElement('div');
     idSection.className = 'modal-section';
     idSection.innerHTML = '<label class="modal-label">Journey ID:</label>';
-    var idInput = document.createElement('input');
-    idInput.type = 'text';
-    idInput.className = 'modal-input';
-    idInput.placeholder = 'JNY-TOPIC-01';
-    idSection.appendChild(idInput);
+    var idRow = document.createElement('div');
+    idRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+    var idPrefix = document.createElement('span');
+    idPrefix.className = 'modal-id-display';
+    idPrefix.style.cssText = 'padding:6px 8px;flex-shrink:0;';
+    idPrefix.textContent = 'JNY-';
+    var descriptorInput = document.createElement('input');
+    descriptorInput.type = 'text';
+    descriptorInput.className = 'modal-input';
+    descriptorInput.placeholder = 'Descriptor (e.g. LOGIN)';
+    descriptorInput.style.flex = '1';
+    var idSep = document.createElement('span');
+    idSep.style.cssText = 'font-weight:600;flex-shrink:0;';
+    idSep.textContent = '-';
+    var numberInput = document.createElement('input');
+    numberInput.type = 'text';
+    numberInput.className = 'modal-input';
+    numberInput.placeholder = '01';
+    numberInput.style.cssText = 'width:60px;flex-shrink:0;';
+    numberInput.value = '01';
+    idRow.appendChild(idPrefix);
+    idRow.appendChild(descriptorInput);
+    idRow.appendChild(idSep);
+    idRow.appendChild(numberInput);
+    idSection.appendChild(idRow);
     modal.appendChild(idSection);
 
     // Title
@@ -2311,13 +2331,17 @@ function _showAddJourneyModal(files) {
     cancelBtn.addEventListener('click', function() { overlay.remove(); });
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 
+    descriptorInput.focus();
+
     createBtn.addEventListener('click', function() {
-        var journeyId = idInput.value.trim();
+        var descriptor = descriptorInput.value.trim();
+        var number = numberInput.value.trim();
         var title = titleInput.value.trim();
-        if (!journeyId || !title) {
-            showToast('Journey ID and title are required', 'warning');
+        if (!descriptor || !number || !title) {
+            showToast('Descriptor, number, and title are required', 'warning');
             return;
         }
+        var journeyId = 'JNY-' + descriptor + '-' + number;
         var checkedRadio = fileList.querySelector('input[name="journey-file"]:checked');
         var fileId = checkedRadio ? checkedRadio.value : '';
         if (fileId === '__new__') {

@@ -1058,8 +1058,8 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Validate JNY ID format
-    if not re.match(r"^JNY-[A-Za-z0-9]+-\d+$", journey_id):
+    # Validate JNY ID format (same pattern as parser: JNY-[A-Za-z0-9-]+)
+    if not re.match(r"^JNY-[A-Za-z0-9-]+$", journey_id):
         return JSONResponse(
             {
                 "success": False,
