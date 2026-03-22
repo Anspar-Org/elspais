@@ -126,7 +126,7 @@ function renderCardStack() {
 function buildCardHtml(nodeId, data, collapsed) {
     const collapsedClass = collapsed ? ' collapsed' : '';
     const focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
-    const shortId = nodeId.replace('REQ-', '');
+    const shortId = nodeId;
     const title = escapeHtml(data.title || '');
     var props = data.properties || {};
     const level = (props.level || '').toUpperCase();
@@ -398,8 +398,8 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     // Header — show journey ID + editable title
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
-    html += '<span class="journey-card-kind">' + shortId + '</span>';
-    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<span class="req-card-id">' + shortId + '</span>';
+    html += '<span class="req-card-title-display view-only">' + title + '</span>';
     // Edit mode: inline title input
     html += '<input type="text" class="edit-only journey-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onJourneyTitleBlur(\'' + nodeId + '\', this)"' +
