@@ -103,11 +103,9 @@
 
 [x] Naming (minor): `coverage_pct` in `RollupMetrics` was misleading — it measured assertion *reference* coverage, not traditional code coverage. Renamed to `referenced_pct` (also `indirect_referenced_pct`, `uat_referenced_pct`).
 
-[ ] Feature (medium): `code_tested` metric 
-— traditional code-test coverage (which lines of code are executed during tests). 
-- Distinct from the current code-requirement traceability (`# Implements:` references). 
-- Will require test runner integration to collect line-level execution data.
-- Can we also map lines tested to Requirements, through the TEST->line coverage link? 
+[x] Feature (medium): `code_tested` metric
+— traditional code-test coverage (which lines of code are executed during tests).
+- Implemented: 6th CoverageDimension on RollupMetrics. Prescan emits function_end_line, IMPLEMENTS edges carry line ranges, LCOV + coverage.json parsers, factory annotates FILE nodes with line_coverage. Annotator intersects implementation line ranges with coverage data. Health check + project-wide metrics. Pre-push hook generates coverage.json with per-test contexts.
 
 [ ] Chore (low): start using Changelog in REQs after v 1.0.0
 

@@ -76,6 +76,9 @@ reference_keyword = "Validates"
 file_patterns = ["test-results.xml"]
 run_meta_file = "test-run-meta.json"
 
+[scanning.coverage]
+file_patterns = ["coverage.json"]
+
 # Validation rules
 
 [rules.hierarchy]

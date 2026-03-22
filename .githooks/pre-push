@@ -337,7 +337,8 @@ echo ""
 echo -e "${BLUE}Running full test suite...${NC}"
 echo ""
 
-if ! pytest tests/ --tb=short -q --junitxml="$REPO_ROOT/test-results.xml" 2>&1; then
+if ! pytest tests/ --tb=short -q --junitxml="$REPO_ROOT/test-results.xml" \
+    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/coverage.json" --cov-report= 2>&1; then
     VALIDATION_FAILED=true
     echo -e "${RED}Test suite failed!${NC}"
 else
