@@ -58,12 +58,12 @@ function createReqPicker(container, options) {
         dropdown.innerHTML = '<div class="req-picker-loading">Searching...</div>';
         openDropdown();
 
-        apiFetch('/api/search?q=' + encodeURIComponent(query) + '&limit=10').then(function(results) {
-            if (!results) {
+        apiFetch('/api/search?q=' + encodeURIComponent(query) + '&limit=10').then(function(data) {
+            if (!data) {
                 dropdown.innerHTML = '<div class="req-picker-empty">Search failed</div>';
                 return;
             }
-            state.results = results;
+            state.results = data.results || [];
             state.highlightIndex = -1;
             renderResults();
         });
