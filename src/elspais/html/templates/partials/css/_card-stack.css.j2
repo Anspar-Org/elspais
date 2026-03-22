@@ -667,12 +667,12 @@ body.edit-mode .card-parent-kind.view-only {
 }
 
 @keyframes flash-bg {
-    0% { background: var(--impl-yes-border, #0d6efd); }
-    100% { background: transparent; }
+    0%, 15% { background-color: rgba(13, 110, 253, 0.35) !important; }
+    100% { background-color: transparent !important; }
 }
 
 .flash-highlight {
-    animation: flash-bg 1.5s ease-out;
+    animation: flash-bg 1.5s ease-out !important;
     border-radius: 4px;
 }
 
