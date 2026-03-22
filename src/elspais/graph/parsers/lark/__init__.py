@@ -247,7 +247,7 @@ class FileDispatcher:
         self,
         content: str,
         file_path: str = "",
-        line_context: dict[int, tuple[str | None, str | None, int]] | None = None,
+        line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
     ) -> list:
         """Parse a code file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer

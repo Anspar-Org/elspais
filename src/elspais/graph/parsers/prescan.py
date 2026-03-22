@@ -78,7 +78,7 @@ def detect_language(file_path: str) -> str:
 def build_line_context(
     lines: list[tuple[int, str]],
     language: str,
-) -> dict[int, tuple[str | None, str | None, int]]:
+) -> dict[int, tuple[str | None, str | None, int, int]]:
     """Build function/class context map for each line.
 
     Pre-scans lines to determine which function/class each line
@@ -95,7 +95,8 @@ def build_line_context(
         language: Detected language key.
 
     Returns:
-        Dict mapping line_number to (function_name, class_name, function_line).
+        Dict mapping line_number to (function_name, class_name, function_line, function_end_line).
+        function_end_line is 0 (sentinel) for text-based scanning since end lines are unreliable.
     """
     # Select patterns for language
     if language == "python":
@@ -135,7 +136,7 @@ def build_line_context(
     func_brace_start: int = -1
     class_brace_start: int = -1
 
-    line_context: dict[int, tuple[str | None, str | None, int]] = {}
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
 
     for ln, text in lines:
         stripped = text.strip()
@@ -205,13 +206,14 @@ def build_line_context(
         class_match = None  # type: ignore[assignment]
         func_match = None  # type: ignore[assignment]
 
-        line_context[ln] = (current_func, current_class, current_func_line)
+        # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
+        line_context[ln] = (current_func, current_class, current_func_line, 0)
 
     # Forward-looking fixup: if a comment line has no function context,
     # look ahead up to 5 lines for the next function definition.
     # This handles "# Implements: <REQ-ID>" placed above a function.
     for idx, (ln, text) in enumerate(lines):
-        func_name, class_name, func_line = line_context[ln]
+        func_name, class_name, func_line, _func_end = line_context[ln]
         if func_name is not None:
             continue
 
@@ -233,8 +235,8 @@ def build_line_context(
                 if m:
                     ahead_func = m.group(2)
                     # Use the class context from the ahead line if available
-                    _, ahead_class, _ = line_context.get(ahead_ln, (None, None, 0))
-                    line_context[ln] = (ahead_func, ahead_class or class_name, ahead_ln)
+                    _, ahead_class, _, _ = line_context.get(ahead_ln, (None, None, 0, 0))
+                    line_context[ln] = (ahead_func, ahead_class or class_name, ahead_ln, 0)
                     break
             else:
                 continue
@@ -247,7 +249,7 @@ def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
 ) -> tuple[
-    dict[int, tuple[str | None, str | None, int]],
+    dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
     int,
 ]:
@@ -262,7 +264,7 @@ def ast_prescan(
 
     Returns:
         Tuple of (line_context, all_test_funcs, first_def_line):
-        - line_context: Maps line_number -> (func_name, class_name, func_line)
+        - line_context: Maps line_number -> (func_name, class_name, func_line, func_end_line)
         - all_test_funcs: List of (func_line, func_name, class_name)
         - first_def_line: Line number of first class/function def (0 if none)
     """
@@ -311,24 +313,26 @@ def ast_prescan(
 
     # Build line_context map: for each source line, determine which
     # function (if any) it falls within
-    line_context: dict[int, tuple[str | None, str | None, int]] = {}
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
     for ln, _text in lines:
         func_name = None
         class_name = None
         func_line = 0
+        func_end_line = 0
         for start, end, fname, cname in func_ranges:
             if start <= ln <= end:
                 func_name = fname
                 class_name = cname
                 func_line = start
+                func_end_line = end
                 break
-        line_context[ln] = (func_name, class_name, func_line)
+        line_context[ln] = (func_name, class_name, func_line, func_end_line)
 
     # Forward-looking fixup: comment lines above a function def fall outside
     # the AST range.  Look ahead up to 5 lines to bind them to the next
     # function — same logic that text_prescan already applies.
     for idx, (ln, text) in enumerate(lines):
-        func_name, _class_name, _func_line = line_context[ln]
+        func_name, _class_name, _func_line, _func_end = line_context[ln]
         if func_name is not None:
             continue
 
@@ -343,9 +347,11 @@ def ast_prescan(
 
         for ahead in range(1, min(6, len(lines) - idx)):
             ahead_ln, _ahead_text = lines[idx + ahead]
-            ahead_func, ahead_class, ahead_fline = line_context.get(ahead_ln, (None, None, 0))
+            ahead_func, ahead_class, ahead_fline, ahead_fend = line_context.get(
+                ahead_ln, (None, None, 0, 0)
+            )
             if ahead_func is not None:
-                line_context[ln] = (ahead_func, ahead_class, ahead_fline)
+                line_context[ln] = (ahead_func, ahead_class, ahead_fline, ahead_fend)
                 break
 
     return line_context, all_test_funcs, first_def_line
@@ -354,7 +360,7 @@ def ast_prescan(
 def text_prescan(
     lines: list[tuple[int, str]],
 ) -> tuple[
-    dict[int, tuple[str | None, str | None, int]],
+    dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
     int,
 ]:
@@ -378,7 +384,7 @@ def text_prescan(
     current_func_line: int = 0
     first_def_line = 0
 
-    line_context: dict[int, tuple[str | None, str | None, int]] = {}
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
     all_test_funcs: list[tuple[int, str, str | None]] = []
 
     for ln, text in lines:
@@ -415,7 +421,8 @@ def text_prescan(
                 current_func = None
                 current_func_indent = -1
 
-        line_context[ln] = (current_func, current_class, current_func_line)
+        # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
+        line_context[ln] = (current_func, current_class, current_func_line, 0)
 
     return line_context, all_test_funcs, first_def_line
 
@@ -424,7 +431,7 @@ def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],
 ) -> tuple[
-    dict[int, tuple[str | None, str | None, int]],
+    dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
     int,
 ]:
@@ -439,36 +446,43 @@ def external_prescan(
     """
     all_test_funcs: list[tuple[int, str, str | None]] = []
     # Build ranges: each function spans from its line to the next function's line - 1
-    # (or end of file)
+    # (or end of file).  If an explicit end_line is provided, use it.
     sorted_entries = sorted(file_entries, key=lambda e: e["line"])
-    func_ranges: list[tuple[int, int, str, str | None]] = []
+    # (start, end, fname, cname, explicit_end_line)
+    func_ranges: list[tuple[int, int, str, str | None, int]] = []
 
     for i, entry in enumerate(sorted_entries):
         start = entry["line"]
         fname = entry["function"]
         cname = entry.get("class")
+        explicit_end = entry.get("end_line", 0)
         if fname.startswith("test_"):
             all_test_funcs.append((start, fname, cname))
         # End is either next function's line - 1, or last source line
         if i + 1 < len(sorted_entries):
-            end = sorted_entries[i + 1]["line"] - 1
+            heuristic_end = sorted_entries[i + 1]["line"] - 1
         else:
-            end = lines[-1][0] if lines else start
-        func_ranges.append((start, end, fname, cname))
+            heuristic_end = lines[-1][0] if lines else start
+        # Use explicit end_line for func_end_line; heuristic for range matching
+        end = heuristic_end
+        func_end_line = explicit_end if explicit_end else heuristic_end
+        func_ranges.append((start, end, fname, cname, func_end_line))
 
     first_def_line = sorted_entries[0]["line"] if sorted_entries else 0
 
-    line_context: dict[int, tuple[str | None, str | None, int]] = {}
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
     for ln, _text in lines:
         func_name = None
         class_name = None
         func_line = 0
-        for start, end, fname, cname in func_ranges:
+        func_end = 0
+        for start, end, fname, cname, fend in func_ranges:
             if start <= ln <= end:
                 func_name = fname
                 class_name = cname
                 func_line = start
+                func_end = fend
                 break
-        line_context[ln] = (func_name, class_name, func_line)
+        line_context[ln] = (func_name, class_name, func_line, func_end)
 
     return line_context, all_test_funcs, first_def_line
