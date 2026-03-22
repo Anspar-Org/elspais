@@ -197,7 +197,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Metadata section — source file right-justified on label line
     var reqSourceLink = '';
     if (sourcePath) {
-        reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;">' +
+        reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;text-transform:none;">' +
             '<a href="#" onclick="event.preventDefault(); showSource(\'' +
             escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;">' +
@@ -418,7 +418,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     if (sourcePath) {
         sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
             escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
-            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;margin-left:auto;">' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;text-transform:none;margin-left:auto;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
     }
     html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
