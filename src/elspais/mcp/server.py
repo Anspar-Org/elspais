@@ -317,14 +317,15 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             EK.INSTANCE,
             EK.CONTAINS,
         ):
-            links.append(
-                {
-                    "id": edge.source.id,
-                    "kind": edge.source.kind.value,
-                    "title": edge.source.get_label(),
-                    "edge_kind": edge.kind.value,
-                }
-            )
+            link_entry: dict[str, Any] = {
+                "id": edge.source.id,
+                "kind": edge.source.kind.value,
+                "title": edge.source.get_label(),
+                "edge_kind": edge.kind.value,
+            }
+            if edge.assertion_targets:
+                link_entry["assertion_targets"] = edge.assertion_targets
+            links.append(link_entry)
     for edge in node.iter_outgoing_edges():
         if edge.kind not in (
             EK.IMPLEMENTS,
@@ -333,14 +334,15 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             EK.INSTANCE,
             EK.CONTAINS,
         ):
-            links.append(
-                {
-                    "id": edge.target.id,
-                    "kind": edge.target.kind.value,
-                    "title": edge.target.get_label(),
-                    "edge_kind": edge.kind.value,
-                }
-            )
+            link_entry = {
+                "id": edge.target.id,
+                "kind": edge.target.kind.value,
+                "title": edge.target.get_label(),
+                "edge_kind": edge.kind.value,
+            }
+            if edge.assertion_targets:
+                link_entry["assertion_targets"] = edge.assertion_targets
+            links.append(link_entry)
 
     # ── Common: keywords ──
     keywords = node.get_field("keywords", []) or []

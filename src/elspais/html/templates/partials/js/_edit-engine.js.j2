@@ -1892,30 +1892,17 @@ function onDeleteJourneyRef(journeyId, reqId) {
     if (!confirm('Remove Validates link to ' + reqId + '?')) return;
     mutate('/api/mutate/edge', {
         action: 'delete', source_id: journeyId, target_id: reqId
-    }).then(function(r) {
+    }).then(async function(r) {
         if (r && r.success) {
-            // Remove badge from DOM
-            var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
-            if (card) {
-                var badges = card.querySelectorAll('.journey-ref-badge');
-                badges.forEach(function(b) {
-                    if (b.textContent.trim().replace(/\s*×\s*$/, '') === reqId) b.remove();
-                });
-            }
+            await refreshAllOpenCards();
+            loadTreeData();
         }
     });
 }
 
-function onAddJourneyRef(journeyId) {
-    var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
-    if (!card) return;
-    var refsDiv = card.querySelector('.journey-refs');
-    if (!refsDiv) return;
-    var addBtn = refsDiv.querySelector('.journey-ref-add-btn');
-    if (!addBtn) return;
-
+function onAddJourneyRef(journeyId, btn) {
     // Toggle form
-    var existing = refsDiv.querySelector('.card-add-rel-form');
+    var existing = btn.parentNode.querySelector('.card-add-rel-form');
     if (existing) { existing.remove(); return; }
 
     var form = document.createElement('div');
@@ -1993,18 +1980,11 @@ function onAddJourneyRef(journeyId) {
         if (assertionLabel) {
             payload.assertion_targets = [assertionLabel];
         }
-        mutate('/api/mutate/edge', payload).then(function(result) {
+        mutate('/api/mutate/edge', payload).then(async function(result) {
             if (result && result.success) {
                 picker.destroy();
                 form.remove();
-                // Add badge to DOM
-                var fullId = assertionLabel ? targetId + '-' + assertionLabel : targetId;
-                var badge = document.createElement('span');
-                badge.className = 'journey-ref-badge';
-                badge.setAttribute('onclick', "switchToReqTab('" + fullId + "')");
-                badge.innerHTML = escapeHtml(fullId) +
-                    ' <span class="edit-only journey-ref-delete" onclick="event.stopPropagation(); onDeleteJourneyRef(\'' + journeyId + '\', \'' + escapeAttr(targetId) + '\')">&times;</span>';
-                addBtn.parentNode.insertBefore(badge, addBtn);
+                await refreshAllOpenCards();
                 loadTreeData();
             }
         });
@@ -2015,7 +1995,7 @@ function onAddJourneyRef(journeyId) {
         form.remove();
     });
 
-    refsDiv.insertBefore(form, addBtn);
+    btn.parentNode.insertBefore(form, btn);
 }
 
 function onAddJourney() {
