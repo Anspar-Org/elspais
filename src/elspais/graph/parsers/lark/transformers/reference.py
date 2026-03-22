@@ -112,7 +112,7 @@ class ReferenceTransformer:
                         break
 
                 if refs:
-                    func_name, class_name, func_line, _func_end = self.line_context.get(
+                    func_name, class_name, func_line, func_end_line = self.line_context.get(
                         start_ln, (None, None, 0, 0)
                     )
                     key = "implements" if self.content_type == "code_ref" else "verifies"
@@ -121,6 +121,7 @@ class ReferenceTransformer:
                         "function_name": func_name,
                         "class_name": class_name,
                         "function_line": func_line,
+                        "function_end_line": func_end_line,
                     }
                     if self.content_type == "code_ref":
                         parsed_data.setdefault("verifies", [])
@@ -255,7 +256,7 @@ class ReferenceTransformer:
         if not refs:
             return None
 
-        func_name, class_name, func_line, _func_end = self.line_context.get(
+        func_name, class_name, func_line, func_end_line = self.line_context.get(
             line_num, (None, None, 0, 0)
         )
 
@@ -269,6 +270,7 @@ class ReferenceTransformer:
                 "function_name": func_name,
                 "class_name": class_name,
                 "function_line": func_line,
+                "function_end_line": func_end_line,
             }
         else:  # test_ref
             parsed_data = {

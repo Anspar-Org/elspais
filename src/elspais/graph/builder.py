@@ -2815,6 +2815,9 @@ class GraphBuilder:
                     node.set_field("class_name", class_name)
                 if func_line:
                     node.set_field("function_line", func_line)
+                func_end_line = data.get("function_end_line", 0)
+                if func_end_line:
+                    node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
 
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
@@ -3324,17 +3327,33 @@ class GraphBuilder:
                     if parent_reqs:
                         parent_req = parent_reqs[0]
                         assertion_label = target.get_field("label", "")
-                        parent_req.link(
+                        edge = parent_req.link(
                             source,
                             edge_kind,
                             assertion_targets=[assertion_label] if assertion_label else None,
                         )
                     else:
                         # Fallback: link directly if no parent found
-                        target.link(source, edge_kind)
+                        edge = target.link(source, edge_kind)
                 else:
                     # Link target as parent of source (implements relationship)
-                    target.link(source, edge_kind)
+                    edge = target.link(source, edge_kind)
+
+                # Store implementation line range on IMPLEMENTS/VERIFIES edges
+                if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
+                    impl_start = (
+                        source.get_field("function_line")
+                        or source.get_field("parse_line")
+                    )
+                    impl_end = (
+                        source.get_field("function_end_line")
+                        or source.get_field("parse_end_line")
+                        or 0
+                    )
+                    if impl_start:
+                        edge.metadata["impl_start_line"] = impl_start
+                    if impl_end:
+                        edge.metadata["impl_end_line"] = impl_end
             elif source and not target:
                 # Broken reference: target doesn't exist
                 self._broken_references.append(

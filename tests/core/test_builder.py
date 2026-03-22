@@ -1373,3 +1373,120 @@ class TestParseDirtyFlag:
         node = graph.find_by_id("REQ-p00001")
         assert node is not None
         assert not node.get_field("parse_dirty")
+
+
+class TestImplementsEdgeMetadata:
+    """Tests for impl_start_line/impl_end_line metadata on IMPLEMENTS edges."""
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_has_line_metadata(self):
+        """IMPLEMENTS edge from CODE node carries impl_start_line and impl_end_line."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+            assertions=[{"label": "A", "text": "Something"}],
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=42,
+            end_line=42,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "verifies": [],
+                "function_name": "do_something",
+                "class_name": None,
+                "function_line": 30,
+                "function_end_line": 60,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        # Find the CODE node
+        code_node = graph.find_by_id("code:src/module.py:42")
+        assert code_node is not None
+        assert code_node.get_field("function_line") == 30
+        assert code_node.get_field("function_end_line") == 60
+
+        # Check IMPLEMENTS edge metadata
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        assert edge.metadata.get("impl_start_line") == 30
+        assert edge.metadata.get("impl_end_line") == 60
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_falls_back_to_parse_line(self):
+        """IMPLEMENTS edge falls back to parse_line when function_line is not set."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=15,
+            end_line=15,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "verifies": [],
+                "function_name": None,
+                "class_name": None,
+                "function_line": 0,
+                "function_end_line": 0,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        code_node = graph.find_by_id("code:src/module.py:15")
+        assert code_node is not None
+
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        # Falls back to parse_line
+        assert edge.metadata.get("impl_start_line") == 15
+        # Falls back to parse_end_line
+        assert edge.metadata.get("impl_end_line") == 15
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_to_assertion_has_metadata(self):
+        """IMPLEMENTS edge targeting an assertion still gets line metadata."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+            assertions=[{"label": "A", "text": "Something"}],
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=10,
+            end_line=10,
+            raw_text="# Implements: REQ-p00001-A",
+            parsed_data={
+                "implements": ["REQ-p00001-A"],
+                "verifies": [],
+                "function_name": "my_func",
+                "class_name": "MyClass",
+                "function_line": 5,
+                "function_end_line": 25,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        code_node = graph.find_by_id("code:src/module.py:10")
+        assert code_node is not None
+
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        assert edge.metadata.get("impl_start_line") == 5
+        assert edge.metadata.get("impl_end_line") == 25
