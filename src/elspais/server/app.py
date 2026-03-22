@@ -49,6 +49,7 @@ from elspais.server.routes_api import (
     api_requirement,
     api_revert,
     api_run_analysis,
+    api_run_broken,
     api_run_checks,
     api_run_gaps,
     api_run_summary,
@@ -142,6 +143,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/check-freshness", api_check_freshness),
         # CLI command endpoints
         Route("/api/run/checks", api_run_checks),
+        Route("/api/run/broken", api_run_broken),
         Route("/api/run/summary", api_run_summary),
         Route("/api/run/gaps", api_run_gaps),
         Route("/api/run/unlinked", api_run_unlinked),

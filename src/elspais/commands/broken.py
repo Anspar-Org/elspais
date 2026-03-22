@@ -114,28 +114,79 @@ def render_section(
 
 
 # =============================================================================
+# Daemon-compatible compute function
+# =============================================================================
+
+
+def compute_broken(
+    graph: FederatedGraph,
+    config: dict[str, Any],
+    params: dict[str, str],
+) -> dict[str, Any]:
+    """Compute broken references and return a structured dict.
+
+    This is the compute_fn for ``_engine.call()``, matching the
+    ``(graph, config, params) -> dict`` signature used by all CLI
+    command endpoints.
+    """
+    refs = collect_broken(graph, config)
+    data = [
+        {
+            "source": br.source_id,
+            "target": br.target_id,
+            "kind": br.edge_kind,
+            "foreign": br.presumed_foreign,
+        }
+        for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
+    ]
+    return {"broken": data, "count": len(data)}
+
+
+# =============================================================================
 # Standalone run
 # =============================================================================
 
 
 def run(args: argparse.Namespace) -> int:
     """Run a standalone broken-references listing."""
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
+    from elspais.commands import _engine
 
     spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-    start_path = Path.cwd()
+    skip_daemon = bool(spec_dir)
 
-    config = get_config(config_path, start_path=start_path)
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
+    if skip_daemon:
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
 
-    output, exit_code = render_section(graph, config, args)
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+        start_path = Path.cwd()
+
+        config = get_config(config_path, start_path=start_path)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        output, exit_code = render_section(graph, config, args)
+    else:
+        data = _engine.call(
+            "/api/run/broken",
+            {},
+            compute_broken,
+            config_path=getattr(args, "config", None),
+            canonical_root=getattr(args, "canonical_root", None),
+        )
+        # Reconstruct output from the dict
+        fmt = getattr(args, "format", "text")
+        refs_data = data.get("broken", [])
+        if fmt == "json":
+            output = json.dumps({"broken": refs_data}, indent=2)
+        elif fmt == "markdown":
+            output = _render_broken_data_markdown(refs_data)
+        else:
+            output = _render_broken_data_text(refs_data)
+        exit_code = 1 if refs_data else 0
 
     output_file = getattr(args, "output", None)
     if output_file:
@@ -144,3 +195,30 @@ def run(args: argparse.Namespace) -> int:
         print(output)
 
     return exit_code
+
+
+def _render_broken_data_text(refs: list[dict[str, Any]]) -> str:
+    """Render broken references from dict data as plain text."""
+    if not refs:
+        return f"\n{_LABEL}: none"
+    lines = [f"\n{_LABEL} ({len(refs)}):"]
+    for br in refs:
+        foreign = " [foreign]" if br.get("foreign") else ""
+        lines.append(f"  {br['source']:20s} -> {br['target']:20s} ({br['kind']}){foreign}")
+    return "\n".join(lines)
+
+
+def _render_broken_data_markdown(refs: list[dict[str, Any]]) -> str:
+    """Render broken references from dict data as markdown."""
+    if not refs:
+        return f"## {_LABEL}\n\nNo broken references found."
+    lines = [
+        f"## {_LABEL} ({len(refs)})",
+        "",
+        "| Source | Target | Kind |",
+        "|--------|--------|------|",
+    ]
+    for br in refs:
+        foreign = " [foreign]" if br.get("foreign") else ""
+        lines.append(f"| {br['source']} | {br['target']} | {br['kind']}{foreign} |")
+    return "\n".join(lines)

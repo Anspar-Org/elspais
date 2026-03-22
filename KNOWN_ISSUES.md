@@ -1,12 +1,17 @@
 # Known Issues
 
-[ ] testing: bug, kinda
-- xml test results are all on 'one line' so its hard to link to them (all results are on line 1).
-- if we can make the test runner natively output a pretty-printed version, then post-processs:
-- xmllint --format test-results.xml -o test-results.xml
+[ ] feature: config
+- make journey IDs configurable like REQ IDs
+- second instand of IDresolver?
 
-[ ] viewer: bug
+[x] testing: bug
+- xml test results are all on 'one line' so its hard to link to them (all results are on line 1).
+- Fixed: pre-push hook now pretty-prints JUnit XML after pytest runs (ET.indent).
+- JUnit XML parser assigns per-testcase line numbers when XML is pretty-printed.
+
+[x] viewer: bug
 - expand collapse icons in tree should be same size as in header.
+- Fixed: nav-tree-toggle font-size changed from 8px to 16px to match card header expand icons.
 
 [x] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
 - Fixed: JS was reading data.children but API returns data.assertions. One-line fix.
@@ -19,9 +24,11 @@
 - Move to file reuses existing dialog
 - Body reconstructed from structured fields for round-trip fidelity
 
-[ ] Bug: daemon doesn't work for all commands
+[x] Bug: daemon doesn't work for all commands
 - elspais checks, twice in a row: 2nd call is always fast
 - elspais checks broken, never fast
+- Fixed: added compute_broken() + /api/run/broken endpoint + _engine.call() in broken.py run()
+- Audited all commands: all read-only graph commands now use daemon; write commands (fix, validate, reformat) intentionally local-only.
 
 [x] viewer: feature
 - Collapse arrow doubled (8px→16px), card headers consistent (req-card-id class for all)

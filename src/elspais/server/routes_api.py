@@ -688,6 +688,15 @@ async def api_run_checks(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def api_run_broken(request: Request) -> JSONResponse:
+    """GET /api/run/broken - Broken references report."""
+    from elspais.commands.broken import compute_broken
+
+    state = _st(request)
+    params = dict(request.query_params)
+    return JSONResponse(compute_broken(state.graph, state.config, params))
+
+
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
     from elspais.commands.summary import compute_summary

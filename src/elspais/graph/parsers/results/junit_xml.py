@@ -6,6 +6,7 @@ Uses IdResolver.search_regex() for finding requirement IDs in test output.
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from pathlib import Path
@@ -13,6 +14,20 @@ from typing import TYPE_CHECKING, Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.test_identity import build_test_id_from_result
+
+# Pattern to extract a named XML attribute value from a raw text line.
+_ATTR_RE: dict[str, re.Pattern[str]] = {}
+
+
+def _attr_value(text: str, attr: str) -> str | None:
+    """Extract the value of *attr* from a raw XML element string."""
+    pat = _ATTR_RE.get(attr)
+    if pat is None:
+        pat = re.compile(rf'{attr}="([^"]*)"')
+        _ATTR_RE[attr] = pat
+    m = pat.search(text)
+    return m.group(1) if m else None
+
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
@@ -165,6 +180,10 @@ class JUnitXMLParser:
         Reassembles lines into full XML content, delegates to ``parse()``,
         and yields ``ParsedContent`` for each test result.
 
+        When the XML is pretty-printed (one ``<testcase`` per line), each
+        result gets the line number of its ``<testcase`` element.  When the
+        XML is minified (single line), all results share line 1.
+
         Args:
             lines: List of (line_number, content) tuples.
             context: Parsing context with file info.
@@ -174,11 +193,27 @@ class JUnitXMLParser:
         """
         content = "\n".join(text for _, text in lines)
         results = self.parse(content, context.file_path)
+
+        # Build a line-number index: (classname, name) -> file line number.
+        # Works when the XML is pretty-printed so each <testcase is on its
+        # own line; falls back to first-line when minified.
+        tc_lines: dict[tuple[str, str], int] = {}
+        base_line = lines[0][0] if lines else 1
+        for line_no, text in lines:
+            if "<testcase " in text:
+                # Extract classname and name from the raw XML line
+                cn = _attr_value(text, "classname")
+                nm = _attr_value(text, "name")
+                if cn is not None and nm is not None:
+                    tc_lines[(cn, nm)] = line_no
+
         for result in results:
+            key = (result.get("classname", ""), result.get("name", ""))
+            start = tc_lines.get(key, base_line)
             yield ParsedContent(
                 content_type="test_result",
-                start_line=lines[0][0] if lines else 1,
-                end_line=lines[-1][0] if lines else 1,
+                start_line=start,
+                end_line=start,
                 raw_text="",
                 parsed_data=result,
             )

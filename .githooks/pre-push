@@ -343,6 +343,18 @@ if ! pytest tests/ --tb=short -q --junitxml="$REPO_ROOT/test-results.xml" 2>&1; 
 else
     echo -e "${GREEN}Test suite passed!${NC}"
 fi
+# Pretty-print the JUnit XML so each <testcase> has its own line,
+# making it possible for elspais to link to individual results.
+python3 -c "
+import xml.etree.ElementTree as ET, sys
+f = '$REPO_ROOT/test-results.xml'
+try:
+    tree = ET.parse(f)
+    ET.indent(tree, space='  ')
+    tree.write(f, encoding='unicode', xml_declaration=True)
+except Exception:
+    sys.exit(0)
+" 2>/dev/null || true
 echo ""
 
 # =====================================================
