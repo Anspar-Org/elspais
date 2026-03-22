@@ -199,6 +199,33 @@ class FileDispatcher:
             self._ref_parser = self._factory.get_reference_parser()
         return self._ref_parser
 
+    @staticmethod
+    def _neutralize_fenced_blocks(content: str) -> str:
+        """Replace content inside fenced code blocks with neutral text.
+
+        Fenced code blocks (```...```) may contain example requirement or
+        journey syntax that should not be parsed as actual content. This
+        replaces each line inside a fence with a neutral comment that the
+        grammar will match as TEXT/remainder, preserving line count.
+        """
+        lines = content.split("\n")
+        result: list[str] = []
+        in_fence = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("```") and not in_fence:
+                in_fence = True
+                result.append(line)  # keep the opening fence marker as-is
+            elif stripped.startswith("```") and in_fence:
+                in_fence = False
+                result.append(line)  # keep the closing fence marker as-is
+            elif in_fence:
+                # Replace with a neutral line that won't match any grammar rule
+                result.append("<!-- fenced -->" if line.strip() else "")
+            else:
+                result.append(line)
+        return "\n".join(result)
+
     def dispatch_spec(
         self,
         content: str,
@@ -209,6 +236,8 @@ class FileDispatcher:
 
         if not content.endswith("\n"):
             content += "\n"
+        # Neutralize fenced code blocks before parsing
+        content = self._neutralize_fenced_blocks(content)
         parser = self._get_req_parser()
         tree = parser.parse(content)
         transformer = RequirementTransformer(self._resolver)
