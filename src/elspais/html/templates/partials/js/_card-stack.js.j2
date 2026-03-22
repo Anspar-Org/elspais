@@ -138,11 +138,15 @@ function buildCardHtml(nodeId, data, collapsed) {
 
     let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
 
-    // Header
+    // Header — with inline title editing
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
-    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<span class="req-card-title-display view-only">' + title + '</span>';
+    html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
+        ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
+        ' data-original="' + escapeAttr(data.title || '') + '"' +
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;padding:1px 4px;">';
     html += '<button class="req-card-delete edit-only" ' +
         'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
         'title="Delete requirement">&#10005;</button>';
@@ -236,14 +240,6 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div>';
 
     html += '</div></div>';
-
-    // Editable Title (edit mode only, replaces header title on blur)
-    html += '<div class="card-section edit-only"><div class="card-section-label">Title <span class="edit-pencil" onclick="event.stopPropagation(); this.closest(\'.card-section\').querySelector(\'.editable-field\').focus()">&#9998;</span></div>';
-    html += '<div class="editable-field" contenteditable="true" data-node-id="' + nodeId + '" ' +
-        'data-field="title" data-original="' + escapeAttr(data.title || '') + '" ' +
-        'onblur="onTitleBlur(this)" onkeydown="onEditableKeydown(event)">' +
-        escapeHtml(data.title || '') + '</div>';
-    html += '</div>';
 
     // Parents section (relationship editor in edit mode)
     html += '<div class="card-section"><div class="card-section-label">Implements / Refines / Satisfies</div>';

@@ -217,3 +217,54 @@ class TestBodyReconstruction:
         assert "**Goal**: Access system securely" in body
         assert "## Steps" in body
         assert "Dashboard loads" in body
+
+
+class TestJourneyUndo:
+    """Tests for undo of journey mutations."""
+
+    def test_undo_field_update(self):
+        graph = build_journey_graph()
+        graph.update_journey_field("JNY-LOGIN-01", "actor", "Admin")
+        node = graph.find_by_id("JNY-LOGIN-01")
+        assert node.get_field("actor") == "Admin"
+        graph.undo_last()
+        assert node.get_field("actor") == "End User"
+
+    def test_undo_add_section(self):
+        graph = build_journey_graph()
+        graph.add_journey_section("JNY-LOGIN-01", "Postconditions", "Done")
+        node = graph.find_by_id("JNY-LOGIN-01")
+        assert len(node.get_field("sections")) == 3
+        graph.undo_last()
+        assert len(node.get_field("sections")) == 2
+
+    def test_undo_delete_section(self):
+        graph = build_journey_graph()
+        graph.delete_journey_section("JNY-LOGIN-01", "Steps")
+        node = graph.find_by_id("JNY-LOGIN-01")
+        assert len(node.get_field("sections")) == 1
+        graph.undo_last()
+        assert len(node.get_field("sections")) == 2
+        assert node.get_field("sections")[1]["name"] == "Steps"
+
+    def test_undo_update_section(self):
+        graph = build_journey_graph()
+        graph.update_journey_section("JNY-LOGIN-01", "Steps", new_name="Procedure")
+        node = graph.find_by_id("JNY-LOGIN-01")
+        assert node.get_field("sections")[0]["name"] == "Procedure"
+        graph.undo_last()
+        assert node.get_field("sections")[0]["name"] == "Steps"
+
+    def test_undo_add_journey(self):
+        graph = build_journey_graph()
+        graph.add_journey("JNY-NEW-01", "New", "file:spec/journeys.md")
+        assert graph.find_by_id("JNY-NEW-01") is not None
+        graph.undo_last()
+        assert graph.find_by_id("JNY-NEW-01") is None
+
+    def test_undo_delete_journey(self):
+        graph = build_journey_graph()
+        graph.delete_journey("JNY-LOGIN-01")
+        assert graph.find_by_id("JNY-LOGIN-01") is None
+        graph.undo_last()
+        assert graph.find_by_id("JNY-LOGIN-01") is not None

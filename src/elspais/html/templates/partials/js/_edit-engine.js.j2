@@ -773,7 +773,8 @@ function onStatusChange(selectEl) {
 function onTitleBlur(el) {
     if (!editState.enabled) return;
     const nodeId = el.dataset.nodeId;
-    const newTitle = el.textContent.trim();
+    const isInput = el.tagName === 'INPUT';
+    const newTitle = isInput ? el.value.trim() : el.textContent.trim();
     const original = el.dataset.original;
 
     if (newTitle === original) {
@@ -782,7 +783,7 @@ function onTitleBlur(el) {
     }
 
     if (!newTitle) {
-        el.textContent = original;
+        if (isInput) el.value = original; else el.textContent = original;
         el.classList.remove('dirty');
         showToast('Title cannot be empty', 'error');
         return;

@@ -381,6 +381,18 @@ class TraceGraph:
             self._undo_rename_file(entry)
         elif op == "fix_broken_reference":
             self._undo_fix_broken_reference(entry)
+        elif op in (
+            "update_journey_field",
+            "update_journey_section",
+            "add_journey_section",
+            "delete_journey_section",
+            "reconstruct_journey_body",
+        ):
+            self._undo_journey_body_mutation(entry)
+        elif op == "add_journey":
+            self._undo_add_journey(entry)
+        elif op == "delete_journey":
+            self._undo_delete_journey(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -686,6 +698,71 @@ class TraceGraph:
             parent_id = entry.before_state.get("parent_id")
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
                 self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
+
+    def _undo_journey_body_mutation(self, entry: MutationEntry) -> None:
+        """Undo a journey field/section/body mutation by restoring body + fields."""
+        node_id = entry.target_id
+        if node_id not in self._index:
+            return
+        node = self._index[node_id]
+        # Restore body
+        old_body = entry.before_state.get("body")
+        if old_body is not None:
+            node.set_field("body", old_body)
+        # Restore field if present (update_journey_field)
+        field = entry.before_state.get("field")
+        if field:
+            old_value = entry.before_state.get("value")
+            if field == "preamble":
+                node.set_field("body_lines", old_value.splitlines() if old_value else [])
+            else:
+                node.set_field(field, old_value)
+        # Restore section if present (update/delete section)
+        old_name = entry.before_state.get("name")
+        old_content = entry.before_state.get("content")
+        op = entry.operation
+        if op == "add_journey_section":
+            # Remove the added section (last one matching after_state name)
+            added_name = entry.after_state.get("name")
+            sections = node.get_field("sections", [])
+            for i in range(len(sections) - 1, -1, -1):
+                if sections[i]["name"] == added_name:
+                    sections.pop(i)
+                    break
+            node.set_field("sections", sections)
+        elif op == "delete_journey_section" and old_name is not None:
+            # Re-insert deleted section
+            sections = node.get_field("sections", [])
+            sections.append({"name": old_name, "content": old_content or ""})
+            node.set_field("sections", sections)
+        elif op == "update_journey_section" and old_name is not None:
+            # Restore section name/content
+            current_name = entry.after_state.get("name")
+            sections = node.get_field("sections", [])
+            for s in sections:
+                if s["name"] == current_name:
+                    s["name"] = old_name
+                    if old_content is not None:
+                        s["content"] = old_content
+                    break
+            node.set_field("sections", sections)
+
+    def _undo_add_journey(self, entry: MutationEntry) -> None:
+        """Undo an add journey operation (delete the added node)."""
+        node_id = entry.target_id
+        if node_id in self._index:
+            node = self._index.pop(node_id)
+            for parent in list(node.iter_parents()):
+                parent.unlink(node)
+
+    def _undo_delete_journey(self, entry: MutationEntry) -> None:
+        """Undo a delete journey operation (restore the node)."""
+        node_id = entry.target_id
+        for i, node in enumerate(self._deleted_nodes):
+            if node.id == node_id:
+                self._deleted_nodes.pop(i)
+                self._index[node_id] = node
+                break
 
     # ─────────────────────────────────────────────────────────────────────────
     # Node Mutation API
@@ -1633,7 +1710,7 @@ class TraceGraph:
         target_id: str,
         assertion_targets: list[str],
     ) -> MutationEntry:
-        """Change assertion targets on an existing IMPLEMENTS/REFINES edge.
+        """Change assertion targets on an existing IMPLEMENTS/REFINES/VALIDATES edge.
 
         Args:
             source_id: The child/source node ID.
@@ -1645,7 +1722,7 @@ class TraceGraph:
 
         Raises:
             KeyError: If source_id or target_id is not found.
-            ValueError: If no IMPLEMENTS/REFINES edge exists between source and target.
+            ValueError: If no matching edge exists between source and target.
         """
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
@@ -1660,13 +1737,14 @@ class TraceGraph:
             if edge.source.id == target_id and edge.kind in (
                 EdgeKind.IMPLEMENTS,
                 EdgeKind.REFINES,
+                EdgeKind.VALIDATES,
             ):
                 edge_to_update = edge
                 break
 
         if edge_to_update is None:
             raise ValueError(
-                f"No IMPLEMENTS/REFINES edge exists from '{target_id}' to '{source_id}'"
+                f"No IMPLEMENTS/REFINES/VALIDATES edge exists from '{target_id}' to '{source_id}'"
             )
 
         old_targets = list(edge_to_update.assertion_targets)

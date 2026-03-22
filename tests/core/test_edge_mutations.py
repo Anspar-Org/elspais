@@ -454,7 +454,7 @@ class TestChangeEdgeTargets:
         """ValueError if no edge exists between the two nodes."""
         graph = build_disconnected_graph()
 
-        with pytest.raises(ValueError, match="No IMPLEMENTS/REFINES edge exists"):
+        with pytest.raises(ValueError, match="No IMPLEMENTS/REFINES/VALIDATES edge exists"):
             graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A"])
 
     # Implements: REQ-o00062-C
