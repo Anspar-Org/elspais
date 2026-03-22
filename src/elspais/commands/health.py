@@ -1356,6 +1356,7 @@ def check_dimension_coverage(
         "verified": ("Verified", "tests"),
         "uat_coverage": ("Validated", "uat"),
         "uat_verified": ("Accepted", "uat"),
+        "code_tested": ("Code Tested (line coverage)", "code"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
 
@@ -1480,13 +1481,31 @@ def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
 
 
 def run_code_checks(
-    graph: FederatedGraph, exclude_status: set[str] | None = None
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> list[HealthCheck]:
     """Run all code reference health checks."""
-    return [
+    from elspais.graph import NodeKind
+
+    checks = [
         check_code_coverage(graph, exclude_status=exclude_status),
         check_unlinked_code(graph),
     ]
+
+    # Add code_tested dimension only when line coverage data is present
+    has_coverage = any(
+        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total > 0
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+    )
+    if has_coverage:
+        checks.append(
+            check_dimension_coverage(
+                graph, "code_tested", exclude_status=exclude_status, config=config
+            )
+        )
+
+    return checks
 
 
 # =============================================================================
@@ -1840,7 +1859,7 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        for check in run_code_checks(graph, exclude_status=exclude_status):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
@@ -1908,7 +1927,7 @@ def compute_checks(
 
     # Code checks
     if run_all or code_only:
-        for check in run_code_checks(graph, exclude_status=exclude_status):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=config):
             report.add(check)
 
     # Test checks
