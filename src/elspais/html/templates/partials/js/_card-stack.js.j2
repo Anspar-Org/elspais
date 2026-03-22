@@ -1198,17 +1198,11 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
 function _flashAssertions(reqId, assertLinkKey) {
     // Find card data to get assertion_links
     var cardState = editState.openCards.get(reqId);
-    if (!cardState || !cardState.data || !cardState.data.assertion_links) {
-        console.log('_flashAssertions: no assertion_links for', reqId);
-        return;
-    }
+    if (!cardState || !cardState.data || !cardState.data.assertion_links) return;
 
     var aLinks = cardState.data.assertion_links;
     var card = document.getElementById('card-' + reqId);
-    if (!card) {
-        console.log('_flashAssertions: no card DOM for', 'card-' + reqId);
-        return;
-    }
+    if (!card) return;
 
     // Collect matching .card-assertion elements (they have the visible background)
     var targets = [];
