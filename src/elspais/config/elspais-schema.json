@@ -256,6 +256,42 @@
       "title": "CoverageConfig",
       "type": "object"
     },
+    "CoverageScanningConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for code coverage report scanning.",
+      "properties": {
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Directories",
+          "type": "array"
+        },
+        "file_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "File Patterns",
+          "type": "array"
+        },
+        "skip_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Files",
+          "type": "array"
+        },
+        "skip_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Dirs",
+          "type": "array"
+        }
+      },
+      "title": "CoverageScanningConfig",
+      "type": "object"
+    },
     "CoverageSeverityConfig": {
       "additionalProperties": false,
       "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'.",
@@ -744,6 +780,9 @@
         },
         "result": {
           "$ref": "#/$defs/ResultScanningConfig"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageScanningConfig"
         },
         "journey": {
           "$ref": "#/$defs/JourneyScanningConfig"

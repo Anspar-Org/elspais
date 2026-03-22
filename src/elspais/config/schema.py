@@ -148,6 +148,12 @@ class ResultScanningConfig(ScanningKindConfig):
     run_meta_file: str = ""
 
 
+class CoverageScanningConfig(ScanningKindConfig):
+    """Configuration for code coverage report scanning."""
+
+    directories: list[str] = Field(default_factory=lambda: ["."])
+
+
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
     file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
@@ -165,6 +171,7 @@ class ScanningConfig(_StrictModel):
     code: CodeScanningConfig = Field(default_factory=CodeScanningConfig)
     test: TestScanningConfig = Field(default_factory=TestScanningConfig)
     result: ResultScanningConfig = Field(default_factory=ResultScanningConfig)
+    coverage: CoverageScanningConfig = Field(default_factory=CoverageScanningConfig)
     journey: JourneyScanningConfig = Field(default_factory=JourneyScanningConfig)
     docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
 
