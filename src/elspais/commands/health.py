@@ -1351,13 +1351,13 @@ def check_dimension_coverage(
         exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
 
     dim_labels = {
-        "implemented": ("Implemented", "coverage"),
-        "tested": ("Tested", "coverage"),
-        "verified": ("Verified", "coverage"),
+        "implemented": ("Implemented", "code"),
+        "tested": ("Tested", "tests"),
+        "verified": ("Verified", "tests"),
         "uat_coverage": ("Validated", "uat"),
         "uat_verified": ("Accepted", "uat"),
     }
-    label, category = dim_labels.get(dimension, (dimension, "coverage"))
+    label, category = dim_labels.get(dimension, (dimension, "code"))
 
     req_count = 0
     req_with_any = 0  # REQs where dim.indirect > 0

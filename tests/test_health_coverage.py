@@ -59,8 +59,8 @@ class TestCheckTestCoverage:
         """Empty graph reports 0/0 test coverage."""
         graph = _make_graph()
         result = check_test_coverage(graph, exclude_status=set())
-        assert result.name == "coverage.tested"
-        assert result.category == "coverage"
+        assert result.name == "tests.tested"
+        assert result.category == "tests"
         assert result.details["total_requirements"] == 0
         assert result.details["reqs_with_any_coverage"] == 0
 
