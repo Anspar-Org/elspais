@@ -404,10 +404,10 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 
     var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
 
-    // Header
+    // Header — show journey ID instead of generic JNY badge
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
-    html += '<span class="journey-card-kind">JNY</span>';
+    html += '<span class="journey-card-kind">' + shortId + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
@@ -416,7 +416,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<div class="req-card-body">';
 
     // Metadata section
-    html += '<div class="card-section"><div class="card-section-label">Journey Metadata</div>';
+    html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
     html += '<div class="card-meta">';
 
     if (props.actor) {
@@ -452,10 +452,17 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Referenced Requirements (from links array — ADDRESSES edges)
+    // Context (if present)
+    if (props.context) {
+        html += '<div class="card-section"><div class="card-section-label">Context</div>';
+        html += '<div class="journey-card-description">' + simpleMarkdown(props.context) + '</div>';
+        html += '</div>';
+    }
+
+    // Referenced Requirements (from links array — VALIDATES edges)
     var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
     if (refs.length > 0) {
-        html += '<div class="card-section"><div class="card-section-label">Addresses (' + refs.length + ')</div>';
+        html += '<div class="card-section"><div class="card-section-label">Validates (' + refs.length + ')</div>';
         html += '<div class="card-parents">';
         refs.forEach(function(link) {
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
@@ -466,12 +473,13 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '</div></div>';
     }
 
-    // Journey body (full text with steps)
-    if (props.description) {
-        html += '<div class="card-section"><div class="card-section-label">Journey Body</div>';
-        html += '<div class="journey-card-description">' + simpleMarkdown(props.description) + '</div>';
+    // Sections (## Steps, ## Expected Outcome, etc.)
+    var sections = props.sections || [];
+    sections.forEach(function(sec) {
+        html += '<div class="card-section"><div class="card-section-label">' + escapeHtml(sec.name) + '</div>';
+        html += '<div class="journey-card-description">' + simpleMarkdown(sec.content || '') + '</div>';
         html += '</div>';
-    }
+    });
 
     html += '</div>'; // end req-card-body
     html += '</div>'; // end req-card

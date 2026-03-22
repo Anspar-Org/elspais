@@ -366,7 +366,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         properties = {
             "actor": node.get_field("actor", ""),
             "goal": node.get_field("goal", ""),
-            "description": node.get_field("body", "") or node.get_field("description", ""),
+            "context": node.get_field("context", ""),
+            "sections": node.get_field("sections", []),
             "descriptor": descriptor,
         }
     elif kind == NodeKind.TEST:

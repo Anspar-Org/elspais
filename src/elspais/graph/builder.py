@@ -2260,7 +2260,10 @@ class GraphBuilder:
         node._content = {
             "actor": data.get("actor"),
             "goal": data.get("goal"),
+            "context": data.get("context"),
             "body": content.raw_text,
+            "body_lines": data.get("body_lines", []),
+            "sections": data.get("sections", []),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
         }
