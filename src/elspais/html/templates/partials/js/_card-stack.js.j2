@@ -1198,30 +1198,38 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
 function _flashAssertions(reqId, assertLinkKey) {
     // Find card data to get assertion_links
     var cardState = editState.openCards.get(reqId);
-    if (!cardState || !cardState.data || !cardState.data.assertion_links) return;
+    if (!cardState || !cardState.data || !cardState.data.assertion_links) {
+        console.log('_flashAssertions: no assertion_links for', reqId);
+        return;
+    }
 
     var aLinks = cardState.data.assertion_links;
-    // Find the card DOM element
     var card = document.getElementById('card-' + reqId);
-    if (!card) return;
+    if (!card) {
+        console.log('_flashAssertions: no card DOM for', 'card-' + reqId);
+        return;
+    }
 
+    var flashed = 0;
     for (var label in aLinks) {
         if (!aLinks[label][assertLinkKey]) continue;
-        // Find the assertion wrapper with this label
         var wrappers = card.querySelectorAll('.card-assertion-wrapper');
         for (var i = 0; i < wrappers.length; i++) {
             var assertionDiv = wrappers[i].querySelector('.card-assertion');
             if (!assertionDiv) continue;
             var labelEl = assertionDiv.querySelector('.card-assertion-label');
             if (labelEl && labelEl.textContent.trim() === label) {
-                // Flash it
+                // Remove then re-add to restart animation if already flashing
+                wrappers[i].classList.remove('flash-highlight');
+                void wrappers[i].offsetWidth; // force reflow
                 wrappers[i].classList.add('flash-highlight');
+                flashed++;
                 (function(el) {
                     setTimeout(function() { el.classList.remove('flash-highlight'); }, 1500);
                 })(wrappers[i]);
-                // Scroll into view
                 wrappers[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
     }
+    console.log('_flashAssertions:', reqId, assertLinkKey, 'flashed', flashed, 'of', Object.keys(aLinks).length);
 }
