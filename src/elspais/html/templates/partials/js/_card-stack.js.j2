@@ -1137,15 +1137,16 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var panelId = 'req-links-' + reqId + '-' + dimKey;
     var panel = document.getElementById(panelId);
 
-    // Always flash assertions that have direct links for this dimension
-    _flashAssertions(reqId, assertLinkKey || dimKey);
-
-    if (!panel) return;
-
-    if (panel.style.display !== 'none') {
+    if (panel && panel.style.display !== 'none') {
+        // Closing — just hide, no flash/scroll
         panel.style.display = 'none';
         return;
     }
+
+    // Opening — flash assertions that have direct links
+    _flashAssertions(reqId, assertLinkKey || dimKey);
+
+    if (!panel) return;
 
     // Find the card data from editState
     var cardState = editState.openCards.get(reqId);
