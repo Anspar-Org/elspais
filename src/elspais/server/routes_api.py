@@ -26,15 +26,19 @@ from elspais.mcp.server import (
     _get_requirement,
     _mutate_add_assertion,
     _mutate_add_edge,
+    _mutate_add_journey,
     _mutate_change_edge_kind,
     _mutate_change_edge_targets,
     _mutate_change_status,
     _mutate_delete_assertion,
     _mutate_delete_edge,
+    _mutate_delete_journey,
     _mutate_delete_requirement,
+    _mutate_journey_section,
     _mutate_move_node_to_file,
     _mutate_rename_file,
     _mutate_update_assertion,
+    _mutate_update_journey_field,
     _mutate_update_title,
     _query_nodes,
     _undo_last_mutation,
@@ -756,6 +760,11 @@ async def api_mutate_title(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and new_title required"}, status_code=400
         )
     result = _mutate_update_title(state.graph, node_id, new_title)
+    # For journeys, reconstruct body to keep header line in sync
+    if result.get("success"):
+        node = state.graph.find_by_id(node_id)
+        if node and node.kind == NodeKind.USER_JOURNEY:
+            state.graph.reconstruct_journey_body(node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
@@ -871,8 +880,121 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
             {"success": False, "error": f"Unknown action: {action}"}, status_code=400
         )
 
+    # For journeys, reconstruct body to keep Validates: lines in sync
+    if result.get("success"):
+        source_node = state.graph.find_by_id(source_id)
+        if source_node and source_node.kind == NodeKind.USER_JOURNEY:
+            state.graph.reconstruct_journey_body(source_id)
+
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
+
+
+# ── Journey Mutations ──────────────────────────────────────────────────────
+
+
+async def api_mutate_journey_field(request: Request) -> JSONResponse:
+    """POST /api/mutate/journey/field - Update actor/goal/context/preamble."""
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    field_name = data.get("field", "")
+    value = data.get("value", "")
+    if not node_id or not field_name:
+        return JSONResponse(
+            {"success": False, "error": "node_id and field required"},
+            status_code=400,
+        )
+    result = _mutate_update_journey_field(state.graph, node_id, field_name, value)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_journey_section(request: Request) -> JSONResponse:
+    """POST /api/mutate/journey/section - Add/update/delete a section."""
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    action = data.get("action", "")
+    name = data.get("name", "")
+    if not node_id or not action or not name:
+        return JSONResponse(
+            {"success": False, "error": "node_id, action, and name required"},
+            status_code=400,
+        )
+    new_name = data.get("new_name")
+    content = data.get("content")
+    result = _mutate_journey_section(state.graph, node_id, action, name, new_name, content)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_journey_add(request: Request) -> JSONResponse:
+    """POST /api/mutate/journey/add - Create new journey."""
+    state = _st(request)
+    data = await request.json()
+    journey_id = data.get("journey_id", "")
+    title = data.get("title", "")
+    file_id = data.get("file_id", "")
+    if not journey_id or not title or not file_id:
+        return JSONResponse(
+            {"success": False, "error": "journey_id, title, and file_id required"},
+            status_code=400,
+        )
+    result = _mutate_add_journey(state.graph, journey_id, title, file_id)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_journey_delete(request: Request) -> JSONResponse:
+    """POST /api/mutate/journey/delete - Delete a journey."""
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    confirm = data.get("confirm", False)
+    if not node_id:
+        return JSONResponse(
+            {"success": False, "error": "node_id required"},
+            status_code=400,
+        )
+    result = _mutate_delete_journey(state.graph, node_id, confirm=confirm)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_journey_files(request: Request) -> JSONResponse:
+    """GET /api/journey-files - List files that contain or can contain journeys."""
+    from elspais.graph.relations import EdgeKind
+
+    state = _st(request)
+    g = state.graph
+    files: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    # Collect all FILE nodes that contain journeys or are in journey/spec dirs
+    for node in g.nodes_by_kind(NodeKind.FILE):
+        file_id = node.id
+        if file_id in seen:
+            continue
+        # Include if it contains a USER_JOURNEY or is a SPEC/JOURNEY file
+        file_type = node.get_field("file_type")
+        has_journey = any(
+            e.target.kind == NodeKind.USER_JOURNEY
+            for e in node.iter_outgoing_edges()
+            if e.kind == EdgeKind.CONTAINS
+        )
+        if has_journey or (file_type and file_type.value in ("SPEC", "JOURNEY")):
+            seen.add(file_id)
+            files.append(
+                {
+                    "id": file_id,
+                    "path": node.get_field("relative_path", ""),
+                    "has_journeys": has_journey,
+                }
+            )
+
+    files.sort(key=lambda f: f["path"])
+    return JSONResponse({"files": files})
 
 
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:

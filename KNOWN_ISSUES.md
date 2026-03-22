@@ -1,5 +1,38 @@
 # Known Issues
 
+[x] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
+- Fixed: JS was reading data.children but API returns data.assertions. One-line fix.
+
+[x] Feature: Viewer. Edit mode supports editing of Journey in the Card interface.
+- Full CRUD: title, actor, goal, context inline editing (save on blur)
+- Section-based body editing: each ## section has header editor + content textarea
+- Add/delete sections, add/delete journey (with file picker modal)
+- Validates references: add/remove with requirement picker + multi-assertion selector
+- Move to file reuses existing dialog
+- Body reconstructed from structured fields for round-trip fidelity
+
+[ ] Bug: daemon doesn't work for all commands
+- elspais checks, twice in a row: 2nd call is always fast
+- elspais checks broken, never fast
+
+[ ] viewer: styling
+- REQ and Journey cards: collapse >v symbol is too small. double the size both X and Y
+- Card header styling. Make consistent for REQ and JNY. Use REQ style (no button), but have REQ ID be the full ID.
+- put the hiearachy filter text area first on the line, so it's always above the tree.
+
+[ ] viewer: bug
+- Cov: filter doesn't work at all. 
+- We've completely redone the coverage as CoverageDimensions, so the list should include all of them.
+- list 5 dimensions, and 3 coverage categories (none, partial, full). 
+- It's a multi-select: can toggle any/all of the dimensions on off. 
+- The coverage categories apply to all selected (i.e. visible) dimensions.
+
+[ ] viewer: feature
+- Add new REQ, like Add new JNY
+
+[ ] viewer: bug
+- REQ Card: multi-select ASSERTION save -> not a JNY toast 
+
 [x] tweak: In Viewer Card: Add Refined badge to Assertion lines
 - Implemented: 6 assertion badges (IMP/REF/TST/VER/VAL/ACC) shown only when direct links exist
 - Header badges clickable to expand REQ-level links + flash matching assertions
@@ -26,9 +59,6 @@
 - Cannot save to disk without reason
 
 [ ] chore (major): general code review. file sizes, duped code, workarounds, sloppiness, etc.
-
-[ ] Feature (low): Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
-- Use multi-select dropdown, then render the reference using the configured settings, e.g. REQ-p12345-A+B+C+X
 
 [ ] Feature (major): change ID of a Requirement
 - All references are updated, creating a complete list of graph mutation operations to do so

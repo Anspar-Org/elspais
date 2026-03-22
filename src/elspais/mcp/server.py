@@ -2337,6 +2337,99 @@ def _mutate_delete_requirement(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Journey Mutation Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_update_journey_field(
+    graph: FederatedGraph,
+    node_id: str,
+    field_name: str,
+    value: str,
+) -> dict[str, Any]:
+    """Update a structured field on a USER_JOURNEY node."""
+    try:
+        entry = graph.update_journey_field(node_id, field_name, value)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Updated {field_name} of {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_journey_section(
+    graph: FederatedGraph,
+    node_id: str,
+    action: str,
+    name: str,
+    new_name: str | None = None,
+    content: str | None = None,
+) -> dict[str, Any]:
+    """Add, update, or delete a journey section."""
+    try:
+        if action == "add":
+            entry = graph.add_journey_section(node_id, name, content or "")
+            msg = f"Added section '{name}' to {node_id}"
+        elif action == "update":
+            entry = graph.update_journey_section(node_id, name, new_name, content)
+            msg = f"Updated section '{name}' in {node_id}"
+        elif action == "delete":
+            entry = graph.delete_journey_section(node_id, name)
+            msg = f"Deleted section '{name}' from {node_id}"
+        else:
+            return {"success": False, "error": f"Unknown action: {action}"}
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": msg,
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_add_journey(
+    graph: FederatedGraph,
+    journey_id: str,
+    title: str,
+    file_id: str,
+) -> dict[str, Any]:
+    """Create a new USER_JOURNEY node."""
+    try:
+        entry = graph.add_journey(journey_id, title, file_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added journey {journey_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_journey(
+    graph: FederatedGraph,
+    node_id: str,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Delete a USER_JOURNEY node."""
+    if not confirm:
+        return {
+            "success": False,
+            "error": "Destructive operation requires confirm=True",
+        }
+    try:
+        entry = graph.delete_journey(node_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted journey {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Assertion Mutation Functions (REQ-o00062-B)
 # ─────────────────────────────────────────────────────────────────────────────
 

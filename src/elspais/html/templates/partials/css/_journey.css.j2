@@ -282,3 +282,130 @@
 .journey-card.compact.expanded .journey-description::after {
     display: none;
 }
+
+/* ── Journey Edit Mode ──────────────────────────────────────────────── */
+
+.journey-title-edit,
+.journey-field-edit,
+.journey-section-name-edit {
+    font-family: inherit;
+    font-size: inherit;
+    border: none;
+    border-bottom: 1px dashed var(--border-color);
+    background: transparent;
+    padding: 1px 4px;
+    outline: none;
+    width: 100%;
+}
+.journey-title-edit { font-size: 1rem; font-weight: 600; flex: 1; }
+.journey-field-edit { width: 90%; }
+.journey-section-name-edit { font-weight: 600; flex: 1; }
+
+.journey-delete-btn {
+    background: none;
+    border: none;
+    color: var(--danger-color, #e03131);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+.journey-delete-btn:hover { opacity: 0.7; }
+
+.journey-move-btn,
+.journey-ref-add-btn,
+.journey-section-add-btn,
+.journey-add-btn {
+    background: none;
+    border: 1px dashed var(--primary-color, #5c7cfa);
+    color: var(--primary-color, #5c7cfa);
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.journey-move-btn:hover,
+.journey-ref-add-btn:hover,
+.journey-section-add-btn:hover,
+.journey-add-btn:hover {
+    background: var(--primary-color, #5c7cfa);
+    color: #fff;
+}
+
+.journey-ref-delete {
+    cursor: pointer;
+    margin-left: 2px;
+    font-size: 0.8em;
+}
+.journey-ref-delete:hover { opacity: 0.7; }
+
+.journey-section-delete {
+    background: none;
+    border: none;
+    color: var(--danger-color, #e03131);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.journey-preamble { border-top: 1px solid var(--border-color); padding-top: 8px; margin-bottom: 8px; }
+.journey-preamble-edit,
+.journey-section-content-edit {
+    width: 100%;
+    min-height: 40px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 6px;
+    resize: vertical;
+    background: var(--bg-secondary, #f8f9fa);
+}
+
+.journey-section {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 8px;
+}
+.journey-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.journey-section-name-view {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--text-secondary, #495057);
+}
+.journey-section-content-view {
+    color: var(--text-primary, #495057);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* Hide edit-only elements by default; show when body has .edit-mode */
+.journey-title-edit,
+.journey-field-edit,
+.journey-preamble-edit,
+.journey-section-name-edit,
+.journey-section-content-edit { display: none; }
+
+body.edit-mode .journey-title-edit,
+body.edit-mode .journey-field-edit,
+body.edit-mode .journey-section-name-edit { display: inline-block; }
+body.edit-mode .journey-preamble-edit,
+body.edit-mode .journey-section-content-edit { display: block; }
+
+body.edit-mode .journey-title-view,
+body.edit-mode .journey-field-view,
+body.edit-mode .journey-preamble-view,
+body.edit-mode .journey-section-name-view,
+body.edit-mode .journey-section-content-view { display: none; }
+
+/* Journey refs section — always visible (show Validates even when empty in edit mode) */
+.journey-refs { margin-bottom: 8px; }
+.journey-sections { margin-top: 8px; }

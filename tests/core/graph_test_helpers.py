@@ -169,7 +169,10 @@ def make_journey(
     title: str = "",
     actor: str = "User",
     goal: str = "",
+    context: str | None = None,
     validates: list[str] | None = None,
+    body_lines: list[str] | None = None,
+    sections: list[dict[str, str]] | None = None,
     source_path: str = "spec/journeys.md",
     start_line: int = 1,
     end_line: int = 10,
@@ -181,7 +184,10 @@ def make_journey(
         title: Journey title
         actor: Actor performing the journey
         goal: Journey goal
+        context: Optional context field
         validates: List of requirement IDs this journey validates
+        body_lines: Preamble text lines (before sections)
+        sections: List of {name, content} section dicts
         source_path: Source file path
         start_line: Start line in source
         end_line: End line in source
@@ -199,7 +205,10 @@ def make_journey(
             "title": title or journey_id,
             "actor": actor,
             "goal": goal,
+            "context": context,
             "validates": validates or [],
+            "body_lines": body_lines or [],
+            "sections": sections or [],
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

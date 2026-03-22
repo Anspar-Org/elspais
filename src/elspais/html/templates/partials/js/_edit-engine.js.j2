@@ -999,7 +999,7 @@ function editEdgeTargets(sourceId, targetId, btn) {
     fetch('/api/requirement/' + encodeURIComponent(targetId))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });
+            var assertions = data.assertions || [];
             if (assertions.length === 0) {
                 showToast('Target has no assertions', 'warning');
                 return;
@@ -1733,3 +1733,424 @@ setInterval(function() {
         }
     });
 }, 30000);
+
+// =====================================================================
+// Journey Editing
+// =====================================================================
+
+function onJourneyTitleBlur(journeyId, input) {
+    var original = input.defaultValue;
+    var newVal = input.value.trim();
+    if (!newVal || newVal === original) { input.value = original; return; }
+    mutate('/api/mutate/title', { node_id: journeyId, new_title: newVal }).then(function(r) {
+        if (r && r.success) {
+            input.defaultValue = newVal;
+            // Update view-mode title
+            var card = input.closest('.journey-card');
+            if (card) {
+                var viewTitle = card.querySelector('.journey-title-view');
+                if (viewTitle) viewTitle.textContent = newVal;
+            }
+        } else { input.value = original; }
+    });
+}
+
+function onJourneyFieldBlur(input) {
+    var journeyId = input.dataset.journeyId;
+    var field = input.dataset.field;
+    var original = input.defaultValue;
+    var newVal = input.value.trim();
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/field', { node_id: journeyId, field: field, value: newVal }).then(function(r) {
+        if (r && r.success) {
+            input.defaultValue = newVal;
+            // Update view-mode span
+            var item = input.closest('.journey-meta-item');
+            if (item) {
+                var viewSpan = item.querySelector('.journey-field-view');
+                if (viewSpan) viewSpan.textContent = newVal;
+            }
+        } else { input.value = original; }
+    });
+}
+
+function onJourneyPreambleBlur(textarea) {
+    var journeyId = textarea.dataset.journeyId;
+    var original = textarea.defaultValue;
+    var newVal = textarea.value;
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/field', { node_id: journeyId, field: 'preamble', value: newVal }).then(function(r) {
+        if (r && r.success) {
+            textarea.defaultValue = newVal;
+            var viewDiv = textarea.parentNode.querySelector('.journey-preamble-view');
+            if (viewDiv) viewDiv.textContent = newVal;
+        } else { textarea.value = original; }
+    });
+}
+
+function onJourneySectionNameBlur(input) {
+    var journeyId = input.dataset.journeyId;
+    var originalName = input.dataset.originalName;
+    var newName = input.value.trim();
+    if (!newName || newName === originalName) { input.value = originalName; return; }
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'update', name: originalName, new_name: newName
+    }).then(function(r) {
+        if (r && r.success) {
+            input.dataset.originalName = newName;
+            input.defaultValue = newName;
+            // Update view-mode name and data attributes
+            var section = input.closest('.journey-section');
+            if (section) {
+                section.dataset.sectionName = newName;
+                var viewName = section.querySelector('.journey-section-name-view');
+                if (viewName) viewName.textContent = newName;
+                // Update content textarea data attribute
+                var contentTA = section.querySelector('.journey-section-content-edit');
+                if (contentTA) contentTA.dataset.sectionName = newName;
+            }
+        } else { input.value = originalName; }
+    });
+}
+
+function onJourneySectionContentBlur(textarea) {
+    var journeyId = textarea.dataset.journeyId;
+    var sectionName = textarea.dataset.sectionName;
+    var original = textarea.defaultValue;
+    var newVal = textarea.value;
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'update', name: sectionName, content: newVal
+    }).then(function(r) {
+        if (r && r.success) {
+            textarea.defaultValue = newVal;
+            var viewDiv = textarea.parentNode.querySelector('.journey-section-content-view');
+            if (viewDiv) viewDiv.textContent = newVal;
+        } else { textarea.value = original; }
+    });
+}
+
+function onAddJourneySection(journeyId) {
+    var name = prompt('Section name:');
+    if (!name) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'add', name: name, content: ''
+    }).then(function(r) {
+        if (r && r.success) {
+            // Add section DOM element
+            var container = document.querySelector('.journey-sections[data-journey-id="' + journeyId + '"]');
+            if (!container) return;
+            var addBtn = container.querySelector('.journey-section-add-btn');
+            var section = document.createElement('div');
+            section.className = 'journey-section';
+            section.dataset.sectionName = name;
+            section.innerHTML =
+                '<div class="journey-section-header">' +
+                    '<span class="journey-section-name journey-section-name-view">' + escapeHtml(name) + '</span>' +
+                    '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(name) + '"' +
+                    ' data-journey-id="' + journeyId + '" data-original-name="' + escapeAttr(name) + '"' +
+                    ' onblur="onJourneySectionNameBlur(this)">' +
+                    '<button class="edit-only journey-section-delete"' +
+                    ' onclick="onDeleteJourneySection(\'' + journeyId + '\', \'' + escapeAttr(name) + '\')"' +
+                    ' title="Delete section">&times;</button>' +
+                '</div>' +
+                '<div class="journey-section-content journey-section-content-view"></div>' +
+                '<textarea class="edit-only journey-section-content-edit"' +
+                ' data-journey-id="' + journeyId + '" data-section-name="' + escapeAttr(name) + '"' +
+                ' onblur="onJourneySectionContentBlur(this)"></textarea>';
+            container.insertBefore(section, addBtn);
+        }
+    });
+}
+
+function onDeleteJourneySection(journeyId, sectionName) {
+    if (!confirm('Delete section "' + sectionName + '"?')) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'delete', name: sectionName
+    }).then(function(r) {
+        if (r && r.success) {
+            var container = document.querySelector('.journey-sections[data-journey-id="' + journeyId + '"]');
+            if (!container) return;
+            var section = container.querySelector('.journey-section[data-section-name="' + sectionName + '"]');
+            if (section) section.remove();
+        }
+    });
+}
+
+function onDeleteJourney(journeyId) {
+    if (!confirm('Delete journey ' + journeyId + '?')) return;
+    mutate('/api/mutate/journey/delete', { node_id: journeyId, confirm: true }).then(function(r) {
+        if (r && r.success) {
+            var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
+            if (card) card.remove();
+            loadTreeData();
+        }
+    });
+}
+
+function onDeleteJourneyRef(journeyId, reqId) {
+    if (!confirm('Remove Validates link to ' + reqId + '?')) return;
+    mutate('/api/mutate/edge', {
+        action: 'delete', source_id: journeyId, target_id: reqId
+    }).then(function(r) {
+        if (r && r.success) {
+            // Remove badge from DOM
+            var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
+            if (card) {
+                var badges = card.querySelectorAll('.journey-ref-badge');
+                badges.forEach(function(b) {
+                    if (b.textContent.trim().replace(/\s*×\s*$/, '') === reqId) b.remove();
+                });
+            }
+        }
+    });
+}
+
+function onAddJourneyRef(journeyId) {
+    var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
+    if (!card) return;
+    var refsDiv = card.querySelector('.journey-refs');
+    if (!refsDiv) return;
+    var addBtn = refsDiv.querySelector('.journey-ref-add-btn');
+    if (!addBtn) return;
+
+    // Toggle form
+    var existing = refsDiv.querySelector('.card-add-rel-form');
+    if (existing) { existing.remove(); return; }
+
+    var form = document.createElement('div');
+    form.className = 'card-add-rel-form';
+
+    // Requirement picker
+    var pickerRow = document.createElement('div');
+    pickerRow.className = 'add-rel-row';
+    pickerRow.innerHTML = '<label class="add-rel-label">Target:</label>';
+    var pickerContainer = document.createElement('div');
+    pickerContainer.className = 'add-rel-picker-container';
+    pickerRow.appendChild(pickerContainer);
+    form.appendChild(pickerRow);
+
+    // Assertion target dropdown
+    var assertionRow = document.createElement('div');
+    assertionRow.className = 'add-rel-row';
+    assertionRow.style.display = 'none';
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertion:</label>';
+    var assertionSelect = document.createElement('select');
+    assertionSelect.className = 'add-rel-select';
+    assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+    assertionRow.appendChild(assertionSelect);
+    form.appendChild(assertionRow);
+
+    // Buttons
+    var btnRow = document.createElement('div');
+    btnRow.className = 'add-rel-buttons';
+    var addBtnEl = document.createElement('button');
+    addBtnEl.className = 'add-rel-add-btn';
+    addBtnEl.textContent = 'Add';
+    addBtnEl.disabled = true;
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'add-rel-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    btnRow.appendChild(addBtnEl);
+    btnRow.appendChild(cancelBtn);
+    form.appendChild(btnRow);
+
+    var picker = createReqPicker(pickerContainer, {
+        placeholder: 'Search for requirement...',
+        fetchAssertions: true,
+        onSelect: function(item) {
+            addBtnEl.disabled = false;
+            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            if (item.assertions && item.assertions.length > 0) {
+                item.assertions.forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a.label || '';
+                    opt.textContent = (a.label || '') + ': ' + (a.text || '').substring(0, 60);
+                    assertionSelect.appendChild(opt);
+                });
+                assertionRow.style.display = 'flex';
+            } else {
+                assertionRow.style.display = 'none';
+            }
+        },
+        onClear: function() {
+            addBtnEl.disabled = true;
+            assertionRow.style.display = 'none';
+        }
+    });
+
+    addBtnEl.addEventListener('click', function() {
+        var selected = picker.getSelected();
+        if (!selected) return;
+        var targetId = selected.id;
+        var assertionLabel = assertionSelect.value;
+        var payload = {
+            action: 'add',
+            source_id: journeyId,
+            target_id: targetId,
+            edge_kind: 'validates'
+        };
+        if (assertionLabel) {
+            payload.assertion_targets = [assertionLabel];
+        }
+        mutate('/api/mutate/edge', payload).then(function(result) {
+            if (result && result.success) {
+                picker.destroy();
+                form.remove();
+                // Add badge to DOM
+                var fullId = assertionLabel ? targetId + '-' + assertionLabel : targetId;
+                var badge = document.createElement('span');
+                badge.className = 'journey-ref-badge';
+                badge.setAttribute('onclick', "switchToReqTab('" + fullId + "')");
+                badge.innerHTML = escapeHtml(fullId) +
+                    ' <span class="edit-only journey-ref-delete" onclick="event.stopPropagation(); onDeleteJourneyRef(\'' + journeyId + '\', \'' + escapeAttr(targetId) + '\')">&times;</span>';
+                addBtn.parentNode.insertBefore(badge, addBtn);
+                loadTreeData();
+            }
+        });
+    });
+
+    cancelBtn.addEventListener('click', function() {
+        picker.destroy();
+        form.remove();
+    });
+
+    refsDiv.insertBefore(form, addBtn);
+}
+
+function onAddJourney() {
+    // Fetch available journey files
+    apiFetch('/api/journey-files').then(function(data) {
+        if (!data || !data.files) {
+            // No files found - just use spec-files endpoint
+            apiFetch('/api/spec-files').then(function(specData) {
+                _showAddJourneyModal(specData ? specData.files || [] : []);
+            });
+            return;
+        }
+        _showAddJourneyModal(data.files);
+    });
+}
+
+function _showAddJourneyModal(files) {
+    // Create modal
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-dialog';
+    modal.innerHTML = '<h3>Add Journey</h3>';
+
+    // File picker
+    var fileSection = document.createElement('div');
+    fileSection.className = 'modal-section';
+    fileSection.innerHTML = '<label class="modal-label">File:</label>';
+    var fileList = document.createElement('div');
+    fileList.className = 'modal-file-list';
+
+    files.forEach(function(f, i) {
+        var label = document.createElement('label');
+        label.className = 'modal-file-option';
+        label.innerHTML = '<input type="radio" name="journey-file" value="' + escapeAttr(f.id) + '"' +
+            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path);
+        fileList.appendChild(label);
+    });
+
+    // New file option
+    var newFileLabel = document.createElement('label');
+    newFileLabel.className = 'modal-file-option';
+    newFileLabel.innerHTML = '<input type="radio" name="journey-file" value="__new__"' +
+        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
+    fileList.appendChild(newFileLabel);
+
+    fileSection.appendChild(fileList);
+
+    var newFileInput = document.createElement('input');
+    newFileInput.type = 'text';
+    newFileInput.className = 'modal-input';
+    newFileInput.placeholder = 'spec/journeys-new.md';
+    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
+    fileSection.appendChild(newFileInput);
+
+    // Show/hide new file input based on radio selection
+    fileList.addEventListener('change', function() {
+        var checked = fileList.querySelector('input[name="journey-file"]:checked');
+        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
+    });
+
+    modal.appendChild(fileSection);
+
+    // Journey ID
+    var idSection = document.createElement('div');
+    idSection.className = 'modal-section';
+    idSection.innerHTML = '<label class="modal-label">Journey ID:</label>';
+    var idInput = document.createElement('input');
+    idInput.type = 'text';
+    idInput.className = 'modal-input';
+    idInput.placeholder = 'JNY-TOPIC-01';
+    idSection.appendChild(idInput);
+    modal.appendChild(idSection);
+
+    // Title
+    var titleSection = document.createElement('div');
+    titleSection.className = 'modal-section';
+    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'modal-input';
+    titleInput.placeholder = 'Journey title';
+    titleSection.appendChild(titleInput);
+    modal.appendChild(titleSection);
+
+    // Buttons
+    var btnRow = document.createElement('div');
+    btnRow.className = 'modal-buttons';
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-btn-primary';
+    createBtn.textContent = 'Create';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    btnRow.appendChild(createBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    cancelBtn.addEventListener('click', function() { overlay.remove(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+    createBtn.addEventListener('click', function() {
+        var journeyId = idInput.value.trim();
+        var title = titleInput.value.trim();
+        if (!journeyId || !title) {
+            showToast('Journey ID and title are required', 'warning');
+            return;
+        }
+        var checkedRadio = fileList.querySelector('input[name="journey-file"]:checked');
+        var fileId = checkedRadio ? checkedRadio.value : '';
+        if (fileId === '__new__') {
+            var newPath = newFileInput.value.trim();
+            if (!newPath) {
+                showToast('Enter a file path for the new file', 'warning');
+                return;
+            }
+            fileId = 'file:' + newPath;
+        }
+        if (!fileId) {
+            showToast('Select a file', 'warning');
+            return;
+        }
+
+        mutate('/api/mutate/journey/add', {
+            journey_id: journeyId, title: title, file_id: fileId
+        }).then(function(r) {
+            if (r && r.success) {
+                overlay.remove();
+                showToast('Journey ' + journeyId + ' created. Reload to see it.', 'success');
+                loadTreeData();
+            }
+        });
+    });
+}

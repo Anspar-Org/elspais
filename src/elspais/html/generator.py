@@ -64,8 +64,13 @@ class JourneyItem:
     description: str
     actor: str | None = None
     goal: str | None = None
+    context: str | None = None
     descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
     file: str = ""  # Source file path
+    file_id: str = ""  # FILE node ID for mutations
+    file_line: int | None = None  # parse_line for source link
+    preamble: str = ""  # body_lines joined
+    sections: list[dict[str, str]] = field(default_factory=list)  # [{name, content}]
     referenced_reqs: list[str] = field(default_factory=list)  # REQs via VALIDATES edges
 
 
@@ -1099,6 +1104,14 @@ class HTMLGenerator:
                 e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES
             )
 
+            # Structured fields for edit mode
+            context = node.get_field("context")
+            body_lines = node.get_field("body_lines", [])
+            preamble = "\n".join(body_lines) if body_lines else ""
+            sections = node.get_field("sections", [])
+            file_id = _fn.id if _fn else ""
+            file_line = node.get_field("parse_line")
+
             journeys.append(
                 JourneyItem(
                     id=node.id,
@@ -1106,8 +1119,13 @@ class HTMLGenerator:
                     description=description,
                     actor=actor,
                     goal=goal,
+                    context=context,
                     descriptor=descriptor,
                     file=file,
+                    file_id=file_id,
+                    file_line=file_line,
+                    preamble=preamble,
+                    sections=sections,
                     referenced_reqs=referenced_reqs,
                 )
             )
