@@ -419,7 +419,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
             escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;margin-left:auto;">' +
-            escapeHtml(sourcePath.split('/').pop()) + '</a>';
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
     }
     html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
