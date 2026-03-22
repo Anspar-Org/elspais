@@ -415,8 +415,15 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
-    // Metadata section
-    html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
+    // Metadata section — source file right-justified on the label line
+    var sourceLink = '';
+    if (sourcePath) {
+        sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;margin-left:auto;">' +
+            escapeHtml(sourcePath.split('/').pop()) + '</a>';
+    }
+    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
 
     if (props.actor) {
@@ -437,16 +444,6 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-meta-item">';
         html += '<span class="card-meta-key">Topic:</span>';
         html += '<span class="card-meta-value">' + escapeHtml(props.descriptor) + '</span>';
-        html += '</div>';
-    }
-
-    if (sourcePath) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Source:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
-            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
-            escapeHtml(sourcePath.split('/').pop()) + '</a>';
         html += '</div>';
     }
 
