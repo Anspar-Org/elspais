@@ -229,6 +229,52 @@ body.edit-mode .status-badge-wrapper {
     color: var(--text-secondary, #888); padding: 2px 6px;
 }
 
+/* --- Add REQ/JNY Modal --- */
+
+.modal-section { margin-bottom: 12px; }
+.modal-file-option {
+    display: block;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.85em;
+    padding: 3px 6px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: var(--text-primary, #333);
+}
+.modal-file-option:hover { background: var(--row-hover, rgba(0,0,0,0.05)); }
+.modal-file-option input[type="radio"] { margin-right: 6px; vertical-align: middle; }
+.modal-id-display {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 1em;
+    font-weight: 600;
+    padding: 6px 8px;
+    background: var(--bg-secondary, #f5f5f5);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    color: var(--text-primary, #333);
+}
+.modal-primary-btn {
+    padding: 8px 20px;
+    background: var(--color-primary, #3b82f6);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+}
+.modal-primary-btn:hover { opacity: 0.9; }
+.modal-cancel-btn {
+    padding: 8px 20px;
+    background: none;
+    color: var(--text-secondary, #666);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+.modal-cancel-btn:hover { background: var(--row-hover, rgba(0,0,0,0.05)); }
+
 /* --- Error Modal --- */
 
 .error-modal-body {

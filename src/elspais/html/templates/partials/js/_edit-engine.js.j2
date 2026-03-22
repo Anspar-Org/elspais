@@ -2070,7 +2070,38 @@ function _showAddRequirementModal(files) {
 
     var modal = document.createElement('div');
     modal.className = 'modal-dialog';
-    modal.innerHTML = '<h3>Add Requirement</h3>';
+    modal.innerHTML = '<h3 class="modal-title">Add Requirement</h3>';
+
+    // Level selector (first — drives ID generation)
+    var levelSection = document.createElement('div');
+    levelSection.className = 'modal-section';
+    levelSection.innerHTML = '<label class="modal-label">Level:</label>';
+    var levelSelect = document.createElement('select');
+    levelSelect.className = 'modal-input';
+    levelSelect.innerHTML = '<option value="PRD">PRD</option><option value="OPS">OPS</option><option value="DEV">DEV</option>';
+    levelSection.appendChild(levelSelect);
+    modal.appendChild(levelSection);
+
+    // ID display (read-only, auto-generated)
+    var idSection = document.createElement('div');
+    idSection.className = 'modal-section';
+    idSection.innerHTML = '<label class="modal-label">Requirement ID:</label>';
+    var idDisplay = document.createElement('div');
+    idDisplay.className = 'modal-id-display';
+    idDisplay.textContent = 'Loading...';
+    idSection.appendChild(idDisplay);
+    modal.appendChild(idSection);
+
+    // Title
+    var titleSection = document.createElement('div');
+    titleSection.className = 'modal-section';
+    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'modal-input';
+    titleInput.placeholder = 'Requirement title';
+    titleSection.appendChild(titleInput);
+    modal.appendChild(titleSection);
 
     // File picker
     var fileSection = document.createElement('div');
@@ -2108,63 +2139,48 @@ function _showAddRequirementModal(files) {
 
     modal.appendChild(fileSection);
 
-    // Requirement ID
-    var idSection = document.createElement('div');
-    idSection.className = 'modal-section';
-    idSection.innerHTML = '<label class="modal-label">Requirement ID:</label>';
-    var idInput = document.createElement('input');
-    idInput.type = 'text';
-    idInput.className = 'modal-input';
-    idInput.placeholder = 'REQ-p00001';
-    idSection.appendChild(idInput);
-    modal.appendChild(idSection);
-
-    // Title
-    var titleSection = document.createElement('div');
-    titleSection.className = 'modal-section';
-    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
-    var titleInput = document.createElement('input');
-    titleInput.type = 'text';
-    titleInput.className = 'modal-input';
-    titleInput.placeholder = 'Requirement title';
-    titleSection.appendChild(titleInput);
-    modal.appendChild(titleSection);
-
-    // Level
-    var levelSection = document.createElement('div');
-    levelSection.className = 'modal-section';
-    levelSection.innerHTML = '<label class="modal-label">Level:</label>';
-    var levelSelect = document.createElement('select');
-    levelSelect.className = 'modal-input';
-    levelSelect.innerHTML = '<option value="PRD">PRD</option><option value="OPS">OPS</option><option value="DEV">DEV</option>';
-    levelSection.appendChild(levelSelect);
-    modal.appendChild(levelSection);
-
-    // Buttons
+    // Buttons (Cancel first, then Create — standard order)
     var btnRow = document.createElement('div');
-    btnRow.className = 'modal-buttons';
-    var createBtn = document.createElement('button');
-    createBtn.className = 'modal-btn-primary';
-    createBtn.textContent = 'Create';
+    btnRow.className = 'modal-actions';
     var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'modal-btn-secondary';
+    cancelBtn.className = 'modal-cancel-btn';
     cancelBtn.textContent = 'Cancel';
-    btnRow.appendChild(createBtn);
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-primary-btn';
+    createBtn.textContent = 'Create';
     btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(createBtn);
     modal.appendChild(btnRow);
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
+    // Fetch next ID for the default level
+    var currentReqId = '';
+    function fetchNextId() {
+        var level = levelSelect.value;
+        idDisplay.textContent = 'Loading...';
+        apiFetch('/api/next-req-id?level=' + encodeURIComponent(level)).then(function(data) {
+            if (data && data.id) {
+                currentReqId = data.id;
+                idDisplay.textContent = data.id;
+            } else {
+                idDisplay.textContent = 'Error';
+            }
+        });
+    }
+    fetchNextId();
+    levelSelect.addEventListener('change', fetchNextId);
+
     cancelBtn.addEventListener('click', function() { overlay.remove(); });
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 
     createBtn.addEventListener('click', function() {
-        var reqId = idInput.value.trim();
+        var reqId = currentReqId;
         var title = titleInput.value.trim();
         var level = levelSelect.value;
         if (!reqId || !title) {
-            showToast('Requirement ID and title are required', 'warning');
+            showToast('Title is required', 'warning');
             return;
         }
         var checkedRadio = fileList.querySelector('input[name="req-file"]:checked');
@@ -2188,6 +2204,8 @@ function _showAddRequirementModal(files) {
             }
         });
     });
+
+    titleInput.focus();
 }
 
 function onAddJourney() {
@@ -2274,17 +2292,17 @@ function _showAddJourneyModal(files) {
     titleSection.appendChild(titleInput);
     modal.appendChild(titleSection);
 
-    // Buttons
+    // Buttons (Cancel, Create — standard order)
     var btnRow = document.createElement('div');
-    btnRow.className = 'modal-buttons';
-    var createBtn = document.createElement('button');
-    createBtn.className = 'modal-btn-primary';
-    createBtn.textContent = 'Create';
+    btnRow.className = 'modal-actions';
     var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'modal-btn-secondary';
+    cancelBtn.className = 'modal-cancel-btn';
     cancelBtn.textContent = 'Cancel';
-    btnRow.appendChild(createBtn);
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-primary-btn';
+    createBtn.textContent = 'Create';
     btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(createBtn);
     modal.appendChild(btnRow);
 
     overlay.appendChild(modal);

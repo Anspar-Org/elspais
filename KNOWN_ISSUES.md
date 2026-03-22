@@ -1,5 +1,10 @@
 # Known Issues
 
+[ ] testing: bug, kinda
+- xml test results are all on 'one line' so its hard to link to them (all results are on line 1).
+- if we can make the test runner natively output a pretty-printed version, then post-processs:
+- xmllint --format test-results.xml -o test-results.xml
+
 [ ] viewer: bug
 - expand collapse icons in tree should be same size as in header.
 

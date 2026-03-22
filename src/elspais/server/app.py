@@ -41,6 +41,7 @@ from elspais.server.routes_api import (
     api_mutate_status,
     api_mutate_title,
     api_mutate_undo,
+    api_next_req_id,
     api_node,
     api_query,
     api_reload,
@@ -152,6 +153,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/mutate/assertion", api_mutate_assertion, methods=["POST"]),
         Route("/api/mutate/assertion/add", api_mutate_assertion_add, methods=["POST"]),
         Route("/api/mutate/assertion/delete", api_mutate_assertion_delete, methods=["POST"]),
+        Route("/api/next-req-id", api_next_req_id),
         Route("/api/mutate/requirement/add", api_mutate_requirement_add, methods=["POST"]),
         Route(
             "/api/mutate/requirement/delete",

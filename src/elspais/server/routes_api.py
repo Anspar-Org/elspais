@@ -820,9 +820,70 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+async def api_next_req_id(request: Request) -> JSONResponse:
+    """GET /api/next-req-id?level=<level> - Generate next available requirement ID."""
+    from elspais.utilities.patterns import ParsedId, build_resolver
+
+    state = _st(request)
+    level = request.query_params.get("level", "").lower()
+    if not level:
+        return JSONResponse({"error": "level required"}, status_code=400)
+
+    resolver = build_resolver(state.config)
+    type_code = resolver.resolve_level(level)
+    if not type_code:
+        return JSONResponse({"error": f"Unknown level: {level}"}, status_code=400)
+
+    # Find the letter alias for this type
+    tdef = resolver._config.types.get(type_code)
+    type_letter = tdef.aliases.get("letter", type_code) if tdef else type_code
+
+    # Find the highest component number among existing IDs of this type
+    max_component = 0
+    for node in state.graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        parsed = resolver.parse(node.id)
+        if parsed and parsed.type_code == type_code:
+            try:
+                num = int(parsed.component)
+                if num > max_component:
+                    max_component = num
+            except ValueError:
+                pass  # named/alphanumeric component
+
+    next_num = max_component + 1
+    comp_fmt = resolver._config.component
+    if comp_fmt.style == "numeric" and comp_fmt.digits > 0 and comp_fmt.leading_zeros:
+        component_str = str(next_num).zfill(comp_fmt.digits)
+    else:
+        component_str = str(next_num)
+
+    # Build the canonical ID
+    next_id = resolver.render(
+        ParsedId(
+            namespace=resolver._config.namespace,
+            type_code=type_code,
+            component=component_str,
+            assertions=[],
+            fqn="",
+        ),
+        form="canonical",
+    )
+
+    return JSONResponse(
+        {
+            "id": next_id,
+            "type_code": type_code,
+            "type_letter": type_letter,
+            "component": component_str,
+            "style": comp_fmt.style,
+        }
+    )
+
+
 async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     """POST /api/mutate/requirement/add - Create a new requirement."""
     from elspais.mcp.server import _mutate_add_requirement as _add_req
+    from elspais.utilities.patterns import build_resolver
 
     state = _st(request)
     data = await request.json()
@@ -835,6 +896,22 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
             {"success": False, "error": "req_id, title, and level required"},
             status_code=400,
         )
+
+    # Validate ID format
+    resolver = build_resolver(state.config)
+    if not resolver.is_valid(req_id):
+        return JSONResponse(
+            {"success": False, "error": f"Invalid ID format: {req_id}"},
+            status_code=400,
+        )
+
+    # Check for conflicts
+    if state.graph.find_by_id(req_id) is not None:
+        return JSONResponse(
+            {"success": False, "error": f"ID already exists: {req_id}"},
+            status_code=400,
+        )
+
     result = _add_req(state.graph, req_id, title, level)
     if result.get("success") and file_id:
         # Wire to file via move_node_to_file
