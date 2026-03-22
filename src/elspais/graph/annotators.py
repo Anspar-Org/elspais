@@ -522,6 +522,41 @@ def count_with_code_refs(
     }
 
 
+def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
+    """Compute project-wide code coverage statistics.
+
+    Returns dict with:
+    - total_executable_lines: sum of executable_lines across FILE nodes
+    - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
+    - total_attributed_lines: sum of code_tested.total across all REQUIREMENT nodes
+      (lines shared across REQs may be counted multiple times)
+    """
+    from elspais.graph import NodeKind
+
+    total_executable = 0
+    total_covered = 0
+
+    for node in graph.iter_by_kind(NodeKind.FILE):
+        executable = node.get_field("executable_lines")
+        if executable:
+            total_executable += executable
+        line_coverage = node.get_field("line_coverage")
+        if line_coverage:
+            total_covered += sum(1 for hit in line_coverage.values() if hit > 0)
+
+    total_attributed = 0
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is not None:
+            total_attributed += rollup.code_tested.total
+
+    return {
+        "total_executable_lines": total_executable,
+        "total_covered_lines": total_covered,
+        "total_attributed_lines": total_attributed,
+    }
+
+
 def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     """Count requirements by git change status.
 
@@ -1323,6 +1358,7 @@ __all__ = [
     "group_by_level",
     "count_by_repo",
     "count_by_coverage",
+    "count_code_coverage",
     "count_with_code_refs",
     "count_by_git_status",
     "count_implementation_files",

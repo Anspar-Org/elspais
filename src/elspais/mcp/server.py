@@ -62,6 +62,7 @@ from elspais.graph.annotators import (
     count_by_coverage,
     count_by_git_status,
     count_by_level,
+    count_code_coverage,
     count_with_code_refs,
 )
 from elspais.graph.factory import build_graph
@@ -1834,7 +1835,7 @@ def _get_project_summary(
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
 
-    return {
+    result: dict[str, Any] = {
         "requirements_by_level": level_counts,
         "coverage": coverage_stats,
         "changes": change_metrics,
@@ -1842,6 +1843,12 @@ def _get_project_summary(
         "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(graph.broken_references()),
     }
+
+    code_cov = count_code_coverage(graph)
+    if code_cov["total_executable_lines"] > 0:
+        result["code_coverage"] = code_cov
+
+    return result
 
 
 def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
