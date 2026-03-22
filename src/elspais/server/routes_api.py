@@ -835,7 +835,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"Unknown level: {level}"}, status_code=400)
 
     # Find the letter alias for this type
-    tdef = resolver._config.types.get(type_code)
+    tdef = resolver.config.types.get(type_code)
     type_letter = tdef.aliases.get("letter", type_code) if tdef else type_code
 
     # Find the highest component number among existing IDs of this type
@@ -851,7 +851,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
                 pass  # named/alphanumeric component
 
     next_num = max_component + 1
-    comp_fmt = resolver._config.component
+    comp_fmt = resolver.config.component
     if comp_fmt.style == "numeric" and comp_fmt.digits > 0 and comp_fmt.leading_zeros:
         component_str = str(next_num).zfill(comp_fmt.digits)
     else:
@@ -860,7 +860,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
     # Build the canonical ID
     next_id = resolver.render(
         ParsedId(
-            namespace=resolver._config.namespace,
+            namespace=resolver.config.namespace,
             type_code=type_code,
             component=component_str,
             assertions=[],
@@ -1038,6 +1038,8 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
 
 async def api_mutate_journey_add(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/add - Create new journey."""
+    import re
+
     state = _st(request)
     data = await request.json()
     journey_id = data.get("journey_id", "")
@@ -1048,6 +1050,25 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             {"success": False, "error": "journey_id, title, and file_id required"},
             status_code=400,
         )
+
+    # Validate JNY ID format
+    if not re.match(r"^JNY-[A-Za-z0-9]+-\d+$", journey_id):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": f"Invalid journey ID format: {journey_id}. "
+                "Expected: JNY-{{Descriptor}}-{{Number}} (e.g., JNY-LOGIN-01)",
+            },
+            status_code=400,
+        )
+
+    # Check for conflicts
+    if state.graph.find_by_id(journey_id) is not None:
+        return JSONResponse(
+            {"success": False, "error": f"ID already exists: {journey_id}"},
+            status_code=400,
+        )
+
     result = _mutate_add_journey(state.graph, journey_id, title, file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
