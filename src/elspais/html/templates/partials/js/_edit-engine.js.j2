@@ -833,15 +833,61 @@ function onAssertionBlur(el) {
     });
 }
 
+function _nextAssertionLabel(existingLabels) {
+    // Determine label style from existing labels and return the next one.
+    // Single letters: A, B, C... → next letter
+    // Numbers: 1, 2, 3... → next number
+    // Mixed/text: return null (needs manual entry)
+    if (existingLabels.length === 0) return 'A';
+
+    var allSingleLetters = existingLabels.every(function(l) { return /^[A-Z]$/.test(l); });
+    if (allSingleLetters) {
+        var maxCode = 0;
+        existingLabels.forEach(function(l) {
+            var code = l.charCodeAt(0);
+            if (code > maxCode) maxCode = code;
+        });
+        if (maxCode < 90) return String.fromCharCode(maxCode + 1); // 90 = 'Z'
+        return null;
+    }
+
+    var allNumbers = existingLabels.every(function(l) { return /^\d+$/.test(l); });
+    if (allNumbers) {
+        var maxNum = 0;
+        existingLabels.forEach(function(l) {
+            var n = parseInt(l, 10);
+            if (n > maxNum) maxNum = n;
+        });
+        return String(maxNum + 1);
+    }
+
+    return null; // text-style, needs manual entry
+}
+
 function onAddAssertion(nodeId) {
-    const label = prompt('Assertion label (e.g., A, B, C):');
-    if (!label) return;
+    // Determine next label from existing assertions
+    var info = editState.openCards.get(nodeId);
+    var existingLabels = [];
+    if (info && info.data) {
+        var children = info.data.children || [];
+        children.forEach(function(c) {
+            if (c.kind === 'assertion' && c.label) existingLabels.push(c.label);
+        });
+    }
+
+    var label = _nextAssertionLabel(existingLabels);
+    if (!label) {
+        label = prompt('Assertion label:');
+        if (!label) return;
+        label = label.trim();
+    }
+
     const text = prompt('Assertion text (SHALL statement):');
     if (!text) return;
 
     mutate('/api/mutate/assertion/add', {
         req_id: nodeId,
-        label: label.trim().toUpperCase(),
+        label: label.toUpperCase(),
         text: text.trim()
     }).then(async function(result) {
         if (result && result.success) {
