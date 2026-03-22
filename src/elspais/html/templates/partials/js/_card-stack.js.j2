@@ -400,13 +400,19 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourcePath = (data.source && data.source.path) || '';
     var sourceLine = (data.source && data.source.line) || 1;
 
-    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '">';
 
-    // Header — show journey ID instead of generic JNY badge
+    // Header — show journey ID + editable title
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="journey-card-kind">' + shortId + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
+    // Edit mode: inline title input
+    html += '<input type="text" class="edit-only journey-title-edit" value="' + escapeAttr(data.title || '') + '"' +
+        ' onclick="event.stopPropagation()" onblur="onJourneyTitleBlur(\'' + nodeId + '\', this)"' +
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;">';
+    // Edit mode: delete journey
+    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&times;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -420,23 +426,28 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;text-transform:none;margin-left:auto;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
+        sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
     }
     html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
 
-    if (props.actor) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Actor:</span>';
-        html += '<span class="card-meta-value">' + escapeHtml(props.actor) + '</span>';
-        html += '</div>';
-    }
+    // Actor — view + edit
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Actor:</span>';
+    html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.actor || '') + '</span>';
+    html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.actor || '') + '"' +
+        ' data-field="actor" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+    html += '</div>';
 
-    if (props.goal) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Goal:</span>';
-        html += '<span class="card-meta-value">' + escapeHtml(props.goal) + '</span>';
-        html += '</div>';
-    }
+    // Goal — view + edit
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Goal:</span>';
+    html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.goal || '') + '</span>';
+    html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.goal || '') + '"' +
+        ' data-field="goal" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+    html += '</div>';
 
     if (props.descriptor) {
         html += '<div class="card-meta-item">';
@@ -447,34 +458,56 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Context (if present)
-    if (props.context) {
+    // Context (view + edit)
+    if (props.context || editState.enabled) {
         html += '<div class="card-section"><div class="card-section-label">Context</div>';
-        html += '<div class="journey-card-description">' + simpleMarkdown(props.context) + '</div>';
+        if (props.context) {
+            html += '<div class="journey-card-description journey-field-view">' + simpleMarkdown(props.context) + '</div>';
+        }
+        html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.context || '') + '"' +
+            ' data-field="context" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+            ' style="width:100%;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:4px;background:#f8f9fa;">';
         html += '</div>';
     }
 
-    // Referenced Requirements (from links array — VALIDATES edges)
+    // Validates — with edit controls
     var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
-    if (refs.length > 0) {
-        html += '<div class="card-section"><div class="card-section-label">Validates (' + refs.length + ')</div>';
-        html += '<div class="card-parents">';
-        refs.forEach(function(link) {
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
-            html += link.id.replace('REQ-', '');
-            if (link.title) html += ' - ' + escapeHtml(link.title);
-            html += '</a>';
-        });
-        html += '</div></div>';
-    }
+    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates (' + refs.length + ')</div>';
+    html += '<div class="card-parents">';
+    refs.forEach(function(link) {
+        html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
+        html += link.id.replace('REQ-', '');
+        if (link.title) html += ' - ' + escapeHtml(link.title);
+        html += '<span class="edit-only journey-ref-delete" onclick="event.preventDefault(); event.stopPropagation(); onDeleteJourneyRef(\'' + nodeId + '\', \'' + link.id + '\')" style="margin-left:6px;color:#e03131;cursor:pointer;">&times;</span>';
+        html += '</a>';
+    });
+    html += '</div>';
+    html += '<button class="edit-only journey-ref-add-btn" onclick="onAddJourneyRef(\'' + nodeId + '\')">+ Add</button>';
+    html += '</div>';
 
-    // Sections (## Steps, ## Expected Outcome, etc.)
+    // Sections (view + edit)
     var sections = props.sections || [];
+    html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
     sections.forEach(function(sec) {
-        html += '<div class="card-section"><div class="card-section-label">' + escapeHtml(sec.name) + '</div>';
-        html += '<div class="journey-card-description">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '">';
+        // Section header — view + edit
+        html += '<div class="card-section-label journey-section-header">';
+        html += '<span class="journey-section-name-view">' + escapeHtml(sec.name) + '</span>';
+        html += '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(sec.name) + '"' +
+            ' data-journey-id="' + nodeId + '" data-original-name="' + escapeAttr(sec.name) + '"' +
+            ' onblur="onJourneySectionNameBlur(this)" style="font-weight:600;flex:1;">';
+        html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
+        html += '</div>';
+        // Section content — view + edit
+        html += '<div class="journey-card-description journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
+            ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            escapeHtml(sec.content || '') + '</textarea>';
         html += '</div>';
     });
+    html += '<button class="edit-only journey-section-add-btn" onclick="onAddJourneySection(\'' + nodeId + '\')">+ Add Section</button>';
+    html += '</div>';
 
     html += '</div>'; // end req-card-body
     html += '</div>'; // end req-card

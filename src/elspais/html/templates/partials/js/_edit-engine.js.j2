@@ -907,10 +907,10 @@ function onEditableKeydown(event) {
 }
 
 async function refreshCard(nodeId) {
-    const data = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
-    if (!data) return;
     const info = editState.openCards.get(nodeId);
     if (!info) return;
+    const data = await apiFetch('/api/node/' + encodeURIComponent(nodeId));
+    if (!data) return;
     info.data = data;
     // Invalidate assertion caches for this requirement
     delete assertionTestsCache[nodeId];

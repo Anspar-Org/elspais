@@ -1,4 +1,4 @@
-{# Partial: _journey_tab.html.j2 — Journey cards with search/grouping + edit mode #}
+{# Partial: _journey_tab.html.j2 — Journey cards with search/grouping #}
 
 <!-- User Journeys Tab Content -->
 <div class="tab-content" id="content-journeys">
@@ -25,25 +25,18 @@
     <div class="journey-list" id="journey-list">
         {% for journey in journeys %}
         <div class="journey-card"
-             data-journey-id="{{ journey.id }}"
              data-id="{{ journey.id|lower }}"
              data-title="{{ journey.title|lower }}"
              data-actor="{{ (journey.actor or '')|lower }}"
              data-goal="{{ (journey.goal or '')|lower }}"
              data-descriptor="{{ journey.descriptor|lower }}"
              data-file="{{ journey.file|lower }}"
-             data-file-id="{{ journey.file_id }}"
              data-refs="{{ journey.referenced_reqs|join(',')|lower }}">
             <div class="journey-card-header">
                 <span class="journey-id">{{ journey.id }}</span>
-                {# View mode: plain title #}
-                <h3 class="journey-title-view">{{ journey.title }}</h3>
-                {# Edit mode: inline editable title #}
-                <input type="text" class="edit-only journey-title-edit" value="{{ journey.title }}"
-                       onblur="onJourneyTitleBlur('{{ journey.id }}', this)">
-                <button class="edit-only journey-delete-btn" onclick="onDeleteJourney('{{ journey.id }}')"
-                        title="Delete journey">&times;</button>
+                <h3>{{ journey.title }}</h3>
             </div>
+            {% if journey.actor or journey.goal or journey.descriptor or journey.file %}
             <div class="journey-meta">
                 {% if journey.descriptor %}
                 <div class="journey-meta-item">
@@ -51,82 +44,37 @@
                     <span class="journey-meta-value">{{ journey.descriptor }}</span>
                 </div>
                 {% endif %}
+                {% if journey.actor %}
                 <div class="journey-meta-item">
                     <span class="journey-meta-label">Actor</span>
-                    <span class="journey-meta-value journey-field-view">{{ journey.actor or '' }}</span>
-                    <input type="text" class="edit-only journey-field-edit" value="{{ journey.actor or '' }}"
-                           data-field="actor" data-journey-id="{{ journey.id }}"
-                           onblur="onJourneyFieldBlur(this)">
+                    <span class="journey-meta-value">{{ journey.actor }}</span>
                 </div>
+                {% endif %}
+                {% if journey.goal %}
                 <div class="journey-meta-item">
                     <span class="journey-meta-label">Goal</span>
-                    <span class="journey-meta-value journey-field-view">{{ journey.goal or '' }}</span>
-                    <input type="text" class="edit-only journey-field-edit" value="{{ journey.goal or '' }}"
-                           data-field="goal" data-journey-id="{{ journey.id }}"
-                           onblur="onJourneyFieldBlur(this)">
-                </div>
-                {% if journey.context %}
-                <div class="journey-meta-item">
-                    <span class="journey-meta-label">Context</span>
-                    <span class="journey-meta-value journey-field-view">{{ journey.context }}</span>
-                    <input type="text" class="edit-only journey-field-edit" value="{{ journey.context }}"
-                           data-field="context" data-journey-id="{{ journey.id }}"
-                           onblur="onJourneyFieldBlur(this)">
+                    <span class="journey-meta-value">{{ journey.goal }}</span>
                 </div>
                 {% endif %}
                 {% if journey.file %}
                 <div class="journey-meta-item">
                     <span class="journey-meta-label">Source</span>
-                    <span class="journey-meta-value journey-source-link" style="text-transform:none"
-                          >{{ journey.file }}{% if journey.file_line %}:{{ journey.file_line }}{% endif %}</span>
-                    <button class="edit-only journey-move-btn"
-                            onclick="onMoveToFile('{{ journey.id }}')"
-                            title="Move to another file">Move</button>
+                    <span class="journey-meta-value">{{ journey.file }}</span>
                 </div>
                 {% endif %}
             </div>
-            {# Validates references #}
+            {% endif %}
+            {% if journey.referenced_reqs %}
             <div class="journey-refs">
-                <span class="journey-refs-label">Validates:</span>
+                <span class="journey-refs-label">Addresses:</span>
                 {% for req_id in journey.referenced_reqs %}
-                <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}
-                    <span class="edit-only journey-ref-delete" onclick="event.stopPropagation(); onDeleteJourneyRef('{{ journey.id }}', '{{ req_id }}')">&times;</span>
-                </span>
+                <span class="journey-ref-badge" onclick="switchToReqTab('{{ req_id }}')">{{ req_id }}</span>
                 {% endfor %}
-                <button class="edit-only journey-ref-add-btn"
-                        onclick="onAddJourneyRef('{{ journey.id }}')">+ Add</button>
-            </div>
-            {# Preamble #}
-            {% if journey.preamble %}
-            <div class="journey-preamble">
-                <div class="journey-preamble-view">{{ journey.preamble }}</div>
-                <textarea class="edit-only journey-preamble-edit"
-                          data-journey-id="{{ journey.id }}"
-                          onblur="onJourneyPreambleBlur(this)">{{ journey.preamble }}</textarea>
             </div>
             {% endif %}
-            {# Sections #}
-            <div class="journey-sections" data-journey-id="{{ journey.id }}">
-                {% for section in journey.sections %}
-                <div class="journey-section" data-section-name="{{ section.name }}">
-                    <div class="journey-section-header">
-                        <span class="journey-section-name journey-section-name-view">{{ section.name }}</span>
-                        <input type="text" class="edit-only journey-section-name-edit" value="{{ section.name }}"
-                               data-journey-id="{{ journey.id }}" data-original-name="{{ section.name }}"
-                               onblur="onJourneySectionNameBlur(this)">
-                        <button class="edit-only journey-section-delete"
-                                onclick="onDeleteJourneySection('{{ journey.id }}', '{{ section.name }}')"
-                                title="Delete section">&times;</button>
-                    </div>
-                    <div class="journey-section-content journey-section-content-view">{{ section.content }}</div>
-                    <textarea class="edit-only journey-section-content-edit"
-                              data-journey-id="{{ journey.id }}" data-section-name="{{ section.name }}"
-                              onblur="onJourneySectionContentBlur(this)">{{ section.content }}</textarea>
-                </div>
-                {% endfor %}
-                <button class="edit-only journey-section-add-btn"
-                        onclick="onAddJourneySection('{{ journey.id }}')">+ Add Section</button>
-            </div>
+            {% if journey.description %}
+            <div class="journey-description">{{ journey.description }}</div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
