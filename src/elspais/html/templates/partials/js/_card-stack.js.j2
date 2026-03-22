@@ -256,8 +256,12 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
                 'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
                 'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
-            html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
+            var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
+                ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
+            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
+                (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+                (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
+            html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
             if (p.assertion_targets && p.assertion_targets.length > 0) {
                 html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
             }
@@ -468,9 +472,12 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<div class="card-parents">';
     refs.forEach(function(link) {
         html += '<div class="card-parent-row">';
-        html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
-        html += link.id.replace('REQ-', '');
-        if (link.title) html += ' - ' + escapeHtml(link.title);
+        var lTargetsJson = (link.assertion_targets && link.assertion_targets.length > 0)
+            ? escapeAttr(JSON.stringify(link.assertion_targets)) : '';
+        html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + link.id + '\', ' +
+            (lTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+            (lTargetsJson ? ' data-targets="' + lTargetsJson + '"' : '') + '>';
+        html += link.id + ' - ' + escapeHtml(link.title || '');
         if (link.assertion_targets && link.assertion_targets.length > 0) {
             html += ' <span class="card-parent-targets">[' + link.assertion_targets.join(', ') + ']</span>';
         }
@@ -538,7 +545,7 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
     // Header
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
-    html += '<span class="journey-card-kind">' + escapeHtml(kindLabel) + '</span>';
+    html += '<span class="req-card-id">' + escapeHtml(kindLabel) + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
@@ -1234,6 +1241,48 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     }
     panel.innerHTML = html;
     panel.style.display = 'block';
+}
+
+function _flashAssertionsByLabel(reqId, labels) {
+    // Flash specific assertion labels (e.g., ["A", "B"]) on a card
+    if (!labels || labels.length === 0) return;
+    var card = document.getElementById('card-' + reqId);
+    if (!card) return;
+
+    var targets = [];
+    var wrappers = card.querySelectorAll('.card-assertion-wrapper');
+    for (var i = 0; i < wrappers.length; i++) {
+        var assertionDiv = wrappers[i].querySelector('.card-assertion');
+        if (!assertionDiv) continue;
+        var labelEl = assertionDiv.querySelector('.card-assertion-label');
+        if (labelEl && labels.indexOf(labelEl.textContent.trim()) >= 0) {
+            targets.push(assertionDiv);
+        }
+    }
+
+    if (targets.length > 0) {
+        targets[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setTimeout(function() {
+        for (var j = 0; j < targets.length; j++) {
+            targets[j].style.transition = 'none';
+            targets[j].style.backgroundColor = 'rgba(13, 110, 253, 0.3)';
+        }
+        setTimeout(function() {
+            for (var j = 0; j < targets.length; j++) {
+                targets[j].style.transition = 'background-color 1s ease-out';
+                targets[j].style.backgroundColor = '';
+            }
+        }, 400);
+    }, 50);
+}
+
+async function openCardAndFlash(targetId, assertionTargets) {
+    await openCard(targetId);
+    if (assertionTargets && assertionTargets.length > 0) {
+        // Small delay to ensure card DOM is rendered
+        setTimeout(function() { _flashAssertionsByLabel(targetId, assertionTargets); }, 150);
+    }
 }
 
 function _flashAssertions(reqId, assertLinkKey) {

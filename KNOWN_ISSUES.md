@@ -1,5 +1,8 @@
 # Known Issues
 
+[ ] viewer: bug
+- expand collapse icons in tree should be same size as in header.
+
 [x] Feature: Viewer. Allow editing of multi-Assertion references in REQUIREMENTS.
 - Fixed: JS was reading data.children but API returns data.assertions. One-line fix.
 
@@ -15,23 +18,25 @@
 - elspais checks, twice in a row: 2nd call is always fast
 - elspais checks broken, never fast
 
-[ ] viewer: styling
-- REQ and Journey cards: collapse >v symbol is too small. double the size both X and Y
-- Card header styling. Make consistent for REQ and JNY. Use REQ style (no button), but have REQ ID be the full ID.
-- put the hiearachy filter text area first on the line, so it's always above the tree.
+[x] viewer: feature
+- Collapse arrow doubled (8px→16px), card headers consistent (req-card-id class for all)
+- Hierarchy filter text area moved first in toolbar
+- + REQ and + JNY buttons added to card stack header bar
 
-[ ] viewer: bug
-- Cov: filter doesn't work at all. 
-- We've completely redone the coverage as CoverageDimensions, so the list should include all of them.
-- list 5 dimensions, and 3 coverage categories (none, partial, full). 
-- It's a multi-select: can toggle any/all of the dimensions on off. 
-- The coverage categories apply to all selected (i.e. visible) dimensions.
+[x] viewer: bug
+- Coverage filter fixed: computed from combined_color tier instead of unpopulated field
+- Selecting none/partial/full now correctly filters tree
 
-[ ] viewer: feature
-- Add new REQ, like Add new JNY
+[x] viewer: feature
+- Add new REQ with file picker modal, level selector, auto-opens card after creation
 
-[ ] viewer: bug
-- REQ Card: multi-select ASSERTION save -> not a JNY toast 
+[x] viewer: bug (was old, already works)
+- REQ Card: multi-select ASSERTION save toast
+
+[x] viewer: bug
+- Clicking relationship link opens target card and flashes targeted assertions
+- Uses same flash mechanism as coverage header badges
+
 
 [x] tweak: In Viewer Card: Add Refined badge to Assertion lines
 - Implemented: 6 assertion badges (IMP/REF/TST/VER/VAL/ACC) shown only when direct links exist
@@ -54,9 +59,11 @@
 
 ---
 
-[ ] feature: viewer: edit assertions-> must give a 'reason' iff CHANGELOG is enforced and status=active
+[ ] wishlist: viewer: edit assertions-> must give a 'reason' iff CHANGELOG is enforced and status=active
 - Shows CHANGELOG section of the card. 'Reason' field in the newest entry is editable.
 - Cannot save to disk without reason
+- handle adding CHANGELOG if its not already there
+- auto-fill all changelog fields, but make them editable in edit mode
 
 [ ] chore (major): general code review. file sizes, duped code, workarounds, sloppiness, etc.
 

@@ -2058,6 +2058,138 @@ function onAddJourneyRef(journeyId, btn) {
     btn.parentNode.insertBefore(form, btn);
 }
 
+function onAddRequirement() {
+    apiFetch('/api/spec-files').then(function(data) {
+        _showAddRequirementModal(data ? data.files || [] : []);
+    });
+}
+
+function _showAddRequirementModal(files) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-dialog';
+    modal.innerHTML = '<h3>Add Requirement</h3>';
+
+    // File picker
+    var fileSection = document.createElement('div');
+    fileSection.className = 'modal-section';
+    fileSection.innerHTML = '<label class="modal-label">File:</label>';
+    var fileList = document.createElement('div');
+    fileList.className = 'modal-file-list';
+
+    files.forEach(function(f, i) {
+        var label = document.createElement('label');
+        label.className = 'modal-file-option';
+        label.innerHTML = '<input type="radio" name="req-file" value="' + escapeAttr(f.id) + '"' +
+            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path);
+        fileList.appendChild(label);
+    });
+
+    var newFileLabel = document.createElement('label');
+    newFileLabel.className = 'modal-file-option';
+    newFileLabel.innerHTML = '<input type="radio" name="req-file" value="__new__"' +
+        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
+    fileList.appendChild(newFileLabel);
+    fileSection.appendChild(fileList);
+
+    var newFileInput = document.createElement('input');
+    newFileInput.type = 'text';
+    newFileInput.className = 'modal-input';
+    newFileInput.placeholder = 'spec/new-requirements.md';
+    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
+    fileSection.appendChild(newFileInput);
+
+    fileList.addEventListener('change', function() {
+        var checked = fileList.querySelector('input[name="req-file"]:checked');
+        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
+    });
+
+    modal.appendChild(fileSection);
+
+    // Requirement ID
+    var idSection = document.createElement('div');
+    idSection.className = 'modal-section';
+    idSection.innerHTML = '<label class="modal-label">Requirement ID:</label>';
+    var idInput = document.createElement('input');
+    idInput.type = 'text';
+    idInput.className = 'modal-input';
+    idInput.placeholder = 'REQ-p00001';
+    idSection.appendChild(idInput);
+    modal.appendChild(idSection);
+
+    // Title
+    var titleSection = document.createElement('div');
+    titleSection.className = 'modal-section';
+    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'modal-input';
+    titleInput.placeholder = 'Requirement title';
+    titleSection.appendChild(titleInput);
+    modal.appendChild(titleSection);
+
+    // Level
+    var levelSection = document.createElement('div');
+    levelSection.className = 'modal-section';
+    levelSection.innerHTML = '<label class="modal-label">Level:</label>';
+    var levelSelect = document.createElement('select');
+    levelSelect.className = 'modal-input';
+    levelSelect.innerHTML = '<option value="PRD">PRD</option><option value="OPS">OPS</option><option value="DEV">DEV</option>';
+    levelSection.appendChild(levelSelect);
+    modal.appendChild(levelSection);
+
+    // Buttons
+    var btnRow = document.createElement('div');
+    btnRow.className = 'modal-buttons';
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-btn-primary';
+    createBtn.textContent = 'Create';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    btnRow.appendChild(createBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    cancelBtn.addEventListener('click', function() { overlay.remove(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+    createBtn.addEventListener('click', function() {
+        var reqId = idInput.value.trim();
+        var title = titleInput.value.trim();
+        var level = levelSelect.value;
+        if (!reqId || !title) {
+            showToast('Requirement ID and title are required', 'warning');
+            return;
+        }
+        var checkedRadio = fileList.querySelector('input[name="req-file"]:checked');
+        var fileId = checkedRadio ? checkedRadio.value : '';
+        if (fileId === '__new__') {
+            var newPath = newFileInput.value.trim();
+            if (!newPath) {
+                showToast('Enter a file path for the new file', 'warning');
+                return;
+            }
+            fileId = 'file:' + newPath;
+        }
+
+        mutate('/api/mutate/requirement/add', {
+            req_id: reqId, title: title, level: level, file_id: fileId
+        }).then(function(r) {
+            if (r && r.success) {
+                overlay.remove();
+                loadTreeData();
+                openCard(reqId);
+            }
+        });
+    });
+}
+
 function onAddJourney() {
     // Fetch available journey files
     apiFetch('/api/journey-files').then(function(data) {

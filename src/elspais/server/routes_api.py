@@ -454,10 +454,14 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     assertions.append(label)
 
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
-        coverage = node.get_field("coverage", "none")
         is_changed = bool(node.get_field("is_changed", False))
         is_uncommitted = bool(node.get_field("is_uncommitted", False))
         tiers = compute_coverage_tiers(node, state.config)
+        # Derive coverage tier from combined_color for filtering
+        _cc = tiers.get("combined_color", "")
+        coverage = (
+            "full" if _cc == "green" else ("partial" if _cc in ("yellow", "orange") else "none")
+        )
 
         rows.append(
             {
@@ -812,6 +816,32 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
     result = _mutate_delete_assertion(state.graph, assertion_id, confirm=True)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_requirement_add(request: Request) -> JSONResponse:
+    """POST /api/mutate/requirement/add - Create a new requirement."""
+    from elspais.mcp.server import _mutate_add_requirement as _add_req
+
+    state = _st(request)
+    data = await request.json()
+    req_id = data.get("req_id", "")
+    title = data.get("title", "")
+    level = data.get("level", "")
+    file_id = data.get("file_id", "")
+    if not req_id or not title or not level:
+        return JSONResponse(
+            {"success": False, "error": "req_id, title, and level required"},
+            status_code=400,
+        )
+    result = _add_req(state.graph, req_id, title, level)
+    if result.get("success") and file_id:
+        # Wire to file via move_node_to_file
+        try:
+            state.graph.move_node_to_file(req_id, file_id)
+        except (ValueError, KeyError):
+            pass  # Node created but file wiring failed — still usable
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 

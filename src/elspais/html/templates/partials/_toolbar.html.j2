@@ -2,6 +2,12 @@
 {# Implements: REQ-p00006-A, REQ-p00006-B #}
 
 <div class="toolbar" id="edit-toolbar">
+    <!-- Text Filter (first, so it's always above the tree) -->
+    <input type="text" class="filter-text-input" id="edit-filter-text"
+           placeholder="Filter tree... (e.g. auth OR password)"
+           oninput="onTreeTextFilter()"
+           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
+
     <!-- Git Filters -->
     <div class="btn-group" role="group">
         <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')">Uncommitted</button>
@@ -41,12 +47,6 @@
             <span>Hide Filtered</span>
         </label>
     </div>
-
-    <!-- Text Filter -->
-    <input type="text" class="filter-text-input" id="edit-filter-text"
-           placeholder="Filter tree... (e.g. auth OR password)"
-           oninput="onTreeTextFilter()"
-           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
 
     <!-- Actions -->
     <div class="toolbar-actions">
