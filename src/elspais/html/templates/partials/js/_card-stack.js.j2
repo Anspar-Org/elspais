@@ -258,17 +258,14 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
             html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
             html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
-            html += '</a>';
-            // Assertion targets display
             if (p.assertion_targets && p.assertion_targets.length > 0) {
-                html += '<span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
+                html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
             }
-            // Assertion targets picker button (edit mode, implements/refines only)
-            if (edgeKind === 'implements' || edgeKind === 'refines') {
-                html += '<button class="card-parent-targets-btn edit-only" ' +
-                    'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
-                    'title="Edit assertion targets">&#8943;</button>';
-            }
+            html += '</a>';
+            // Assertion targets picker button (edit mode)
+            html += '<button class="card-parent-targets-btn edit-only" ' +
+                'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
+                'title="Edit assertion targets">&#9998;</button>';
             html += '<button class="card-parent-delete edit-only" ' +
                 'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
                 'title="Remove relationship">&times;</button>';
@@ -475,15 +472,14 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
         html += link.id.replace('REQ-', '');
         if (link.title) html += ' - ' + escapeHtml(link.title);
-        html += '</a>';
-        // Assertion targets display
         if (link.assertion_targets && link.assertion_targets.length > 0) {
-            html += '<span class="card-parent-targets">[' + link.assertion_targets.join(', ') + ']</span>';
+            html += ' <span class="card-parent-targets">[' + link.assertion_targets.join(', ') + ']</span>';
         }
+        html += '</a>';
         // Assertion targets picker button (edit mode)
         html += '<button class="card-parent-targets-btn edit-only" ' +
             'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + link.id + '\', this)" ' +
-            'title="Edit assertion targets">&#8943;</button>';
+            'title="Edit assertion targets">&#9998;</button>';
         html += '<button class="card-parent-delete edit-only" ' +
             'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + link.id + '\')" ' +
             'title="Remove relationship">&times;</button>';
