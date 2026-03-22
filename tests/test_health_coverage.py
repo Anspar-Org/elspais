@@ -59,10 +59,10 @@ class TestCheckTestCoverage:
         """Empty graph reports 0/0 test coverage."""
         graph = _make_graph()
         result = check_test_coverage(graph, exclude_status=set())
-        assert result.name == "tests.coverage"
-        assert result.category == "tests"
+        assert result.name == "coverage.tested"
+        assert result.category == "coverage"
         assert result.details["total_requirements"] == 0
-        assert result.details["requirements_with_tests"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
 
     # Implements: REQ-d00218-A
     def test_req_with_direct_tested_counted(self):
@@ -77,9 +77,9 @@ class TestCheckTestCoverage:
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_tests"] == 1
+        assert result.details["reqs_with_any_coverage"] == 1
         assert result.details["total_requirements"] == 1
-        assert result.details["test_coverage_percent"] == 100.0
+        assert result.details["req_coverage_percent"] == 100.0
 
     # Implements: REQ-d00218-A
     def test_req_without_direct_tested_not_counted(self):
@@ -94,7 +94,7 @@ class TestCheckTestCoverage:
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_tests"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
 
     # Implements: REQ-d00218-B
     def test_test_coverage_separate_from_code_coverage(self):
@@ -112,7 +112,7 @@ class TestCheckTestCoverage:
         result = check_test_coverage(graph, exclude_status=set())
 
         # Test coverage should be 0 even though implemented.direct is 2
-        assert result.details["requirements_with_tests"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
 
     # Implements: REQ-d00218-C
     def test_excluded_statuses_filter_requirements(self):
@@ -135,7 +135,7 @@ class TestCheckTestCoverage:
         result = check_test_coverage(graph, exclude_status={"Deprecated"})
 
         assert result.details["total_requirements"] == 1
-        assert result.details["requirements_with_tests"] == 1
+        assert result.details["reqs_with_any_coverage"] == 1
 
     # Implements: REQ-d00218-C
     def test_parent_credit_from_child_test_coverage(self):
@@ -163,7 +163,7 @@ class TestCheckTestCoverage:
         graph = _make_graph(parent, child)
         result = check_test_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_tests"] == 2
+        assert result.details["reqs_with_any_coverage"] == 2
         assert result.details["total_requirements"] == 2
 
     # Implements: REQ-d00218-A
@@ -175,7 +175,7 @@ class TestCheckTestCoverage:
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_tests"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
 
     # Implements: REQ-d00218-A
@@ -212,8 +212,8 @@ class TestCheckTestCoverage:
         result = check_test_coverage(graph, exclude_status=set())
 
         assert result.details["total_requirements"] == 3
-        assert result.details["requirements_with_tests"] == 2
-        assert result.details["test_coverage_percent"] == round(2 / 3 * 100, 1)
+        assert result.details["reqs_with_any_coverage"] == 2
+        assert result.details["req_coverage_percent"] == round(2 / 3 * 100, 1)
 
 
 # =============================================================================
@@ -238,9 +238,9 @@ class TestCheckUatCoverage:
         """Empty graph reports 0/0 UAT coverage."""
         graph = _make_graph()
         result = check_uat_coverage(graph, exclude_status=set())
-        assert result.name == "uat.coverage"
+        assert result.name == "uat.uat_coverage"
         assert result.details["total_requirements"] == 0
-        assert result.details["requirements_with_uat"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
 
     # Implements: REQ-d00219-A
     def test_req_with_uat_covered_counted(self):
@@ -255,8 +255,8 @@ class TestCheckUatCoverage:
         graph = _make_graph(req)
         result = check_uat_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_uat"] == 1
-        assert result.details["uat_coverage_percent"] == 100.0
+        assert result.details["reqs_with_any_coverage"] == 1
+        assert result.details["req_coverage_percent"] == 100.0
 
     # Implements: REQ-d00219-A
     def test_req_without_uat_covered_not_counted(self):
@@ -271,7 +271,7 @@ class TestCheckUatCoverage:
         graph = _make_graph(req)
         result = check_uat_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_uat"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
 
     # Implements: REQ-d00219-A
     def test_excluded_statuses_filter(self):
@@ -296,7 +296,7 @@ class TestCheckUatCoverage:
         result = check_uat_coverage(graph, exclude_status={"Rejected"})
 
         assert result.details["total_requirements"] == 1
-        assert result.details["requirements_with_uat"] == 1
+        assert result.details["reqs_with_any_coverage"] == 1
 
     # Implements: REQ-d00219-A
     def test_no_rollup_metrics_not_counted(self):
@@ -305,7 +305,7 @@ class TestCheckUatCoverage:
         graph = _make_graph(req)
         result = check_uat_coverage(graph, exclude_status=set())
 
-        assert result.details["requirements_with_uat"] == 0
+        assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
 
 
@@ -485,14 +485,15 @@ class TestRunUatChecks:
     """Tests for the run_uat_checks aggregation function."""
 
     # Implements: REQ-d00219-A
-    def test_returns_both_coverage_and_results(self):
-        """run_uat_checks returns both uat.coverage and uat.results checks."""
+    def test_returns_coverage_verified_and_results(self):
+        """run_uat_checks returns uat.uat_coverage, uat.uat_verified, and uat.results checks."""
         graph = _make_graph()
         checks = run_uat_checks(graph, exclude_status=set(), config={})
 
-        assert len(checks) == 2
+        assert len(checks) == 3
         names = {c.name for c in checks}
-        assert "uat.coverage" in names
+        assert "uat.uat_coverage" in names
+        assert "uat.uat_verified" in names
         assert "uat.results" in names
 
     # Implements: REQ-d00219-A
@@ -517,6 +518,6 @@ class TestRunUatChecks:
         graph = _make_graph(req_active, req_deprecated)
         checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config={})
 
-        coverage_check = next(c for c in checks if c.name == "uat.coverage")
+        coverage_check = next(c for c in checks if c.name == "uat.uat_coverage")
         assert coverage_check.details["total_requirements"] == 1
-        assert coverage_check.details["requirements_with_uat"] == 1
+        assert coverage_check.details["reqs_with_any_coverage"] == 1

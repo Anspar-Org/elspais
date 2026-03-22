@@ -1325,38 +1325,114 @@ def _excluded_note(
     return f" [{', '.join(parts)} excluded]"
 
 
-def check_code_coverage(
+def check_dimension_coverage(
     graph: FederatedGraph,
+    dimension: str,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check code coverage statistics."""
+    """Check coverage for one of the 5 CoverageDimension dimensions.
+
+    Reports both requirement-level (any coverage) and assertion-level
+    (direct/indirect percentages) metrics.
+
+    Args:
+        graph: The graph to check.
+        dimension: One of 'implemented', 'tested', 'verified',
+                   'uat_coverage', 'uat_verified'.
+        exclude_status: Statuses to exclude from counts.
+        config: Project config dict.
+    """
     from elspais.graph import NodeKind
-    from elspais.graph.annotators import count_with_code_refs
 
     if exclude_status is None:
         from elspais.config import get_status_roles
 
         exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
-    code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph, exclude_status=exclude_status)
+
+    dim_labels = {
+        "implemented": ("Implemented", "coverage"),
+        "tested": ("Tested", "coverage"),
+        "verified": ("Verified", "coverage"),
+        "uat_coverage": ("Validated", "uat"),
+        "uat_verified": ("Accepted", "uat"),
+    }
+    label, category = dim_labels.get(dimension, (dimension, "coverage"))
+
+    req_count = 0
+    req_with_any = 0  # REQs where dim.indirect > 0
+    req_with_direct = 0  # REQs where dim.direct > 0
+    total_assertions = 0
+    direct_assertions = 0
+    indirect_assertions = 0
+    has_any_failures = False
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            continue
+        req_count += 1
+        metrics = node.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        dim = getattr(metrics, dimension, None)
+        if dim is None:
+            continue
+        total_assertions += dim.total
+        direct_assertions += dim.direct
+        indirect_assertions += dim.indirect
+        if dim.indirect > 0:
+            req_with_any += 1
+        if dim.direct > 0:
+            req_with_direct += 1
+        if dim.has_failures:
+            has_any_failures = True
+
+    req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
+    direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
+    indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
     note = _excluded_note(graph, exclude_status)
 
+    # Build message showing both levels
+    msg_parts = [
+        f"{label}: {req_with_any}/{req_count} REQs ({req_pct:.0f}%)",
+        f"{direct_assertions}/{total_assertions} assertions direct ({direct_pct:.0f}%)",
+    ]
+    if indirect_assertions != direct_assertions:
+        msg_parts.append(f"{indirect_assertions} indirect ({indirect_pct:.0f}%)")
+    if has_any_failures:
+        msg_parts.append("FAILURES DETECTED")
+    message = ", ".join(msg_parts) + note
+
     return HealthCheck(
-        name="code.coverage",
-        passed=True,  # Informational only
-        message=(
-            f"{coverage['with_code_refs']}/{coverage['total_requirements']} requirements "
-            f"have code references ({coverage['coverage_percent']}%){note}"
-        ),
-        category="code",
-        severity="info",
+        name=f"{category}.{dimension}",
+        passed=not has_any_failures,
+        message=message,
+        category=category,
+        severity="error" if has_any_failures else "info",
         details={
-            "code_nodes": code_count,
-            "requirements_with_code": coverage["with_code_refs"],
-            "total_requirements": coverage["total_requirements"],
-            "coverage_percent": coverage["coverage_percent"],
+            "dimension": dimension,
+            "reqs_with_any_coverage": req_with_any,
+            "reqs_with_direct_coverage": req_with_direct,
+            "total_requirements": req_count,
+            "req_coverage_percent": round(req_pct, 1),
+            "total_assertions": total_assertions,
+            "direct_assertions": direct_assertions,
+            "indirect_assertions": indirect_assertions,
+            "direct_pct": round(direct_pct, 1),
+            "indirect_pct": round(indirect_pct, 1),
+            "has_failures": has_any_failures,
         },
+    )
+
+
+def check_code_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
+    """Check code coverage — delegates to dimension check for 'implemented'."""
+    return check_dimension_coverage(
+        graph, "implemented", exclude_status=exclude_status, config=config
     )
 
 
@@ -1543,64 +1619,8 @@ def check_test_coverage(
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check test coverage statistics.
-
-    Uses RollupMetrics computed by annotate_coverage() to report three
-    distinct coverage dimensions:
-    - test: assertions verified by TEST nodes (direct_tested, includes rollup)
-    - uat: assertions validated by USER_JOURNEY nodes (uat_covered)
-    - overall: combined referenced_pct (test + code + rollup, excludes INDIRECT)
-    """
-    from elspais.graph import NodeKind
-
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
-    test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    req_count = 0
-    test_covered = 0
-    uat_covered = 0
-    overall_covered = 0
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
-            continue
-        req_count += 1
-        metrics = node.get_metric("rollup_metrics")
-        if metrics is None:
-            continue
-        if metrics.tested.direct > 0:
-            test_covered += 1
-        if metrics.uat_coverage.indirect > 0:
-            uat_covered += 1
-        if metrics.implemented.indirect_pct > 0:
-            overall_covered += 1
-
-    test_pct = (test_covered / req_count * 100) if req_count > 0 else 0
-    overall_pct = (overall_covered / req_count * 100) if req_count > 0 else 0
-    note = _excluded_note(graph, exclude_status)
-
-    note = _excluded_note(graph, exclude_status)
-
-    return HealthCheck(
-        name="tests.coverage",
-        passed=True,  # Informational only
-        message=(
-            f"{test_covered}/{req_count} requirements "
-            f"have test coverage ({test_pct:.1f}%){note}"
-        ),
-        category="tests",
-        severity="info",
-        details={
-            "test_nodes": test_count,
-            "requirements_with_tests": test_covered,
-            "requirements_with_any_coverage": overall_covered,
-            "total_requirements": req_count,
-            "test_coverage_percent": round(test_pct, 1),
-            "overall_coverage_percent": round(overall_pct, 1),
-        },
-    )
+    """Check test coverage — delegates to dimension check for 'tested'."""
+    return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
 def check_uat_coverage(
@@ -1608,45 +1628,9 @@ def check_uat_coverage(
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check UAT (User Acceptance Test) coverage via journey validation.
-
-    Reports requirements validated by USER_JOURNEY nodes through
-    Validates: edges (test -> journey -> requirement chain).
-    """
-    from elspais.graph import NodeKind
-
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
-
-    req_count = 0
-    uat_covered = 0
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
-            continue
-        req_count += 1
-        metrics = node.get_metric("rollup_metrics")
-        if metrics is not None and metrics.uat_coverage.indirect > 0:
-            uat_covered += 1
-
-    uat_pct = (uat_covered / req_count * 100) if req_count > 0 else 0
-    note = _excluded_note(graph, exclude_status)
-
-    return HealthCheck(
-        name="uat.coverage",
-        passed=True,  # Informational only
-        message=(
-            f"{uat_covered}/{req_count} requirements " f"have UAT coverage ({uat_pct:.1f}%){note}"
-        ),
-        category="uat",
-        severity="info",
-        details={
-            "requirements_with_uat": uat_covered,
-            "total_requirements": req_count,
-            "uat_coverage_percent": round(uat_pct, 1),
-        },
+    """Check UAT coverage — delegates to dimension check for 'uat_coverage'."""
+    return check_dimension_coverage(
+        graph, "uat_coverage", exclude_status=exclude_status, config=config
     )
 
 
@@ -1803,6 +1787,7 @@ def run_test_checks(
     """Run all test file health checks."""
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
+        check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
     ]
@@ -1814,6 +1799,9 @@ def run_uat_checks(
     """Run all UAT (User Acceptance Test) health checks."""
     return [
         check_uat_coverage(graph, exclude_status=exclude_status, config=config),
+        check_dimension_coverage(
+            graph, "uat_verified", exclude_status=exclude_status, config=config
+        ),
         check_uat_results(graph, config=config),
     ]
 

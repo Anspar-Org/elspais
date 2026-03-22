@@ -1,14 +1,11 @@
 # Known Issues
 
-[ ] tweak: In Viewer Card: Add Refined badge to Assertion lines
-- only shown if there is a direct assertion-level 'refines' linking to it
-- Only show badges for which there are direct assertion-level links
-- clicking any of these expands the list of links below the Assertion (like for implemented and tested)
-- for journey 'validates' links in that expanded list, instead of linking to the file, link to the Journey card.
-- since Assertions no longer have badges unless there are direct links to them, we need a place to put REQ-level links
--- Make the links above the metadata clickable: the expand to show the REQ-level links. 
--- if no REQ-level link, then not clickable.
--- The colors are still computed as they are currently- by using the REQ-level rolled up stat. 
+[x] tweak: In Viewer Card: Add Refined badge to Assertion lines
+- Implemented: 6 assertion badges (IMP/REF/TST/VER/VAL/ACC) shown only when direct links exist
+- Header badges clickable to expand REQ-level links + flash matching assertions
+- Journey links open Journey card; VER shows results, ACC shows journey results
+- 3 display modes (full/abbrev/dots); badge colors driven by config severity
+- Multi-assertion references (A+B+C) now properly parsed in test/code refs
 
 
 [x] feature: move file dialog
@@ -48,7 +45,8 @@
 - Also added: Checkpoint button (local commit), slide-to-share push widget, removed Revert/Refresh buttons
 - Pipeline: Edit -> Undo/Save -> Checkpoint -> Share
 
-[ ] UX (medium): Viewer vs checks report coverage disagreement. The checks report can show 100% CODE and 100% TEST coverage, yet the viewer shows many assertions without Implements:/Verifies: references (unimplemented/unvalidated). The two surfaces use different definitions of "coverage" — checks measures at the requirement level (any reference to the REQ counts), while the viewer exposes assertion-level gaps. Badge colors in the hierarchy view don't surface this distinction. Fix: checks should report both direct (assertion-level) and indirect (rollup) coverage metrics.
+[x] UX (medium): Viewer vs checks report coverage disagreement.
+- Implemented: Replaced CODE/TEST/UAT coverage checks with 5 CoverageDimension checks (implemented, tested, verified, uat_coverage, uat_verified). Each reports both REQ-level ("X/Y REQs have any coverage") and assertion-level ("X/Y assertions direct, Y indirect") metrics. Unified check_dimension_coverage() function.
 
 [ ] Feature: **Dart/Flutter parser support** (function detection strategy, result parser)
 
