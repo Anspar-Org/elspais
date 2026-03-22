@@ -1202,7 +1202,7 @@ function _flashAssertions(reqId, assertLinkKey) {
 
     var aLinks = cardState.data.assertion_links;
     // Find the card DOM element
-    var card = document.querySelector('.req-card[data-node-id="' + reqId + '"]');
+    var card = document.getElementById('card-' + reqId);
     if (!card) return;
 
     for (var label in aLinks) {
