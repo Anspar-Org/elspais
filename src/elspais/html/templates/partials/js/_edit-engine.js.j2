@@ -2231,45 +2231,6 @@ function _showAddJourneyModal(files) {
     modal.className = 'modal-dialog';
     modal.innerHTML = '<h3>Add Journey</h3>';
 
-    // File picker
-    var fileSection = document.createElement('div');
-    fileSection.className = 'modal-section';
-    fileSection.innerHTML = '<label class="modal-label">File:</label>';
-    var fileList = document.createElement('div');
-    fileList.className = 'modal-file-list';
-
-    files.forEach(function(f, i) {
-        var label = document.createElement('label');
-        label.className = 'modal-file-option';
-        label.innerHTML = '<input type="radio" name="journey-file" value="' + escapeAttr(f.id) + '"' +
-            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path || f.relative_path || '');
-        fileList.appendChild(label);
-    });
-
-    // New file option
-    var newFileLabel = document.createElement('label');
-    newFileLabel.className = 'modal-file-option';
-    newFileLabel.innerHTML = '<input type="radio" name="journey-file" value="__new__"' +
-        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
-    fileList.appendChild(newFileLabel);
-
-    fileSection.appendChild(fileList);
-
-    var newFileInput = document.createElement('input');
-    newFileInput.type = 'text';
-    newFileInput.className = 'modal-input';
-    newFileInput.placeholder = 'spec/journeys-new.md';
-    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
-    fileSection.appendChild(newFileInput);
-
-    // Show/hide new file input based on radio selection
-    fileList.addEventListener('change', function() {
-        var checked = fileList.querySelector('input[name="journey-file"]:checked');
-        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
-    });
-
-    modal.appendChild(fileSection);
-
     // Journey ID — fixed JNY- prefix, editable descriptor and number
     var idSection = document.createElement('div');
     idSection.className = 'modal-section';
@@ -2311,6 +2272,42 @@ function _showAddJourneyModal(files) {
     titleInput.placeholder = 'Journey title';
     titleSection.appendChild(titleInput);
     modal.appendChild(titleSection);
+
+    // File picker
+    var fileSection = document.createElement('div');
+    fileSection.className = 'modal-section';
+    fileSection.innerHTML = '<label class="modal-label">File:</label>';
+    var fileList = document.createElement('div');
+    fileList.className = 'modal-file-list';
+
+    files.forEach(function(f, i) {
+        var label = document.createElement('label');
+        label.className = 'modal-file-option';
+        label.innerHTML = '<input type="radio" name="journey-file" value="' + escapeAttr(f.id) + '"' +
+            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path || f.relative_path || '');
+        fileList.appendChild(label);
+    });
+
+    var newFileLabel = document.createElement('label');
+    newFileLabel.className = 'modal-file-option';
+    newFileLabel.innerHTML = '<input type="radio" name="journey-file" value="__new__"' +
+        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
+    fileList.appendChild(newFileLabel);
+    fileSection.appendChild(fileList);
+
+    var newFileInput = document.createElement('input');
+    newFileInput.type = 'text';
+    newFileInput.className = 'modal-input';
+    newFileInput.placeholder = 'spec/journeys-new.md';
+    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
+    fileSection.appendChild(newFileInput);
+
+    fileList.addEventListener('change', function() {
+        var checked = fileList.querySelector('input[name="journey-file"]:checked');
+        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
+    });
+
+    modal.appendChild(fileSection);
 
     // Buttons (Cancel, Create — standard order)
     var btnRow = document.createElement('div');
@@ -2362,8 +2359,8 @@ function _showAddJourneyModal(files) {
         }).then(function(r) {
             if (r && r.success) {
                 overlay.remove();
-                showToast('Journey ' + journeyId + ' created. Reload to see it.', 'success');
                 loadTreeData();
+                openCard(journeyId);
             }
         });
     });
