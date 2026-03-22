@@ -112,23 +112,25 @@ class RollupMetrics:
     Computed once during graph annotation and stored in node._metrics.
     Provides both aggregate counts and per-assertion detail.
 
-    The 5 CoverageDimension instances provide uniform access:
+    The 6 CoverageDimension instances provide uniform access:
     - implemented: CODE/REQ coverage of assertions
     - tested: TEST nodes exist for assertions
     - verified: TEST results passing for assertions
     - uat_coverage: JNY Validates coverage of assertions
     - uat_verified: JNY results passing for assertions
+    - code_tested: Implementation lines covered by tests (total=lines, not assertions)
     """
 
     total_assertions: int = 0
     assertion_coverage: dict[str, list[CoverageContribution]] = field(default_factory=dict)
 
-    # The 5 uniform coverage dimensions
+    # The 6 uniform coverage dimensions
     implemented: CoverageDimension = field(default_factory=CoverageDimension)
     tested: CoverageDimension = field(default_factory=CoverageDimension)
     verified: CoverageDimension = field(default_factory=CoverageDimension)
     uat_coverage: CoverageDimension = field(default_factory=CoverageDimension)
     uat_verified: CoverageDimension = field(default_factory=CoverageDimension)
+    code_tested: CoverageDimension = field(default_factory=CoverageDimension)
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.

@@ -598,6 +598,120 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
+    """Compute the code_tested dimension from line coverage data.
+
+    Intersects implementation line ranges (from IMPLEMENTS edges to CODE nodes)
+    with file-level line_coverage data to determine how many implementation
+    lines are exercised by tests.
+
+    Args:
+        node: The REQUIREMENT node.
+        metrics: The RollupMetrics to update (modifies code_tested in place).
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.relations import EdgeKind
+
+    # Collect implementation lines: set of (relative_path, line_number)
+    impl_lines: set[tuple[str, int]] = set()
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+
+        impl_start = edge.metadata.get("impl_start_line")
+        impl_end = edge.metadata.get("impl_end_line")
+        if not impl_start:
+            continue
+
+        # Fallback: if impl_end is 0 or missing, use parse_end_line
+        if not impl_end:
+            impl_end = target.get_field("parse_end_line") or 0
+
+        if not impl_end or impl_end < impl_start:
+            continue
+
+        # Find FILE ancestor of CODE node
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path:
+            continue
+
+        for line_no in range(impl_start, impl_end + 1):
+            impl_lines.add((rel_path, line_no))
+
+    if not impl_lines:
+        return
+
+    # Group lines by file for efficient coverage lookup
+    lines_by_file: dict[str, set[int]] = {}
+    for rel_path, line_no in impl_lines:
+        lines_by_file.setdefault(rel_path, set()).add(line_no)
+
+    # Indirect coverage: check file-level line_coverage
+    indirect_count = 0
+    has_any_coverage = False
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path not in lines_by_file:
+            continue
+
+        line_coverage = fn.get_field("line_coverage")
+        if line_coverage is None:
+            continue
+        has_any_coverage = True
+        break  # Just checking existence
+
+    if has_any_coverage:
+        # Build file_node cache for coverage lookup
+        file_coverage: dict[str, dict[int, int]] = {}
+        for edge in node.iter_outgoing_edges():
+            if edge.kind != EdgeKind.IMPLEMENTS:
+                continue
+            target = edge.target
+            if target.kind != NodeKind.CODE:
+                continue
+            fn = target.file_node()
+            if fn is None:
+                continue
+            rel_path = fn.get_field("relative_path")
+            if not rel_path or rel_path in file_coverage:
+                continue
+            lc = fn.get_field("line_coverage")
+            if lc is not None:
+                file_coverage[rel_path] = lc
+
+        for rel_path, lines in lines_by_file.items():
+            lc = file_coverage.get(rel_path)
+            if lc is None:
+                continue
+            for line_no in lines:
+                if lc.get(line_no, 0) > 0:
+                    indirect_count += 1
+
+    metrics.code_tested = CoverageDimension(
+        total=len(impl_lines),
+        direct=0,  # Direct requires per-test attribution (RESULT.covered_lines)
+        indirect=indirect_count,
+        has_failures=False,
+    )
+
+
 # Refines: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
@@ -848,6 +962,9 @@ def annotate_coverage(graph: FederatedGraph) -> None:
             uat_verified_indirect=len(uat_validated_all),
             uat_verified_failures=uat_has_failures,
         )
+
+        # Compute code_tested dimension from coverage data
+        _compute_code_tested(node, metrics)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
