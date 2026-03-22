@@ -1210,7 +1210,7 @@ function _flashAssertions(reqId, assertLinkKey) {
         return;
     }
 
-    // Collect matching elements first
+    // Collect matching .card-assertion elements (they have the visible background)
     var targets = [];
     for (var label in aLinks) {
         if (!aLinks[label][assertLinkKey]) continue;
@@ -1220,7 +1220,7 @@ function _flashAssertions(reqId, assertLinkKey) {
             if (!assertionDiv) continue;
             var labelEl = assertionDiv.querySelector('.card-assertion-label');
             if (labelEl && labelEl.textContent.trim() === label) {
-                targets.push(wrappers[i]);
+                targets.push(assertionDiv);
             }
         }
     }
