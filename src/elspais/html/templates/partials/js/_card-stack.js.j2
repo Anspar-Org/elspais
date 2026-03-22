@@ -194,8 +194,20 @@ function buildCardHtml(nodeId, data, collapsed) {
         });
     }
 
-    // Metadata section
-    html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
+    // Metadata section — source file right-justified on label line
+    var reqSourceLink = '';
+    if (sourcePath) {
+        reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;">' +
+            '<a href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;">' +
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>' +
+            '<button class="card-move-file-btn edit-only" ' +
+            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeHtml(sourcePath) + '\')" ' +
+            'title="Move to different file" style="font-size:0.65rem;">Move</button>' +
+            '</span>';
+    }
+    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Level
@@ -222,20 +234,6 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-key">Hash:</span>';
     html += '<span class="card-meta-value" style="font-family:monospace;font-size:0.75rem;">' + hash + '</span>';
     html += '</div>';
-
-    // Source
-    if (sourcePath) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Source:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
-            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
-            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
-        html += ' <button class="card-move-file-btn edit-only" ' +
-            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeHtml(sourcePath) + '\')" ' +
-            'title="Move to different file">Move</button>';
-        html += '</div>';
-    }
 
     html += '</div></div>';
 
