@@ -292,7 +292,6 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
             html += '<div class="card-assertion">';
             html += '<span class="card-assertion-label">' + label + '</span>';
-            html += '<span class="edit-pencil edit-only" onclick="event.stopPropagation(); this.closest(\'.card-assertion\').querySelector(\'.card-assertion-text\').focus()">&#9998;</span>';
             html += '<span class="card-assertion-text editable-field" ' +
                 'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
