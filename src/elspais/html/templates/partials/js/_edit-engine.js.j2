@@ -1310,15 +1310,14 @@ function onAddRelationship(nodeId, btn) {
     pickerRow.appendChild(pickerContainer);
     form.appendChild(pickerRow);
 
-    // Assertion target dropdown (populated after requirement selection)
+    // Assertion targets (checkbox picker, populated after requirement selection)
     var assertionRow = document.createElement('div');
-    assertionRow.className = 'add-rel-row';
+    assertionRow.className = 'add-rel-row add-rel-assertions';
     assertionRow.style.display = 'none';
-    assertionRow.innerHTML = '<label class="add-rel-label">Assertion:</label>';
-    var assertionSelect = document.createElement('select');
-    assertionSelect.className = 'add-rel-select';
-    assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
-    assertionRow.appendChild(assertionSelect);
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertions:</label>';
+    var assertionChecks = document.createElement('div');
+    assertionChecks.className = 'edge-targets-picker-inline';
+    assertionRow.appendChild(assertionChecks);
     form.appendChild(assertionRow);
 
     // Buttons
@@ -1340,14 +1339,16 @@ function onAddRelationship(nodeId, btn) {
         fetchAssertions: true,
         onSelect: function(item) {
             addBtn.disabled = false;
-            // Populate assertion dropdown
-            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            // Build checkbox list for assertions
+            assertionChecks.innerHTML = '';
             if (item.assertions && item.assertions.length > 0) {
                 item.assertions.forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a.label || '';
-                    opt.textContent = (a.label || '') + ': ' + (a.text || '').substring(0, 60);
-                    assertionSelect.appendChild(opt);
+                    var label = document.createElement('label');
+                    label.className = 'edge-targets-option';
+                    label.innerHTML = '<input type="checkbox" value="' + escapeAttr(a.label) + '"> ' +
+                        '<strong>' + escapeHtml(a.label) + '</strong> ' +
+                        escapeHtml((a.text || '').substring(0, 60));
+                    assertionChecks.appendChild(label);
                 });
                 assertionRow.style.display = 'flex';
             } else {
@@ -1357,7 +1358,7 @@ function onAddRelationship(nodeId, btn) {
         onClear: function() {
             addBtn.disabled = true;
             assertionRow.style.display = 'none';
-            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            assertionChecks.innerHTML = '';
         }
     });
 
@@ -1367,7 +1368,12 @@ function onAddRelationship(nodeId, btn) {
 
         var edgeKind = typeSelect.value;
         var targetId = selected.id;
-        var assertionLabel = assertionSelect.value;
+
+        // Collect checked assertion targets
+        var targets = [];
+        assertionChecks.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+            targets.push(cb.value);
+        });
 
         var payload = {
             action: 'add',
@@ -1376,8 +1382,8 @@ function onAddRelationship(nodeId, btn) {
             edge_kind: edgeKind
         };
 
-        if (assertionLabel) {
-            payload.assertion_targets = [assertionLabel];
+        if (targets.length > 0) {
+            payload.assertion_targets = targets;
         }
 
         mutate('/api/mutate/edge', payload).then(async function(result) {
@@ -1964,15 +1970,14 @@ function onAddJourneyRef(journeyId, btn) {
     pickerRow.appendChild(pickerContainer);
     form.appendChild(pickerRow);
 
-    // Assertion target dropdown
+    // Assertion targets (checkbox picker, populated after requirement selection)
     var assertionRow = document.createElement('div');
-    assertionRow.className = 'add-rel-row';
+    assertionRow.className = 'add-rel-row add-rel-assertions';
     assertionRow.style.display = 'none';
-    assertionRow.innerHTML = '<label class="add-rel-label">Assertion:</label>';
-    var assertionSelect = document.createElement('select');
-    assertionSelect.className = 'add-rel-select';
-    assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
-    assertionRow.appendChild(assertionSelect);
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertions:</label>';
+    var assertionChecks = document.createElement('div');
+    assertionChecks.className = 'edge-targets-picker-inline';
+    assertionRow.appendChild(assertionChecks);
     form.appendChild(assertionRow);
 
     // Buttons
@@ -1994,13 +1999,15 @@ function onAddJourneyRef(journeyId, btn) {
         fetchAssertions: true,
         onSelect: function(item) {
             addBtnEl.disabled = false;
-            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            assertionChecks.innerHTML = '';
             if (item.assertions && item.assertions.length > 0) {
                 item.assertions.forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a.label || '';
-                    opt.textContent = (a.label || '') + ': ' + (a.text || '').substring(0, 60);
-                    assertionSelect.appendChild(opt);
+                    var label = document.createElement('label');
+                    label.className = 'edge-targets-option';
+                    label.innerHTML = '<input type="checkbox" value="' + escapeAttr(a.label) + '"> ' +
+                        '<strong>' + escapeHtml(a.label) + '</strong> ' +
+                        escapeHtml((a.text || '').substring(0, 60));
+                    assertionChecks.appendChild(label);
                 });
                 assertionRow.style.display = 'flex';
             } else {
@@ -2010,6 +2017,7 @@ function onAddJourneyRef(journeyId, btn) {
         onClear: function() {
             addBtnEl.disabled = true;
             assertionRow.style.display = 'none';
+            assertionChecks.innerHTML = '';
         }
     });
 
@@ -2017,15 +2025,20 @@ function onAddJourneyRef(journeyId, btn) {
         var selected = picker.getSelected();
         if (!selected) return;
         var targetId = selected.id;
-        var assertionLabel = assertionSelect.value;
+
+        var targets = [];
+        assertionChecks.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+            targets.push(cb.value);
+        });
+
         var payload = {
             action: 'add',
             source_id: journeyId,
             target_id: targetId,
             edge_kind: 'validates'
         };
-        if (assertionLabel) {
-            payload.assertion_targets = [assertionLabel];
+        if (targets.length > 0) {
+            payload.assertion_targets = targets;
         }
         mutate('/api/mutate/edge', payload).then(async function(result) {
             if (result && result.success) {
