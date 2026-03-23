@@ -1,5 +1,13 @@
 # Known Issues
 
+[ ] viewer: feature : reports
+- allow running of 'gaps', checks, and other reports
+- Add a 'reports' tab to tree column (REQ, JNY, Reports)
+- Or would it fit better in the 'file viewer' column?
+- 'Download' button for reports?
+- highlight 'gaps' on hierarchy? Why? ...it's already captured in the badge color.
+ 
+
 [ ] feature: config
 - make journey IDs configurable like REQ IDs
 - second instand of IDresolver?

@@ -111,21 +111,20 @@
 
 ## User Journeys
 
-| ID                          | Title                                             | Actor                                  | File                  |
-| --------------------------- | ------------------------------------------------- | -------------------------------------- | --------------------- |
-| JNY-Admin-Portal-01         | Manage Admin Users                                | Dr. Lisa Chen (Principal Investigator) | requirements-spec.md  |
-| JNY-Auditor-Change-01       | Investigate Requirement Changes                   | Janet (Validation Consultant)          | sponsor-oversight.md  |
-| JNY-Auditor-Validate-01     | Conduct a Compliance Audit                        | Janet (Validation Consultant)          | sponsor-oversight.md  |
-| JNY-CEO-Audit-01            | Support a Regulatory Inspection                   | Priya (CEO)                            | executive.md          |
-| JNY-CEO-Dashboard-01        | Assess Project Health for a Board Meeting         | Priya (CEO)                            | executive.md          |
-| JNY-CEO-Sponsor-01          | Prepare Evidence for Sponsor Contract Renewal     | Priya (CEO)                            | executive.md          |
-| JNY-Dev-MCP-01              | Use AI Assistant to Query and Author Requirements | Sarah (Developer)                      | dev-team.md           |
-| JNY-Dev-Setup-01            | Set Up Requirements for a New Feature             | Sarah (Developer)                      | dev-team.md           |
-| JNY-DevOps-CI-01            | Set Up CI/CD Requirement Validation               | Alex (DevOps Engineer)                 | project-management.md |
-| JNY-PM-MultiRepo-01         | Coordinate Cross-Repository Requirements          | Elvira (Internal Project Manager)      | project-management.md |
-| JNY-PM-Sprint-01            | Track Requirement Status During a Sprint          | Elvira (Internal Project Manager)      | project-management.md |
-| JNY-QA-Coverage-01          | Map Tests to Requirements for Coverage            | Marcus (QA Engineer)                   | dev-team.md           |
-| JNY-Sponsor-PM-01           | Review Milestone Deliverables                     | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
-| JNY-Sponsor-PM-02           | Filter Sponsor-Specific Requirements              | Dr. Chen (Sponsor Project Manager)     | sponsor-oversight.md  |
-| JNY-SponsorQA-Coverage-01   | Verify Test Coverage Before Release               | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
-| JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates        | Rita (Sponsor QA Lead)                 | quality-assurance.md  |
+| ID                          | Title                                             | Actor                              | File                  |
+| --------------------------- | ------------------------------------------------- | ---------------------------------- | --------------------- |
+| JNY-Auditor-Change-01       | Investigate Requirement Changes                   | Janet (Validation Consultant)      | sponsor-oversight.md  |
+| JNY-Auditor-Validate-01     | Conduct a Compliance Audit                        | Janet (Validation Consultant)      | sponsor-oversight.md  |
+| JNY-CEO-Audit-01            | Support a Regulatory Inspection                   | Priya (CEO)                        | executive.md          |
+| JNY-CEO-Dashboard-01        | Assess Project Health for a Board Meeting         | Priya (CEO)                        | executive.md          |
+| JNY-CEO-Sponsor-01          | Prepare Evidence for Sponsor Contract Renewal     | Priya (CEO)                        | executive.md          |
+| JNY-Dev-MCP-01              | Use AI Assistant to Query and Author Requirements | Sarah (Developer)                  | dev-team.md           |
+| JNY-Dev-Setup-01            | Set Up Requirements for a New Feature             | Sarah (Developer)                  | dev-team.md           |
+| JNY-DevOps-CI-01            | Set Up CI/CD Requirement Validation               | Alex (DevOps Engineer)             | project-management.md |
+| JNY-PM-MultiRepo-01         | Coordinate Cross-Repository Requirements          | Elvira (Internal Project Manager)  | project-management.md |
+| JNY-PM-Sprint-01            | Track Requirement Status During a Sprint          | Elvira (Internal Project Manager)  | project-management.md |
+| JNY-QA-Coverage-01          | Map Tests to Requirements for Coverage            | Marcus (QA Engineer)               | dev-team.md           |
+| JNY-Sponsor-PM-01           | Review Milestone Deliverables                     | Dr. Chen (Sponsor Project Manager) | sponsor-oversight.md  |
+| JNY-Sponsor-PM-02           | Filter Sponsor-Specific Requirements              | Dr. Chen (Sponsor Project Manager) | sponsor-oversight.md  |
+| JNY-SponsorQA-Coverage-01   | Verify Test Coverage Before Release               | Rita (Sponsor QA Lead)             | quality-assurance.md  |
+| JNY-SponsorQA-Regression-01 | Validate a Bug Fix Has Requirement Updates        | Rita (Sponsor QA Lead)             | quality-assurance.md  |
